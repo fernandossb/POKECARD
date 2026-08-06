@@ -1,0 +1,34 @@
+{
+  "version": "2026.07.29",
+  "updatedAt": "2026-07-29",
+  "source": "Montador Automático de Decks Pokémon TCG",
+  "deckSize": 60,
+  "sameNameLimit": 4,
+  "basicEnergyUnlimited": true,
+  "coherence": {
+    "minimumRealEnergy": 8,
+    "maximumPrimaryEnergyTypes": 2,
+    "requireCompatibleEnergyPlan": true,
+    "requireCompleteEvolutionLines": true,
+    "excludePocketFromPhysicalFormats": true
+  },
+  "simulation": {
+    "quick": 1000,
+    "detailed": 5000,
+    "deterministicSeed": true
+  },
+  "weights": {
+    "legality": 30,
+    "consistency": 22,
+    "setupSpeed": 16,
+    "synergy": 15,
+    "energyEfficiency": 10,
+    "ownership": 7
+  },
+  "formats": [
+    {"id": "standard", "name": "Padrão", "note": "A legalidade individual depende da marca de regulamentação e dos dados disponíveis."},
+    {"id": "expanded", "name": "Expandido", "note": "Verifique banimentos e reimpressões nas regras atuais do torneio."},
+    {"id": "glc", "name": "Gym Leader Challenge", "note": "Validação conservadora enquanto o catálogo não trouxer todas as regras impressas."},
+    {"id": "casual", "name": "Livre / Casual", "note": "Aceita todo o catálogo local, mantendo limites de construção."}
+  ]
+}

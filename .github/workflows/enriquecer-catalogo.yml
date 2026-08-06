@@ -1,0 +1,58 @@
+name: Enriquecer catálogo (tipos de Treinador)
+
+# Roda apenas quando você mandar: Actions -> Enriquecer catálogo -> Run workflow.
+# Não roda em push para não refazer o trabalho a cada commit.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: enriquecer-catalogo
+  cancel-in-progress: false
+
+jobs:
+  enriquecer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Baixar projeto
+        uses: actions/checkout@v4
+
+      - name: Configurar Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Enriquecer catálogo com category e trainerType
+        run: node scripts/enriquecer-catalogo.mjs
+
+      - name: Conferir resultado
+        shell: bash
+        run: |
+          node -e "
+            const fs = require('fs');
+            const catalog = JSON.parse(fs.readFileSync('app/src/main/assets/www/data/catalog.json', 'utf8'));
+            const cards = catalog.cards || [];
+            const withCategory = cards.filter(card => card.category).length;
+            const withTrainerType = cards.filter(card => card.trainerType).length;
+            console.log('Cartas no catálogo:', cards.length);
+            console.log('Com category:', withCategory);
+            console.log('Com trainerType:', withTrainerType);
+            if (!withCategory) { console.error('Nenhuma carta recebeu category — o enriquecimento falhou.'); process.exit(1); }
+            if (!withTrainerType) { console.error('Nenhum trainerType gravado — Itens e Apoiadores continuariam indistinguíveis.'); process.exit(1); }
+          "
+
+      - name: Publicar catálogo enriquecido
+        shell: bash
+        run: |
+          git config user.name "fichario-catalog-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add app/src/main/assets/www/data/catalog.json app/src/main/assets/www/data/catalog-data.js
+          if git diff --cached --quiet; then
+            echo "Catálogo já estava atualizado; nada a publicar."
+          else
+            git commit -m "Enriquecer catálogo com tipos de Treinador $(date -u +%F)"
+            git push
+          fi

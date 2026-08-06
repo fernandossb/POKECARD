@@ -1,0 +1,13 @@
+FICHÁRIO POKÉMON v1.0.0 — BASE LIMPA
+
+Este pacote é o projeto completo consolidado e deve substituir o conteúdo do repositório, preservando somente a pasta .git local.
+
+Fluxo:
+1. Faça backup da pasta atual do repositório.
+2. No GitHub Desktop, aborte qualquer merge em andamento.
+3. Substitua o conteúdo do repositório por este projeto, sem apagar .git.
+4. Commit to main.
+5. Push origin.
+6. Aguarde o GitHub Actions gerar o APK assinado.
+
+A assinatura continua usando os mesmos Secrets do GitHub.
