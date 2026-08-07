@@ -2831,7 +2831,6 @@ function renderSets() {
   return `
     <section class="screen vision-explore-screen">
       <div class="vision-screen-head"><h2>Explorar</h2><button onclick="ui.setQuery='';render()">Mais recentes</button></div>
-      <div class="explore-mode-tabs"><button class="active">Sets</button><button onclick="setTab('cards')">Cartas</button></div>
       <div class="explore-search-panel">
         <label class="vision-search"><span>${tabIcon('pokedex')}</span><input id="setSearchInput" value="${esc(ui.setQuery)}" placeholder="Buscar set..."
           oncompositionstart="this.dataset.composing='1'"
@@ -2971,8 +2970,10 @@ function renderCards() {
   return `
     <section class="screen vision-collection-screen">
       <div class="collection-head"><h2>${esc(title)}</h2><div><button onclick="exportBackup()">Exportar</button><button onclick="notify('Toque nas cartas para selecionar e editar.')">Selecionar</button></div></div>
-      ${!forcedFilter ? `<div class="collection-scope-tabs"><button class="${filter==='owned'?'active':''}" onclick="ui.cardFilter='owned';render()">Tenho</button><button class="${filter==='wishlist'?'active':''}" onclick="ui.cardFilter='wishlist';render()">Quero</button><button onclick="openMoreNavigation()">Minhas</button></div>` : ''}
-      <div class="collection-view-tabs"><button onclick="setTab('sets')">Sets</button><button class="active">Cartas</button></div>
+      <!-- As fileiras "Tenho/Quero/Minhas" e "Sets/Cartas" saíram: a primeira
+           repetia os filtros logo abaixo e a segunda repetia os botões
+           Explorar e Coleção da barra de baixo. -->
+
       ${selectedSet ? `<div class="selected-set-banner"><span>${esc(selectedSet.name)}</span><button onclick="ui.cardSet='all';render()">Limpar</button></div>` : ''}
       <div class="toolbar collection-toolbar">
         <label class="vision-search"><span>${tabIcon('pokedex')}</span><input id="cardSearchInput" value="${esc(ui.cardQuery)}" placeholder="Buscar cartas..."

@@ -3075,7 +3075,15 @@ html, body, .app { background: var(--vision-bg) !important; }
 .vision-home-head .vision-profile-button { z-index: 2; }
 
 /* 3) Pokébola: fora do fluxo, centralizada e acima da barra */
-.tabs { position: relative !important; padding-top: 26px !important; }
+/* A barra continua PRESA no rodapé. `fixed` já serve de referência para a
+   Pokébola absoluta — trocar por `relative` soltava a barra e ela subia junto
+   com a rolagem. */
+.tabs {
+  position: fixed !important;
+  left: 0 !important; right: 0 !important; bottom: 0 !important;
+  z-index: 100 !important;
+  padding-top: 26px !important;
+}
 .tab.scanner-tab {
   position: absolute !important;
   left: 50% !important; top: -20px !important;

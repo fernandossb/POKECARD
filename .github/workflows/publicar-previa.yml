@@ -1,0 +1,59 @@
+name: Publicar prévia no navegador
+
+# Publica a pasta do aplicativo como site, para conferir o visual no celular
+# sem precisar gerar e instalar o APK. Roda a cada envio para main e também
+# pode ser acionada à mão.
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - 'app/src/main/assets/www/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Uma publicação por vez; não cancela a que já estiver rodando.
+concurrency:
+  group: previa-pages
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Baixar projeto
+        uses: actions/checkout@v4
+
+      - name: Conferir se a pasta do app existe
+        shell: bash
+        run: |
+          PASTA="app/src/main/assets/www"
+          if [ ! -f "$PASTA/index.html" ]; then
+            echo "index.html não encontrado em $PASTA"
+            exit 1
+          fi
+          echo "Arquivos a publicar: $(find "$PASTA" -type f | wc -l)"
+          du -sh "$PASTA"
+
+      - name: Configurar Pages
+        uses: actions/configure-pages@v5
+
+      - name: Empacotar a pasta do app
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: app/src/main/assets/www
+
+      - name: Publicar
+        id: deploy
+        uses: actions/deploy-pages@v4
+
+      - name: Endereço da prévia
+        shell: bash
+        run: echo "Prévia disponível em ${{ steps.deploy.outputs.page_url }}"
