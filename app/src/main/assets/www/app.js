@@ -596,9 +596,70 @@ function cardVariationProfile(card) {
   };
 }
 
+// Nomes em português para os códigos que as fontes publicam. O usuário nunca
+// deve ver "reverse-holofoil"; o código continua sendo o mesmo por baixo.
+const VARIANT_FRIENDLY_LABELS = {
+  'normal': 'Comum',
+  'holo': 'Holográfica',
+  'holofoil': 'Holográfica',
+  'reverse': 'Reverse Holo',
+  'reverse-holofoil': 'Reverse Holo',
+  '1st-edition': '1ª Edição',
+  '1st-edition-holofoil': '1ª Edição holográfica',
+  'unlimited': 'Tiragem normal',
+  'unlimited-holofoil': 'Tiragem normal holográfica',
+  'firstEdition': '1ª Edição',
+  'unstamped': 'Sem carimbo',
+  'stamped': 'Com carimbo',
+};
+
+function friendlyVariantLabel(value) {
+  const exact = exactSourceEnum(value);
+  return VARIANT_FRIENDLY_LABELS[exact] || exact;
+}
+
+/**
+ * Escolhe sozinho a variante exata a partir do acabamento, da edição e do
+ * idioma marcados. A lista de opções muda de carta para carta — quem manda é
+ * o que as fontes publicam para aquela carta — por isso não dá para deduzir
+ * por regra fixa: aqui pontuamos as opções reais e ficamos com a melhor.
+ */
+function derivePricingVariant(card, { finish, edition, language, current } = {}) {
+  const options = pricingVariantDetailsForCard(card, language).map(item => item.value).filter(Boolean);
+  if (!options.length) return exactSourceEnum(current) || 'normal';
+  if (options.length === 1) return options[0];
+
+  const wantedFinish = normalize(finish || 'normal');
+  const firstEdition = normalize(edition) === normalize('firstEdition');
+  let best = null;
+  let bestScore = -Infinity;
+
+  for (const value of options) {
+    const v = normalize(value);
+    const isReverse = v.includes('reverse');
+    const isHolo = v.includes('holo') && !isReverse;
+    let score = 0;
+
+    if (wantedFinish === 'reverse') score += isReverse ? 12 : -6;
+    else if (wantedFinish === 'holo') score += isHolo ? 12 : -6;
+    else score += (!isReverse && !isHolo) ? 12 : -6;
+
+    if (firstEdition) score += v.includes('1st') ? 8 : -4;
+    else score += v.includes('1st') ? -4 : 2;
+
+    // Entre empates, vale mais a opção que realmente tem preço publicado.
+    if (centralPriceResolveKey(card?.id || '', language || 'pt-br', value)) score += 3;
+    // Mantém a escolha atual quando ela continua sendo válida.
+    if (exactSourceEnum(current) === value) score += 1;
+
+    if (score > bestScore) { bestScore = score; best = value; }
+  }
+  return best || options[0];
+}
+
 function priceDimensionLabel(field, value) {
   if (field === 'finishes') return finishPriceLabel(value);
-  return exactSourceEnum(value);
+  return friendlyVariantLabel(value);
 }
 
 function optionListForCard(card, field, selected, preserveSelected = true, language = '') {
@@ -1927,6 +1988,7 @@ function openMoreNavigation() {
       <button onclick="closeModal();setTab('decks')"><span class="quick-action-icon">${tabIcon('decks')}</span><span><strong>Decks</strong><small>Monte e organize seus decks</small></span></button>
       <button onclick="closeModal();setTab('wishlist')"><span class="quick-action-icon">${tabIcon('wishlist')}</span><span><strong>Wishlist</strong><small>Cartas que você procura</small></span></button>
       <button onclick="closeModal();setTab('repeated')"><span class="quick-action-icon">${tabIcon('repeated')}</span><span><strong>Repetidas</strong><small>Estoque para troca ou venda</small></span></button>
+      <button onclick="closeModal();abrirTrofeus()"><span class="quick-action-icon">🏆</span><span><strong>Troféus</strong><small>${(() => { const r = typeof resumoTrofeus === 'function' ? resumoTrofeus() : null; return r ? `${r.conquistadas} de ${r.total} medalhas conquistadas` : 'Medalhas por coleção, tipo e região'; })()}</small></span></button>
       <button onclick="closeModal();abrirTemaPokemon()"><span class="quick-action-icon">${tabIcon('pokedex')}</span><span><strong>Tema do aplicativo</strong><small>${esc(window.__TEMA_ATUAL__?.nome || 'Gengar')} · deixe o app com a cara do seu favorito</small></span></button>
       <button onclick="closeModal();openBackupPanel()"><span class="quick-action-icon">${tabIcon('collections')}</span><span><strong>Backup e ajustes</strong><small>Proteja e configure seus dados</small></span></button>
     </div>`);
@@ -2367,12 +2429,42 @@ async function refreshRegistrationVariantImage(cardId) {
   if (sourceLabel) sourceLabel.textContent = `Imagem: ${image.source || 'catálogo público'}${image.fallback ? ' (imagem-base)' : ''}`;
 }
 
-function handleRegistrationVariantChange(cardId) {
+function handleRegistrationVariantChange(cardId, origem = '') {
   const card = cardMap.get(cardId);
   if (card) refreshCardSpecificVariationFields(card);
+  // A variante exata acompanha sozinha o acabamento, a edição e o idioma.
+  // Só não mexemos nela quando foi o próprio usuário quem a escolheu.
+  if (card && origem !== 'variante') sincronizarVarianteExata(card);
   const variant = registrationVariantFromForm();
   refreshAutomaticPriceField(cardId, variant.finish);
   refreshRegistrationVariantImage(cardId);
+}
+
+function sincronizarVarianteExata(card) {
+  const campo = document.getElementById('regPricingVariant');
+  if (!campo) return;
+  const escolhido = derivePricingVariant(card, {
+    finish: document.getElementById('regFinish')?.value,
+    edition: document.getElementById('regEdition')?.value,
+    language: document.getElementById('regLanguage')?.value,
+    current: campo.value,
+  });
+  if (escolhido && campo.value !== escolhido) {
+    const existe = [...campo.options].some(opcao => opcao.value === escolhido);
+    if (existe) campo.value = escolhido;
+  }
+  atualizarResumoVariante(card);
+}
+
+// Mostra o seletor apenas quando a carta tem mais de uma versão de verdade.
+function atualizarResumoVariante(card) {
+  const bloco = document.getElementById('regVarianteBloco');
+  const resumo = document.getElementById('regVarianteResumo');
+  const campo = document.getElementById('regPricingVariant');
+  if (!bloco || !campo) return;
+  const total = campo.options.length;
+  bloco.classList.toggle('hidden', total <= 1);
+  if (resumo) resumo.textContent = friendlyVariantLabel(campo.value);
 }
 
 function showQuoteImageInRegistration(cardId, identity) {
@@ -2903,8 +2995,26 @@ function renderCards() {
 }
 
 function filterChips() {
-  const chips = [['all','Tudo'],['missing','Faltantes'],['repeated','Duplicadas'],['price-review','Preços pendentes']];
-  return chips.map(([value,label]) => `<button class="chip ${ui.cardFilter===value?'active':''}" onclick="ui.cardFilter='${value}';ui.cardLimit=40;cardResultCache.key='';refreshSearchResults('cardQuery', true);document.querySelectorAll('.chip').forEach(btn=>btn.classList.toggle('active',btn.textContent==='${label}'))">${label}</button>`).join('');
+  // "Tenho" e "Desejo" tinham saído desta barra e ficado em outro menu, o que
+  // deixava o conjunto de filtros incompleto. Voltaram para cá, todos juntos.
+  const chips = [
+    ['all', 'Tudo'],
+    ['owned', 'Tenho'],
+    ['missing', 'Faltantes'],
+    ['wishlist', 'Desejo'],
+    ['repeated', 'Duplicadas'],
+    ['price-review', 'Preços pendentes'],
+  ];
+  return chips.map(([value, label]) =>
+    `<button class="chip ${ui.cardFilter === value ? 'active' : ''}" onclick="aplicarFiltroCartas('${value}')">${esc(label)}</button>`
+  ).join('');
+}
+
+function aplicarFiltroCartas(valor) {
+  ui.cardFilter = valor;
+  ui.cardLimit = 40;
+  cardResultCache.key = '';
+  renderKeepingScroll();
 }
 
 function cardSorter(sort) {
@@ -3276,7 +3386,7 @@ function scannerContextualIdentityHtml(card) {
     scannerSession.pricingVariant = exactVariants[0].value;
   }
   if (exactVariants.length) {
-    fields.push(`<label>variantEnum exato<select class="field" onchange="selectScannerPricingVariant(this.value)">${exactVariants.map(item => option(item.value,item.value,scannerSession.pricingVariant)).join('')}</select><small>String original da fonte; ${exactVariants.filter(item => item.priced).length} com preço no Database.</small></label>`);
+    fields.push(`<label>Versão da carta<select class="field" onchange="selectScannerPricingVariant(this.value)">${exactVariants.map(item => option(item.value,friendlyVariantLabel(item.value),scannerSession.pricingVariant)).join('')}</select><small>${exactVariants.filter(item => item.priced).length} de ${exactVariants.length} com preço disponível.</small></label>`);
   }
   if (availability.editions.length > 1 || availability.editions[0] !== 'unlimited') fields.push(`<label>Edição<select class="field" onchange="scannerSession.edition=this.value;scannerSession.manualVariationOverride=false">${uniqueValues(availability.editions, [scannerSession.edition]).map(value => option(value,value,scannerSession.edition)).join('')}</select></label>`);
   if (availability.distributions.length > 1 || availability.distributions[0] !== 'unstamped') fields.push(`<label>Distribuição<select class="field" onchange="scannerSession.distribution=this.value;scannerSession.manualVariationOverride=false">${uniqueValues(availability.distributions, [scannerSession.distribution]).map(value => option(value,value,scannerSession.distribution)).join('')}</select></label>`);
@@ -3315,7 +3425,7 @@ function showScannerPrimaryCandidate() {
     </div>
     <div class="scanner-variation-picker">
       <strong>Qual é a variação desta carta?</strong>
-      <small>Escolha o variantEnum exato. O preço será consultado pela mesma string recebida da fonte.</small>
+      <small>Escolha a versão exata da carta. O preço é buscado para essa versão.</small>
       <div class="scanner-variation-options">
         ${scannerFinishOptionsHtml(card)}
       </div>
@@ -3540,8 +3650,8 @@ function automaticPriceBox(cardId, finish = 'normal', variantId = '', identityOv
       : '';
     const statusHtml = verified
       ? (usedFallback
-        ? `<small class="price-verification verified">✓ Price Database: ID e variantEnum exatos · referência do ${esc(PRICE_MARKET_LABELS[priceLanguage] || priceLanguage)}, pois Cardmarket/TCGplayer não precificam a tiragem ${esc(displayQuote.requestedLanguage || 'pt-br')}.</small>`
-        : '<small class="price-verification verified">✓ Price Database: ID, idioma e variantEnum exato compatíveis.</small>')
+        ? `<small class="price-verification verified">✓ Carta e versão conferidas · valor de referência do ${esc(PRICE_MARKET_LABELS[priceLanguage] || priceLanguage)}, porque não existe preço publicado da tiragem ${esc(displayQuote.requestedLanguage || 'pt-br')}.</small>`
+        : '<small class="price-verification verified">✓ Carta, idioma e versão conferidos.</small>')
       : userValidated
         ? '<small class="price-verification user-validated">✓ Correspondência do banco confirmada manualmente por você.</small>'
         : `<small class="price-verification review">⚠ Necessita validação${reasons.length ? `: ${esc(reasons.join('; '))}` : ''}. Este valor ainda não entra no total da coleção.</small>`;
@@ -3702,23 +3812,42 @@ function openCard(cardId, variantId = undefined) {
       <div class="registration-grid two-columns">
         ${registrationField('Quantidade', `<div class="quantity-stepper"><button type="button" class="quantity-step-btn" onclick="changeRegistrationQuantity(-1)" aria-label="Diminuir quantidade">−</button><input id="regQuantity" class="field quantity-step-value" type="number" inputmode="numeric" min="0" step="1" value="${Math.max(0, Number(draft.quantity) || 0)}"><button type="button" class="quantity-step-btn" onclick="changeRegistrationQuantity(1)" aria-label="Aumentar quantidade">+</button></div>`)}
         ${registrationField('Condição', `<select id="regCondition" class="field" onchange="handleRegistrationVariantChange('${esc(card.id)}')">${['Mint','Near Mint','Excelente','Bom','Regular','Danificada'].map(value => option(value,value,draft.condition)).join('')}</select>`)}
-        ${registrationField('finish (TCGdex)', `<select id="regFinish" class="field" onchange="handleRegistrationVariantChange('${esc(card.id)}')">${optionListForCard(card,'finishes',draft.finish,Boolean(selected?.manualVariationOverride))}</select>`)}
-        ${registrationField('language (TCGdex)', `<select id="regLanguage" class="field" onchange="handleRegistrationVariantChange('${esc(card.id)}')">${optionListForCard(card,'languages',draft.language,true)}</select>`)}
-        ${registrationField('variantEnum exato (Price Database)', `<select id="regPricingVariant" class="field" onchange="handleRegistrationVariantChange('${esc(card.id)}')">${optionListForCard(card,'pricingVariants',draft.pricingVariant,true,draft.language)}</select><small>Valor original recebido do TCGdex, TCGplayer ou Cardmarket; nenhuma nomenclatura é descartada.</small>`)}
-        ${registrationField('printVariation', `<select id="regEdition" class="field" onchange="handleRegistrationVariantChange('${esc(card.id)}')">${optionListForCard(card,'editions',draft.edition,Boolean(selected?.manualVariationOverride))}</select>`)}
-        ${registrationField('stamp', `<select id="regDistribution" class="field" onchange="handleRegistrationVariantChange('${esc(card.id)}')">${optionListForCard(card,'distributions',draft.distribution,Boolean(selected?.manualVariationOverride))}</select>`)}
+        ${registrationField('Acabamento', `<select id="regFinish" class="field" onchange="handleRegistrationVariantChange('${esc(card.id)}')">${optionListForCard(card,'finishes',draft.finish,Boolean(selected?.manualVariationOverride))}</select>`)}
+        ${registrationField('Idioma da carta', `<select id="regLanguage" class="field" onchange="handleRegistrationVariantChange('${esc(card.id)}')">${optionListForCard(card,'languages',draft.language,true)}</select>`)}
+        ${registrationField('Preço automático', `<div id="automaticPriceBox">${automaticPriceBox(card.id, draft.finish, existingId, draft)}</div>`, 'span-2')}
+      </div>
+
+      <details class="registration-group" open>
+        <summary>Detalhes da impressão <span id="regVarianteResumo" class="registration-group-hint">${esc(friendlyVariantLabel(draft.pricingVariant))}</span></summary>
+        <div class="registration-grid two-columns">
+        ${registrationField('Edição', `<select id="regEdition" class="field" onchange="handleRegistrationVariantChange('${esc(card.id)}')">${optionListForCard(card,'editions',draft.edition,Boolean(selected?.manualVariationOverride))}</select>`)}
+        ${registrationField('Carimbo', `<select id="regDistribution" class="field" onchange="handleRegistrationVariantChange('${esc(card.id)}')">${optionListForCard(card,'distributions',draft.distribution,Boolean(selected?.manualVariationOverride))}</select>`)}
         <input type="hidden" id="regArtVariant" value="standard">
+        <div id="regVarianteBloco" class="registration-field span-2">
+          <label>Versão usada para o preço</label>
+          <select id="regPricingVariant" class="field" onchange="handleRegistrationVariantChange('${esc(card.id)}','variante')">${optionListForCard(card,'pricingVariants',draft.pricingVariant,true,draft.language)}</select>
+          <small>O app escolhe sozinho conforme o acabamento e a edição. Só mexa se souber que esta carta é outra versão.</small>
+        </div>
         ${registrationField('Região', `<select id="regRegion" class="field" onchange="handleRegistrationVariantChange('${esc(card.id)}')">${['Brasil','Estados Unidos','Europa','Japão','Coreia','China','Outra região'].map(value => option(value,value,draft.region)).join('')}</select>`)}
+        ${registrationField('Guardada em', `<select id="regStorage" class="field">${['fichario','caixa','deck','troca','venda'].map(value => option(value,value,draft.storageLocation)).join('')}</select>`)}
+        </div>
+      </details>
+
+      <details class="registration-group">
+        <summary>Carta graduada e observações <span class="registration-group-hint">${esc(draft.gradingCompany && draft.gradingCompany !== 'Não graduada' ? draft.gradingCompany : 'opcional')}</span></summary>
+        <div class="registration-grid two-columns">
         ${registrationField('Certificadora', `<select id="regGradingCompany" class="field" onchange="handleRegistrationVariantChange('${esc(card.id)}')">${['Não graduada','PSA','CGC','Beckett BGS','Beckett Black Label','SGC','Outra certificadora'].map(value => option(value,value,draft.gradingCompany)).join('')}</select>`)}
         ${registrationField('Nota da graduação', `<input id="regGrade" class="field" inputmode="decimal" placeholder="Ex.: 10" value="${esc(draft.grade)}" onchange="handleRegistrationVariantChange('${esc(card.id)}')">`)}
-        ${registrationField('Tags adicionais', `<input id="regVariantTags" class="field" placeholder="Ex.: error, miscut, signed" value="${esc((draft.variantTags || []).join(', '))}" onchange="handleRegistrationVariantChange('${esc(card.id)}')">`)}
-        ${registrationField('Guardada em', `<select id="regStorage" class="field">${['fichario','caixa','deck','troca','venda'].map(value => option(value,value,draft.storageLocation)).join('')}</select>`)}
+        ${registrationField('Marcações extras', `<input id="regVariantTags" class="field" placeholder="Ex.: erro de corte, assinada" value="${esc((draft.variantTags || []).join(', '))}" onchange="handleRegistrationVariantChange('${esc(card.id)}')">`)}
+        </div>
+      </details>
+
+      <div class="registration-grid two-columns">
         ${registrationField('Pokémon representado', `<div class="pokemon-link-search">
           <input type="hidden" id="regPokemonId" value="${manualPokemonId || ''}" data-automatic="${automaticLinked.length ? '1' : '0'}">
           <input id="regPokemonSearch" class="field" type="search" autocomplete="off" inputmode="search" placeholder="Digite o nome ou número do Pokémon" value="${manualPokemonId ? esc(pokemonLinkDisplayValue(manualPokemonId)) : ''}" oninput="updatePokemonLinkSearch(this.value)" onfocus="updatePokemonLinkSearch(this.value)">
           <div id="regPokemonResults" class="pokemon-link-results">${renderPokemonLinkSearchResults('', manualPokemonId, automaticLinked)}</div>
-        </div><small class="pokemon-link-help">${automaticLinked.length ? `Vínculo automático atual: ${esc(automaticLinked.map(item => item.name).join(' + '))}. Busque para substituir.` : 'A carta não foi reconhecida automaticamente. Digite o nome ou número e toque no resultado.'}</small><small id="regPokemonError" class="field-validation-error hidden">Esta escolha é obrigatória para cadastrar a carta.</small>`)}
-        ${registrationField('Preço automático', `<div id="automaticPriceBox">${automaticPriceBox(card.id, draft.finish, existingId, draft)}</div>`)}
+        </div><small class="pokemon-link-help">${automaticLinked.length ? `Vínculo automático atual: ${esc(automaticLinked.map(item => item.name).join(' + '))}. Busque para substituir.` : 'A carta não foi reconhecida automaticamente. Digite o nome ou número e toque no resultado.'}</small><small id="regPokemonError" class="field-validation-error hidden">Esta escolha é obrigatória para cadastrar a carta.</small>`, 'span-2')}
       </div>
 
       <details class="manual-variation-override">
@@ -3870,8 +3999,8 @@ function clearPokemonLinkSelection() {
   updatePokemonLinkSearch('');
 }
 
-function registrationField(label, control) {
-  return `<label class="registration-field"><span>${esc(label)}</span>${control}</label>`;
+function registrationField(label, control, extraClass = '') {
+  return `<label class="registration-field${extraClass ? ` ${extraClass}` : ''}"><span>${esc(label)}</span>${control}</label>`;
 }
 
 function registrationToggle(id, label, checked) {
@@ -3956,9 +4085,11 @@ function renderRegion(region, items, stats) {
 
 function renderPokemonTile(item, stat) {
   const owned = stat.copies > 0;
+  // Começa com o sprite local (instantâneo, funciona sem internet) e o
+  // arte3d.js troca pela arte 3D quando o quadradinho entra na tela.
   return `<button class="pokemon-tile ${owned ? '' : 'missing'}" onclick="openPokemon(${item.id})">
     ${owned ? `<span class="pokemon-owned-count">${stat.copies}</span>` : ''}
-    <img src="${esc(item.sprite)}" loading="lazy" alt="${esc(item.name)}">
+    <img src="${esc(item.sprite)}" loading="lazy" alt="${esc(item.name)}" data-arte3d="${Number(item.id)}">
     <span class="pokemon-number">Nº ${String(item.id).padStart(4,'0')}</span>
     <span class="pokemon-name">${esc(item.name)}</span>
   </button>`;

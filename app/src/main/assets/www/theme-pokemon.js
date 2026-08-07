@@ -19,6 +19,31 @@
 
   // bg = fundo geral · s1/s2/s3 = cartões · line = bordas
   // mut = texto secundário · pri = cor de destaque · soft = fundo do destaque
+  //
+  // dex/dexDark = a cor do "plástico" da Pokédex, bem mais viva. Ela veste
+  // só o cabeçalho e a barra de abas — a área de conteúdo continua escura,
+  // como as telas encaixadas no aparelho de verdade.
+  var PLASTICO = {
+    'Fantasma':  ['#9640dd', '#4a2070'],
+    'Elétrico':  ['#f7c422', '#9a7008'],
+    'Fogo':      ['#ef4a34', '#8a2412'],
+    'Água':      ['#358ce0', '#14497e'],
+    'Planta':    ['#4cc45f', '#155e28'],
+    'Gelo':      ['#54cfe0', '#12626e'],
+    'Lutador':   ['#e0654a', '#7e2a18'],
+    'Venenoso':  ['#c05ad8', '#5e2470'],
+    'Terrestre': ['#dfae4e', '#7e5a14'],
+    'Voador':    ['#8fb0f5', '#33477e'],
+    'Psíquico':  ['#f5608a', '#7e2540'],
+    'Inseto':    ['#a8cc3a', '#4c5c15'],
+    'Pedra':     ['#c9a962', '#5f4d14'],
+    'Sombrio':   ['#9c8672', '#3f3327'],
+    'Dragão':    ['#8b72ff', '#332270'],
+    'Metálico':  ['#a3bccc', '#3d5058'],
+    'Fada':      ['#f588c8', '#7e2a5a'],
+    'Normal':    ['#c8bda0', '#4f4a3b']
+  };
+
   var TYPES = {
     'Fantasma':  { bg:'#0d0618', s1:'#1a0d2b', s2:'#221136', s3:'#2b1743', line:'#3d2159', mut:'#b3a3c4', pri:'#b46cff', soft:'#2c1547' },
     'Elétrico':  { bg:'#141002', s1:'#241d06', s2:'#2e2409', s3:'#392d0c', line:'#4f3f11', mut:'#c8bd90', pri:'#f5c518', soft:'#3a2d08' },
@@ -49,13 +74,36 @@
     return null;
   }
 
-  function paletteFor(pokemon) {
+  function tipoPrincipal(pokemon) {
     var types = (pokemon && pokemon.types) || [];
-    for (var i = 0; i < types.length; i++) if (TYPES[types[i]]) return TYPES[types[i]];
-    return FALLBACK;
+    for (var i = 0; i < types.length; i++) if (TYPES[types[i]]) return types[i];
+    return 'Fantasma';
+  }
+
+  function paletteFor(pokemon) {
+    return TYPES[tipoPrincipal(pokemon)] || FALLBACK;
   }
 
   function spritePath(id) { return 'sprites/' + Number(id) + '.png'; }
+
+  // Plásticos claros (Elétrico, Gelo, Fada...) pedem texto escuro; escuros
+  // pedem texto claro. Calculado na hora para valer também em cores futuras.
+  function luminancia(hex) {
+    var c = [1, 3, 5].map(function (i) {
+      var v = parseInt(hex.substr(i, 2), 16) / 255;
+      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  }
+
+  // Compara o contraste real contra preto e contra branco e fica com o melhor,
+  // em vez de usar um limiar fixo — que errava nos tons médios.
+  function tintaSobre(hex) {
+    var L = luminancia(hex);
+    var contrasteBranco = 1.05 / (L + 0.05);
+    var contratePreto = (L + 0.05) / 0.05;
+    return contratePreto >= contrasteBranco ? '#16161a' : '#ffffff';
+  }
 
   function savedId() {
     try {
@@ -120,6 +168,16 @@
     root.style.setProperty('--vision-primary-soft', p.soft);
     // O brilho do mascote acompanha a cor de destaque.
     root.style.setProperty('--theme-glow', p.pri);
+
+    // Plástico da Pokédex: cabeçalho e barra de abas.
+    var plastico = PLASTICO[tipoPrincipal(pokemon)] || PLASTICO['Fantasma'];
+    root.style.setProperty('--dex-body', plastico[0]);
+    root.style.setProperty('--dex-body-dark', plastico[1]);
+    root.style.setProperty('--dex-body-text', tintaSobre(plastico[0]));
+    root.style.setProperty('--dex-body-shadow', tintaSobre(plastico[0]) === '#ffffff'
+      ? '0 1px 2px rgba(0,0,0,.5)'
+      : '0 1px 1px rgba(255,255,255,.45)');
+    root.style.setProperty('--dex-lcd-text', p.mut);
 
     try { localStorage.setItem(STORAGE_KEY, String(id)); } catch (e) {}
     window.__TEMA_ATUAL__ = {

@@ -2436,7 +2436,7 @@ body::before { display: block !important; }
 .selected-set-banner { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding: 9px 12px; border-radius: 12px; background: #173732; color: #bfe1d9; font-size: 10px; }
 .selected-set-banner button { border: 0; background: transparent; color: var(--vision-primary); }
 .collection-toolbar .filter-grid { margin-top: 11px; }
-.collection-filter-chips { display: grid !important; grid-template-columns: repeat(2,1fr); gap: 7px !important; margin-top: 10px; }
+.collection-filter-chips { display: grid !important; grid-template-columns: repeat(3,1fr); gap: 7px !important; margin-top: 10px; }
 .collection-filter-chips .chip { min-height: 38px; border-radius: 12px !important; }
 .card-results-count { margin: 4px 0 10px; color: #829b96; font-size: 9px; }
 .card-list { grid-template-columns: repeat(3,minmax(0,1fr)) !important; gap: 10px 8px !important; }
@@ -2646,3 +2646,226 @@ body::before { display: block !important; }
   background: var(--vision-primary-soft);
   color: var(--vision-text);
 }
+
+/* Artes 3D e cadastro em blocos */
+.pokemon-tile img.arte3d-carregada { image-rendering: auto; }
+.registration-group {
+  margin: 10px 0; padding: 10px 12px;
+  border: 1px solid var(--vision-line); border-radius: 12px;
+  background: var(--vision-surface);
+}
+.registration-group > summary {
+  cursor: pointer; font-size: 13px; font-weight: 500;
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+}
+.registration-group[open] > summary { margin-bottom: 10px; }
+.registration-group-hint {
+  font-weight: 400; font-size: 11px; color: var(--vision-muted);
+  background: var(--vision-primary-soft); padding: 2px 8px; border-radius: 999px;
+}
+.registration-field.span-2 { grid-column: 1 / -1; }
+.registration-field.hidden, #regVarianteBloco.hidden { display: none !important; }
+
+/* =========================================================================
+   Camada Pokédex clássica — v4.0
+   Dá ao app a linguagem física da Pokédex de 1996: contorno fino de tinta,
+   botões salientes, telas afundadas, lente e visor de LCD. As cores continuam
+   vindo das variáveis --vision-*, que o theme-pokemon.js repinta conforme o
+   Pokémon favorito. Só o acabamento muda aqui; nenhuma tela é reorganizada.
+   ========================================================================= */
+:root {
+  --dex-ink: #16161a;
+  --dex-bezel: #edeae1;
+  --dex-lcd-text: #c8f078;
+  /* Relevo: luz em cima, sombra embaixo, apoio sólido no chão. */
+  --dex-raise: inset 0 2px 0 rgba(255,255,255,.30), inset 0 -3px 0 rgba(0,0,0,.26), 0 3px 0 rgba(0,0,0,.42);
+  --dex-raise-soft: inset 0 2px 0 rgba(255,255,255,.22), inset 0 -2px 0 rgba(0,0,0,.20), 0 2px 0 rgba(0,0,0,.35);
+  --dex-press: inset 0 3px 7px rgba(0,0,0,.45);
+  --dex-sink: inset 0 3px 8px rgba(0,0,0,.55), inset 0 -1px 0 rgba(255,255,255,.10);
+  --dex-plastic: linear-gradient(180deg, rgba(255,255,255,.16), rgba(0,0,0,.14));
+}
+
+/* ---- Corpo de plástico ---- */
+.app-header {
+  position: relative !important;
+  background-image: var(--dex-plastic) !important;
+  background-color: var(--dex-body, #9640dd) !important;
+  border-bottom: 2px solid var(--dex-ink) !important;
+  box-shadow: inset 0 -3px 6px rgba(0,0,0,.20) !important;
+}
+.app-header .header-row h1, .app-header .kicker, .app-header .header-icon {
+  color: var(--dex-body-text, #fff) !important;
+  text-shadow: var(--dex-body-shadow, 0 1px 2px rgba(0,0,0,.45));
+}
+
+/* ---- Lente e luzes: reaproveitam os três elementos já existentes ---- */
+.gengar-atmosphere {
+  display: block !important;
+  position: absolute !important;
+  top: calc(14px + env(safe-area-inset-top)); left: 16px;
+  width: auto; height: 20px; inset: auto auto auto 16px;
+  z-index: 2; pointer-events: none;
+}
+.gengar-atmosphere::before {
+  content: ''; position: absolute; left: 0; top: -8px;
+  width: 34px; height: 34px; border-radius: 50%;
+  background: #5bc8f5; border: 2px solid #efefef;
+  box-shadow: 0 0 0 2px var(--dex-ink),
+              inset 0 -4px 7px rgba(0,40,80,.55),
+              inset 0 3px 5px rgba(255,255,255,.6);
+  animation: none;
+}
+.gengar-atmosphere::after {
+  content: ''; position: absolute; left: 9px; top: -2px;
+  width: 11px; height: 7px; border-radius: 50%;
+  background: rgba(255,255,255,.85);
+}
+.gengar-atmosphere span {
+  position: absolute !important; top: 4px;
+  width: 10px !important; height: 10px !important;
+  border-radius: 50% !important; border: 1.5px solid var(--dex-ink);
+  filter: none !important; opacity: 1 !important; animation: none !important;
+  box-shadow: inset 0 2px 2px rgba(255,255,255,.55), inset 0 -2px 3px rgba(0,0,0,.4);
+}
+.gengar-atmosphere span:nth-child(1) { left: 44px !important; background: #e8402f !important; }
+.gengar-atmosphere span:nth-child(2) { left: 60px !important; background: #f5c518 !important; }
+.gengar-atmosphere span:nth-child(3) { left: 76px !important; background: #3fae4a !important; }
+
+.header-row h1 { padding-left: 0; }
+.kicker { padding-left: 96px; }
+
+/* ---- Visor de LCD ---- */
+#header-status {
+  display: inline-block;
+  margin-top: 6px !important;
+  padding: 5px 9px;
+  border: 2px solid var(--dex-ink);
+  border-radius: 5px;
+  background: rgba(0,0,0,.55);
+  color: var(--dex-lcd-text) !important;
+  font-family: ui-monospace, "Courier New", monospace;
+  font-size: 10.5px !important;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  box-shadow: var(--dex-sink);
+}
+
+/* ---- Telas afundadas ---- */
+.stat-card, .portfolio-value, .collection-summary-grid > *, .pokedex-progress-card,
+.catalog-last-result, .deck-summary, .price-market-summary, .tema-atual {
+  border: 2px solid var(--dex-ink) !important;
+  border-radius: 9px !important;
+  box-shadow: var(--dex-sink) !important;
+}
+
+/* ---- Campos: também afundados ---- */
+.field, input.field, select.field, textarea.field, .vision-search {
+  border: 2px solid var(--dex-ink) !important;
+  border-radius: 8px !important;
+  box-shadow: var(--dex-sink) !important;
+}
+
+/* ---- Botões salientes ---- */
+.primary-btn, .secondary-btn, .danger-btn, .load-more, .chip,
+.quick-action-list button, .price-refresh-btn, .price-validate-btn,
+.deck-suggestion-options button, .tema-item, .quantity-step-btn {
+  border: 2px solid var(--dex-ink) !important;
+  border-radius: 9px !important;
+  box-shadow: var(--dex-raise-soft) !important;
+  background-image: var(--dex-plastic) !important;
+  font-weight: 500 !important;
+  transition: transform .05s ease, box-shadow .05s ease;
+}
+.primary-btn { box-shadow: var(--dex-raise) !important; }
+.primary-btn:active, .secondary-btn:active, .danger-btn:active, .chip:active,
+.quick-action-list button:active, .tema-item:active, .quantity-step-btn:active {
+  transform: translateY(2px);
+  box-shadow: var(--dex-press) !important;
+}
+.chip.active, .tema-item.ativo {
+  box-shadow: var(--dex-press) !important;
+  transform: translateY(1px);
+}
+
+/* ---- Abas: os botões azuis da Pokédex ---- */
+.tabs {
+  border-top: 2px solid var(--dex-ink) !important;
+  background: var(--dex-body-dark, #4a2070) !important;
+  box-shadow: inset 0 3px 6px rgba(0,0,0,.30) !important;
+  gap: 5px !important; padding: 9px 10px calc(11px + env(safe-area-inset-bottom)) !important;
+}
+.tab {
+  border: 2px solid var(--dex-ink) !important;
+  border-radius: 7px !important;
+  background: #63cdf7 !important;
+  color: #16161a !important;
+  box-shadow: inset 0 2px 0 rgba(255,255,255,.75), inset 0 -3px 0 rgba(0,60,90,.32), 0 2px 0 rgba(0,0,0,.4) !important;
+}
+.tab.active {
+  background: var(--dex-bezel) !important;
+  box-shadow: var(--dex-press) !important;
+  transform: translateY(1px);
+}
+.tab .tab-label { font-size: 9.5px !important; font-weight: 500 !important; letter-spacing: .03em; }
+.scanner-tab { background: #f5c518 !important; }
+
+/* ---- Cartões com moldura, como o visor da Pokédex ---- */
+.panel, .set-card, .vision-card-tile, .card-row, .owned-variant-row,
+.modal-sheet, .deck-panel, .timeline-set-card, .registration-group, .deck-analysis {
+  border: 2px solid var(--dex-ink) !important;
+  border-radius: 10px !important;
+  box-shadow: var(--dex-raise-soft) !important;
+}
+
+/* ---- Mascote com apoio no plástico ---- */
+.gengar-header-art {
+  filter: drop-shadow(0 4px 4px rgba(0,0,0,.5)) !important;
+}
+
+@media (max-width: 380px) {
+  .kicker { padding-left: 92px; }
+  .gengar-atmosphere::before { width: 30px; height: 30px; }
+  .gengar-atmosphere span:nth-child(1) { left: 40px !important; }
+  .gengar-atmosphere span:nth-child(2) { left: 55px !important; }
+  .gengar-atmosphere span:nth-child(3) { left: 70px !important; }
+}
+
+/* Troféus — medalhas com níveis */
+.trofeu-familia {
+  margin: 16px 0 8px; font-size: 14px; font-weight: 500;
+  display: flex; justify-content: space-between; align-items: baseline;
+}
+.trofeu-familia span { font-size: 11px; color: var(--vision-muted); }
+.trofeu-grade { display: grid; grid-template-columns: 1fr; gap: 8px; }
+@media (min-width: 420px) { .trofeu-grade { grid-template-columns: 1fr 1fr; } }
+.trofeu {
+  display: flex; align-items: center; gap: 11px; padding: 10px 12px;
+  border: 2px solid var(--dex-ink); border-radius: 10px;
+  background: var(--vision-surface-2);
+  box-shadow: var(--dex-raise-soft);
+}
+.trofeu.bloqueado { opacity: .55; }
+.trofeu-medalha {
+  position: relative; flex: none;
+  width: 46px; height: 46px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 21px; line-height: 1;
+  background: var(--tr-cor); border: 2px solid var(--dex-ink);
+  box-shadow: inset 0 3px 0 rgba(255,255,255,.42), inset 0 -4px 0 rgba(0,0,0,.30), 0 2px 0 rgba(0,0,0,.45);
+}
+.trofeu.bloqueado .trofeu-medalha { filter: grayscale(1); }
+.trofeu-nivel {
+  position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%);
+  font-size: 8.5px; font-weight: 500; letter-spacing: .04em;
+  padding: 1px 6px; border-radius: 999px; white-space: nowrap;
+  background: var(--dex-ink); color: #fff; border: 1px solid var(--tr-cor);
+}
+.trofeu-info { min-width: 0; flex: 1; }
+.trofeu-info strong { display: block; font-size: 13px; }
+.trofeu-info small { display: block; font-size: 10.5px; color: var(--vision-muted); line-height: 1.4; }
+.trofeu-barra {
+  height: 6px; margin: 6px 0 4px; border-radius: 999px; overflow: hidden;
+  background: rgba(0,0,0,.45); box-shadow: inset 0 2px 3px rgba(0,0,0,.5);
+}
+.trofeu-barra span { display: block; height: 100%; background: var(--tr-cor); }
+.trofeu-conta { font-variant-numeric: tabular-nums; }
