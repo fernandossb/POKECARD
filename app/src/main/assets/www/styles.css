@@ -3054,3 +3054,53 @@ html, body, .app { background: var(--vision-bg) !important; }
 }
 .tab.scanner-tab .tab-label { display: none !important; }
 .tab.scanner-tab .tab-icon { width: 24px !important; height: 24px !important; }
+
+/* =========================================================================
+   Ajustes v4.1.2
+   1) Telas de Sets e Cartas sem a faixa de título — sobra espaço para a lista
+   2) Nada mais passa por baixo da lente do cabeçalho
+   3) Botão do scanner vira Pokébola centralizada acima da barra
+   ========================================================================= */
+
+/* 1) Fora as faixas de título dessas telas. A busca e os filtros ficam. */
+.vision-screen-head,
+.collection-head { display: none !important; }
+.explore-mode-tabs, .collection-view-tabs, .collection-scope-tabs { margin-top: 4px !important; }
+.screen { padding-top: 12px !important; }
+
+/* 2) O conteúdo do cabeçalho sempre por cima da lente e das luzes */
+.vision-home-head::before,
+.vision-home-head::after { z-index: 0; }
+.vision-home-head > * { position: relative; z-index: 1; }
+.vision-home-head .vision-profile-button { z-index: 2; }
+
+/* 3) Pokébola: fora do fluxo, centralizada e acima da barra */
+.tabs { position: relative !important; padding-top: 26px !important; }
+.tab.scanner-tab {
+  position: absolute !important;
+  left: 50% !important; top: -20px !important;
+  transform: translateX(-50%);
+  margin: 0 !important;
+  flex: none !important;
+  width: 54px !important; height: 54px !important;
+  border-radius: 50% !important;
+  border: 2.5px solid #16161a !important;
+  background: linear-gradient(180deg, #ee3b2f 0%, #ee3b2f 46%, #16161a 46%, #16161a 54%, #f4f1ea 54%, #f4f1ea 100%) !important;
+  box-shadow: inset 0 3px 0 rgba(255,255,255,.32), inset 0 -4px 0 rgba(0,0,0,.22), 0 3px 0 rgba(0,0,0,.5) !important;
+  padding: 0 !important;
+  overflow: visible;
+}
+.tab.scanner-tab::after {
+  content: ''; position: absolute; left: 50%; top: 50%;
+  width: 17px; height: 17px; transform: translate(-50%,-50%);
+  border-radius: 50%; background: #f4f1ea;
+  border: 2.5px solid #16161a;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,.28);
+}
+.tab.scanner-tab .tab-icon,
+.tab.scanner-tab .tab-label { display: none !important; }
+.tab.scanner-tab:active { transform: translateX(-50%) translateY(2px); }
+
+/* A Pokébola sobe o bastante para não encostar em nenhum botão, e os cinco
+   botões de texto continuam divididos por igual na barra. */
+.tab.scanner-tab { top: -30px !important; }

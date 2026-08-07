@@ -45,24 +45,24 @@
   };
 
   var TYPES = {
-    'Fantasma':  { bg:'#0d0618', s1:'#1a0d2b', s2:'#221136', s3:'#2b1743', line:'#3d2159', mut:'#b3a3c4', pri:'#b46cff', soft:'#2c1547' },
-    'Elétrico':  { bg:'#141002', s1:'#241d06', s2:'#2e2409', s3:'#392d0c', line:'#4f3f11', mut:'#c8bd90', pri:'#f5c518', soft:'#3a2d08' },
-    'Fogo':      { bg:'#150703', s1:'#261008', s2:'#31150a', s3:'#3d1b0d', line:'#552712', mut:'#c9ac9c', pri:'#ff7a2f', soft:'#3d1a09' },
-    'Água':      { bg:'#030d17', s1:'#08192b', s2:'#0b2038', s3:'#0f2845', line:'#17395e', mut:'#9fb4cc', pri:'#3d9bff', soft:'#0d2440' },
-    'Planta':    { bg:'#04120a', s1:'#0a2113', s2:'#0d2b18', s3:'#10351e', line:'#194a2a', mut:'#a3c0ad', pri:'#4fc463', soft:'#0f3020' },
-    'Gelo':      { bg:'#031216', s1:'#082228', s2:'#0b2c34', s3:'#0e3640', line:'#154c59', mut:'#a0c3ca', pri:'#5fd3e0', soft:'#0d3038' },
-    'Lutador':   { bg:'#150705', s1:'#26110c', s2:'#31160f', s3:'#3d1c13', line:'#55291b', mut:'#c8a89e', pri:'#e0603f', soft:'#3c1a11' },
-    'Venenoso':  { bg:'#100618', s1:'#1e0d2b', s2:'#271136', s3:'#301743', line:'#452159', mut:'#bda3c8', pri:'#c05ad8', soft:'#301447' },
-    'Terrestre': { bg:'#120d03', s1:'#221a08', s2:'#2c220b', s3:'#372a0e', line:'#4d3b14', mut:'#c5b795', pri:'#d9a441', soft:'#382a0b' },
-    'Voador':    { bg:'#060911', s1:'#0d1424', s2:'#111a2e', s3:'#152039', line:'#1f2e4f', mut:'#a9b3cc', pri:'#8aa9f0', soft:'#141e38' },
-    'Psíquico':  { bg:'#15060c', s1:'#260c17', s2:'#31101e', s3:'#3d1425', line:'#551c33', mut:'#cca0b0', pri:'#f2557f', soft:'#3c1322' },
-    'Inseto':    { bg:'#0b1003', s1:'#161f08', s2:'#1d290b', s3:'#24330e', line:'#334814', mut:'#b4c095', pri:'#9dc030', soft:'#24310b' },
-    'Pedra':     { bg:'#110d04', s1:'#211a0a', s2:'#2b220d', s3:'#352b10', line:'#4a3c17', mut:'#c2b596', pri:'#c2a15a', soft:'#362b0d' },
-    'Sombrio':   { bg:'#0a0806', s1:'#17130e', s2:'#1e1913', s3:'#261f17', line:'#372e23', mut:'#bcaea1', pri:'#a08a74', soft:'#251e16' },
-    'Dragão':    { bg:'#080513', s1:'#120c24', s2:'#18102e', s3:'#1e1439', line:'#2c1f52', mut:'#aea4cc', pri:'#8b72ff', soft:'#1d1440' },
-    'Metálico':  { bg:'#070a0d', s1:'#10171d', s2:'#151e26', s3:'#1a252f', line:'#273541', mut:'#aeb8c2', pri:'#9ab4cc', soft:'#19232d' },
-    'Fada':      { bg:'#14060f', s1:'#250c1c', s2:'#301024', s3:'#3c142d', line:'#541c40', mut:'#cea3bd', pri:'#f07ac0', soft:'#3b132a' },
-    'Normal':    { bg:'#0b0a07', s1:'#191710', s2:'#211e15', s3:'#29251a', line:'#3b3627', mut:'#bcb6a6', pri:'#c0b596', soft:'#282318' }
+    'Fantasma':  { bg:'#1c1230', s1:'#2a1c45', s2:'#332352', s3:'#3d2b60', line:'#553a7a', mut:'#c9bcd9', pri:'#c78aff', soft:'#3b2861' },
+    'Elétrico':  { bg:'#241f0a', s1:'#352d10', s2:'#403716', s3:'#4b421c', line:'#665a27', mut:'#dbd0a6', pri:'#f7d040', soft:'#4a3f18' },
+    'Fogo':      { bg:'#2a150c', s1:'#3b2013', s2:'#472819', s3:'#54311f', line:'#71442c', mut:'#dcbcab', pri:'#ff8f4d', soft:'#50291a' },
+    'Água':      { bg:'#0d1e33', s1:'#152c49', s2:'#1a3557', s3:'#203f66', line:'#2d5688', mut:'#b4c8de', pri:'#5aabff', soft:'#1d3d63' },
+    'Planta':    { bg:'#10251a', s1:'#193526', s2:'#1e402e', s3:'#244b37', line:'#316648', mut:'#b6d0bd', pri:'#67d47a', soft:'#204431' },
+    'Gelo':      { bg:'#0d2429', s1:'#153439', s2:'#1a3f46', s3:'#204a53', line:'#2c6570', mut:'#b4d2d8', pri:'#78dfea', soft:'#1d4550' },
+    'Lutador':   { bg:'#2a1512', s1:'#3b201b', s2:'#472822', s3:'#543129', line:'#714438', mut:'#dbb8ae', pri:'#ee7a5b', soft:'#4f2a22' },
+    'Venenoso':  { bg:'#211230', s1:'#301c45', s2:'#3a2352', s3:'#452b60', line:'#5f3a7a', mut:'#d0bcd9', pri:'#d072e8', soft:'#432861' },
+    'Terrestre': { bg:'#241c0b', s1:'#352a12', s2:'#403318', s3:'#4b3d1e', line:'#66532a', mut:'#d7c9a6', pri:'#e8b95c', soft:'#4a3c1a' },
+    'Voador':    { bg:'#141a2b', s1:'#1e263c', s2:'#242e48', s3:'#2b3755', line:'#3c4b73', mut:'#bfc7dd', pri:'#a3bcf7', soft:'#293351' },
+    'Psíquico':  { bg:'#2b1119', s1:'#3d1b26', s2:'#4a222e', s3:'#572a38', line:'#743a4d', mut:'#e0b3c0', pri:'#ff7a9c', soft:'#522433' },
+    'Inseto':    { bg:'#1c220c', s1:'#2a3213', s2:'#333c19', s3:'#3d471f', line:'#53602b', mut:'#c9d3aa', pri:'#b6d84c', soft:'#3b451c' },
+    'Pedra':     { bg:'#231c0d', s1:'#332a15', s2:'#3e341b', s3:'#493e21', line:'#63552e', mut:'#d5c9a8', pri:'#d4b673', soft:'#473c1e' },
+    'Sombrio':   { bg:'#1a1613', s1:'#28221d', s2:'#312a24', s3:'#3a322b', line:'#50463c', mut:'#cec2b6', pri:'#b39c86', soft:'#382f28' },
+    'Dragão':    { bg:'#161230', s1:'#221c45', s2:'#2a2352', s3:'#322b60', line:'#463a7a', mut:'#c1b8dd', pri:'#a48eff', soft:'#302861' },
+    'Metálico':  { bg:'#141b21', s1:'#1e2731', s2:'#25303b', s3:'#2c3946', line:'#3e4e5e', mut:'#c3cdd6', pri:'#b0c8de', soft:'#2a3644' },
+    'Fada':      { bg:'#2b1322', s1:'#3d1d31', s2:'#4a243c', s3:'#572c47', line:'#743d60', mut:'#e2b6d0', pri:'#ff96d4', soft:'#522742' },
+    'Normal':    { bg:'#1b1913', s1:'#29251c', s2:'#322e23', s3:'#3b362a', line:'#514b3b', mut:'#cfc9b8', pri:'#d3c8a8', soft:'#383326' }
   };
   var FALLBACK = TYPES['Fantasma'];
 
