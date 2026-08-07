@@ -2869,3 +2869,84 @@ body::before { display: block !important; }
 }
 .trofeu-barra span { display: block; height: 100%; background: var(--tr-cor); }
 .trofeu-conta { font-variant-numeric: tabular-nums; }
+
+/* =========================================================================
+   Correção v4.0.1 — o cabeçalho Pokédex no lugar certo.
+   A camada v3.7 esconde o <header class="app-header"> e desenha o próprio
+   topo dentro da tela inicial (.vision-home-head). A versão anterior desta
+   camada pintava o cabeçalho escondido, então nada aparecia.
+   ========================================================================= */
+.vision-home-head {
+  position: relative !important;
+  margin: 0 0 14px !important;
+  padding: 13px 14px 12px !important;
+  border: 2px solid var(--dex-ink) !important;
+  border-radius: 14px !important;
+  background-image: var(--dex-plastic) !important;
+  background-color: var(--dex-body, #9640dd) !important;
+  box-shadow: inset 0 2px 0 rgba(255,255,255,.28), inset 0 -3px 8px rgba(0,0,0,.24), 0 3px 0 rgba(0,0,0,.42) !important;
+  align-items: flex-start !important;
+  overflow: hidden;
+  min-height: 92px;
+}
+.vision-home-head > div:first-child { padding-left: 92px; }
+.vision-home-head span,
+.vision-home-head h2 {
+  color: var(--dex-body-text, #fff) !important;
+  text-shadow: var(--dex-body-shadow, 0 1px 2px rgba(0,0,0,.45));
+}
+.vision-home-head h2 { font-size: 19px !important; }
+
+/* Lente de vidro e as três luzinhas */
+.vision-home-head::before {
+  content: ''; position: absolute; left: 14px; top: 13px;
+  width: 34px; height: 34px; border-radius: 50%;
+  background: #5bc8f5; border: 2px solid #efefef;
+  box-shadow: 0 0 0 2px var(--dex-ink),
+              inset 0 -4px 7px rgba(0,40,80,.55),
+              inset 0 3px 5px rgba(255,255,255,.6),
+              14px 6px 0 -13px #e8402f, 14px 6px 0 -11px var(--dex-ink),
+              32px 6px 0 -13px #f5c518, 32px 6px 0 -11px var(--dex-ink),
+              50px 6px 0 -13px #3fae4a, 50px 6px 0 -11px var(--dex-ink);
+}
+.vision-home-head::after {
+  content: ''; position: absolute; left: 23px; top: 19px;
+  width: 11px; height: 7px; border-radius: 50%;
+  background: rgba(255,255,255,.85);
+}
+
+/* Mascote do tema no canto do cabeçalho */
+.vision-profile-button {
+  position: relative; z-index: 1;
+  border: 2px solid var(--dex-ink) !important;
+  box-shadow: var(--dex-raise-soft) !important;
+  background-image: var(--dex-plastic) !important;
+}
+
+/* O topo das demais telas segue a mesma linguagem, em versão discreta */
+.vision-screen-head, .collection-head {
+  border: 2px solid var(--dex-ink) !important;
+  border-radius: 12px !important;
+  padding: 11px 13px !important;
+  background-image: var(--dex-plastic) !important;
+  background-color: var(--dex-body, #9640dd) !important;
+  box-shadow: var(--dex-raise-soft) !important;
+}
+.vision-screen-head h2, .collection-head h2 {
+  color: var(--dex-body-text, #fff) !important;
+  text-shadow: var(--dex-body-shadow, 0 1px 2px rgba(0,0,0,.45));
+}
+
+/* A barra de abas precisa vencer a regra da v3.7, que vem depois. */
+.tabs { background: var(--dex-body-dark, #4a2070) !important; backdrop-filter: none !important; }
+.tab.scanner-tab {
+  background: #f5c518 !important;
+  background-image: var(--dex-plastic) !important;
+  color: #16161a !important;
+  border-color: var(--dex-ink) !important;
+  box-shadow: inset 0 2px 0 rgba(255,255,255,.7), inset 0 -3px 0 rgba(0,0,0,.28), 0 2px 0 rgba(0,0,0,.4) !important;
+}
+
+@media (max-width: 380px) {
+  .vision-home-head > div:first-child { padding-left: 86px; }
+}

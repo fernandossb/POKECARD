@@ -67,7 +67,7 @@ public final class MainActivity extends Activity {
     private static final int PICK_CARD_IMAGE = 1003;
     private static final int SCAN_CARD_IMAGE = 1004;
     private static final int CREATE_CSV_EXPORT = 1005;
-    private static final String UPDATE_API_URL = "https://api.github.com/repos/fernandossb/Fichario_pokemon_pokedex/releases/latest";
+    private static final String UPDATE_API_URL = "https://api.github.com/repos/fernandossb/POKECARD/releases/latest";
     private static final String APK_MIME = "application/vnd.android.package-archive";
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
