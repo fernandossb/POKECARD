@@ -2950,3 +2950,107 @@ body::before { display: block !important; }
 @media (max-width: 380px) {
   .vision-home-head > div:first-child { padding-left: 86px; }
 }
+
+/* =========================================================================
+   Correção v4.1.1 — o tema alcança o app inteiro.
+   A camada v3.7 grava os verdes direto nas regras (gradientes e bordas fixas),
+   ignorando as variáveis --vision-*. Por isso só o cabeçalho trocava de cor.
+   Aqui essas superfícies voltam a obedecer ao tema do Pokémon favorito.
+   ========================================================================= */
+
+/* Fundo geral */
+html, body, .app { background: var(--vision-bg) !important; }
+
+/* Cartões grandes: telas afundadas dentro do plástico */
+.portfolio-card,
+.pokedex-progress-card,
+.vision-card-tile,
+.selected-set-banner,
+.modal-sheet,
+.deck-panel,
+.scanner-number-guide > div,
+.scanner-ocr-debug,
+.quantity-control,
+.pokemon-link-results {
+  background: var(--vision-surface) !important;
+  background-image: none !important;
+  border: 2px solid var(--dex-ink) !important;
+  border-radius: 12px !important;
+  box-shadow: var(--dex-sink) !important;
+}
+.portfolio-card::after { background: rgba(255,255,255,.05) !important; }
+
+/* Valor do portfólio: o visor principal do aparelho */
+.portfolio-value {
+  border: 2px solid var(--dex-ink);
+  border-radius: 10px;
+  background: rgba(0,0,0,.42);
+  box-shadow: var(--dex-sink);
+  padding: 12px 14px;
+  margin: 16px 0 14px !important;
+}
+.portfolio-value strong { color: var(--vision-primary) !important; }
+.portfolio-value small, .portfolio-title { color: var(--vision-muted) !important; }
+.portfolio-sale, .portfolio-foot { color: var(--vision-muted) !important; }
+.portfolio-languages span {
+  background: var(--vision-primary-soft) !important;
+  border: 2px solid var(--dex-ink) !important;
+  color: var(--vision-muted) !important;
+  box-shadow: var(--dex-raise-soft) !important;
+}
+.portfolio-languages span b { color: var(--vision-primary) !important; }
+
+/* Anel da Pokédex e barras de progresso */
+.progress, .pokedex-progress-card .progress {
+  background: rgba(0,0,0,.5) !important;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,.6) !important;
+}
+.progress > span, .progress span { background: var(--vision-primary) !important; }
+
+/* Miniaturas e arte das cartas */
+.vision-card-art { background: var(--vision-surface-2) !important; background-image: none !important; }
+.variant-chip, .badge.owned, .badge.price {
+  background: var(--vision-primary-soft) !important;
+  border: 1.5px solid var(--dex-ink) !important;
+  color: var(--vision-muted) !important;
+}
+
+/* Preço automático */
+.automatic-price-card:not(.empty-price):not(.loading-price) {
+  background: var(--vision-surface-2) !important;
+  background-image: none !important;
+  border: 2px solid var(--dex-ink) !important;
+  box-shadow: var(--dex-sink) !important;
+}
+.automatic-price-card:not(.empty-price):not(.loading-price) strong { color: var(--vision-primary) !important; }
+
+/* ---- Barra de abas: tudo em uma linha só ---- */
+.tabs {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  gap: 4px !important;
+  padding: 8px 7px calc(9px + env(safe-area-inset-bottom)) !important;
+  overflow: visible !important;
+}
+.tab {
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+  padding: 6px 1px !important;
+  border-radius: 8px !important;
+}
+.tab .tab-icon { width: 18px !important; height: 18px !important; }
+.tab .tab-label {
+  font-size: 8.5px !important;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 100%; display: block;
+}
+/* O botão do scanner é o destaque redondo do meio, sem empurrar os vizinhos */
+.tab.scanner-tab {
+  flex: 0 0 52px !important;
+  width: 52px !important; height: 52px !important;
+  border-radius: 50% !important;
+  margin: -14px 2px 0 !important;
+  align-self: center;
+}
+.tab.scanner-tab .tab-label { display: none !important; }
+.tab.scanner-tab .tab-icon { width: 24px !important; height: 24px !important; }
