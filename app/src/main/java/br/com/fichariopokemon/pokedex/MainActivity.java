@@ -60,6 +60,27 @@ import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.view.Gravity;
+import android.widget.Button;
+import android.widget.TextView;
+import androidx.annotation.NonNull;
+import androidx.camera.core.CameraSelector;
+import androidx.camera.core.ImageAnalysis;
+import androidx.camera.core.ImageProxy;
+import androidx.camera.core.Preview;
+import androidx.camera.lifecycle.ProcessCameraProvider;
+import androidx.camera.view.PreviewView;
+import androidx.core.app.ActivityCompat;
+import androidx.lifecycle.Lifecycle;
+import androidx.lifecycle.LifecycleOwner;
+import androidx.lifecycle.LifecycleRegistry;
+import com.google.common.util.concurrent.ListenableFuture;
+import androidx.core.content.ContextCompat;
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.mlkit.vision.text.Text;
 
 public final class MainActivity extends Activity {
     private static final int CREATE_BACKUP = 1001;
@@ -881,5 +902,275 @@ public final class MainActivity extends Activity {
                 }
             });
         }
+
+        @JavascriptInterface
+        public void startLiveScanner(final String finish) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    MainActivity.this.requestLiveScanner(finish);
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void stopLiveScanner() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    MainActivity.this.closeLiveScanner();
+                }
+            });
+        }
+    }
+
+    /* =====================================================================
+       Scanner contínuo — câmera ao vivo dentro do aplicativo.
+
+       O modo "uma por vez" continua usando o aplicativo de câmera do celular.
+       Aqui a imagem aparece dentro do app e cada quadro é lido pelo mesmo
+       reconhecedor de texto, sem precisar tirar foto. Uma carta reconhecida
+       não é reenviada enquanto a anterior não for concluída ou até passar o
+       tempo de espera, para não cadastrar a mesma carta várias vezes.
+       ===================================================================== */
+
+    private static final int LIVE_CAMERA_PERMISSION = 2001;
+    /* Espaço mínimo entre dois envios, para o app conseguir mostrar a carta
+       reconhecida antes de aceitar a próxima. */
+    private static final long LIVE_SCAN_INTERVAL_MS = 1800L;
+    /* Texto muito curto costuma ser reflexo ou borda; não vale tentar. */
+    private static final int LIVE_MIN_TEXT_LENGTH = 12;
+
+    private FrameLayout liveScannerOverlay;
+    private ExecutorService liveScannerExecutor;
+    private ProcessCameraProvider liveCameraProvider;
+    private ScannerLifecycle liveScannerLifecycle;
+    private TextRecognizer liveRecognizer;
+    private TextView liveScannerHint;
+    private String pendingLiveFinish = "comum";
+    private volatile boolean liveScannerBusy;
+    private volatile long liveScannerLastDelivery;
+
+    /** Ciclo de vida próprio: a tela principal estende Activity simples,
+        que a CameraX não aceita como dona da câmera. */
+    private static final class ScannerLifecycle implements LifecycleOwner {
+        private final LifecycleRegistry registry = new LifecycleRegistry(this);
+
+        ScannerLifecycle() {
+            registry.setCurrentState(Lifecycle.State.INITIALIZED);
+        }
+
+        void start() {
+            registry.setCurrentState(Lifecycle.State.RESUMED);
+        }
+
+        void stop() {
+            registry.setCurrentState(Lifecycle.State.DESTROYED);
+        }
+
+        @NonNull
+        @Override
+        public Lifecycle getLifecycle() {
+            return registry;
+        }
+    }
+
+    private void requestLiveScanner(String finish) {
+        pendingLiveFinish = finish == null || finish.isEmpty() ? "comum" : finish;
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+                != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.CAMERA}, LIVE_CAMERA_PERMISSION);
+            return;
+        }
+        openLiveScanner();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
+                                           @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != LIVE_CAMERA_PERMISSION) return;
+        boolean liberada = grantResults.length > 0
+                && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+        if (liberada) {
+            openLiveScanner();
+        } else {
+            runJavascript("window.receiveScannerError&&window.receiveScannerError("
+                    + JSONObject.quote("Permissão de câmera negada. Use o modo Uma por vez.") + ");");
+        }
+    }
+
+    private void openLiveScanner() {
+        if (liveScannerOverlay != null) return;
+        try {
+            liveScannerBusy = false;
+            liveScannerLastDelivery = 0L;
+            liveScannerExecutor = Executors.newSingleThreadExecutor();
+            liveRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
+
+            PreviewView previewView = new PreviewView(this);
+            previewView.setScaleType(PreviewView.ScaleType.FILL_CENTER);
+
+            liveScannerHint = new TextView(this);
+            liveScannerHint.setText("Aponte para a carta");
+            liveScannerHint.setTextColor(Color.WHITE);
+            liveScannerHint.setTextSize(15f);
+            liveScannerHint.setPadding(28, 22, 28, 22);
+            liveScannerHint.setBackgroundColor(Color.argb(150, 0, 0, 0));
+            liveScannerHint.setGravity(Gravity.CENTER);
+
+            Button encerrar = new Button(this);
+            encerrar.setText("Encerrar");
+            encerrar.setAllCaps(false);
+            encerrar.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View view) {
+                    closeLiveScanner();
+                    runJavascript("window.receiveLiveScannerClosed&&window.receiveLiveScannerClosed();");
+                }
+            });
+
+            liveScannerOverlay = new FrameLayout(this);
+            liveScannerOverlay.setBackgroundColor(Color.BLACK);
+            liveScannerOverlay.addView(previewView, new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+
+            FrameLayout.LayoutParams hintParams = new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT);
+            hintParams.gravity = Gravity.TOP;
+            liveScannerOverlay.addView(liveScannerHint, hintParams);
+
+            FrameLayout.LayoutParams botaoParams = new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
+            botaoParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+            botaoParams.bottomMargin = 70;
+            liveScannerOverlay.addView(encerrar, botaoParams);
+
+            rootView.addView(liveScannerOverlay, new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+
+            liveScannerLifecycle = new ScannerLifecycle();
+            final ListenableFuture<ProcessCameraProvider> futuro = ProcessCameraProvider.getInstance(this);
+            futuro.addListener(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        liveCameraProvider = futuro.get();
+                        bindLiveCamera(previewView);
+                    } catch (Exception error) {
+                        falharLiveScanner(error);
+                    }
+                }
+            }, ContextCompat.getMainExecutor(this));
+        } catch (Exception error) {
+            falharLiveScanner(error);
+        }
+    }
+
+    private void bindLiveCamera(PreviewView previewView) {
+        Preview preview = new Preview.Builder().build();
+        preview.setSurfaceProvider(previewView.getSurfaceProvider());
+
+        ImageAnalysis analise = new ImageAnalysis.Builder()
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .build();
+        analise.setAnalyzer(liveScannerExecutor, new ImageAnalysis.Analyzer() {
+            @Override
+            public void analyze(@NonNull ImageProxy proxy) {
+                analisarQuadro(proxy);
+            }
+        });
+
+        liveCameraProvider.unbindAll();
+        liveScannerLifecycle.start();
+        liveCameraProvider.bindToLifecycle(liveScannerLifecycle,
+                CameraSelector.DEFAULT_BACK_CAMERA, preview, analise);
+    }
+
+    @SuppressWarnings("UnsafeOptInUsageError")
+    private void analisarQuadro(final ImageProxy proxy) {
+        long agora = System.currentTimeMillis();
+        if (liveScannerBusy || agora - liveScannerLastDelivery < LIVE_SCAN_INTERVAL_MS
+                || proxy.getImage() == null || liveRecognizer == null) {
+            proxy.close();
+            return;
+        }
+        liveScannerBusy = true;
+        InputImage imagem = InputImage.fromMediaImage(
+                proxy.getImage(), proxy.getImageInfo().getRotationDegrees());
+        liveRecognizer.process(imagem)
+                .addOnSuccessListener(new OnSuccessListener<Text>() {
+                    @Override
+                    public void onSuccess(Text resultado) {
+                        String texto = resultado == null ? "" : resultado.getText();
+                        if (texto.trim().length() >= LIVE_MIN_TEXT_LENGTH) {
+                            liveScannerLastDelivery = System.currentTimeMillis();
+                            final String finish = pendingLiveFinish;
+                            runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    if (liveScannerHint != null) liveScannerHint.setText("Carta lida — procurando…");
+                                    deliverScannerText(texto, finish);
+                                }
+                            });
+                        }
+                        liveScannerBusy = false;
+                        proxy.close();
+                    }
+                })
+                .addOnFailureListener(new OnFailureListener() {
+                    @Override
+                    public void onFailure(@NonNull Exception e) {
+                        liveScannerBusy = false;
+                        proxy.close();
+                    }
+                });
+    }
+
+    /** Chamado pelo app quando a carta foi cadastrada, para voltar a ler. */
+    private void liberarLiveScanner(final String mensagem) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (liveScannerHint != null) liveScannerHint.setText(mensagem);
+                liveScannerLastDelivery = System.currentTimeMillis();
+            }
+        });
+    }
+
+    private void falharLiveScanner(Exception error) {
+        closeLiveScanner();
+        String mensagem = error == null || error.getMessage() == null
+                ? "Não foi possível abrir a câmera ao vivo."
+                : error.getMessage();
+        runJavascript("window.receiveScannerError&&window.receiveScannerError("
+                + JSONObject.quote(mensagem) + ");");
+    }
+
+    private void closeLiveScanner() {
+        try {
+            if (liveCameraProvider != null) liveCameraProvider.unbindAll();
+        } catch (Exception ignored) {
+        }
+        if (liveScannerLifecycle != null) {
+            liveScannerLifecycle.stop();
+            liveScannerLifecycle = null;
+        }
+        if (liveRecognizer != null) {
+            try { liveRecognizer.close(); } catch (Exception ignored) {}
+            liveRecognizer = null;
+        }
+        if (liveScannerExecutor != null) {
+            liveScannerExecutor.shutdown();
+            liveScannerExecutor = null;
+        }
+        if (liveScannerOverlay != null) {
+            rootView.removeView(liveScannerOverlay);
+            liveScannerOverlay = null;
+        }
+        liveScannerHint = null;
+        liveCameraProvider = null;
+        liveScannerBusy = false;
     }
 }

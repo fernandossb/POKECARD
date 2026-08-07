@@ -75,7 +75,7 @@ let cardSearchIndex = new Map();
 let cardsBySet = new Map();
 let staticCardSortCache = new Map();
 let pokemonInferenceCache = new Map();
-let scannerSession = { active: false, pricingVariant: 'normal', finish: 'normal', language: 'pt-br', condition: 'Near Mint', edition: 'unlimited', distribution: 'unstamped', artVariant: 'standard', region: 'Brasil', gradingCompany: 'Não graduada', grade: '', tags: [], setId: 'all', count: 0, lastIds: [] };
+let scannerSession = { active: false, pricingVariant: 'normal', finish: 'normal', language: 'pt-br', condition: 'Near Mint', edition: 'unlimited', distribution: 'unstamped', artVariant: 'standard', region: 'Brasil', gradingCompany: 'Não graduada', grade: '', tags: [], setId: 'all', count: 0, lastIds: [], live: false };
 let scannerDraftFinish = '';
 let scannerDraftLanguage = '';
 let scannerDraftCondition = '';
@@ -3102,16 +3102,33 @@ function startScannerSession(finish, setId = 'all', preferences = scannerPrefere
 
 function scanNextCard() {
   if (!scannerSession.active) return openScannerSetup();
+  // No modo contínuo a câmera fica aberta dentro do app e vai lendo sozinha.
+  // No modo "uma por vez" usamos o aplicativo de câmera do celular.
+  if (scannerSession.mode === 'continuous' && window.Android?.startLiveScanner) {
+    scannerSession.live = true;
+    window.Android.startLiveScanner(scannerSession.finish);
+    return;
+  }
   if (window.Android?.startCardScanner) {
+    scannerSession.live = false;
     window.Android.startCardScanner(scannerSession.finish);
     return;
   }
   showScannerMessage('Câmera disponível somente no aplicativo Android.', true);
 }
 
+// O aparelho avisa que a câmera ao vivo foi encerrada pelo botão da tela.
+window.receiveLiveScannerClosed = function () {
+  scannerSession.live = false;
+  stopScannerSession();
+};
+
 function stopScannerSession() {
   scannerSession.active = false;
   scannerCandidateBuffer = [];
+  // Fecha também a câmera ao vivo, senão ela continuaria ligada por cima do app.
+  if (scannerSession.live && window.Android?.stopLiveScanner) window.Android.stopLiveScanner();
+  scannerSession.live = false;
   closeModal();
   notify(`Sessão finalizada: ${scannerSession.count} carta(s) cadastrada(s).`);
 }
@@ -3575,6 +3592,15 @@ function confirmScannedCard(cardId) {
   scannerSession.lastIds.unshift(cardId);
   scannerSession.lastIds = scannerSession.lastIds.slice(0, 12);
   showScannerMessage(`${card.name} cadastrada como ${scannerSession.pricingVariant}.`);
+  if (scannerSession.mode === 'continuous' && scannerSession.live) {
+    // A câmera ao vivo continua aberta atrás: basta fechar o aviso para
+    // voltar a enxergá-la. Reabrir criaria uma segunda câmera por cima.
+    const espera = scannerSession.speed === 'fast' ? 700 : scannerSession.speed === 'paused' ? 3000 : 1400;
+    setTimeout(() => {
+      if (scannerSession.active && scannerSession.live) closeModal();
+    }, espera);
+    return;
+  }
   if (scannerSession.mode === 'continuous') {
     const delay = scannerSession.speed === 'fast' ? 800 : scannerSession.speed === 'paused' ? 4000 : 2000;
     setTimeout(() => {

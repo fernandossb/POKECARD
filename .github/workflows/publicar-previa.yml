@@ -44,6 +44,11 @@ jobs:
 
       - name: Configurar Pages
         uses: actions/configure-pages@v5
+        with:
+          # Liga o Pages sozinho na primeira vez. Sem isto o robô para com
+          # "Get Pages site failed / Not Found" enquanto ninguém tiver
+          # ativado a opção na mão nas configurações do repositório.
+          enablement: true
 
       - name: Empacotar a pasta do app
         uses: actions/upload-pages-artifact@v3

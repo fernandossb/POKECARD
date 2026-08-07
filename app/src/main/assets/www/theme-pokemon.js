@@ -86,6 +86,125 @@
 
   function spritePath(id) { return 'sprites/' + Number(id) + '.png'; }
 
+  /* ---- Nível de claridade escolhido pelo usuário ----
+     A cor de cada tipo continua vindo da tabela acima; o que muda aqui é o
+     quanto o fundo e os cartões são claros. Os tons são recalculados na hora
+     a partir do matiz da cor de destaque, então qualquer nível funciona para
+     os 18 tipos sem precisar de tabela nova. */
+  var CLARIDADE_KEY = 'fichario-pokemon-claridade-v1';
+  /* Os níveis pulam a faixa média de luminosidade de propósito. Fundo com
+     claridade entre 35% e 60% não dá contraste bom nem com letra clara nem
+     com escura — testando, o texto caía para 3,9:1 ali. Pulando essa faixa,
+     o pior caso das 18 cores × 6 níveis fica em 5,1:1. */
+  var NIVEIS = [
+    { nome: 'Bem escuro', fundo: 6,  passo: 5,  sat: 44 },
+    { nome: 'Escuro',     fundo: 12, passo: 6,  sat: 40 },
+    { nome: 'Médio',      fundo: 19, passo: 6,  sat: 36 },
+    { nome: 'Suave',      fundo: 66, passo: -5, sat: 32 },
+    { nome: 'Claro',      fundo: 82, passo: -4, sat: 28 },
+    { nome: 'Bem claro',  fundo: 95, passo: -4, sat: 24 }
+  ];
+  var NIVEL_PADRAO = 2; // parecido com o que o app já mostrava
+
+  function hexParaHsl(hex) {
+    var r = parseInt(hex.substr(1, 2), 16) / 255;
+    var g = parseInt(hex.substr(3, 2), 16) / 255;
+    var b = parseInt(hex.substr(5, 2), 16) / 255;
+    var max = Math.max(r, g, b), min = Math.min(r, g, b);
+    var l = (max + min) / 2, h = 0, s = 0;
+    if (max !== min) {
+      var d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      if (max === r) h = ((g - b) / d + (g < b ? 6 : 0));
+      else if (max === g) h = (b - r) / d + 2;
+      else h = (r - g) / d + 4;
+      h *= 60;
+    }
+    return { h: h, s: s * 100, l: l * 100 };
+  }
+
+  function hslParaHex(h, s, l) {
+    s = Math.max(0, Math.min(100, s)) / 100;
+    l = Math.max(0, Math.min(100, l)) / 100;
+    var c = (1 - Math.abs(2 * l - 1)) * s;
+    var x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+    var m = l - c / 2;
+    var r = 0, g = 0, b = 0;
+    if (h < 60) { r = c; g = x; }
+    else if (h < 120) { r = x; g = c; }
+    else if (h < 180) { g = c; b = x; }
+    else if (h < 240) { g = x; b = c; }
+    else if (h < 300) { r = x; b = c; }
+    else { r = c; b = x; }
+    var par = function (v) {
+      var n = Math.round((v + m) * 255);
+      return ('0' + Math.max(0, Math.min(255, n)).toString(16)).slice(-2);
+    };
+    return '#' + par(r) + par(g) + par(b);
+  }
+
+  function nivelSalvo() {
+    try {
+      var n = Number(localStorage.getItem(CLARIDADE_KEY));
+      if (n >= 1 && n <= NIVEIS.length) return n;
+    } catch (e) {}
+    return NIVEL_PADRAO;
+  }
+
+  function luminanciaHex(hex) {
+    var c = [1, 3, 5].map(function (i) {
+      var v = parseInt(hex.substr(i, 2), 16) / 255;
+      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  }
+
+  function contraste(a, b) {
+    var A = luminanciaHex(a), B = luminanciaHex(b);
+    return (Math.max(A, B) + 0.05) / (Math.min(A, B) + 0.05);
+  }
+
+  /* Procura o tom mais próximo do desejado que ainda tenha contraste
+     suficiente com o fundo. Sem isto, os níveis intermediários deixavam o
+     texto quase invisível: fundo médio com letra clara não funciona. */
+  function tomLegivel(h, s, fundo, alvo, comecarClaro) {
+    var passo = comecarClaro ? -3 : 3;
+    var inicio = comecarClaro ? 97 : 8;
+    for (var l = inicio; l >= 0 && l <= 100; l += passo) {
+      var cor = hslParaHex(h, s, l);
+      if (contraste(cor, fundo) >= alvo) return cor;
+    }
+    return comecarClaro ? '#ffffff' : '#000000';
+  }
+
+  /** Monta os tons do tema a partir da cor do tipo e do nível escolhido. */
+  function paletaComClaridade(base, nivelIndice) {
+    var nivel = NIVEIS[nivelIndice - 1] || NIVEIS[NIVEL_PADRAO - 1];
+    var h = hexParaHsl(base.pri).h;
+    var s = nivel.sat;
+    var f = nivel.fundo;
+    var p = nivel.passo;
+
+    var fundo = hslParaHex(h, s, f);
+    var s1 = hslParaHex(h, s, f + p);
+    var s2 = hslParaHex(h, s, f + p * 1.7);
+    var s3 = hslParaHex(h, s, f + p * 2.4);
+    var linha = hslParaHex(h, s + 6, f + p * 3.4);
+
+    // Quem decide se a letra é clara ou escura é o próprio cartão, não o
+    // número do nível — assim os tons do meio também ficam legíveis.
+    var claro = luminanciaHex(s1) > 0.18;
+    var texto = tomLegivel(h, 14, s1, 8.5, !claro);
+    var mut = tomLegivel(h, 24, s1, 4.6, !claro);
+    var pri = tomLegivel(h, 68, s1, 3.2, !claro);
+    var soft = hslParaHex(h, s + 10, claro ? Math.min(95, f + p * 2.6) : f + p * 2);
+
+    return {
+      bg: fundo, s1: s1, s2: s2, s3: s3, line: linha,
+      mut: mut, pri: pri, soft: soft, texto: texto, claro: claro
+    };
+  }
+
   // Plásticos claros (Elétrico, Gelo, Fada...) pedem texto escuro; escuros
   // pedem texto claro. Calculado na hora para valer também em cores futuras.
   function luminancia(hex) {
@@ -155,7 +274,7 @@
 
   function apply(id) {
     var pokemon = findPokemon(id);
-    var p = paletteFor(pokemon);
+    var p = paletaComClaridade(paletteFor(pokemon), nivelSalvo());
     var root = document.documentElement;
 
     root.style.setProperty('--vision-bg', p.bg);
@@ -168,6 +287,17 @@
     root.style.setProperty('--vision-primary-soft', p.soft);
     // O brilho do mascote acompanha a cor de destaque.
     root.style.setProperty('--theme-glow', p.pri);
+
+    // No nível bem claro a letra vira escura e o visor deixa de ser um poço
+    // preto — senão o texto sumiria e os cartões ficariam manchados.
+    root.style.setProperty('--vision-text', p.texto);
+    root.style.setProperty('--dex-visor', p.claro ? 'rgba(0,0,0,.07)' : 'rgba(0,0,0,.42)');
+    root.style.setProperty('--dex-sink', p.claro
+      ? 'inset 0 2px 5px rgba(0,0,0,.16), inset 0 -1px 0 rgba(255,255,255,.7)'
+      : 'inset 0 3px 8px rgba(0,0,0,.55), inset 0 -1px 0 rgba(255,255,255,.10)');
+    root.style.setProperty('--dex-plastic', p.claro
+      ? 'linear-gradient(180deg, rgba(255,255,255,.26), rgba(0,0,0,.08))'
+      : 'linear-gradient(180deg, rgba(255,255,255,.16), rgba(0,0,0,.14))');
 
     // Plástico da Pokédex: cabeçalho e barra de abas.
     var plastico = PLASTICO[tipoPrincipal(pokemon)] || PLASTICO['Fantasma'];
@@ -230,11 +360,26 @@
     return '<div class="tema-atual">Tema agora: <strong>' + nomeAtual() + '</strong> · tipo ' + tipoAtual() + '</div>';
   }
 
+  function barraClaridade() {
+    var n = nivelSalvo();
+    return '<div class="claridade-caixa">'
+      + '<div class="claridade-topo"><span>Claridade do app</span><b id="claridadeNome">' + NIVEIS[n - 1].nome + '</b></div>'
+      + '<div class="claridade-linha">'
+      + '<span class="claridade-icone">🌑</span>'
+      + '<input type="range" id="claridadeBarra" min="1" max="' + NIVEIS.length + '" step="1" value="' + n + '"'
+      + ' oninput="ajustarClaridade(this.value)">'
+      + '<span class="claridade-icone">☀️</span>'
+      + '</div>'
+      + '<small>Vale para qualquer Pokémon escolhido. A mudança aparece na hora.</small>'
+      + '</div>';
+  }
+
   function corpo() {
     return '<button class="modal-close" onclick="closeModal()" aria-label="Fechar">×</button>'
       + '<h2>Tema do aplicativo</h2>'
       + '<p class="screen-subtitle">Escolha seu Pokémon favorito. O app assume as cores do tipo dele e mostra a arte no topo e ao fundo.</p>'
       + cabecalho()
+      + barraClaridade()
       + '<input class="field" placeholder="Buscar Pokémon por nome ou número" oninput="filtrarTemaPokemon(this.value)">'
       + grade();
   }
@@ -249,6 +394,13 @@
   window.abrirTemaPokemon = function () {
     busca = '';
     if (typeof showModal === 'function') showModal(corpo());
+  };
+  window.ajustarClaridade = function (valor) {
+    var n = Math.max(1, Math.min(NIVEIS.length, Number(valor) || NIVEL_PADRAO));
+    try { localStorage.setItem(CLARIDADE_KEY, String(n)); } catch (e) {}
+    var rotulo = document.getElementById('claridadeNome');
+    if (rotulo) rotulo.textContent = NIVEIS[n - 1].nome;
+    apply(savedId());
   };
   window.filtrarTemaPokemon = function (valor) { busca = valor; redesenhar(); };
   window.escolherTemaPokemon = function (id) {

@@ -3,14 +3,17 @@
 Serve para conferir o visual antes de gerar o APK. É o aplicativo de verdade
 rodando no navegador — mesmas telas, mesmas cores, mesmos botões.
 
-## Ligar (uma vez só)
+## Ligar
 
-1. No GitHub, abra o repositório **POKECARD**
-2. **Settings → Pages**
-3. Em **Source**, escolha **GitHub Actions**
-4. Salve
+Não precisa configurar nada: o próprio robô ativa o Pages na primeira vez
+(`enablement: true` no workflow).
 
-Pronto. A partir daí funciona sozinho.
+Só é preciso que as permissões de escrita estejam liberadas, o que já vale para
+os outros robôs do projeto: **Settings → Actions → General → Workflow
+permissions → Read and write permissions**.
+
+Se mesmo assim aparecer o erro *"Get Pages site failed / Not Found"*, dá para
+ligar à mão em **Settings → Pages → Source → GitHub Actions** e rodar de novo.
 
 ## Como usar
 
