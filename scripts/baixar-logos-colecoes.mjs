@@ -43,7 +43,9 @@ console.log(`${sets.length} coleções encontradas.`);
 const indice = {};
 let baixados = 0;
 let reaproveitados = 0;
-let semLogo = 0;
+let comSimbolo = 0;
+let semArte = 0;
+const faltando = [];
 
 for (const resumo of sets) {
   const id = resumo?.id;
@@ -57,28 +59,35 @@ for (const resumo of sets) {
     continue;
   }
 
-  let detalhe;
-  try {
-    detalhe = await pegarJson(`${API}/sets/${encodeURIComponent(id)}`);
-  } catch {
-    semLogo += 1;
+  // A própria lista já traz logo e símbolo, então não é preciso abrir cada
+  // coleção uma a uma — o que economiza 218 requisições.
+  // Nem toda coleção tem logo (kits de treinador e promos avulsas costumam
+  // não ter); nesses casos o símbolo da expansão serve bem.
+  const fontes = [resumo.logo, resumo.symbol].filter(Boolean);
+  if (!fontes.length) {
+    semArte += 1;
+    faltando.push(`${id} (${resumo.name || 'sem nome'})`);
     continue;
   }
 
-  const base = detalhe?.logo;
-  if (!base) { semLogo += 1; continue; }
-
-  try {
-    const imagem = await fetch(`${base}.webp`);
-    if (!imagem.ok) throw new Error(`HTTP ${imagem.status}`);
-    const bytes = Buffer.from(await imagem.arrayBuffer());
-    if (bytes.length < 200) throw new Error('arquivo vazio');
-    fs.writeFileSync(arquivo, bytes);
-    indice[id] = `set-logos/${id}.webp`;
-    baixados += 1;
-    process.stdout.write(`\r${baixados + reaproveitados} logos prontos`);
-  } catch {
-    semLogo += 1;
+  let salvou = false;
+  for (const base of fontes) {
+    try {
+      const imagem = await fetch(`${base}.webp`);
+      if (!imagem.ok) throw new Error(`HTTP ${imagem.status}`);
+      const bytes = Buffer.from(await imagem.arrayBuffer());
+      if (bytes.length < 200) throw new Error('arquivo vazio');
+      fs.writeFileSync(arquivo, bytes);
+      indice[id] = `set-logos/${id}.webp`;
+      if (base === resumo.logo) baixados += 1; else comSimbolo += 1;
+      salvou = true;
+      process.stdout.write(`\r${baixados + comSimbolo + reaproveitados} artes prontas`);
+      break;
+    } catch { /* tenta a próxima fonte */ }
+  }
+  if (!salvou) {
+    semArte += 1;
+    faltando.push(`${id} (${resumo.name || 'sem nome'})`);
   }
 }
 
@@ -94,8 +103,14 @@ const tamanho = fs.readdirSync(destino)
   .filter(nome => nome.endsWith('.webp'))
   .reduce((soma, nome) => soma + fs.statSync(path.join(destino, nome)).size, 0);
 
-console.log(`\n\nLogos disponíveis: ${total} de ${sets.length} coleções`);
-console.log(`  baixados agora: ${baixados}`);
-console.log(`  já existiam:    ${reaproveitados}`);
-console.log(`  sem logo:       ${semLogo}`);
+console.log(`\n\nArtes disponíveis: ${total} de ${sets.length} coleções`);
+console.log(`  logo baixado agora:  ${baixados}`);
+console.log(`  símbolo (sem logo):  ${comSimbolo}`);
+console.log(`  já existiam:         ${reaproveitados}`);
+console.log(`  sem arte nenhuma:    ${semArte}`);
 console.log(`Espaço ocupado: ${(tamanho / 1024 / 1024).toFixed(1)} MB`);
+if (faltando.length) {
+  console.log('\nColeções sem logo nem símbolo na fonte:');
+  for (const nome of faltando) console.log(`  · ${nome}`);
+  console.log('Essas continuam com o símbolo genérico no app — é limite da fonte, não erro.');
+}
