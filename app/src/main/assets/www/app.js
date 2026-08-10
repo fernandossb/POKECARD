@@ -1375,7 +1375,10 @@ async function loadCatalogData() {
     return {
       ...item,
       releaseDate: installed.releaseDate || item.releaseDate || null,
-      collectionImage: installed.image || item.collectionImage || 'gengar-wallpaper.webp',
+      // Sem o papel de parede aqui: ele já é o último recurso da lista de
+      // candidatos. Preenchendo neste ponto, o campo nunca ficava vazio e
+      // atropelava o logo verdadeiro da coleção.
+      collectionImage: installed.image || item.collectionImage || '',
     };
   };
   if (!updated?.cards?.length || !updated?.sets?.length) {
@@ -2839,13 +2842,14 @@ function setImageCandidates(item) {
   // Agora ele é o último recurso.
   const candidates = [
     setLogoLocal(item.id),
-    item.collectionImage,
     explicitSetAssetUrl(item.logoUrl),
     series && series !== 'other' ? `https://assets.tcgdex.net/pt/${encodeURIComponent(series)}/${id}/logo.webp` : '',
     series && series !== 'other' ? `https://assets.tcgdex.net/en/${encodeURIComponent(series)}/${id}/logo.webp` : '',
+    // A imagem dos metadados costuma ser a arte de uma carta, não o logo da
+    // coleção. Serve como reserva, nunca antes do logo de verdade.
+    item.collectionImage,
     explicitSetAssetUrl(item.symbolUrl),
     series && series !== 'other' ? `https://assets.tcgdex.net/univ/${encodeURIComponent(series)}/${id}/symbol.webp` : '',
-    'gengar-wallpaper.webp',
   ];
   return [...new Set(candidates.filter(Boolean))];
 }
