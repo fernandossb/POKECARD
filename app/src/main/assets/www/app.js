@@ -1108,15 +1108,25 @@ function centralPriceQuote(cardId, variant = 'normal') {
   // Um mercado só, na ordem de preferência: TCGplayer, TCGdex, Cardmarket.
   // Misturar os três numa média única esconde de onde veio o número e mistura
   // mercados com liquidez muito diferente.
-  const chosenMarket = priorityMarketValues(sources);
-  const sourceValues = chosenMarket.values;
-  // Preço-base = média do mercado escolhido (referência NM). O ajuste de
-  // condição é aplicado aqui, no app, porque o percentual é editável.
-  const basePriceBrl = sourceValues.length
+  const providers = new Set(sources.map(item => providerFromSourceId(item.source)).filter(Boolean));
+  // Banco novo já publica o mercado que usou; banco antigo não tem esse campo.
+  const publishedMarket = String(match.priceMarket || '').trim();
+  const usedMarket = publishedMarket || (providers.size > 1 ? priorityMarketValues(sources).provider : [...providers][0] || '');
+  const sourceValues = (usedMarket ? sources.filter(item => providerFromSourceId(item.source) === usedMarket) : sources)
+    .map(item => Number(item?.valueBrl))
+    .filter(value => Number.isFinite(value) && value > 0);
+
+  // Quem calcula o preço é o banco: `priceBrl` é a resposta oficial. O app só
+  // refaz a conta no caso em que o banco publicado ainda é antigo E a lista
+  // mistura mais de um mercado — aí a prioridade muda o número e vale a pena
+  // aplicá-la já, sem esperar a próxima reconstrução. Com um mercado só, a
+  // prioridade não altera nada e o valor publicado fica como está.
+  const recalcular = !publishedMarket && providers.size > 1 && sourceValues.length > 0;
+  const basePriceBrl = recalcular
     ? Math.round((sourceValues.reduce((sum, value) => sum + value, 0) / sourceValues.length) * 100) / 100
     : Number(match.priceBrl);
-  if (chosenMarket.provider) {
-    reasons.push(`Valor do ${PRICE_SOURCE_LABELS[chosenMarket.provider] || chosenMarket.provider} (${sourceValues.length} referência(s)) — mercado de maior prioridade com preço para esta versão.`);
+  if (usedMarket) {
+    reasons.push(`Valor do ${PRICE_SOURCE_LABELS[usedMarket] || usedMarket} (${sourceValues.length} referência(s)) — mercado de maior prioridade com preço para esta versão.`);
   }
   const adjustedBrl = Math.round(basePriceBrl * compatibility.conditionMultiplier * 100) / 100;
   return {
@@ -1138,7 +1148,7 @@ function centralPriceQuote(cardId, variant = 'normal') {
     usable: verified,
     // O multiplicador entra na impressão digital: mudar a tabela de condição
     // invalida as confirmações manuais feitas sobre o valor anterior.
-    fingerprint: ['preco-brasil', compatibility.key, basePriceBrl, chosenMarket.provider, compatibility.conditionMultiplier, match.updatedAt || centralPriceGeneratedAt() || ''].join('|'),
+    fingerprint: ['preco-brasil', compatibility.key, basePriceBrl, usedMarket, compatibility.conditionMultiplier, match.updatedAt || centralPriceGeneratedAt() || ''].join('|'),
     priceLanguage: compatibility.language,
     requestedLanguage: compatibility.requestedLanguage,
     fallbackLanguage: compatibility.fallbackLanguage,
@@ -1155,13 +1165,13 @@ function centralPriceQuote(cardId, variant = 'normal') {
           ? `language ${compatibility.requestedLanguage} → ${compatibility.language} (${PRICE_MARKET_LABELS[compatibility.language] || compatibility.language})`
           : `language ${compatibility.language}`,
         `variantEnum ${compatibility.variantEnum}`,
-        chosenMarket.provider
-          ? `mercado ${PRICE_SOURCE_LABELS[chosenMarket.provider] || chosenMarket.provider} · ${sourceValues.length} de ${sources.length} valor(es)`
+        usedMarket
+          ? `mercado ${PRICE_SOURCE_LABELS[usedMarket] || usedMarket} · ${sourceValues.length} de ${sources.length} valor(es)`
           : `${sources.length} valor(es) de fonte`,
       ].filter(Boolean),
     },
-    priceMarket: chosenMarket.provider,
-    priceMarketLabel: PRICE_SOURCE_LABELS[chosenMarket.provider] || chosenMarket.provider,
+    priceMarket: usedMarket,
+    priceMarketLabel: PRICE_SOURCE_LABELS[usedMarket] || usedMarket,
     sources,
     // As referências acompanham o mesmo ajuste de condição do preço exibido.
     low: Math.round((sourceValues.length ? Math.min(...sourceValues) : basePriceBrl) * compatibility.conditionMultiplier * 100) / 100,

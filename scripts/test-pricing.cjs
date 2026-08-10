@@ -30,6 +30,27 @@ const context = {
         priceBrl: 12.34, confidence: 75, matchLevel: 'exact', updatedAt: '2026-08-05T12:00:00Z',
         sources: [{ source: 'tcgplayer:reverse-holofoil:marketPrice', valueBrl: 13.68 }],
       },
+      // Banco antigo (sem `priceMarket`) com valores dos dois mercados: aqui a
+      // prioridade muda o número, então o app aplica a regra na hora.
+      'sv03.5-002::pt-br::normal': {
+        cardId: 'sv03.5-002', language: 'pt-br', variantEnum: 'normal',
+        priceBrl: 30, confidence: 80, matchLevel: 'exact', updatedAt: '2026-08-05T12:00:00Z',
+        sources: [
+          { source: 'tcgplayer:normal:marketPrice', valueBrl: 10 },
+          { source: 'tcgplayer:normal:lowPrice', valueBrl: 8 },
+          { source: 'cardmarket:normal:trend', valueBrl: 50 },
+          { source: 'cardmarket:normal:avg7', valueBrl: 52 },
+        ],
+      },
+      // Banco novo: já publicou o mercado escolhido, o app respeita o valor.
+      'sv03.5-003::pt-br::normal': {
+        cardId: 'sv03.5-003', language: 'pt-br', variantEnum: 'normal',
+        priceBrl: 7.77, priceMarket: 'cardmarket', confidence: 80, matchLevel: 'exact', updatedAt: '2026-08-05T12:00:00Z',
+        sources: [
+          { source: 'cardmarket:normal:trend', valueBrl: 7.5, used: true },
+          { source: 'cardmarket:normal:avg7', valueBrl: 8.04, used: true },
+        ],
+      },
     },
   },
 };
@@ -46,4 +67,43 @@ assert.strictEqual(context.automaticPriceQuote('missing-card', exactVariant), nu
 assert.strictEqual(context.automaticPriceQuote('sv03.5-001', { ...exactVariant, pricingVariant: 'Reverse Holofoil' }), null, 'Não deve aceitar enum alterado');
 assert(!source.includes('requestLigaPokemon'), 'O app não pode manter ponte de consulta à Liga');
 assert(!source.includes('fetchLigaPokemonPricing'), 'O app não pode manter fallback de preço da Liga');
-console.log('Precificação exclusiva pelo Price Database e variantEnum exato aprovados.');
+
+// --- Prioridade de mercado: TCGplayer, depois TCGdex, depois Cardmarket ---
+
+const normalVariant = { ...exactVariant, pricingVariant: 'normal', finish: 'normal' };
+
+// Banco antigo com os dois mercados: só o TCGplayer entra na conta.
+const mixed = context.automaticPriceQuote('sv03.5-002', normalVariant);
+assert(mixed, 'Deve encontrar preço da carta com dois mercados');
+assert.strictEqual(mixed.brl, 9, 'Deve usar só o TCGplayer: média de 10 e 8');
+assert.strictEqual(mixed.priceMarket, 'tcgplayer');
+assert.strictEqual(mixed.low, 8, 'Menor referência deve ignorar o Cardmarket');
+assert.strictEqual(mixed.high, 10, 'Maior referência deve ignorar o Cardmarket');
+
+// Banco novo já resolveu a prioridade: o app não recalcula por cima.
+const published = context.automaticPriceQuote('sv03.5-003', normalVariant);
+assert(published, 'Deve encontrar preço da carta com mercado já publicado');
+assert.strictEqual(published.brl, 7.77, 'Deve respeitar o priceBrl publicado pelo banco');
+assert.strictEqual(published.priceMarket, 'cardmarket', 'Sem TCGplayer, cai para o Cardmarket');
+
+// Um mercado só: a prioridade não muda nada e o valor publicado fica de pé.
+assert.strictEqual(quote.priceMarket, 'tcgplayer');
+
+// --- Botões de versão: sem repetir nome e sem opção sem preço ---
+
+// Só `reverse-holofoil` tem preço nesta carta; `reverse` e `normal` somem.
+assert.deepStrictEqual(
+  context.variantesVisiveis('sv03.5-001', ['normal', 'reverse', 'reverse-holofoil'], 'reverse-holofoil', 'pt-br'),
+  ['reverse-holofoil'],
+  'Só deve sobrar a versão com preço publicado'
+);
+
+// Sem preço nenhum, mostramos as opções — mas "reverse" e "reverse-holofoil"
+// têm o mesmo nome na tela, então vira um botão só.
+assert.deepStrictEqual(
+  context.variantesVisiveis('carta-sem-preco', ['reverse', 'reverse-holofoil'], '', 'pt-br'),
+  ['reverse'],
+  'Nomes repetidos devem virar um botão só'
+);
+
+console.log('Precificação exclusiva pelo Price Database, prioridade de mercado e variantes visíveis aprovados.');
