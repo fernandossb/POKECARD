@@ -2833,16 +2833,36 @@ function explicitSetAssetUrl(url) {
 function setImageCandidates(item) {
   const series = setAssetSeries(item);
   const id = encodeURIComponent(item.id);
+  // A ordem importa: a primeira que carregar é a que fica. O papel de parede
+  // genérico estava em segundo lugar e, como ele sempre existe, o logo real
+  // nunca chegava a ser tentado — todas as coleções ficavam com a mesma arte.
+  // Agora ele é o último recurso.
   const candidates = [
+    setLogoLocal(item.id),
     item.collectionImage,
-    'gengar-wallpaper.webp',
     explicitSetAssetUrl(item.logoUrl),
     series && series !== 'other' ? `https://assets.tcgdex.net/pt/${encodeURIComponent(series)}/${id}/logo.webp` : '',
     series && series !== 'other' ? `https://assets.tcgdex.net/en/${encodeURIComponent(series)}/${id}/logo.webp` : '',
     explicitSetAssetUrl(item.symbolUrl),
     series && series !== 'other' ? `https://assets.tcgdex.net/univ/${encodeURIComponent(series)}/${id}/symbol.webp` : '',
+    'gengar-wallpaper.webp',
   ];
   return [...new Set(candidates.filter(Boolean))];
+}
+
+/**
+ * Logo que veio junto no aplicativo, baixado por
+ * scripts/baixar-logos-colecoes.mjs. Funciona sem internet e não quebra se
+ * algum endereço mudar lá fora.
+ */
+function setLogoLocal(setId) {
+  const id = String(setId || '').trim();
+  if (!id) return '';
+  const indice = window.__SET_LOGOS__;
+  // Com o índice presente, só devolve o que realmente foi baixado. Sem ele,
+  // tenta o caminho previsto — se não existir, o app passa para o próximo.
+  if (indice && typeof indice === 'object') return indice[id] || '';
+  return `set-logos/${encodeURIComponent(id)}.webp`;
 }
 
 function loadNextSetImage(image) {

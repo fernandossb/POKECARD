@@ -1,0 +1,54 @@
+name: Baixar logos das coleções
+
+# Guarda o logo de cada coleção dentro do aplicativo, para os cartões nunca
+# dependerem da internet. Só roda quando acionado à mão — os logos mudam pouco.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: baixar-logos
+  cancel-in-progress: false
+
+jobs:
+  logos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Baixar projeto
+        uses: actions/checkout@v4
+
+      - name: Configurar Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Buscar os logos
+        run: node scripts/baixar-logos-colecoes.mjs
+
+      - name: Conferir resultado
+        shell: bash
+        run: |
+          PASTA="app/src/main/assets/www/set-logos"
+          QUANTOS=$(find "$PASTA" -name '*.webp' | wc -l)
+          echo "Logos baixados: $QUANTOS"
+          du -sh "$PASTA"
+          if [ "$QUANTOS" -lt 50 ]; then
+            echo "Poucos logos baixados; algo deu errado na busca."
+            exit 1
+          fi
+
+      - name: Publicar
+        shell: bash
+        run: |
+          git config user.name "fichario-logos-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add app/src/main/assets/www/set-logos
+          if git diff --cached --quiet; then
+            echo "Nenhum logo novo."
+          else
+            git commit -m "Atualizar logos das coleções $(date -u +%F)"
+            git push
+          fi
