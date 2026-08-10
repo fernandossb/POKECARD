@@ -13,7 +13,6 @@
   'use strict';
 
   var STORAGE_KEY = 'fichario-pokemon-tema-favorito-v1';
-  var ART_KEY = 'fichario-pokemon-tema-arte-v1';
   var DEFAULT_ID = 94;
   var ART_BASE = 'https://cdn.jsdelivr.net/gh/PokeAPI/sprites@master/sprites/pokemon/other/home/';
 
@@ -239,29 +238,92 @@
     return DEFAULT_ID;
   }
 
-  function cachedArt(id) {
-    try {
-      var cache = JSON.parse(localStorage.getItem(ART_KEY) || 'null');
-      return cache && Number(cache.id) === Number(id) && cache.dataUrl ? cache.dataUrl : '';
-    } catch (e) { return ''; }
+  /* Cinco artes diferentes para o mesmo Pokémon, sorteadas a cada abertura do
+     app — assim o fundo não fica sempre igual. As quatro primeiras existem
+     para todos os 1.025; as duas últimas faltam em alguns, e nesse caso o
+     sorteio simplesmente cai na próxima da fila. */
+  var ARTES = [
+    { id: 'home',        caminho: 'other/home/',                  ext: '.png' },
+    { id: 'oficial',     caminho: 'other/official-artwork/',      ext: '.png' },
+    { id: 'home-shiny',  caminho: 'other/home/shiny/',            ext: '.png' },
+    { id: 'ofic-shiny',  caminho: 'other/official-artwork/shiny/', ext: '.png' },
+    { id: 'showdown',    caminho: 'other/showdown/',              ext: '.gif' },
+    { id: 'sonho',       caminho: 'other/dream-world/',           ext: '.svg' }
+  ];
+  var SPRITES_BASE = 'https://cdn.jsdelivr.net/gh/PokeAPI/sprites@master/sprites/pokemon/';
+  var DB_NOME = 'fichario-pokemon-arte-tema';
+  var LOJA = 'artes';
+  var banco = null;
+
+  function abrirBanco() {
+    if (banco) return Promise.resolve(banco);
+    return new Promise(function (resolve, reject) {
+      var pedido = indexedDB.open(DB_NOME, 1);
+      pedido.onupgradeneeded = function () {
+        if (!pedido.result.objectStoreNames.contains(LOJA)) pedido.result.createObjectStore(LOJA);
+      };
+      pedido.onsuccess = function () { banco = pedido.result; resolve(banco); };
+      pedido.onerror = function () { reject(pedido.error); };
+    });
   }
 
-  function baixarArte(id, aoConcluir) {
-    fetch(ART_BASE + Number(id) + '.png').then(function (r) {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.blob();
-    }).then(function (blob) {
-      return new Promise(function (resolve, reject) {
-        var leitor = new FileReader();
-        leitor.onload = function () { resolve(leitor.result); };
-        leitor.onerror = reject;
-        leitor.readAsDataURL(blob);
+  function lerGuardada(chave) {
+    return abrirBanco().then(function (db) {
+      return new Promise(function (resolve) {
+        var req = db.transaction(LOJA, 'readonly').objectStore(LOJA).get(chave);
+        req.onsuccess = function () { resolve(req.result || ''); };
+        req.onerror = function () { resolve(''); };
       });
-    }).then(function (dataUrl) {
-      // Guarda só a arte em uso: várias estouram a cota e só uma fica visível.
-      try { localStorage.setItem(ART_KEY, JSON.stringify({ id: Number(id), dataUrl: dataUrl })); } catch (e) {}
-      aoConcluir(dataUrl);
-    }).catch(function () { /* sem internet: segue com o sprite local */ });
+    }).catch(function () { return ''; });
+  }
+
+  function guardar(chave, dataUrl) {
+    // IndexedDB e não localStorage: são várias artes de ~140 KB e a cota do
+    // localStorage estouraria já na segunda.
+    abrirBanco().then(function (db) {
+      db.transaction(LOJA, 'readwrite').objectStore(LOJA).put(dataUrl, chave);
+    }).catch(function () {});
+  }
+
+  function embaralhar(lista) {
+    var copia = lista.slice();
+    for (var i = copia.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = copia[i]; copia[i] = copia[j]; copia[j] = t;
+    }
+    return copia;
+  }
+
+  /** Tenta as artes em ordem sorteada até uma funcionar. */
+  function buscarArte(id, aoConcluir) {
+    var fila = embaralhar(ARTES);
+
+    function tentar(indice) {
+      if (indice >= fila.length) return; // nenhuma deu certo: fica o sprite local
+      var arte = fila[indice];
+      var chave = Number(id) + ':' + arte.id;
+
+      lerGuardada(chave).then(function (guardada) {
+        if (guardada) { aoConcluir(guardada, arte.id); return null; }
+        return fetch(SPRITES_BASE + arte.caminho + Number(id) + arte.ext).then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.blob();
+        }).then(function (blob) {
+          return new Promise(function (resolve, reject) {
+            var leitor = new FileReader();
+            leitor.onload = function () { resolve(leitor.result); };
+            leitor.onerror = reject;
+            leitor.readAsDataURL(blob);
+          });
+        }).then(function (dataUrl) {
+          guardar(chave, dataUrl);
+          aoConcluir(dataUrl, arte.id);
+          return null;
+        });
+      }).catch(function () { tentar(indice + 1); });
+    }
+
+    tentar(0);
   }
 
   function aplicarImagem(url, ehArte3d) {
@@ -269,7 +331,12 @@
     root.style.setProperty('--theme-wallpaper', 'url("' + url + '")');
     root.style.setProperty('--theme-wallpaper-size', ehArte3d ? '84vw' : '74vw');
     root.style.setProperty('--theme-wallpaper-pos', 'center 8%');
-    root.style.setProperty('--theme-wallpaper-opacity', ehArte3d ? '.15' : '.12');
+    // Arte escura sobre fundo escuro some com opacidade baixa: a 12% não dava
+    // para ver nada. No tema claro o contrário — precisa baixar, senão a arte
+    // briga com o texto.
+    var claroAgora = window.__TEMA_CLARO__ === true;
+    root.style.setProperty('--theme-wallpaper-opacity',
+      ehArte3d ? (claroAgora ? '.16' : '.32') : (claroAgora ? '.10' : '.20'));
     root.style.setProperty('--theme-wallpaper-render', ehArte3d ? 'auto' : 'pixelated');
     root.style.setProperty('--theme-veil', 'rgba(0,0,0,.82)');
     var art = document.querySelector('.gengar-header-art');
@@ -302,6 +369,8 @@
     // No nível bem claro a letra vira escura e o visor deixa de ser um poço
     // preto — senão o texto sumiria e os cartões ficariam manchados.
     root.style.setProperty('--vision-text', p.texto);
+    // Guardado para a marca d'água saber se o fundo está claro ou escuro.
+    window.__TEMA_CLARO__ = p.claro === true;
     root.style.setProperty('--dex-visor', p.claro ? 'rgba(0,0,0,.07)' : 'rgba(0,0,0,.42)');
     root.style.setProperty('--dex-sink', p.claro
       ? 'inset 0 2px 5px rgba(0,0,0,.16), inset 0 -1px 0 rgba(255,255,255,.7)'
@@ -327,9 +396,9 @@
       tipo: (pokemon && pokemon.types && pokemon.types[0]) || 'Fantasma'
     };
 
-    var guardada = cachedArt(id);
-    aplicarImagem(guardada || spritePath(id), Boolean(guardada));
-    if (!guardada) baixarArte(id, function (dataUrl) { aplicarImagem(dataUrl, true); });
+    // Mostra o sprite local na hora e troca pela arte sorteada quando chegar.
+    aplicarImagem(spritePath(id), false);
+    buscarArte(id, function (dataUrl) { aplicarImagem(dataUrl, true); });
   }
 
   function nomeAtual() {

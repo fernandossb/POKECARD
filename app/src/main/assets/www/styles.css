@@ -2978,9 +2978,9 @@ body::before {
   content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
   background-image: var(--theme-wallpaper, none);
   background-repeat: no-repeat;
-  background-position: center 14%;
-  background-size: 82vw;
-  opacity: .10;
+  background-position: right -12% top 6%;
+  background-size: 92vw;
+  opacity: var(--theme-wallpaper-opacity, .30);
   display: block !important;
 }
 .app { position: relative; z-index: 1; }
