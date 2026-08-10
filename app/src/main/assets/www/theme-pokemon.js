@@ -151,6 +151,13 @@
     return NIVEL_PADRAO;
   }
 
+  function hexParaRgba(hex, alfa) {
+    var r = parseInt(hex.substr(1, 2), 16);
+    var g = parseInt(hex.substr(3, 2), 16);
+    var b = parseInt(hex.substr(5, 2), 16);
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + alfa + ')';
+  }
+
   function luminanciaHex(hex) {
     var c = [1, 3, 5].map(function (i) {
       var v = parseInt(hex.substr(i, 2), 16) / 255;
@@ -279,6 +286,10 @@
 
     root.style.setProperty('--vision-bg', p.bg);
     root.style.setProperty('--vision-surface', p.s1);
+    // Versão semitransparente do cartão: deixa a arte do favorito respirar
+    // por trás. Feita aqui em rgba porque color-mix não existe em WebView
+    // antigo e o cartão ficaria sem cor nenhuma.
+    root.style.setProperty('--vision-surface-soft', hexParaRgba(p.s1, 0.88));
     root.style.setProperty('--vision-surface-2', p.s2);
     root.style.setProperty('--vision-surface-3', p.s3);
     root.style.setProperty('--vision-line', p.line);

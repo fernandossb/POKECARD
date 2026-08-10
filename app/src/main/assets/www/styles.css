@@ -2965,3 +2965,84 @@ body::before, body::after, .gengar-atmosphere { display: none !important; }
 }
 .top-set-barra span { display: block; height: 100%; background: var(--vision-primary); }
 .top-set-pct { flex: none; font-size: 15px; font-weight: 700; color: var(--vision-primary); }
+
+/* =========================================================================
+   v5.1 — presença do Pokémon favorito na interface
+   O mascote volta ao cabeçalho, a arte aparece como marca d'água ao fundo e
+   sprites espiam nos cantos dos blocos de números. Os cartões ficam levemente
+   translúcidos para a arte respirar por trás sem atrapalhar a leitura.
+   ========================================================================= */
+
+/* Marca d'água: a arte do favorito atrás de tudo */
+body::before {
+  content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image: var(--theme-wallpaper, none);
+  background-repeat: no-repeat;
+  background-position: center 14%;
+  background-size: 82vw;
+  opacity: .10;
+  display: block !important;
+}
+.app { position: relative; z-index: 1; }
+
+/* Mascote no cabeçalho da tela inicial */
+.gengar-header-art {
+  display: none !important;
+}
+.vision-home-head { position: relative !important; }
+.vision-home-head::after {
+  content: ''; position: absolute; right: -6px; bottom: -14px;
+  width: 92px; height: 92px; pointer-events: none;
+  background-image: var(--theme-wallpaper, none);
+  background-repeat: no-repeat; background-position: center; background-size: contain;
+  filter: drop-shadow(0 6px 10px rgba(0,0,0,.45));
+  display: block !important;
+}
+.vision-home-head .vision-profile-button { margin-right: 96px; }
+
+/* Cartões translúcidos, para a arte aparecer por trás */
+.portfolio-card, .pokedex-progress-card, .stat-card,
+.collection-summary-grid > *, .top-set {
+  background: var(--vision-surface-soft, var(--vision-surface)) !important;
+  backdrop-filter: blur(6px);
+}
+
+/* Sprite espiando no canto dos blocos de números */
+.collection-summary-grid > *, .stat-card { position: relative; overflow: hidden; }
+.collection-summary-grid > *::after {
+  content: ''; position: absolute; right: -10px; bottom: -10px;
+  width: 54px; height: 54px; opacity: .22; pointer-events: none;
+  background-image: var(--theme-wallpaper, none);
+  background-repeat: no-repeat; background-position: center; background-size: contain;
+}
+.collection-summary-grid > * > * { position: relative; z-index: 1; }
+
+/* Telas vazias ganham o favorito ao lado */
+.empty {
+  position: relative; padding: 22px 18px 22px 92px !important;
+  min-height: 84px; display: flex; flex-direction: column; justify-content: center;
+  background: var(--vision-surface) !important;
+  border: 1px solid var(--v5-borda) !important;
+  border-radius: var(--v5-raio) !important;
+  color: var(--vision-muted) !important;
+}
+.empty::before {
+  content: ''; position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+  width: 64px; height: 64px; opacity: .55;
+  background-image: var(--theme-wallpaper, none);
+  background-repeat: no-repeat; background-position: center; background-size: contain;
+}
+
+/* Medalhas com a arte do Pokémon do tipo, quando houver */
+.trofeu-medalha { position: relative; overflow: hidden; }
+.trofeu-medalha::after {
+  content: ''; position: absolute; inset: 0; opacity: .18; pointer-events: none;
+  background-image: var(--theme-wallpaper, none);
+  background-repeat: no-repeat; background-position: center bottom; background-size: 78%;
+}
+.trofeu.bloqueado .trofeu-medalha::after { opacity: .08; }
+
+@media (max-width: 380px) {
+  .vision-home-head::after { width: 76px; height: 76px; }
+  .vision-home-head .vision-profile-button { margin-right: 78px; }
+}

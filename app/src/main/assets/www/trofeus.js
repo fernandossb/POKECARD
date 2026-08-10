@@ -4,8 +4,9 @@
    Pokédex, preços). Nada é inventado nem salvo separado: se você apagar uma
    carta, a medalha volta atrás sozinha.
 
-   São 4 níveis por medalha — bronze, prata, ouro e platina — e as famílias
-   por tipo e por região geram uma medalha para cada valor, como as do GO. */
+   São 6 níveis por medalha — bronze, prata, ouro, platina, diamante e mestre —
+   com metas pensadas para uma coleção que pode chegar a 100 mil cartas. As
+   famílias por tipo, região e raridade geram uma medalha para cada valor. */
 (function () {
   'use strict';
 
@@ -21,7 +22,7 @@
       setsCompletos: 0, setsIniciados: 0,
       pokemonCompletos: 0, cartasComTodasVariantes: 0,
       decks: ((state && state.decks) || []).length,
-      graduadas: 0, carimbadas: 0, idiomas: {}
+      graduadas: 0, carimbadas: 0, idiomas: {}, noFichario: 0, paraNegociar: 0, desejadas: 0
     };
 
     var vistos = new Set();
@@ -53,11 +54,16 @@
 
       var variantes = variantsFor ? variantsFor(cardId) : [];
       variantes.forEach(function (v) {
+        var copias = Math.max(0, Number(v.quantity) || 0);
         if (v.language) m.idiomas[v.language] = (m.idiomas[v.language] || 0) + 1;
         if (v.gradingCompany && v.gradingCompany !== 'Não graduada') m.graduadas += 1;
         if (v.distribution === 'stamped') m.carimbadas += 1;
+        if (v.storageLocation === 'fichario') m.noFichario += copias;
+        if (v.storageLocation === 'troca' || v.storageLocation === 'venda'
+            || v.isForTrade || v.isForSale) m.paraNegociar += copias;
+        if (v.isWishlist) m.desejadas += 1;
         var preco = effectiveVariantPrice ? effectiveVariantPrice(cardId, v) : null;
-        if (preco && isFinite(preco.brl)) m.valor += Number(preco.brl) * Math.max(0, Number(v.quantity) || 0);
+        if (preco && isFinite(preco.brl)) m.valor += Number(preco.brl) * copias;
       });
 
       // Todas as variantes conhecidas desta carta já cadastradas?
@@ -99,22 +105,39 @@
   }
 
   // ---- Catálogo de medalhas ----
-  // valor: função que lê a medida · metas: os 4 degraus
+  // valor: função que lê a medida · metas: os 6 degraus
   function catalogo(m) {
     var lista = [
-      { id:'colecionador', nome:'Colecionador', icone:'📇', desc:'Cartas cadastradas', valor:m.copias, metas:[10,100,1000,5000] },
-      { id:'variedade',    nome:'Variedade',    icone:'🃏', desc:'Cartas diferentes', valor:m.unicas, metas:[10,100,750,3000] },
-      { id:'pokedex',      nome:'Pesquisador',  icone:'🔎', desc:'Pokémon na sua Pokédex', valor:m.pokemonRegistrados, metas:[25,150,500,1025] },
-      { id:'sets',         nome:'Arquivista',   icone:'🗂️', desc:'Coleções completas', valor:m.setsCompletos, metas:[1,5,20,50] },
-      { id:'explorador',   nome:'Explorador',   icone:'🧭', desc:'Coleções iniciadas', valor:m.setsIniciados, metas:[3,15,60,150] },
-      { id:'linhagem',     nome:'Linhagem',     icone:'🧬', desc:'Pokémon com todas as cartas', valor:m.pokemonCompletos, metas:[1,10,50,200] },
-      { id:'perfeccionista', nome:'Perfeccionista', icone:'✨', desc:'Cartas com todas as variantes', valor:m.cartasComTodasVariantes, metas:[1,15,100,500] },
-      { id:'tesouro',      nome:'Tesouro',      icone:'💎', desc:'Valor da coleção em reais', valor:Math.round(m.valor), metas:[100,1000,10000,50000], moeda:true },
-      { id:'estrategista', nome:'Estrategista', icone:'⚔️', desc:'Decks montados', valor:m.decks, metas:[1,5,15,40] },
-      { id:'certificado',  nome:'Certificado',  icone:'🏅', desc:'Cartas graduadas', valor:m.graduadas, metas:[1,5,25,100] },
-      { id:'carimbo',      nome:'Carimbada',    icone:'🖃', desc:'Cartas com carimbo', valor:m.carimbadas, metas:[1,10,50,200] },
-      { id:'poliglota',    nome:'Poliglota',    icone:'🌐', desc:'Idiomas diferentes na coleção', valor:Object.keys(m.idiomas).length, metas:[1,2,3,4] }
+      { id:'colecionador', nome:'Colecionador', icone:'📇', desc:'Cartas cadastradas', valor:m.copias, metas:[10,250,2500,15000,50000,100000] },
+      { id:'variedade',    nome:'Variedade',    icone:'🃏', desc:'Cartas diferentes', valor:m.unicas, metas:[10,150,1500,6000,15000,31000] },
+      { id:'pokedex',      nome:'Pesquisador',  icone:'🔎', desc:'Pokémon na sua Pokédex', valor:m.pokemonRegistrados, metas:[25,150,400,700,900,1025] },
+      { id:'sets',         nome:'Arquivista',   icone:'🗂️', desc:'Coleções completas', valor:m.setsCompletos, metas:[1,5,20,50,100,180] },
+      { id:'explorador',   nome:'Explorador',   icone:'🧭', desc:'Coleções iniciadas', valor:m.setsIniciados, metas:[3,15,60,150,280,390] },
+      { id:'linhagem',     nome:'Linhagem',     icone:'🧬', desc:'Pokémon com todas as cartas', valor:m.pokemonCompletos, metas:[1,10,50,200,500,1025] },
+      { id:'perfeccionista', nome:'Perfeccionista', icone:'✨', desc:'Cartas com todas as variantes', valor:m.cartasComTodasVariantes, metas:[1,25,250,1500,6000,15000] },
+      { id:'tesouro',      nome:'Tesouro',      icone:'💎', desc:'Valor da coleção em reais', valor:Math.round(m.valor), metas:[100,2500,25000,150000,500000,1500000], moeda:true },
+      { id:'estrategista', nome:'Estrategista', icone:'⚔️', desc:'Decks montados', valor:m.decks, metas:[1,5,15,40,90,180] },
+      { id:'certificado',  nome:'Certificado',  icone:'🏅', desc:'Cartas graduadas', valor:m.graduadas, metas:[1,5,25,100,350,1000] },
+      { id:'carimbo',      nome:'Carimbada',    icone:'🖃', desc:'Cartas com carimbo', valor:m.carimbadas, metas:[1,10,50,250,900,2500] },
+      { id:'poliglota',    nome:'Poliglota',    icone:'🌐', desc:'Idiomas diferentes na coleção', valor:Object.keys(m.idiomas).length, metas:[1,2,3,3,3,3] },
+      { id:'guardiao',     nome:'Guardião',     icone:'🛡️', desc:'Cartas guardadas no fichário', valor:m.noFichario, metas:[10,250,2500,15000,50000,100000] },
+      { id:'negociante',   nome:'Negociante',   icone:'🤝', desc:'Cartas separadas para troca ou venda', valor:m.paraNegociar, metas:[1,25,250,1500,6000,20000] },
+      { id:'caçador',      nome:'Caçador',      icone:'🎯', desc:'Cartas na lista de desejos', valor:m.desejadas, metas:[1,20,100,500,1500,4000] },
+      { id:'veterano',     nome:'Veterano',     icone:'⏳', desc:'Coleções diferentes representadas', valor:m.setsIniciados, metas:[5,25,80,180,300,391] }
     ];
+
+    // Uma medalha por raridade encontrada na coleção. A raridade vem do
+    // catálogo enriquecido; sem ele, esta família simplesmente não aparece.
+    var ICONE_RARIDADE = {
+      'Comum':'⚪','Incomum':'🔵','Rara':'⭐','Rara Holo':'🌟','Ultra Rara':'💫',
+      'Promo':'🎁','Rara Secreta':'🔒','Rara Dupla':'✌️','Hiper Rara':'🌈',
+      'Rara Holo V':'🅥','Rara Holo VMAX':'🆚','Rara Arco-Íris':'🌈','Amazing Rare':'💠'
+    };
+    Object.keys(m.porRaridade).sort().forEach(function (r) {
+      lista.push({ id:'rar-'+r, nome:r, icone:ICONE_RARIDADE[r] || '🎴',
+        desc:'Cartas de raridade '+r, valor:m.porRaridade[r],
+        metas:[5,50,400,2000,8000,25000], familia:'Raridades' });
+    });
 
     // Uma medalha por tipo, como as do Pokémon GO.
     var TIPOS = ['Planta','Fogo','Água','Elétrico','Psíquico','Lutador','Sombrio','Metálico',
@@ -124,14 +147,14 @@
       'Terrestre':'⛰️','Pedra':'🪨','Inseto':'🐛','Fantasma':'👻','Gelo':'❄️','Normal':'⭐' };
     TIPOS.forEach(function (t) {
       lista.push({ id:'tipo-'+t, nome:t, icone:ICONE_TIPO[t]||'⭐', desc:'Cartas do tipo '+t,
-        valor:m.porTipo[t]||0, metas:[5,25,100,400], familia:'Tipos' });
+        valor:m.porTipo[t]||0, metas:[10,100,600,3000,10000,30000], familia:'Tipos' });
     });
 
     // Uma medalha por região.
     var REGIOES = ['Kanto','Johto','Hoenn','Sinnoh','Unova','Kalos','Alola','Galar','Paldea'];
     REGIOES.forEach(function (r) {
       lista.push({ id:'regiao-'+r, nome:r, icone:'🗺️', desc:'Cartas de '+r,
-        valor:m.porRegiao[r]||0, metas:[5,25,100,300], familia:'Regiões' });
+        valor:m.porRegiao[r]||0, metas:[10,100,600,3000,9000,25000], familia:'Regiões' });
     });
 
     return lista;
@@ -157,8 +180,10 @@
     return Number(valor).toLocaleString('pt-BR');
   }
 
-  var CORES = { 0:'#4a4a52', 1:'#b4763a', 2:'#9aa6ae', 3:'#e8bf21', 4:'#6fe0d0' };
-  var ROTULOS = { 0:'Bloqueada', 1:'Bronze', 2:'Prata', 3:'Ouro', 4:'Platina' };
+  /* Seis níveis. Os dois últimos existem porque a meta é uma coleção de
+     ~100 mil cartas: com quatro níveis tudo virava platina cedo demais. */
+  var CORES = { 0:'#4a4a52', 1:'#b4763a', 2:'#9aa6ae', 3:'#e8bf21', 4:'#6fe0d0', 5:'#7fd1ff', 6:'#ff7ad4' };
+  var ROTULOS = { 0:'Bloqueada', 1:'Bronze', 2:'Prata', 3:'Ouro', 4:'Platina', 5:'Diamante', 6:'Mestre' };
 
   function cartao(item) {
     var n = nivelDe(item);
@@ -182,7 +207,7 @@
     var conquistadas = lista.filter(function (i) { return nivelDe(i) > 0; }).length;
     var platinas = lista.filter(function (i) { return nivelDe(i) === 4; }).length;
 
-    var familias = { 'Coleção': [], 'Tipos': [], 'Regiões': [] };
+    var familias = { 'Coleção': [], 'Raridades': [], 'Tipos': [], 'Regiões': [] };
     lista.forEach(function (i) { (familias[i.familia || 'Coleção'] || familias['Coleção']).push(i); });
 
     var corpo = '<button class="modal-close" onclick="closeModal()" aria-label="Fechar">×</button>'

@@ -51,13 +51,13 @@ async function fetchCategory(category) {
   const MAX_PAGES = 200;
   for (let page = 1; page <= MAX_PAGES; page += 1) {
     const data = await graphql(
-      `{ cards(filters:{category:"${category}"}, pagination:{page:${page},itemsPerPage:${PAGE_SIZE}}) { id trainerType } }`
+      `{ cards(filters:{category:"${category}"}, pagination:{page:${page},itemsPerPage:${PAGE_SIZE}}) { id trainerType rarity } }`
     );
     const cards = data?.cards || [];
     const before = found.size;
     for (const card of cards) {
       if (!card?.id) continue;
-      found.set(card.id, { category, trainerType: card.trainerType || null });
+      found.set(card.id, { category, trainerType: card.trainerType || null, rarity: card.rarity || null });
     }
     process.stdout.write(`\r${category}: ${found.size} cartas`);
     // Para quando a página vem incompleta ou não traz nada novo.
@@ -86,6 +86,8 @@ for (const card of cards) {
   // trainerType só existe para cartas de Treinador; nas demais fica ausente.
   if (info.trainerType) card.trainerType = info.trainerType;
   else delete card.trainerType;
+  // "None" é como a fonte marca carta sem raridade impressa.
+  if (info.rarity && info.rarity !== 'None') card.rarity = info.rarity;
   enriched += 1;
 }
 
