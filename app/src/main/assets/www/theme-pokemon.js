@@ -242,14 +242,15 @@
      app — assim o fundo não fica sempre igual. As quatro primeiras existem
      para todos os 1.025; as duas últimas faltam em alguns, e nesse caso o
      sorteio simplesmente cai na próxima da fila. */
+  /* Só as artes animadas. A normal e a brilhante se revezam a cada abertura,
+     dando variedade sem perder o movimento. Alguns Pokémon da geração 9 ainda
+     não têm animação; para esses vale o modelo 3D parado, e por último o
+     sprite local, que existe para todos e funciona sem internet. */
   var ARTES = [
-    { id: 'home',        caminho: 'other/home/',                  ext: '.png' },
-    { id: 'oficial',     caminho: 'other/official-artwork/',      ext: '.png' },
-    { id: 'home-shiny',  caminho: 'other/home/shiny/',            ext: '.png' },
-    { id: 'ofic-shiny',  caminho: 'other/official-artwork/shiny/', ext: '.png' },
-    { id: 'showdown',    caminho: 'other/showdown/',              ext: '.gif' },
-    { id: 'sonho',       caminho: 'other/dream-world/',           ext: '.svg' }
+    { id: 'anim',       caminho: 'other/showdown/',       ext: '.gif', animada: true },
+    { id: 'anim-shiny', caminho: 'other/showdown/shiny/', ext: '.gif', animada: true }
   ];
+  var ARTE_RESERVA = { id: 'home', caminho: 'other/home/', ext: '.png', animada: false };
   var SPRITES_BASE = 'https://cdn.jsdelivr.net/gh/PokeAPI/sprites@master/sprites/pokemon/';
   var DB_NOME = 'fichario-pokemon-arte-tema';
   var LOJA = 'artes';
@@ -296,7 +297,7 @@
 
   /** Tenta as artes em ordem sorteada até uma funcionar. */
   function buscarArte(id, aoConcluir) {
-    var fila = embaralhar(ARTES);
+    var fila = embaralhar(ARTES).concat([ARTE_RESERVA]);
 
     function tentar(indice) {
       if (indice >= fila.length) return; // nenhuma deu certo: fica o sprite local

@@ -8,7 +8,15 @@
 (function () {
   'use strict';
 
-  var BASE = 'https://cdn.jsdelivr.net/gh/PokeAPI/sprites@master/sprites/pokemon/other/home/';
+  /* Arte animada primeiro. Além de dar vida à lista, ela é bem mais leve que
+     o modelo 3D parado (~50 KB contra ~140 KB), o que ajuda numa tela que
+     mostra centenas de Pokémon. Alguns da geração 9 ainda não têm animação;
+     nesses casos entra o modelo parado. */
+  var FONTES = [
+    'https://cdn.jsdelivr.net/gh/PokeAPI/sprites@master/sprites/pokemon/other/showdown/',
+    'https://cdn.jsdelivr.net/gh/PokeAPI/sprites@master/sprites/pokemon/other/home/'
+  ];
+  var EXTENSOES = ['.gif', '.png'];
   var DB_NOME = 'fichario-pokemon-arte3d';
   var LOJA = 'imagens';
   var memoria = new Map();
@@ -46,6 +54,17 @@
     }).catch(function () {});
   }
 
+  /** Tenta a arte animada e, se não existir para este Pokémon, a parada. */
+  function buscarNasFontes(id, indice) {
+    if (indice >= FONTES.length) return Promise.reject(new Error('sem arte'));
+    return fetch(FONTES[indice] + id + EXTENSOES[indice]).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.blob();
+    }).then(comoDataUrl).catch(function () {
+      return buscarNasFontes(id, indice + 1);
+    });
+  }
+
   function comoDataUrl(blob) {
     return new Promise(function (resolve, reject) {
       var leitor = new FileReader();
@@ -77,10 +96,7 @@
         aplicar(img, guardada);
         return null;
       }
-      return fetch(BASE + id + '.png').then(function (r) {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.blob();
-      }).then(comoDataUrl).then(function (dataUrl) {
+      return buscarNasFontes(id, 0).then(function (dataUrl) {
         memoria.set(id, dataUrl);
         guardar(id, dataUrl);
         baixando.delete(id);
