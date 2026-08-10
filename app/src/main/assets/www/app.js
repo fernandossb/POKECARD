@@ -2232,8 +2232,47 @@ function renderDashboard() {
         <button onclick="ui.cardFilter='owned';setTab('cards')"><span>${tabIcon('collections')}</span><strong>${ownedVariants}</strong><small>Versões</small></button>
         <button onclick="ui.cardFilter='owned';setTab('cards')"><span>${tabIcon('pokedex')}</span><strong>${specialCopies}</strong><small>Especiais</small></button>
       </div>
+      ${topColecoesPanel()}
       ${pricingPanel()}
     </section>`;
+}
+
+/**
+ * As 10 coleções em que você está mais perto de completar, da mais adiantada
+ * para a menos. Só entram coleções com pelo menos uma carta cadastrada.
+ */
+function topColecoesPanel() {
+  const lista = buildSetStats()
+    .filter(set => set.ownedUnique > 0)
+    .map(set => {
+      const total = set.officialCardCount || set.totalCardCount || 0;
+      return { ...set, total, pct: total ? Math.min(100, (set.ownedUnique / total) * 100) : 0 };
+    })
+    .sort((a, b) => b.pct - a.pct || b.ownedUnique - a.ownedUnique)
+    .slice(0, 10);
+
+  if (!lista.length) {
+    return `<section class="top-sets">
+      <div class="section-heading"><h3 class="section-title">Coleções mais completas</h3></div>
+      <div class="empty">Cadastre cartas para acompanhar o progresso das suas coleções.</div>
+    </section>`;
+  }
+
+  return `<section class="top-sets">
+    <div class="section-heading"><h3 class="section-title">Coleções mais completas</h3><button onclick="setTab('sets')">Ver todas</button></div>
+    <ol class="top-sets-lista">
+      ${lista.map((set, i) => `
+        <li class="top-set" onclick="ui.cardSet='${esc(set.id)}';ui.cardFilter='all';setTab('cards')">
+          <span class="top-set-pos">${i + 1}</span>
+          <span class="top-set-info">
+            <strong>${esc(set.name)}</strong>
+            <small>${set.ownedUnique}${set.total ? ` de ${set.total}` : ''} cartas</small>
+            <i class="top-set-barra"><span style="width:${set.pct.toFixed(1)}%"></span></i>
+          </span>
+          <b class="top-set-pct">${Math.round(set.pct)}%</b>
+        </li>`).join('')}
+    </ol>
+  </section>`;
 }
 
 function languageCode(language) {
@@ -3036,7 +3075,7 @@ function scannerFinishLabel(value) {
 }
 
 function scannerPreferences() {
-  const defaults = { mode: 'single', language: 'pt-br', speed: 'normal', fps: 'balanced', setId: ui.cardSet !== 'all' ? ui.cardSet : 'all' };
+  const defaults = { mode: 'continuous', language: 'pt-br', speed: 'normal', fps: 'balanced', setId: ui.cardSet !== 'all' ? ui.cardSet : 'all' };
   try { return { ...defaults, ...JSON.parse(localStorage.getItem(SCANNER_PREFS_KEY) || '{}') }; }
   catch (_) { return defaults; }
 }
@@ -3108,6 +3147,12 @@ function scanNextCard() {
     scannerSession.live = true;
     window.Android.startLiveScanner(scannerSession.finish);
     return;
+  }
+  // Antes o app caía no modo de fotos em silêncio quando a câmera ao vivo não
+  // existia, e ficava parecendo que o contínuo simplesmente não funcionava.
+  if (scannerSession.mode === 'continuous' && !window.Android?.startLiveScanner && !scannerSession.avisouSemLive) {
+    scannerSession.avisouSemLive = true;
+    notify('Este aplicativo ainda não tem a câmera contínua. Instale a versão mais nova para usá-la.');
   }
   if (window.Android?.startCardScanner) {
     scannerSession.live = false;

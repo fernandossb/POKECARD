@@ -2666,482 +2666,302 @@ body::before { display: block !important; }
 .registration-field.span-2 { grid-column: 1 / -1; }
 .registration-field.hidden, #regVarianteBloco.hidden { display: none !important; }
 
+
 /* =========================================================================
-   Camada Pokédex clássica — v4.0
-   Dá ao app a linguagem física da Pokédex de 1996: contorno fino de tinta,
-   botões salientes, telas afundadas, lente e visor de LCD. As cores continuam
-   vindo das variáveis --vision-*, que o theme-pokemon.js repinta conforme o
-   Pokémon favorito. Só o acabamento muda aqui; nenhuma tela é reorganizada.
+   POKECARD — camada visual v5.0
+   Substitui as camadas que estavam empilhadas (Pokédex de plástico, contornos
+   grossos, botões salientes). Visual único, escuro e limpo, no espírito das
+   referências: superfícies suaves, cantos arredondados, linha fina, número
+   grande em destaque e a cor vinda do tema do Pokémon favorito.
+   Toda cor sai de --vision-*, que o theme-pokemon.js repinta.
    ========================================================================= */
 :root {
-  --dex-ink: #16161a;
-  --dex-bezel: #edeae1;
-  --dex-lcd-text: #c8f078;
-  /* Relevo: luz em cima, sombra embaixo, apoio sólido no chão. */
-  --dex-raise: inset 0 2px 0 rgba(255,255,255,.30), inset 0 -3px 0 rgba(0,0,0,.26), 0 3px 0 rgba(0,0,0,.42);
-  --dex-raise-soft: inset 0 2px 0 rgba(255,255,255,.22), inset 0 -2px 0 rgba(0,0,0,.20), 0 2px 0 rgba(0,0,0,.35);
-  --dex-press: inset 0 3px 7px rgba(0,0,0,.45);
-  --dex-sink: inset 0 3px 8px rgba(0,0,0,.55), inset 0 -1px 0 rgba(255,255,255,.10);
-  --dex-plastic: linear-gradient(180deg, rgba(255,255,255,.16), rgba(0,0,0,.14));
+  --v5-raio: 18px;
+  --v5-raio-p: 12px;
+  --v5-borda: rgba(255, 255, 255, .08);
+  --v5-borda-forte: rgba(255, 255, 255, .14);
+  --v5-sombra: 0 8px 24px rgba(0, 0, 0, .28);
+  --v5-gap: 12px;
 }
 
-/* ---- Corpo de plástico ---- */
-.app-header {
-  position: relative !important;
-  background-image: var(--dex-plastic) !important;
-  background-color: var(--dex-body, #9640dd) !important;
-  border-bottom: 2px solid var(--dex-ink) !important;
-  box-shadow: inset 0 -3px 6px rgba(0,0,0,.20) !important;
+/* ---- Base ---- */
+html, body, .app {
+  background: var(--vision-bg) !important;
+  color: var(--vision-text) !important;
 }
-.app-header .header-row h1, .app-header .kicker, .app-header .header-icon {
-  color: var(--dex-body-text, #fff) !important;
-  text-shadow: var(--dex-body-shadow, 0 1px 2px rgba(0,0,0,.45));
-}
+body::before, body::after, .gengar-atmosphere { display: none !important; }
+.app-header { display: none !important; }
+.content { padding: 0 16px calc(96px + env(safe-area-inset-bottom)) !important; }
+.screen { padding-top: 14px !important; max-width: 780px; margin: 0 auto; }
 
-/* ---- Lente e luzes: reaproveitam os três elementos já existentes ---- */
-.gengar-atmosphere {
-  display: block !important;
-  position: absolute !important;
-  top: calc(14px + env(safe-area-inset-top)); left: 16px;
-  width: auto; height: 20px; inset: auto auto auto 16px;
-  z-index: 2; pointer-events: none;
-}
-.gengar-atmosphere::before {
-  content: ''; position: absolute; left: 0; top: -8px;
-  width: 34px; height: 34px; border-radius: 50%;
-  background: #5bc8f5; border: 2px solid #efefef;
-  box-shadow: 0 0 0 2px var(--dex-ink),
-              inset 0 -4px 7px rgba(0,40,80,.55),
-              inset 0 3px 5px rgba(255,255,255,.6);
-  animation: none;
-}
-.gengar-atmosphere::after {
-  content: ''; position: absolute; left: 9px; top: -2px;
-  width: 11px; height: 7px; border-radius: 50%;
-  background: rgba(255,255,255,.85);
-}
-.gengar-atmosphere span {
-  position: absolute !important; top: 4px;
-  width: 10px !important; height: 10px !important;
-  border-radius: 50% !important; border: 1.5px solid var(--dex-ink);
-  filter: none !important; opacity: 1 !important; animation: none !important;
-  box-shadow: inset 0 2px 2px rgba(255,255,255,.55), inset 0 -2px 3px rgba(0,0,0,.4);
-}
-.gengar-atmosphere span:nth-child(1) { left: 44px !important; background: #e8402f !important; }
-.gengar-atmosphere span:nth-child(2) { left: 60px !important; background: #f5c518 !important; }
-.gengar-atmosphere span:nth-child(3) { left: 76px !important; background: #3fae4a !important; }
-
-.header-row h1 { padding-left: 0; }
-.kicker { padding-left: 96px; }
-
-/* ---- Visor de LCD ---- */
-#header-status {
-  display: inline-block;
-  margin-top: 6px !important;
-  padding: 5px 9px;
-  border: 2px solid var(--dex-ink);
-  border-radius: 5px;
-  background: rgba(0,0,0,.55);
-  color: var(--dex-lcd-text) !important;
-  font-family: ui-monospace, "Courier New", monospace;
-  font-size: 10.5px !important;
-  letter-spacing: .07em;
-  text-transform: uppercase;
-  box-shadow: var(--dex-sink);
-}
-
-/* ---- Telas afundadas ---- */
-.stat-card, .portfolio-value, .collection-summary-grid > *, .pokedex-progress-card,
-.catalog-last-result, .deck-summary, .price-market-summary, .tema-atual {
-  border: 2px solid var(--dex-ink) !important;
-  border-radius: 9px !important;
-  box-shadow: var(--dex-sink) !important;
-}
-
-/* ---- Campos: também afundados ---- */
-.field, input.field, select.field, textarea.field, .vision-search {
-  border: 2px solid var(--dex-ink) !important;
-  border-radius: 8px !important;
-  box-shadow: var(--dex-sink) !important;
-}
-
-/* ---- Botões salientes ---- */
-.primary-btn, .secondary-btn, .danger-btn, .load-more, .chip,
-.quick-action-list button, .price-refresh-btn, .price-validate-btn,
-.deck-suggestion-options button, .tema-item, .quantity-step-btn {
-  border: 2px solid var(--dex-ink) !important;
-  border-radius: 9px !important;
-  box-shadow: var(--dex-raise-soft) !important;
-  background-image: var(--dex-plastic) !important;
-  font-weight: 500 !important;
-  transition: transform .05s ease, box-shadow .05s ease;
-}
-.primary-btn { box-shadow: var(--dex-raise) !important; }
-.primary-btn:active, .secondary-btn:active, .danger-btn:active, .chip:active,
-.quick-action-list button:active, .tema-item:active, .quantity-step-btn:active {
-  transform: translateY(2px);
-  box-shadow: var(--dex-press) !important;
-}
-.chip.active, .tema-item.ativo {
-  box-shadow: var(--dex-press) !important;
-  transform: translateY(1px);
-}
-
-/* ---- Abas: os botões azuis da Pokédex ---- */
-.tabs {
-  border-top: 2px solid var(--dex-ink) !important;
-  background: var(--dex-body-dark, #4a2070) !important;
-  box-shadow: inset 0 3px 6px rgba(0,0,0,.30) !important;
-  gap: 5px !important; padding: 9px 10px calc(11px + env(safe-area-inset-bottom)) !important;
-}
-.tab {
-  border: 2px solid var(--dex-ink) !important;
-  border-radius: 7px !important;
-  background: #63cdf7 !important;
-  color: #16161a !important;
-  box-shadow: inset 0 2px 0 rgba(255,255,255,.75), inset 0 -3px 0 rgba(0,60,90,.32), 0 2px 0 rgba(0,0,0,.4) !important;
-}
-.tab.active {
-  background: var(--dex-bezel) !important;
-  box-shadow: var(--dex-press) !important;
-  transform: translateY(1px);
-}
-.tab .tab-label { font-size: 9.5px !important; font-weight: 500 !important; letter-spacing: .03em; }
-.scanner-tab { background: #f5c518 !important; }
-
-/* ---- Cartões com moldura, como o visor da Pokédex ---- */
-.panel, .set-card, .vision-card-tile, .card-row, .owned-variant-row,
-.modal-sheet, .deck-panel, .timeline-set-card, .registration-group, .deck-analysis {
-  border: 2px solid var(--dex-ink) !important;
-  border-radius: 10px !important;
-  box-shadow: var(--dex-raise-soft) !important;
-}
-
-/* ---- Mascote com apoio no plástico ---- */
-.gengar-header-art {
-  filter: drop-shadow(0 4px 4px rgba(0,0,0,.5)) !important;
-}
-
-@media (max-width: 380px) {
-  .kicker { padding-left: 92px; }
-  .gengar-atmosphere::before { width: 30px; height: 30px; }
-  .gengar-atmosphere span:nth-child(1) { left: 40px !important; }
-  .gengar-atmosphere span:nth-child(2) { left: 55px !important; }
-  .gengar-atmosphere span:nth-child(3) { left: 70px !important; }
-}
-
-/* Troféus — medalhas com níveis */
-.trofeu-familia {
-  margin: 16px 0 8px; font-size: 14px; font-weight: 500;
-  display: flex; justify-content: space-between; align-items: baseline;
-}
-.trofeu-familia span { font-size: 11px; color: var(--vision-muted); }
-.trofeu-grade { display: grid; grid-template-columns: 1fr; gap: 8px; }
-@media (min-width: 420px) { .trofeu-grade { grid-template-columns: 1fr 1fr; } }
-.trofeu {
-  display: flex; align-items: center; gap: 11px; padding: 10px 12px;
-  border: 2px solid var(--dex-ink); border-radius: 10px;
-  background: var(--vision-surface-2);
-  box-shadow: var(--dex-raise-soft);
-}
-.trofeu.bloqueado { opacity: .55; }
-.trofeu-medalha {
-  position: relative; flex: none;
-  width: 46px; height: 46px; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 21px; line-height: 1;
-  background: var(--tr-cor); border: 2px solid var(--dex-ink);
-  box-shadow: inset 0 3px 0 rgba(255,255,255,.42), inset 0 -4px 0 rgba(0,0,0,.30), 0 2px 0 rgba(0,0,0,.45);
-}
-.trofeu.bloqueado .trofeu-medalha { filter: grayscale(1); }
-.trofeu-nivel {
-  position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%);
-  font-size: 8.5px; font-weight: 500; letter-spacing: .04em;
-  padding: 1px 6px; border-radius: 999px; white-space: nowrap;
-  background: var(--dex-ink); color: #fff; border: 1px solid var(--tr-cor);
-}
-.trofeu-info { min-width: 0; flex: 1; }
-.trofeu-info strong { display: block; font-size: 13px; }
-.trofeu-info small { display: block; font-size: 10.5px; color: var(--vision-muted); line-height: 1.4; }
-.trofeu-barra {
-  height: 6px; margin: 6px 0 4px; border-radius: 999px; overflow: hidden;
-  background: rgba(0,0,0,.45); box-shadow: inset 0 2px 3px rgba(0,0,0,.5);
-}
-.trofeu-barra span { display: block; height: 100%; background: var(--tr-cor); }
-.trofeu-conta { font-variant-numeric: tabular-nums; }
-
-/* =========================================================================
-   Correção v4.0.1 — o cabeçalho Pokédex no lugar certo.
-   A camada v3.7 esconde o <header class="app-header"> e desenha o próprio
-   topo dentro da tela inicial (.vision-home-head). A versão anterior desta
-   camada pintava o cabeçalho escondido, então nada aparecia.
-   ========================================================================= */
+/* ---- Cabeçalho da tela inicial ---- */
 .vision-home-head {
-  position: relative !important;
-  margin: 0 0 14px !important;
-  padding: 13px 14px 12px !important;
-  border: 2px solid var(--dex-ink) !important;
-  border-radius: 14px !important;
-  background-image: var(--dex-plastic) !important;
-  background-color: var(--dex-body, #9640dd) !important;
-  box-shadow: inset 0 2px 0 rgba(255,255,255,.28), inset 0 -3px 8px rgba(0,0,0,.24), 0 3px 0 rgba(0,0,0,.42) !important;
-  align-items: flex-start !important;
-  overflow: hidden;
-  min-height: 92px;
+  display: flex !important; align-items: center; justify-content: space-between;
+  gap: 12px; margin: 4px 0 18px !important; padding: 0 !important;
+  background: none !important; border: 0 !important; box-shadow: none !important;
+  min-height: 0 !important;
 }
-.vision-home-head > div:first-child { padding-left: 92px; }
-.vision-home-head span,
+.vision-home-head::before, .vision-home-head::after { display: none !important; }
+.vision-home-head span {
+  display: block; font-size: 13px; color: var(--vision-muted) !important;
+  text-shadow: none !important; letter-spacing: 0;
+}
 .vision-home-head h2 {
-  color: var(--dex-body-text, #fff) !important;
-  text-shadow: var(--dex-body-shadow, 0 1px 2px rgba(0,0,0,.45));
+  font-size: 26px !important; font-weight: 700; letter-spacing: -.02em;
+  color: var(--vision-text) !important; text-shadow: none !important; margin: 2px 0 0;
 }
-.vision-home-head h2 { font-size: 19px !important; }
-
-/* Lente de vidro e as três luzinhas */
-.vision-home-head::before {
-  content: ''; position: absolute; left: 14px; top: 13px;
-  width: 34px; height: 34px; border-radius: 50%;
-  background: #5bc8f5; border: 2px solid #efefef;
-  box-shadow: 0 0 0 2px var(--dex-ink),
-              inset 0 -4px 7px rgba(0,40,80,.55),
-              inset 0 3px 5px rgba(255,255,255,.6),
-              14px 6px 0 -13px #e8402f, 14px 6px 0 -11px var(--dex-ink),
-              32px 6px 0 -13px #f5c518, 32px 6px 0 -11px var(--dex-ink),
-              50px 6px 0 -13px #3fae4a, 50px 6px 0 -11px var(--dex-ink);
-}
-.vision-home-head::after {
-  content: ''; position: absolute; left: 23px; top: 19px;
-  width: 11px; height: 7px; border-radius: 50%;
-  background: rgba(255,255,255,.85);
-}
-
-/* Mascote do tema no canto do cabeçalho */
 .vision-profile-button {
-  position: relative; z-index: 1;
-  border: 2px solid var(--dex-ink) !important;
-  box-shadow: var(--dex-raise-soft) !important;
-  background-image: var(--dex-plastic) !important;
+  width: 46px !important; height: 46px !important; flex: none;
+  border-radius: 50% !important;
+  border: 2px solid var(--vision-primary) !important;
+  background: var(--vision-surface) !important; background-image: none !important;
+  color: var(--vision-text) !important; font-size: 14px; font-weight: 600;
+  box-shadow: none !important;
 }
 
-/* O topo das demais telas segue a mesma linguagem, em versão discreta */
-.vision-screen-head, .collection-head {
-  border: 2px solid var(--dex-ink) !important;
-  border-radius: 12px !important;
-  padding: 11px 13px !important;
-  background-image: var(--dex-plastic) !important;
-  background-color: var(--dex-body, #9640dd) !important;
-  box-shadow: var(--dex-raise-soft) !important;
-}
-.vision-screen-head h2, .collection-head h2 {
-  color: var(--dex-body-text, #fff) !important;
-  text-shadow: var(--dex-body-shadow, 0 1px 2px rgba(0,0,0,.45));
-}
-
-/* A barra de abas precisa vencer a regra da v3.7, que vem depois. */
-.tabs { background: var(--dex-body-dark, #4a2070) !important; backdrop-filter: none !important; }
-.tab.scanner-tab {
-  background: #f5c518 !important;
-  background-image: var(--dex-plastic) !important;
-  color: #16161a !important;
-  border-color: var(--dex-ink) !important;
-  box-shadow: inset 0 2px 0 rgba(255,255,255,.7), inset 0 -3px 0 rgba(0,0,0,.28), 0 2px 0 rgba(0,0,0,.4) !important;
-}
-
-@media (max-width: 380px) {
-  .vision-home-head > div:first-child { padding-left: 86px; }
-}
-
-/* =========================================================================
-   Correção v4.1.1 — o tema alcança o app inteiro.
-   A camada v3.7 grava os verdes direto nas regras (gradientes e bordas fixas),
-   ignorando as variáveis --vision-*. Por isso só o cabeçalho trocava de cor.
-   Aqui essas superfícies voltam a obedecer ao tema do Pokémon favorito.
-   ========================================================================= */
-
-/* Fundo geral */
-html, body, .app { background: var(--vision-bg) !important; }
-
-/* Cartões grandes: telas afundadas dentro do plástico */
-.portfolio-card,
-.pokedex-progress-card,
-.vision-card-tile,
-.selected-set-banner,
-.modal-sheet,
-.deck-panel,
-.scanner-number-guide > div,
-.scanner-ocr-debug,
-.quantity-control,
-.pokemon-link-results {
+/* ---- Cartões ---- */
+.portfolio-card, .pokedex-progress-card, .panel, .set-card, .vision-card-tile,
+.card-row, .owned-variant-row, .deck-panel, .timeline-set-card, .modal-sheet,
+.registration-group, .deck-analysis, .catalog-last-result, .selected-set-banner,
+.scanner-number-guide > div, .scanner-ocr-debug, .quantity-control,
+.pokemon-link-results, .claridade-caixa, .trofeu {
   background: var(--vision-surface) !important;
   background-image: none !important;
-  border: 2px solid var(--dex-ink) !important;
-  border-radius: 12px !important;
-  box-shadow: var(--dex-sink) !important;
+  border: 1px solid var(--v5-borda) !important;
+  border-radius: var(--v5-raio) !important;
+  box-shadow: none !important;
 }
-.portfolio-card::after { background: rgba(255,255,255,.05) !important; }
+.portfolio-card { padding: 18px !important; }
+.portfolio-card::after { display: none !important; }
 
-/* Valor do portfólio: o visor principal do aparelho */
-.portfolio-value {
-  border: 2px solid var(--dex-ink);
-  border-radius: 10px;
-  background: var(--dex-visor, rgba(0,0,0,.42));
-  box-shadow: var(--dex-sink);
-  padding: 12px 14px;
-  margin: 16px 0 14px !important;
+/* ---- Números em destaque ---- */
+.portfolio-title {
+  color: var(--vision-muted) !important; font-size: 11px !important;
+  letter-spacing: .1em; text-transform: uppercase;
 }
-.portfolio-value strong { color: var(--vision-primary) !important; }
-.portfolio-value small, .portfolio-title { color: var(--vision-muted) !important; }
-.portfolio-sale, .portfolio-foot { color: var(--vision-muted) !important; }
+.portfolio-title > span { color: var(--vision-primary) !important; }
+.portfolio-title button {
+  color: var(--vision-primary) !important; font-size: 12px !important;
+  font-weight: 500 !important; text-transform: none; letter-spacing: 0;
+}
+.portfolio-value {
+  margin: 16px 0 14px !important; padding: 0 !important;
+  border: 0 !important; background: none !important; box-shadow: none !important;
+}
+.portfolio-value small { color: var(--vision-muted) !important; font-size: 12px !important; }
+.portfolio-value strong {
+  margin-top: 4px !important; font-size: 34px !important; font-weight: 700;
+  letter-spacing: -.03em; color: var(--vision-text) !important;
+}
+.portfolio-sale, .portfolio-foot {
+  border: 1px solid var(--v5-borda) !important; border-radius: var(--v5-raio-p) !important;
+  background: var(--vision-surface-2) !important; color: var(--vision-muted) !important;
+}
+.portfolio-foot { border: 0 !important; background: none !important; font-size: 11px !important; }
 .portfolio-languages span {
-  background: var(--vision-primary-soft) !important;
-  border: 2px solid var(--dex-ink) !important;
-  color: var(--vision-muted) !important;
-  box-shadow: var(--dex-raise-soft) !important;
+  background: var(--vision-surface-2) !important;
+  border: 1px solid var(--v5-borda) !important;
+  border-radius: 999px !important; color: var(--vision-muted) !important;
+  box-shadow: none !important; font-size: 11px;
 }
 .portfolio-languages span b { color: var(--vision-primary) !important; }
 
-/* Anel da Pokédex e barras de progresso */
-.progress, .pokedex-progress-card .progress {
-  background: rgba(0,0,0,.5) !important;
-  box-shadow: inset 0 2px 4px rgba(0,0,0,.6) !important;
+/* ---- Blocos de números lado a lado ---- */
+.stat-card, .collection-summary-grid > * {
+  background: var(--vision-surface) !important;
+  border: 1px solid var(--v5-borda) !important;
+  border-radius: var(--v5-raio-p) !important;
+  box-shadow: none !important; padding: 13px 14px !important;
 }
-.progress > span, .progress span { background: var(--vision-primary) !important; }
+.stat-value { font-size: 22px !important; font-weight: 700; letter-spacing: -.02em; color: var(--vision-text) !important; }
+.stat-label { font-size: 11px !important; color: var(--vision-muted) !important; letter-spacing: .04em; }
 
-/* Miniaturas e arte das cartas */
-.vision-card-art { background: var(--vision-surface-2) !important; background-image: none !important; }
-.variant-chip, .badge.owned, .badge.price {
-  background: var(--vision-primary-soft) !important;
-  border: 1.5px solid var(--dex-ink) !important;
-  color: var(--vision-muted) !important;
-}
-
-/* Preço automático */
-.automatic-price-card:not(.empty-price):not(.loading-price) {
+/* ---- Campos e busca ---- */
+.field, input.field, select.field, textarea.field, .vision-search {
   background: var(--vision-surface-2) !important;
-  background-image: none !important;
-  border: 2px solid var(--dex-ink) !important;
-  box-shadow: var(--dex-sink) !important;
+  border: 1px solid var(--v5-borda) !important;
+  border-radius: var(--v5-raio-p) !important;
+  box-shadow: none !important;
+  color: var(--vision-text) !important;
+  min-height: 46px;
 }
-.automatic-price-card:not(.empty-price):not(.loading-price) strong { color: var(--vision-primary) !important; }
+.field:focus, .vision-search:focus-within { border-color: var(--vision-primary) !important; }
+.vision-search span { color: var(--vision-muted) !important; }
 
-/* ---- Barra de abas: tudo em uma linha só ---- */
+/* ---- Botões ---- */
+.primary-btn, .secondary-btn, .danger-btn, .load-more,
+.quick-action-list button, .price-refresh-btn, .price-validate-btn,
+.deck-suggestion-options button, .quantity-step-btn {
+  border-radius: var(--v5-raio-p) !important;
+  border: 1px solid var(--v5-borda-forte) !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  font-weight: 500 !important;
+  transition: opacity .12s ease;
+}
+.primary-btn {
+  background: var(--vision-primary) !important;
+  border-color: transparent !important;
+  color: var(--vision-bg) !important;
+  min-height: 48px;
+}
+.secondary-btn, .quick-action-list button, .price-refresh-btn {
+  background: var(--vision-surface-2) !important;
+  color: var(--vision-text) !important;
+}
+.primary-btn:active, .secondary-btn:active, .quick-action-list button:active { opacity: .75; }
+
+/* ---- Filtros em pílula ---- */
+.chip {
+  border-radius: 999px !important;
+  border: 1px solid var(--v5-borda) !important;
+  background: var(--vision-surface-2) !important;
+  color: var(--vision-muted) !important;
+  box-shadow: none !important; font-size: 12px !important;
+  min-height: 38px; font-weight: 500 !important;
+}
+.chip.active {
+  background: var(--vision-primary-soft) !important;
+  border-color: var(--vision-primary) !important;
+  color: var(--vision-primary) !important;
+  transform: none !important;
+}
+
+/* ---- Grade de cartas ---- */
+.vision-card-tile { padding: 8px !important; overflow: hidden; }
+.vision-card-art {
+  background: var(--vision-surface-2) !important;
+  border-radius: var(--v5-raio-p) !important;
+  overflow: hidden;
+}
+.tile-price-row, .card-meta { color: var(--vision-muted) !important; }
+
+/* ---- Barra inferior ---- */
 .tabs {
-  display: flex !important;
-  flex-wrap: nowrap !important;
-  gap: 4px !important;
-  padding: 8px 7px calc(9px + env(safe-area-inset-bottom)) !important;
-  overflow: visible !important;
+  position: fixed !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
+  z-index: 100 !important;
+  display: flex !important; flex-wrap: nowrap !important; gap: 2px !important;
+  padding: 8px 6px calc(9px + env(safe-area-inset-bottom)) !important;
+  background: var(--vision-surface) !important;
+  border-top: 1px solid var(--v5-borda) !important;
+  box-shadow: 0 -6px 20px rgba(0, 0, 0, .3) !important;
+  backdrop-filter: none !important;
 }
 .tab {
-  flex: 1 1 0 !important;
-  min-width: 0 !important;
-  padding: 6px 1px !important;
-  border-radius: 8px !important;
+  flex: 1 1 0 !important; min-width: 0 !important;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 7px 2px !important;
+  border: 0 !important; border-radius: var(--v5-raio-p) !important;
+  background: transparent !important;
+  color: var(--vision-muted) !important;
+  box-shadow: none !important; transform: none !important;
 }
-.tab .tab-icon { width: 18px !important; height: 18px !important; }
+.tab.active { background: var(--vision-primary-soft) !important; color: var(--vision-primary) !important; }
+.tab .tab-icon { width: 21px !important; height: 21px !important; }
 .tab .tab-label {
-  font-size: 8.5px !important;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  max-width: 100%; display: block;
+  font-size: 10px !important; font-weight: 500 !important;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
 }
-/* O botão do scanner é o destaque redondo do meio, sem empurrar os vizinhos */
+/* Botão de escanear: círculo em destaque, centralizado e acima da barra */
 .tab.scanner-tab {
-  flex: 0 0 52px !important;
-  width: 52px !important; height: 52px !important;
+  position: absolute !important; left: 50% !important; top: -22px !important;
+  transform: translateX(-50%) !important;
+  flex: none !important; width: 56px !important; height: 56px !important;
   border-radius: 50% !important;
-  margin: -14px 2px 0 !important;
-  align-self: center;
+  background: var(--vision-primary) !important;
+  color: var(--vision-bg) !important;
+  border: 4px solid var(--vision-bg) !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .4) !important;
+  justify-content: center;
 }
 .tab.scanner-tab .tab-label { display: none !important; }
-.tab.scanner-tab .tab-icon { width: 24px !important; height: 24px !important; }
+.tab.scanner-tab .tab-icon { width: 25px !important; height: 25px !important; }
+.tab.scanner-tab:active { transform: translateX(-50%) scale(.94) !important; }
 
-/* =========================================================================
-   Ajustes v4.1.2
-   1) Telas de Sets e Cartas sem a faixa de título — sobra espaço para a lista
-   2) Nada mais passa por baixo da lente do cabeçalho
-   3) Botão do scanner vira Pokébola centralizada acima da barra
-   ========================================================================= */
+/* ---- Abas internas ---- */
+.explore-mode-tabs, .collection-view-tabs, .collection-scope-tabs {
+  background: var(--vision-surface) !important;
+  border: 1px solid var(--v5-borda) !important;
+  border-radius: var(--v5-raio-p) !important;
+  overflow: hidden; padding: 4px !important; gap: 4px !important;
+}
+.explore-mode-tabs button, .collection-view-tabs button, .collection-scope-tabs button {
+  border: 0 !important; border-radius: 9px !important;
+  background: transparent !important; color: var(--vision-muted) !important;
+  box-shadow: none !important; min-height: 38px; font-size: 13px; font-weight: 500;
+}
+.explore-mode-tabs button.active, .collection-view-tabs button.active,
+.collection-scope-tabs button.active {
+  background: var(--vision-primary-soft) !important; color: var(--vision-primary) !important;
+}
 
-/* 1) Fora as faixas de título dessas telas. A busca e os filtros ficam. */
-.vision-screen-head,
-.collection-head { display: none !important; }
-.explore-mode-tabs, .collection-view-tabs, .collection-scope-tabs { margin-top: 4px !important; }
-.screen { padding-top: 12px !important; }
+/* ---- Janelas ---- */
+.modal-sheet { border-radius: 22px 22px 0 0 !important; }
+.modal-close {
+  border: 1px solid var(--v5-borda) !important; border-radius: 50% !important;
+  background: var(--vision-surface-2) !important; color: var(--vision-text) !important;
+  box-shadow: none !important;
+}
 
-/* 2) O conteúdo do cabeçalho sempre por cima da lente e das luzes */
-.vision-home-head::before,
-.vision-home-head::after { z-index: 0; }
-.vision-home-head > * { position: relative; z-index: 1; }
-.vision-home-head .vision-profile-button { z-index: 2; }
+/* ---- Troféus ---- */
+.trofeu { padding: 12px !important; }
+.trofeu-medalha {
+  border: 0 !important;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .14) !important;
+}
+.trofeu-barra { background: var(--vision-surface-2) !important; box-shadow: none !important; }
 
-/* 3) Pokébola: fora do fluxo, centralizada e acima da barra */
-/* A barra continua PRESA no rodapé. `fixed` já serve de referência para a
-   Pokébola absoluta — trocar por `relative` soltava a barra e ela subia junto
-   com a rolagem. */
-.tabs {
-  position: fixed !important;
-  left: 0 !important; right: 0 !important; bottom: 0 !important;
-  z-index: 100 !important;
-  padding-top: 26px !important;
+/* ---- Preço automático ---- */
+.automatic-price-card:not(.empty-price):not(.loading-price) {
+  background: var(--vision-surface-2) !important;
+  border: 1px solid var(--v5-borda) !important;
+  border-radius: var(--v5-raio-p) !important;
+  box-shadow: none !important;
 }
-.tab.scanner-tab {
-  position: absolute !important;
-  left: 50% !important; top: -20px !important;
-  transform: translateX(-50%);
-  margin: 0 !important;
-  flex: none !important;
-  width: 54px !important; height: 54px !important;
-  border-radius: 50% !important;
-  border: 2.5px solid #16161a !important;
-  background: linear-gradient(180deg, #ee3b2f 0%, #ee3b2f 46%, #16161a 46%, #16161a 54%, #f4f1ea 54%, #f4f1ea 100%) !important;
-  box-shadow: inset 0 3px 0 rgba(255,255,255,.32), inset 0 -4px 0 rgba(0,0,0,.22), 0 3px 0 rgba(0,0,0,.5) !important;
-  padding: 0 !important;
-  overflow: visible;
-}
-.tab.scanner-tab::after {
-  content: ''; position: absolute; left: 50%; top: 50%;
-  width: 17px; height: 17px; transform: translate(-50%,-50%);
-  border-radius: 50%; background: #f4f1ea;
-  border: 2.5px solid #16161a;
-  box-shadow: inset 0 1px 2px rgba(0,0,0,.28);
-}
-.tab.scanner-tab .tab-icon,
-.tab.scanner-tab .tab-label { display: none !important; }
-.tab.scanner-tab:active { transform: translateX(-50%) translateY(2px); }
+.automatic-price-card strong { color: var(--vision-primary) !important; }
 
-/* A Pokébola sobe o bastante para não encostar em nenhum botão, e os cinco
-   botões de texto continuam divididos por igual na barra. */
-.tab.scanner-tab { top: -30px !important; }
-
-/* Barra de claridade do tema */
-.claridade-caixa {
-  margin: 12px 0; padding: 11px 13px;
-  border: 2px solid var(--dex-ink); border-radius: 12px;
-  background: var(--vision-surface-2);
-  box-shadow: var(--dex-raise-soft);
-}
-.claridade-topo {
-  display: flex; justify-content: space-between; align-items: baseline;
-  font-size: 12px; color: var(--vision-muted); margin-bottom: 9px;
-}
-.claridade-topo b { color: var(--vision-primary); font-size: 13px; }
-.claridade-linha { display: flex; align-items: center; gap: 10px; }
-.claridade-icone { font-size: 15px; }
-#claridadeBarra {
-  flex: 1; height: 26px; -webkit-appearance: none; appearance: none;
-  background: transparent; margin: 0;
-}
+/* ---- Barra de claridade ---- */
 #claridadeBarra::-webkit-slider-runnable-track {
-  height: 10px; border-radius: 999px;
-  border: 2px solid var(--dex-ink);
-  background: linear-gradient(90deg, rgba(0,0,0,.55), var(--vision-primary));
-  box-shadow: inset 0 2px 4px rgba(0,0,0,.45);
+  height: 6px; border: 0; border-radius: 999px;
+  background: var(--vision-surface-2); box-shadow: none;
 }
 #claridadeBarra::-webkit-slider-thumb {
-  -webkit-appearance: none; appearance: none;
-  width: 24px; height: 24px; margin-top: -9px;
-  border-radius: 50%; background: #f2efe6;
-  border: 2px solid var(--dex-ink);
-  box-shadow: inset 0 2px 0 rgba(255,255,255,.9), inset 0 -3px 0 rgba(0,0,0,.2), 0 2px 0 rgba(0,0,0,.4);
+  width: 20px; height: 20px; margin-top: -7px;
+  background: var(--vision-primary); border: 0; box-shadow: none;
 }
-.claridade-caixa small { display: block; margin-top: 8px; font-size: 10.5px; color: var(--vision-muted); line-height: 1.4; }
+
+/* ---- Progresso ---- */
+.progress { background: var(--vision-surface-2) !important; box-shadow: none !important; border-radius: 999px; }
+.progress > span, .progress span { background: var(--vision-primary) !important; }
+
+@media (min-width: 520px) {
+  .content { padding-left: 24px !important; padding-right: 24px !important; }
+}
+
+/* ---- Coleções mais completas ---- */
+.top-sets { margin: 18px 0; }
+.top-sets-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.top-set {
+  display: flex; align-items: center; gap: 12px; cursor: pointer;
+  padding: 11px 13px;
+  background: var(--vision-surface); border: 1px solid var(--v5-borda);
+  border-radius: var(--v5-raio-p);
+}
+.top-set-pos {
+  flex: none; width: 26px; height: 26px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--vision-primary-soft); color: var(--vision-primary);
+  font-size: 12px; font-weight: 700;
+}
+.top-set-info { flex: 1; min-width: 0; }
+.top-set-info strong {
+  display: block; font-size: 14px; font-weight: 500; color: var(--vision-text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.top-set-info small { display: block; font-size: 11px; color: var(--vision-muted); margin-top: 1px; }
+.top-set-barra {
+  display: block; height: 5px; margin-top: 7px; border-radius: 999px;
+  background: var(--vision-surface-2); overflow: hidden;
+}
+.top-set-barra span { display: block; height: 100%; background: var(--vision-primary); }
+.top-set-pct { flex: none; font-size: 15px; font-weight: 700; color: var(--vision-primary); }
