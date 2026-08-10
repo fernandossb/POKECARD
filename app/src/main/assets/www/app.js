@@ -618,6 +618,137 @@ function friendlyVariantLabel(value) {
   return VARIANT_FRIENDLY_LABELS[exact] || exact;
 }
 
+// Cada acabamento tem sua própria cara, como as etiquetas da carta física.
+const VARIANT_ESTILO = {
+  'normal': { classe: 'v-comum', icone: '◻' },
+  'holo': { classe: 'v-holo', icone: '✦' },
+  'holofoil': { classe: 'v-holo', icone: '✦' },
+  'reverse': { classe: 'v-reverse', icone: '◧' },
+  'reverse-holofoil': { classe: 'v-reverse', icone: '◧' },
+  '1st-edition': { classe: 'v-primeira', icone: '❶' },
+  '1st-edition-holofoil': { classe: 'v-primeira', icone: '❶' },
+  'unlimited': { classe: 'v-comum', icone: '◻' },
+  'unlimited-holofoil': { classe: 'v-holo', icone: '✦' },
+};
+
+function variantEstilo(value) {
+  return VARIANT_ESTILO[exactSourceEnum(value)] || { classe: 'v-outra', icone: '◈' };
+}
+
+const FINISH_ROTULOS = { normal: 'Comum', holo: 'Holo', reverse: 'Reverse' };
+
+// Cada grupo de botões é o espelho de uma lista suspensa que ficou escondida.
+// A lista continua sendo a dona da resposta; os botões só a mostram bonita.
+const PILL_GRUPOS = {
+  acabamento: {
+    grupoId: 'regAcabamentoPills',
+    selectId: 'regFinish',
+    acao: 'escolherAcabamento',
+    rotulo: value => FINISH_ROTULOS[value] || value,
+  },
+  variante: {
+    grupoId: 'regVariantePills',
+    selectId: 'regPricingVariant',
+    acao: 'escolherVariante',
+    rotulo: friendlyVariantLabel,
+  },
+};
+
+function pillHtml(tipo, cardId, value, ativo, precificada) {
+  const grupo = PILL_GRUPOS[tipo];
+  const estilo = variantEstilo(value);
+  const marca = ativo ? ' ativo' : '';
+  const semPreco = precificada === false ? ' sem-preco' : '';
+  const titulo = precificada === false ? 'Sem preço exato para esta versão' : '';
+  return `<button type="button" class="variante-pill ${estilo.classe}${marca}${semPreco}"
+    data-pill="${esc(value)}"${titulo ? ` title="${esc(titulo)}"` : ''}
+    onclick="${grupo.acao}('${esc(cardId)}','${esc(value)}')">
+    <span class="variante-icone" aria-hidden="true">${estilo.icone}</span>${esc(grupo.rotulo(value))}
+  </button>`;
+}
+
+/**
+ * Monta os botões a partir da lista escondida, que já traz só as versões que
+ * esta carta realmente tem. Serve tanto para desenhar a primeira vez quanto
+ * para redesenhar quando o idioma muda.
+ */
+function pillsDoSelect(tipo, cardId, opcoes, valorAtual, precificadas) {
+  return opcoes
+    .map(value => pillHtml(tipo, cardId, value, value === valorAtual, precificadas ? precificadas.has(value) : undefined))
+    .join('');
+}
+
+function finishPillsHtml(card, draft, travado) {
+  const perfil = cardVariationProfile(card);
+  const valores = uniqueFinishValues(perfil.finishes, travado && draft.finish ? [draft.finish] : []);
+  if (!valores.length) return '';
+  const conteudo = pillsDoSelect('acabamento', card.id, valores, finishKind(draft.finish) || valores[0]);
+  return `<div class="variante-pills destaque" id="regAcabamentoPills">${conteudo}</div>`;
+}
+
+function variantPillsHtml(card, draft) {
+  const idioma = draft.language || document.getElementById('regLanguage')?.value || scannerSession.language || 'pt-br';
+  const detalhes = pricingVariantDetailsForCard(card, idioma).slice();
+  // A versão já salva nesta carta entra na lista mesmo que a fonte não a
+  // ofereça mais, senão o botão dela sumiria da tela.
+  if (draft.pricingVariant && !detalhes.some(item => item.value === draft.pricingVariant)) {
+    detalhes.push({ value: draft.pricingVariant, priced: false });
+  }
+  if (!detalhes.length) return '';
+  const precificadas = new Set(detalhes.filter(item => item.priced).map(item => item.value));
+  const valores = detalhes.map(item => item.value);
+  const conteudo = pillsDoSelect('variante', card.id, valores, draft.pricingVariant || valores[0], precificadas);
+  return `<div class="variante-pills" id="regVariantePills">${conteudo}</div>`;
+}
+
+// Redesenha os botões depois que as listas escondidas foram recalculadas.
+function reconstruirPills(card) {
+  const idioma = document.getElementById('regLanguage')?.value || 'pt-br';
+  const precificadas = new Set(
+    pricingVariantDetailsForCard(card, idioma).filter(item => item.priced).map(item => item.value)
+  );
+  for (const [tipo, config] of Object.entries(PILL_GRUPOS)) {
+    const grupo = document.getElementById(config.grupoId);
+    const select = document.getElementById(config.selectId);
+    if (!grupo || !select) continue;
+    const valores = [...select.options].map(opcao => opcao.value);
+    grupo.innerHTML = pillsDoSelect(tipo, card.id, valores, select.value, tipo === 'variante' ? precificadas : null);
+  }
+}
+
+// Deixa aceso o botão escolhido, venha o clique do usuário ou a escolha
+// automática do app.
+function marcarPillAtiva(grupoId, valor) {
+  const grupo = document.getElementById(grupoId);
+  if (!grupo) return;
+  grupo.querySelectorAll('.variante-pill').forEach(botao => {
+    botao.classList.toggle('ativo', botao.dataset.pill === valor);
+  });
+}
+
+function escolherAcabamento(cardId, valor) {
+  const campo = document.getElementById('regFinish');
+  if (campo) campo.value = valor;
+  marcarPillAtiva('regAcabamentoPills', valor);
+  handleRegistrationVariantChange(cardId);
+}
+
+function escolherVariante(cardId, valor) {
+  const campo = document.getElementById('regPricingVariant');
+  if (campo) campo.value = valor;
+  marcarPillAtiva('regVariantePills', valor);
+  // O acabamento acompanha a versão escolhida, para o preço bater com ela.
+  const finish = document.getElementById('regFinish');
+  if (finish) {
+    const alvo = /reverse/i.test(valor) ? 'reverse' : /holo/i.test(valor) ? 'holo' : 'normal';
+    if ([...finish.options].some(opcao => opcao.value === alvo)) {
+      finish.value = alvo;
+      marcarPillAtiva('regAcabamentoPills', alvo);
+    }
+  }
+  handleRegistrationVariantChange(cardId, 'variante');
+}
+
 /**
  * Escolhe sozinho a variante exata a partir do acabamento, da edição e do
  * idioma marcados. A lista de opções muda de carta para carta — quem manda é
@@ -2498,7 +2629,7 @@ function sincronizarVarianteExata(card) {
   atualizarResumoVariante(card);
 }
 
-// Mostra o seletor apenas quando a carta tem mais de uma versão de verdade.
+// Mostra os botões apenas quando a carta tem mais de uma versão de verdade.
 function atualizarResumoVariante(card) {
   const bloco = document.getElementById('regVarianteBloco');
   const resumo = document.getElementById('regVarianteResumo');
@@ -2506,6 +2637,11 @@ function atualizarResumoVariante(card) {
   if (!bloco || !campo) return;
   const total = campo.options.length;
   bloco.classList.toggle('hidden', total <= 1);
+  marcarPillAtiva('regVariantePills', campo.value);
+  // Carta que só existe num acabamento não precisa de botão de escolha.
+  const acabamentoBloco = document.getElementById('regAcabamentoBloco');
+  const acabamento = document.getElementById('regFinish');
+  if (acabamentoBloco && acabamento) acabamentoBloco.classList.toggle('hidden', acabamento.options.length <= 1);
   if (resumo) resumo.textContent = friendlyVariantLabel(campo.value);
 }
 
@@ -3357,6 +3493,8 @@ function refreshCardSpecificVariationFields(card) {
     select.innerHTML = optionListForCard(card, profileField, selected, preserveSelected, language);
     if (preserveSelected && [...select.options].some(item => item.value === selected)) select.value = selected;
   }
+  reconstruirPills(card);
+  atualizarResumoVariante(card);
   const profile = cardVariationProfile(card);
   document.querySelectorAll('.owned-variant-row[data-owned-pricing-variant]').forEach(row => {
     const supported = profile.pricingVariants.includes(exactSourceEnum(row.dataset.ownedPricingVariant));
@@ -3908,8 +4046,12 @@ function openCard(cardId, variantId = undefined) {
       <div class="registration-grid two-columns">
         ${registrationField('Quantidade', `<div class="quantity-stepper"><button type="button" class="quantity-step-btn" onclick="changeRegistrationQuantity(-1)" aria-label="Diminuir quantidade">−</button><input id="regQuantity" class="field quantity-step-value" type="number" inputmode="numeric" min="0" step="1" value="${Math.max(0, Number(draft.quantity) || 0)}"><button type="button" class="quantity-step-btn" onclick="changeRegistrationQuantity(1)" aria-label="Aumentar quantidade">+</button></div>`)}
         ${registrationField('Condição', `<select id="regCondition" class="field" onchange="handleRegistrationVariantChange('${esc(card.id)}')">${['Mint','Near Mint','Excelente','Bom','Regular','Danificada'].map(value => option(value,value,draft.condition)).join('')}</select>`)}
-        ${registrationField('Acabamento', `<select id="regFinish" class="field" onchange="handleRegistrationVariantChange('${esc(card.id)}')">${optionListForCard(card,'finishes',draft.finish,Boolean(selected?.manualVariationOverride))}</select>`)}
         ${registrationField('Idioma da carta', `<select id="regLanguage" class="field" onchange="handleRegistrationVariantChange('${esc(card.id)}')">${optionListForCard(card,'languages',draft.language,true)}</select>`)}
+        <div id="regAcabamentoBloco" class="registration-field span-2">
+          <label>Acabamento</label>
+          <select id="regFinish" class="hidden" aria-hidden="true" tabindex="-1">${optionListForCard(card,'finishes',draft.finish,Boolean(selected?.manualVariationOverride))}</select>
+          ${finishPillsHtml(card, draft, Boolean(selected?.manualVariationOverride))}
+        </div>
         ${registrationField('Preço automático', `<div id="automaticPriceBox">${automaticPriceBox(card.id, draft.finish, existingId, draft)}</div>`, 'span-2')}
       </div>
 
@@ -3920,9 +4062,10 @@ function openCard(cardId, variantId = undefined) {
         ${registrationField('Carimbo', `<select id="regDistribution" class="field" onchange="handleRegistrationVariantChange('${esc(card.id)}')">${optionListForCard(card,'distributions',draft.distribution,Boolean(selected?.manualVariationOverride))}</select>`)}
         <input type="hidden" id="regArtVariant" value="standard">
         <div id="regVarianteBloco" class="registration-field span-2">
-          <label>Versão usada para o preço</label>
-          <select id="regPricingVariant" class="field" onchange="handleRegistrationVariantChange('${esc(card.id)}','variante')">${optionListForCard(card,'pricingVariants',draft.pricingVariant,true,draft.language)}</select>
-          <small>O app escolhe sozinho conforme o acabamento e a edição. Só mexa se souber que esta carta é outra versão.</small>
+          <label>Versão desta carta</label>
+          <select id="regPricingVariant" class="hidden" aria-hidden="true" tabindex="-1">${optionListForCard(card,'pricingVariants',draft.pricingVariant,true,draft.language)}</select>
+          ${variantPillsHtml(card, draft)}
+          <small>Só aparecem as versões que esta carta realmente tem. O app já marca a mais provável.</small>
         </div>
         ${registrationField('Região', `<select id="regRegion" class="field" onchange="handleRegistrationVariantChange('${esc(card.id)}')">${['Brasil','Estados Unidos','Europa','Japão','Coreia','China','Outra região'].map(value => option(value,value,draft.region)).join('')}</select>`)}
         ${registrationField('Guardada em', `<select id="regStorage" class="field">${['fichario','caixa','deck','troca','venda'].map(value => option(value,value,draft.storageLocation)).join('')}</select>`)}

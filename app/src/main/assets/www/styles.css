@@ -3046,3 +3046,61 @@ body::before {
   .vision-home-head::after { width: 76px; height: 76px; }
   .vision-home-head .vision-profile-button { margin-right: 78px; }
 }
+
+/* ============================================================
+   v5.5 — Botões temáticos de acabamento e versão
+   Em vez de lista suspensa, a carta mostra de cara só as versões
+   que ela realmente tem. Cada acabamento com a cor que lembra a
+   carta física: comum neutra, holo dourada, reverse azul.
+   ============================================================ */
+.variante-pills {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px;
+}
+.variante-pills.destaque { gap: 10px; }
+
+.variante-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 15px; border-radius: 999px;
+  font: 700 12px/1 'Segoe UI', system-ui, sans-serif;
+  letter-spacing: .04em; text-transform: uppercase;
+  color: #f7fbff;
+  border: 2px solid rgba(255, 255, 255, .16);
+  background: rgba(255, 255, 255, .07);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 2px 5px rgba(0, 0, 0, .3);
+  cursor: pointer;
+  transition: transform .12s ease, box-shadow .12s ease, filter .12s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.variante-pills.destaque .variante-pill { padding: 11px 18px; font-size: 13px; }
+.variante-pill:active { transform: scale(.96); }
+.variante-icone { font-size: 13px; line-height: 1; opacity: .95; }
+
+/* Versão não escolhida fica apagada; a escolhida acende. */
+.variante-pill { filter: saturate(.35) brightness(.82); opacity: .78; }
+.variante-pill.ativo {
+  filter: none; opacity: 1;
+  border-color: rgba(255, 255, 255, .5);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 4px 12px rgba(0, 0, 0, .42);
+  transform: translateY(-1px);
+}
+
+/* Cores por acabamento */
+.variante-pill.v-comum   { background: linear-gradient(135deg, #6c7a89, #47535e); }
+.variante-pill.v-holo    { background: linear-gradient(135deg, #ff9d2f, #ff4f8b); }
+.variante-pill.v-reverse { background: linear-gradient(135deg, #2fa8ff, #6b5cff); }
+.variante-pill.v-primeira{ background: linear-gradient(135deg, #f2c94c, #c9860a); color: #2a1c00; }
+.variante-pill.v-outra   { background: linear-gradient(135deg, #7c5cff, #4b2fb5); }
+
+/* Sem preço exato no banco: fica marcada com um traço, sem sumir. */
+.variante-pill.sem-preco { border-style: dashed; }
+.variante-pill.sem-preco::after {
+  content: '·'; margin-left: 2px; opacity: .7; font-size: 16px; line-height: 0;
+}
+
+#regVarianteBloco > label,
+#regAcabamentoBloco > label {
+  display: block; margin-bottom: 2px;
+  font: 600 11px/1.4 'Segoe UI', system-ui, sans-serif;
+  letter-spacing: .08em; text-transform: uppercase;
+  color: var(--vision-text-soft, rgba(255, 255, 255, .72));
+}
