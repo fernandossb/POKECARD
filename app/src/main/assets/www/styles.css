@@ -3097,8 +3097,7 @@ body::before {
   content: '·'; margin-left: 2px; opacity: .7; font-size: 16px; line-height: 0;
 }
 
-#regVarianteBloco > label,
-#regAcabamentoBloco > label {
+#regVarianteBloco > label {
   display: block; margin-bottom: 2px;
   font: 600 11px/1.4 'Segoe UI', system-ui, sans-serif;
   letter-spacing: .08em; text-transform: uppercase;
