@@ -400,6 +400,10 @@
     // Mostra o sprite local na hora e troca pela arte sorteada quando chegar.
     aplicarImagem(spritePath(id), false);
     buscarArte(id, function (dataUrl) { aplicarImagem(dataUrl, true); });
+
+    // O fundo mudou: quem cuida do contraste precisa refazer as contas, porque
+    // as correções antigas foram calculadas contra as cores anteriores.
+    try { window.dispatchEvent(new CustomEvent('tema-aplicado')); } catch (e) {}
   }
 
   function nomeAtual() {

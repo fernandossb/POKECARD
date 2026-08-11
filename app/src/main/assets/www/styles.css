@@ -3103,3 +3103,94 @@ body::before {
   letter-spacing: .08em; text-transform: uppercase;
   color: var(--vision-text-soft, rgba(255, 255, 255, .72));
 }
+
+/* ============================================================
+   v5.6 — Contraste garantido em todas as abas
+
+   Regra geral: nenhum texto tem cor fixa. Todo texto herda a cor
+   do tema, que já é calculada para contrastar com o fundo daquele
+   nível de claridade. O contraste.js confere o resultado na tela
+   e corrige o que escapar — estas regras existem para que sobre
+   pouca coisa a corrigir.
+   ============================================================ */
+
+/* Texto comum acompanha o tema. As camadas antigas fixavam branco
+   e verde direto, o que sumia quando o fundo clareava. */
+.app .content,
+.app .content p,
+.app .content li,
+.app .content td,
+.app .content th,
+.app .content span,
+.app .content strong,
+.app .content b,
+.app .content em,
+.app .content h1,
+.app .content h2,
+.app .content h3,
+.app .content h4,
+.modal-sheet,
+.modal-sheet p,
+.modal-sheet li,
+.modal-sheet span,
+.modal-sheet strong,
+.modal-sheet h1,
+.modal-sheet h2,
+.modal-sheet h3,
+.modal-sheet h4 {
+  color: var(--vision-text);
+}
+
+/* Texto de apoio: mesma família de cor, um degrau mais discreto.
+   `--vision-muted` já nasce com 4,6:1 contra o cartão. */
+.app .content small,
+.app .content .muted,
+.app .content .card-meta,
+.app .content .screen-subtitle,
+.modal-sheet small,
+.modal-sheet .muted,
+.modal-sheet .screen-subtitle,
+.registration-field > span,
+.registration-field > label {
+  color: var(--vision-muted);
+}
+
+/* Caixas de texto: fundo e letra sempre do mesmo par, nunca um
+   claro com o outro. */
+.field,
+input.field,
+select.field,
+textarea.field,
+input[type="text"],
+input[type="search"],
+input[type="number"],
+input[type="date"],
+select,
+textarea {
+  background: var(--vision-surface-2);
+  color: var(--vision-text);
+  border: 1px solid var(--vision-line);
+}
+
+/* A dica dentro do campo segue a cor corrigida daquele campo. */
+input::placeholder,
+textarea::placeholder {
+  color: var(--ph-cor, var(--vision-muted));
+  opacity: 1;
+}
+
+/* As listas suspensas são desenhadas pelo sistema, fora do alcance
+   do corretor: fixamos o par aqui para não sair branco no branco. */
+select option {
+  background: var(--vision-surface-2);
+  color: var(--vision-text);
+}
+
+/* Números de preço e contadores: mesma regra do texto comum, só que
+   o destaque usa a cor primária, que já é calculada com contraste. */
+.price-value,
+.price-market-summary strong,
+.card-price,
+.total-value {
+  color: var(--vision-primary);
+}
