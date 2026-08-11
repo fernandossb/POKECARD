@@ -1020,6 +1020,17 @@ public final class MainActivity extends Activity {
     }
 
     private void openLiveScanner() {
+        /* Deixar a tela pronta para mostrar a câmera vem ANTES de conferir se
+           ela já está aberta. Assim `startLiveScanner` pode ser chamado a
+           qualquer momento com o sentido de "garanta que a câmera aparece":
+           se algo tiver devolvido o fundo opaco no meio do caminho, esta
+           chamada conserta, em vez de sair calada e deixar o aplicativo
+           desenhado por cima da imagem. */
+        if (webView != null) {
+            webView.setBackgroundColor(Color.TRANSPARENT);
+            runJavascript("document.documentElement.classList.add('camera-ao-vivo');");
+        }
+        liveScannerPaused = false;
         if (liveScannerOverlay != null) return;
         try {
             liveScannerBusy = false;
@@ -1045,11 +1056,6 @@ public final class MainActivity extends Activity {
             // Índice 0 = abaixo da WebView, que já está no rootView.
             rootView.addView(liveScannerOverlay, 0, new FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
-
-            /* Sem isto a WebView pinta o próprio fundo e a câmera não aparece.
-               A cor original é restaurada ao fechar o scanner. */
-            webView.setBackgroundColor(Color.TRANSPARENT);
-            runJavascript("document.documentElement.classList.add('camera-ao-vivo');");
 
             liveScannerLifecycle = new ScannerLifecycle();
             final ListenableFuture<ProcessCameraProvider> futuro = ProcessCameraProvider.getInstance(this);

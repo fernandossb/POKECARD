@@ -3478,8 +3478,7 @@ function stopScannerSession() {
   scannerSession.active = false;
   scannerCandidateBuffer = [];
   // Fecha também a câmera ao vivo, senão ela continuaria ligada por cima do app.
-  if (scannerSession.live && window.Android?.stopLiveScanner) window.Android.stopLiveScanner();
-  scannerSession.live = false;
+  sairDaCamera();
   closeModal();
   // As leituras não adicionadas ficam guardadas; elas reaparecem na próxima
   // vez que o scanner abrir, em vez de irem para o lixo em silêncio.
@@ -3609,15 +3608,43 @@ function scannerStringSimilarity(a, b) {
   return 1 - previous[b.length] / Math.max(a.length, b.length);
 }
 
+/* Aviso curto sobre a imagem da câmera, sem tirar a câmera da tela. */
+function avisarNaCamera(mensagem) {
+  const dica = document.getElementById('cameraDica');
+  if (!dica) return notify(mensagem);
+  dica.textContent = mensagem;
+  clearTimeout(avisarNaCamera.timer);
+  avisarNaCamera.timer = setTimeout(() => {
+    const alvo = document.getElementById('cameraDica');
+    if (alvo) alvo.textContent = 'Encaixe a carta dentro da moldura';
+  }, 2200);
+}
+
 window.receiveScannerText = function receiveScannerText(text, finish) {
   if (!scannerSession.active) return;
   scannerSession.finish = finish || scannerSession.finish;
   scannerLastOcrText = String(text || '').trim();
   const candidates = scannerCandidates(String(text || ''));
-  if (!candidates.length) return showScannerMessage('Aproxime a carta, evite reflexos e mantenha nome e numeração visíveis.', true);
+
+  if (!candidates.length) {
+    /* Com a câmera ao vivo, não dá para abrir um aviso em cima da tela: ele
+       cobriria a imagem e os botões, e o caminho de volta reabria a câmera por
+       cima dela mesma. Aqui a leitura falha em silêncio e a câmera continua. */
+    if (scannerSession.live) return avisarNaCamera('Não reconheci — aproxime e evite reflexo');
+    return showScannerMessage('Aproxime a carta, evite reflexos e mantenha nome e numeração visíveis.', true);
+  }
+
+  /* A carta recém-confirmada continua na frente da lente. Sem esta trava, o
+     app perguntaria de novo sobre ela um segundo depois de ser adicionada. */
+  const primeira = candidates[0].card;
+  if (scannerSession.live && primeira.id === scannerSession.ultimaConfirmada
+      && Date.now() - (scannerSession.confirmadaEm || 0) < 4000) {
+    return avisarNaCamera('Já adicionada — mostre a próxima carta');
+  }
+
   scannerCandidateBuffer = candidates;
   showScannerPrimaryCandidate();
-  loadScannerVariantAvailability(candidates[0].card);
+  loadScannerVariantAvailability(primeira);
 };
 
 function languageFromMarketKey(value) { return PRICE_LANGUAGES.includes(value) ? value : ''; }
@@ -3813,6 +3840,15 @@ function variantesParaEscolher(card, idioma, atual) {
    HTML por cima: a moldura é só uma borda com o meio vazado, e a faixa de
    baixo mostra as artes já lidas. */
 function telaCameraAoVivo() {
+  /* Toda vez que esta tela é desenhada ela reafirma o estado da câmera.
+     `startLiveScanner` é seguro de chamar repetido: se a câmera já estiver
+     aberta ele só devolve a transparência do fundo. Sem isto, bastava um
+     tropeço no meio da sessão para a tela do scanner continuar desenhada com
+     o aplicativo aparecendo atrás, no lugar da imagem da câmera. */
+  document.documentElement.classList.add('camera-ao-vivo');
+  if (scannerSession.live) {
+    try { window.Android?.startLiveScanner?.(scannerSession.finish); } catch (_) {}
+  }
   const pendentes = leiturasPendentes();
   const total = totalLeituras();
   const tiras = pendentes.slice(0, 12).map(linha => {
@@ -3934,6 +3970,16 @@ function pausarCamera() {
   try { window.Android?.pauseLiveScanner?.(); } catch (_) {}
 }
 
+/* Encerra a câmera e devolve a tela normal do aplicativo.
+   O Android também desliga a classe ao fechar a câmera, mas o app não pode
+   depender disso: se a ponte não responder — versão antiga, câmera que nunca
+   chegou a abrir —, `#app` continuaria escondido e a tela ficaria vazia. */
+function sairDaCamera() {
+  try { if (scannerSession.live) window.Android?.stopLiveScanner?.(); } catch (_) {}
+  scannerSession.live = false;
+  document.documentElement.classList.remove('camera-ao-vivo');
+}
+
 function retomarCamera() {
   fecharPainelLeitura();
   try { window.Android?.resumeLiveScanner?.(); } catch (_) {}
@@ -4044,8 +4090,7 @@ function comoEscanear() {
 function encerrarLeitura() {
   const total = totalLeituras();
   if (total) return abrirRevisaoSessao();
-  if (scannerSession.live && window.Android?.stopLiveScanner) window.Android.stopLiveScanner();
-  scannerSession.live = false;
+  sairDaCamera();
   scannerSession.active = false;
   closeModal();
 }
@@ -4100,11 +4145,17 @@ function scannerOcrDiagnosticHtml() {
 }
 
 window.receiveScannerError = function receiveScannerError(message) {
-  if (scannerSession.active) showScannerMessage(message || 'Não foi possível ler a carta.', true);
+  if (!scannerSession.active) return;
+  // Erro com a câmera aberta vira aviso na própria tela; abrir um painel por
+  // cima esconderia a imagem e a lista de leituras.
+  if (scannerSession.live) return avisarNaCamera(message || 'Não foi possível ler a carta.');
+  showScannerMessage(message || 'Não foi possível ler a carta.', true);
 };
 
 window.receiveScannerCancelled = function receiveScannerCancelled() {
-  if (scannerSession.active) showScannerMessage('A captura foi cancelada.', true);
+  if (!scannerSession.active) return;
+  if (scannerSession.live) return avisarNaCamera('Captura cancelada.');
+  showScannerMessage('A captura foi cancelada.', true);
 };
 
 /* Confirmar a leitura NÃO grava na coleção: só põe a carta na lista de
@@ -4113,9 +4164,12 @@ function confirmScannedCard(cardId) {
   const card = cardMap.get(cardId);
   if (!card) { notify('Esta carta não está mais no catálogo.'); return retomarCamera(); }
   registrarLeitura(cardId);
-  notify(`${card.name} — ${totalLeituras()} na lista`);
+  scannerSession.ultimaConfirmada = cardId;
+  scannerSession.confirmadaEm = Date.now();
+  scannerCandidateBuffer = [];
   retomarCamera();
   telaCameraAoVivo();
+  avisarNaCamera(`${card.name} adicionada · ${totalLeituras()} na lista`);
 }
 
 /* ---------- Tela de revisão ----------
@@ -4308,8 +4362,7 @@ function adicionarCartasDaSessao() {
   saveState();
   scannerSession.count += gravadas;
   descartarSessaoGuardada();
-  if (scannerSession.live && window.Android?.stopLiveScanner) window.Android.stopLiveScanner();
-  scannerSession.live = false;
+  sairDaCamera();
   scannerSession.active = false;
   closeModal();
   render();
