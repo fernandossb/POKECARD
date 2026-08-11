@@ -305,6 +305,8 @@ const ui = {
   cardSet: 'all',
   cardLimit: 40,
   setQuery: '',
+  setStatus: 'all',   // all | comecei | completas | faltando | vazias
+  setSort: 'recentes', // recentes | antigas | nome | completas | tamanho
   dexQuery: '',
   dexRegion: 'all',
   dexType: 'all',
@@ -2883,12 +2885,40 @@ async function startCatalogUpdate() {
 
 function filteredSetRows() {
   const query = normalize(ui.setQuery);
-  return buildSetStats()
-    .filter(item => !query
-      || normalize(item.name).includes(query)
-      || normalize(item.id).includes(query)
-      || String(setReleaseYear(item) || '').includes(query))
-    .sort(compareSetsByTimeline);
+  const comCartas = new Set(cards.map(card => card.setId));
+
+  const filtradas = buildSetStats().filter(item => {
+    if (query
+      && !normalize(item.name).includes(query)
+      && !normalize(item.id).includes(query)
+      && !String(setReleaseYear(item) || '').includes(query)) return false;
+
+    const total = item.officialCardCount || item.totalCardCount || 0;
+    switch (ui.setStatus) {
+      case 'comecei': return item.ownedUnique > 0 && (!total || item.ownedUnique < total);
+      case 'completas': return total > 0 && item.ownedUnique >= total;
+      case 'faltando': return item.ownedUnique === 0;
+      // Coleções que aparecem na lista mas não têm carta instalada: útil para
+      // enxergar o que a atualização do catálogo ainda não trouxe.
+      case 'vazias': return !comCartas.has(item.id);
+      default: return true;
+    }
+  });
+
+  const porNome = (a, b) => a.name.localeCompare(b.name, 'pt-BR');
+  const tamanho = item => item.officialCardCount || item.totalCardCount || 0;
+  switch (ui.setSort) {
+    case 'antigas': return filtradas.sort((a, b) => compareSetsByTimeline(b, a));
+    case 'nome': return filtradas.sort(porNome);
+    case 'completas': return filtradas.sort((a, b) => (b.progress - a.progress) || (b.ownedUnique - a.ownedUnique) || porNome(a, b));
+    case 'tamanho': return filtradas.sort((a, b) => (tamanho(b) - tamanho(a)) || porNome(a, b));
+    default: return filtradas.sort(compareSetsByTimeline);
+  }
+}
+
+function mudarFiltroSets(campo, valor) {
+  ui[campo] = valor;
+  render();
 }
 
 const SET_RELEASE_YEAR_BY_ID = {
@@ -3078,6 +3108,8 @@ function renderSetSearchResults() {
 
 function renderSets() {
   const totalSets = catalog.sets.length;
+  const vazias = colecoesSemCartas().length;
+  const mostradas = filteredSetRows().length;
   return `
     <section class="screen vision-explore-screen">
       <div class="vision-screen-head"><h2>Explorar</h2><button onclick="ui.setQuery='';render()">Mais recentes</button></div>
@@ -3086,11 +3118,51 @@ function renderSets() {
           oncompositionstart="this.dataset.composing='1'"
           oncompositionend="this.dataset.composing='';searchAndRender('setQuery', this.value, 'setSearchInput')"
           oninput="searchAndRender('setQuery', this.value, 'setSearchInput')"></label>
-        <div class="explore-filter-row"><button>Séries</button><button>Todos</button><span>${totalSets.toLocaleString('pt-BR')} sets</span></div>
+        <!-- Antes havia dois botões, "Séries" e "Todos", que não faziam nada.
+             No lugar deles, filtro e ordenação que respondem de verdade. -->
+        <div class="explore-filter-row">
+          <select class="explore-filtro" onchange="mudarFiltroSets('setStatus', this.value)">
+            ${[['all','Todas as coleções'],['comecei','Comecei'],['completas','Completas'],['faltando','Ainda não tenho'],['vazias','Sem cartas baixadas']]
+              .map(([valor, rotulo]) => option(valor, rotulo, ui.setStatus)).join('')}
+          </select>
+          <select class="explore-filtro" onchange="mudarFiltroSets('setSort', this.value)">
+            ${[['recentes','Mais recentes'],['antigas','Mais antigas'],['nome','Nome (A–Z)'],['completas','Mais completas'],['tamanho','Mais cartas']]
+              .map(([valor, rotulo]) => option(valor, rotulo, ui.setSort)).join('')}
+          </select>
+          <span class="explore-contagem">${mostradas.toLocaleString('pt-BR')} de ${totalSets.toLocaleString('pt-BR')}</span>
+        </div>
       </div>
+
+      <!-- Antes isto ficava no fim da tela, depois de mais de cem coleções e
+           dentro de um bloco fechado: na prática, invisível. -->
+      <button class="atualizar-catalogo-btn" ${catalogUpdating ? 'disabled' : ''} onclick="startCatalogUpdate()">
+        <span>${catalogUpdating ? '⟳ Atualizando…' : '⟳ Buscar cartas e coleções novas'}</span>
+        <small>${esc(resumoCatalogo())}</small>
+      </button>
+      ${vazias && !catalogUpdateMeta.updatedAt ? `<div class="catalogo-aviso">
+        <strong>${vazias} coleção(ões) ainda sem cartas baixadas</strong>
+        <span>Elas aparecem na lista mas abrem vazias. O botão acima busca as cartas que faltam.</span>
+      </div>` : ''}
+      ${catalogUpdating ? `<div class="catalog-progress"><div class="progress"><span style="width:${catalogUpdateTotal > 0 ? Math.max(0, Math.min(100, Math.round((catalogUpdateCurrent / catalogUpdateTotal) * 100))) : 0}%"></span></div><small>${esc(catalogUpdateMessage || 'Preparando atualização...')}</small></div>` : ''}
+
       <div id="setSearchResults">${renderSetSearchResults()}</div>
-      <details class="catalog-maintenance"><summary>Atualização do catálogo</summary>${catalogUpdatePanel()}</details>
+      <details class="catalog-maintenance"><summary>Detalhes da atualização</summary>${catalogUpdatePanel()}</details>
     </section>`;
+}
+
+/* Coleções que existem na lista mas não têm nenhuma carta instalada. Elas
+   abrem vazias e é o que mais confunde: a coleção aparece, o conteúdo não. */
+function colecoesSemCartas() {
+  const porSet = new Map();
+  for (const card of cards) porSet.set(card.setId, (porSet.get(card.setId) || 0) + 1);
+  return (catalog.sets || []).filter(set => !porSet.get(set.id));
+}
+
+function resumoCatalogo() {
+  const quando = catalogUpdateMeta.updatedAt
+    ? `atualizado em ${formatCatalogUpdateDate(catalogUpdateMeta.updatedAt)}`
+    : 'nunca atualizado pela internet';
+  return `${cards.length.toLocaleString('pt-BR')} cartas · ${catalog.sets.length} coleções · ${quando}`;
 }
 
 function renderSetCard(item) {
@@ -4393,6 +4465,35 @@ function renderCardRow(card) {
 }
 
 function emptyCards() {
+  /* Coleção escolhida que simplesmente não tem carta nenhuma instalada é caso
+     diferente de filtro sem resultado: não adianta mexer nos filtros, as
+     cartas nunca foram baixadas. O aviso precisa dizer isso e oferecer a
+     solução, senão a tela vazia parece defeito. */
+  const setId = ui.cardSet;
+  if (setId && setId !== 'all') {
+    const temAlguma = cards.some(card => card.setId === setId);
+    if (!temAlguma) {
+      const set = catalog.sets.find(item => item.id === setId);
+      const esperado = set?.officialCardCount || set?.totalCardCount || 0;
+      /* Depois de uma atualização bem-sucedida, coleção ainda vazia não é
+         falta de download: é a fonte que não publica as cartas dela. Insistir
+         no botão só faria o usuário repetir uma busca que nunca vai trazer
+         nada. É o caso de várias expansões japonesas antigas. */
+      if (catalogUpdateMeta.updatedAt) {
+        return `<div class="empty catalogo-vazio">
+          <strong>Esta coleção não tem cartas publicadas na fonte</strong>
+          <span>${esc(set?.name || setId)} existe no catálogo${esperado ? ` e tem ${esperado} cartas impressas` : ''}, mas o TCGdex — de onde o app tira o catálogo — não disponibiliza as cartas dela. Acontece com expansões japonesas antigas.</span>
+          <small>Você ainda pode cadastrar essas cartas à mão pelo scanner, digitando o número.</small>
+        </div>`;
+      }
+      return `<div class="empty catalogo-vazio">
+        <strong>As cartas desta coleção ainda não foram baixadas</strong>
+        <span>${esc(set?.name || setId)}${esperado ? ` tem ${esperado} cartas` : ''}, mas nenhuma está instalada no aplicativo.</span>
+        <button class="primary-btn" ${catalogUpdating ? 'disabled' : ''} onclick="startCatalogUpdate()">${catalogUpdating ? 'Buscando…' : '⟳ Buscar as cartas agora'}</button>
+        <small>Precisa de internet. Suas quantidades e cadastros não são apagados.</small>
+      </div>`;
+    }
+  }
   return '<div class="empty"><strong>Nenhuma carta encontrada</strong>Tente mudar os filtros ou buscar outro nome.</div>';
 }
 

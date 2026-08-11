@@ -27,7 +27,11 @@
 
   var ALVO_NORMAL = 4.5;
   var ALVO_GRANDE = 3;
+  // Guarda a cor aplicada por nós; a presença dela significa "já corrigido".
   var MARCA = 'data-contraste';
+  // Guarda a cor que o elemento tinha ANTES da primeira correção. É dela que
+  // toda avaliação parte, para a correção não se avaliar a si mesma.
+  var COR_BASE = 'data-cor-base';
 
   // As duas caixas de primeiro nível da tela. `#modal` fica fora de `#app`,
   // por isso são duas. Nada de raízes aninhadas: cada elemento é visitado
@@ -221,7 +225,15 @@
     var cs = getComputedStyle(el);
     if (cs.visibility === 'hidden' || Number(cs.opacity) === 0) return null;
 
-    var corTexto = parseCor(cs.color);
+    /* A conta parte SEMPRE da cor original, guardada na primeira correção,
+       nunca da cor que nós mesmos aplicamos.
+
+       Ler a cor corrigida era um vai-e-vem: o elemento passava no teste
+       justamente por causa da correção, a correção era retirada por parecer
+       desnecessária, a cor voltava a ser ilegível e na varredura seguinte tudo
+       se repetia. Em telas que se redesenham várias vezes — como o cadastro da
+       carta, que recarrega preço e imagem — isso aparecia como texto piscando. */
+    var corTexto = parseCor(el.getAttribute(COR_BASE) || cs.color);
     if (!corTexto) return null;
 
     // O fundo onde a letra encosta: se a caixa tem cor própria (campo, botão,
@@ -233,35 +245,41 @@
     var alvo = alvoDoTexto(cs);
 
     if (contraste(efetiva, fundo) >= alvo) {
-      // Já está legível: se havia correção antiga, ela não é mais necessária.
+      // A cor de origem já é legível aqui: se havia correção, ela sobrava.
       return el.hasAttribute(MARCA) ? { el: el, limpar: true } : null;
     }
-    return { el: el, cor: paraCss(corLegivel(efetiva, fundo, alvo)) };
+
+    var nova = paraCss(corLegivel(efetiva, fundo, alvo));
+    // Já está exatamente nesta cor: nada a escrever, e a varredura seguinte
+    // também não vai encontrar trabalho — o estado estabiliza.
+    if (el.getAttribute(MARCA) === nova) return null;
+    return { el: el, cor: nova, base: el.getAttribute(COR_BASE) || cs.color };
   }
 
   // FASE 2 — só escrita, depois de todas as medições terem sido feitas.
   function aplicar(tarefa) {
     var el = tarefa.el;
-    if (tarefa.limpar) {
-      el.style.removeProperty('color');
-      el.style.removeProperty('--ph-cor');
-      el.removeAttribute(MARCA);
-      return;
-    }
+    if (tarefa.limpar) return desfazer(el);
+    // A marca guarda a cor aplicada; assim a próxima varredura reconhece que
+    // não há nada a mudar em vez de reescrever o mesmo valor.
+    if (!el.hasAttribute(COR_BASE)) el.setAttribute(COR_BASE, tarefa.base);
     el.style.setProperty('color', tarefa.cor, 'important');
-    el.setAttribute(MARCA, '1');
+    el.setAttribute(MARCA, tarefa.cor);
     // O texto de dica dos campos acompanha a cor corrigida do campo.
     var tag = el.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA') el.style.setProperty('--ph-cor', tarefa.cor);
   }
 
+  function desfazer(el) {
+    el.style.removeProperty('color');
+    el.style.removeProperty('--ph-cor');
+    el.removeAttribute(MARCA);
+    el.removeAttribute(COR_BASE);
+  }
+
   function limparCorrecoes() {
     var marcados = document.querySelectorAll('[' + MARCA + ']');
-    for (var i = 0; i < marcados.length; i++) {
-      marcados[i].style.removeProperty('color');
-      marcados[i].style.removeProperty('--ph-cor');
-      marcados[i].removeAttribute(MARCA);
-    }
+    for (var i = 0; i < marcados.length; i++) desfazer(marcados[i]);
   }
 
   function varrer() {
