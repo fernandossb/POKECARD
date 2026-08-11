@@ -91,18 +91,23 @@ assert.strictEqual(quote.priceMarket, 'tcgplayer');
 
 // --- Botões de versão: sem repetir nome e sem opção sem preço ---
 
+// O array volta de dentro do vm, de outro "realm": comparar com deepStrictEqual
+// falharia pelo protótipo mesmo com o conteúdo certo. Comparamos como texto.
+const visiveis = (cardId, valores, selecionada) =>
+  context.variantesVisiveis(cardId, valores, selecionada, 'pt-br').join('|');
+
 // Só `reverse-holofoil` tem preço nesta carta; `reverse` e `normal` somem.
-assert.deepStrictEqual(
-  context.variantesVisiveis('sv03.5-001', ['normal', 'reverse', 'reverse-holofoil'], 'reverse-holofoil', 'pt-br'),
-  ['reverse-holofoil'],
+assert.strictEqual(
+  visiveis('sv03.5-001', ['normal', 'reverse', 'reverse-holofoil'], 'reverse-holofoil'),
+  'reverse-holofoil',
   'Só deve sobrar a versão com preço publicado'
 );
 
 // Sem preço nenhum, mostramos as opções — mas "reverse" e "reverse-holofoil"
 // têm o mesmo nome na tela, então vira um botão só.
-assert.deepStrictEqual(
-  context.variantesVisiveis('carta-sem-preco', ['reverse', 'reverse-holofoil'], '', 'pt-br'),
-  ['reverse'],
+assert.strictEqual(
+  visiveis('carta-sem-preco', ['reverse', 'reverse-holofoil'], ''),
+  'reverse',
   'Nomes repetidos devem virar um botão só'
 );
 
