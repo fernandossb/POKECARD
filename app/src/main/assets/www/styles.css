@@ -3515,3 +3515,64 @@ html.camera-ao-vivo .modal { background: transparent !important; }
 .badge.categoria-energia   { background: rgba(255, 214, 64, .18); border-color: rgba(255, 214, 64, .55); }
 .badge.categoria-pokemon   { background: rgba(94, 178, 255, .18); border-color: rgba(94, 178, 255, .5); }
 .badge.categoria-outra     { background: rgba(160, 140, 255, .18); border-color: rgba(160, 140, 255, .5); }
+
+/* ============================================================
+   v5.11 — Cabeçalho do cadastro sem buraco e sem sobreposição
+
+   Três defeitos reais, medidos na tela:
+
+   1. O bloco de texto do cabeçalho tinha `flex: 1 1 260px`, escrito
+      quando o cabeçalho era em LINHA (260px = largura desejada).
+      Outra regra passou a forçar `flex-direction: column`, e nessa
+      direção a mesma medida vira ALTURA mínima: o bloco ficava com
+      260px mesmo precisando de 123px. Os ~137px restantes eram o
+      "espaço enorme vazio".
+
+   2. Os botões de quantidade pediam 48+72+48 mais 16 de folga = 184px
+      dentro de uma coluna de 153px. O excedente invadia o campo ao
+      lado, que é a Condição — daí os botões sobrepostos.
+
+   3. A arte ocupava 78vw. Somada ao buraco acima, empurrava nome,
+      etiquetas e o resto da tela para fora da primeira dobra.
+
+   As regras aqui usam `.card-detail-sheet` e `!important` porque as
+   regras antigas que causam o problema também usam.
+   ============================================================ */
+
+/* 1 — o bloco de texto ocupa o que precisa, nem um pixel a mais */
+.card-detail-sheet .registration-header > div:last-child {
+  flex: 0 0 auto !important;
+  width: 100%;
+  min-width: 0;
+}
+.card-detail-sheet .registration-header { gap: 10px !important; }
+
+/* 3 — arte proporcional à tela, deixando o nome visível sem rolar */
+@media (max-width: 560px) {
+  .card-detail-sheet .registration-image-frame {
+    width: min(56vw, 230px) !important;
+    margin: 0 auto 2px !important;
+  }
+  .card-detail-sheet .registration-header h2 { font-size: 24px !important; margin: 2px 0 !important; }
+}
+
+/* 2 — botões de quantidade dentro da própria coluna */
+.quantity-stepper {
+  grid-template-columns: 40px minmax(0, 1fr) 40px;
+  gap: 6px;
+  max-width: 100%;
+}
+.quantity-step-btn { min-height: 42px; font-size: 21px; padding: 0; }
+.quantity-step-value { min-width: 0; }
+
+/* Cabeçalho de seção: o texto encolhe, o botão nunca é empurrado
+   para cima dele. */
+.registration-section-title { flex-wrap: wrap; }
+.registration-section-title > div { min-width: 0; flex: 1 1 60%; }
+.registration-section-title > button { flex: 0 0 auto; }
+
+/* Nenhum campo pode transbordar a própria coluna. */
+.registration-grid > * { min-width: 0; }
+.registration-field .field,
+.registration-field select,
+.registration-field input { max-width: 100%; }

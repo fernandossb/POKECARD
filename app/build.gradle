@@ -13,8 +13,8 @@ android {
         applicationId 'br.com.fichariopokemon.pokedex'
         minSdk 26
         targetSdk 36
-        versionCode 99
-        versionName '5.10.0'
+        versionCode 100
+        versionName '5.10.1'
     }
 
     signingConfigs {
