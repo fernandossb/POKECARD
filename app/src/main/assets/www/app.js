@@ -358,7 +358,12 @@ function saveVariantImageCache() {
 }
 
 const PRICE_FINISHES = ['normal', 'holo', 'reverse'];
+/* Os três idiomas ficam sempre disponíveis em qualquer carta. Antes a lista
+   era restringida pelo que a fonte publicava para aquela carta — e como o
+   idioma não entra mais no cálculo do valor (o preço cai para o mercado que
+   tiver dados), essa restrição só atrapalhava quem tem a carta em português. */
 const PRICE_LANGUAGES = ['pt-br', 'en', 'ja'];
+const PRICE_LANGUAGE_LABELS = { 'pt-br': 'Português', en: 'Inglês', ja: 'Japonês' };
 // Cardmarket e TCGplayer só precificam as tiragens internacional (inglês) e
 // japonesa. O Price Database, portanto, não publica chaves `pt-br`. Para que a
 // carta brasileira tenha referência de valor, a consulta cai para o mercado que
@@ -2015,7 +2020,12 @@ function saveCardVariant(cardId, variantId) {
   state.entries[cardId] = entry;
   const automaticPokemonIds = Array.isArray(card.pokemonIds) ? card.pokemonIds.map(Number).filter(id => pokemonMap.has(id)) : [];
   const selectedPokemonId = Number(document.getElementById('regPokemonId')?.value || 0);
-  if (!automaticPokemonIds.length && !selectedPokemonId) {
+  /* Carta que a fonte já classificou como Treinador ou Energia não representa
+     Pokémon nenhum — exigir o vínculo aqui obrigava o usuário a inventar um.
+     Só continua obrigatório quando o app realmente não sabe o que é a carta. */
+  const categoriaConhecida = categoriaDaCarta(card);
+  const precisaDeVinculo = !categoriaConhecida || categoriaConhecida.classe === 'pokemon';
+  if (!automaticPokemonIds.length && !selectedPokemonId && precisaDeVinculo) {
     const field = document.getElementById('regPokemonSearch') || document.getElementById('regPokemonId');
     field?.classList.add('field-error');
     field?.focus();
@@ -2807,6 +2817,55 @@ async function fetchCatalogLocale(base, localeLabel) {
   return { sets, cards, failures: 0, listedCards: remoteCards.length };
 }
 
+/* =====================================================================
+   Categoria da carta (Pokémon / Treinador / Energia)
+
+   A listagem de cartas do TCGdex traz só id, número e nome — não diz se a
+   carta é um Pokémon, um Item, um Apoiador, um Estádio ou uma Energia. Essa
+   informação existe na consulta GraphQL, que aceita 2.500 cartas por página:
+   o catálogo inteiro sai em cerca de quinze pedidos.
+
+   Sem isso o app não tem como classificar uma carta que não representa
+   nenhum Pokémon, e ela ficava sem identidade nenhuma na tela.
+   ===================================================================== */
+const CATEGORIA_ROTULOS = { Pokemon: 'Pokémon', Trainer: 'Treinador', Energy: 'Energia' };
+const TREINADOR_ROTULOS = {
+  Item: 'Item',
+  Supporter: 'Apoiador',
+  Stadium: 'Estádio',
+  Tool: 'Ferramenta',
+  'Pokemon Tool': 'Ferramenta',
+  'Technical Machine': 'Máquina Técnica',
+};
+const ENERGIA_ROTULOS = { Normal: 'Energia básica', Special: 'Energia especial' };
+
+async function fetchCategoriasGraphQL(totalEstimado) {
+  const porPagina = 2500;
+  const mapa = new Map();
+  for (let pagina = 1; pagina <= 40; pagina += 1) {
+    setCatalogUpdateProgress(`Classificando cartas (Item, Apoiador, Energia...): página ${pagina}`,
+      mapa.size, Math.max(totalEstimado, mapa.size + 1), true);
+    const corpo = JSON.stringify({
+      query: `{ cards(filters: {}, pagination: {page: ${pagina}, itemsPerPage: ${porPagina}}) { id category trainerType energyType } }`,
+    });
+    let lote;
+    try {
+      const resposta = await fetch('https://api.tcgdex.net/v2/graphql', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: corpo,
+      });
+      if (!resposta.ok) break;
+      const json = await resposta.json();
+      lote = json?.data?.cards;
+    } catch (_) { break; }
+    if (!Array.isArray(lote) || !lote.length) break;
+    for (const item of lote) {
+      if (item?.id) mapa.set(item.id, { category: item.category || '', trainerType: item.trainerType || '', energyType: item.energyType || '' });
+    }
+    if (lote.length < porPagina) break;
+  }
+  return mapa;
+}
+
 async function startCatalogUpdate() {
   if (catalogUpdating) return;
   catalogUpdating = true;
@@ -2846,6 +2905,16 @@ async function startCatalogUpdate() {
       });
     }
 
+    // Classificação: Pokémon, Item, Apoiador, Estádio, Ferramenta, Energia.
+    const categorias = await fetchCategoriasGraphQL(localCards.size);
+    let classificadas = 0;
+    for (const [id, dados] of categorias) {
+      const card = localCards.get(id);
+      if (!card || !dados.category) continue;
+      localCards.set(id, { ...card, category: dados.category, trainerType: dados.trainerType, energyType: dados.energyType });
+      classificadas += 1;
+    }
+
     const updatedCatalog = {
       version: new Date().toISOString(),
       source: 'TCGdex completo JA + EN + PT-BR + catálogo local',
@@ -2864,6 +2933,7 @@ async function startCatalogUpdate() {
       cardsAdded: Math.max(0, localCards.size - oldCardCount),
       setsTotal: localSets.size,
       cardsTotal: localCards.size,
+      classificadas,
       failures: ptResult.failures + enResult.failures + jaResult.failures,
       enListedCards: enResult.listedCards || enResult.cards.size,
       ptListedCards: ptResult.listedCards || ptResult.cards.size,
@@ -3291,7 +3361,7 @@ function renderCards() {
   const selectedSet = ui.cardSet === 'all' ? null : catalog.sets.find(set => set.id === ui.cardSet);
   return `
     <section class="screen vision-collection-screen">
-      <div class="collection-head"><h2>${esc(title)}</h2><div><button onclick="exportBackup()">Exportar</button><button onclick="notify('Toque nas cartas para selecionar e editar.')">Selecionar</button></div></div>
+      <div class="collection-head"><h2>${esc(title)}</h2></div>
       <!-- As fileiras "Tenho/Quero/Minhas" e "Sets/Cartas" saíram: a primeira
            repetia os filtros logo abaixo e a segunda repetia os botões
            Explorar e Coleção da barra de baixo. -->
@@ -3726,7 +3796,11 @@ function artVariantFromMarketKey() { return 'standard'; }
 
 function refreshCardSpecificVariationFields(card) {
   if (!card || document.getElementById('regVariationCardId')?.value !== String(card.id)) return;
-  const fieldMap = { regPricingVariant: 'pricingVariants', regFinish: 'finishes', regLanguage: 'languages', regEdition: 'editions', regDistribution: 'distributions', regArtVariant: 'artVariants' };
+  /* `regLanguage` ficou de fora de propósito: os três idiomas valem para
+     qualquer carta e o campo é montado uma vez só. Enquanto ele esteve nesta
+     lista, era reconstruído a partir do que a fonte publicava para a carta —
+     e sumiam opções, deixando só um ou dois idiomas disponíveis. */
+  const fieldMap = { regPricingVariant: 'pricingVariants', regFinish: 'finishes', regEdition: 'editions', regDistribution: 'distributions', regArtVariant: 'artVariants' };
   const savedManualOverride = document.getElementById('regManualVariationOverride')?.value === '1';
   for (const [id, profileField] of Object.entries(fieldMap)) {
     const select = document.getElementById(id);
@@ -4643,6 +4717,9 @@ function openCard(cardId, variantId = undefined) {
   const automaticLinked = (card.pokemonIds || []).map(Number).map(id => pokemonMap.get(id)).filter(Boolean);
   const manualPokemonId = Number(entry.manualPokemonId) || 0;
   const creatingNew = variantId === null;
+  // Só conta como "o usuário escolheu esta versão" quando o id veio de fato;
+  // abrir a carta sem indicar versão apenas mostra a primeira, sem editar.
+  const abriuVarianteEspecifica = typeof variantId === 'string' && variantId !== '';
   const selected = creatingNew ? null : (variantId ? variants.find(item => item.id === variantId) : variants[0]);
   const variationProfile = cardVariationProfile(card);
   const draft = selected || defaultVariant(scannerDraftFinish ? 1 : 0, {
@@ -4678,7 +4755,7 @@ function openCard(cardId, variantId = undefined) {
         <div class="badges">
           <span class="badge ${quantity ? 'owned' : ''}">${quantity ? `Total no fichário: ${quantity}` : 'Ainda não cadastrada'}</span>
           ${variants.length ? `<span class="badge purple">${variants.length} ${variants.length === 1 ? 'variante' : 'variantes'}</span>` : ''}
-          ${manualPokemonId === 1026 ? '<span class="badge">#1026 Energia / Ferramenta</span>' : linked.map(item => `<span class="badge">#${String(item.id).padStart(4,'0')} ${esc(item.name)}</span>`).join('')}
+          ${identidadeDaCartaHtml(card, linked, manualPokemonId)}
         </div>
       </div>
     </div>
@@ -4691,7 +4768,9 @@ function openCard(cardId, variantId = undefined) {
       ${variants.length ? `<div class="owned-variant-list">${variants.map(item => `<button class="owned-variant-row ${item.id === existingId ? 'active' : ''}" data-owned-finish="${esc(item.finish)}" data-owned-pricing-variant="${esc(item.pricingVariant || '')}" onclick="openCard('${esc(card.id)}','${esc(item.id)}')"><span><strong>${esc(item.pricingVariant || finishPriceLabel(finishKind(item.finish)))}</strong><small>${esc(languageCode(item.language))} · ${esc(item.condition || 'Near Mint')}</small><small class="owned-variant-warning" hidden></small></span><b>${money(effectiveVariantPrice(card.id,item)?.brl)}</b><em>x${Number(item.quantity)||0}</em></button>`).join('')}</div>` : '<div class="notice compact">Nenhuma versão cadastrada. Toque em Adicionar para começar.</div>'}
     </section>
 
-    <details class="card-editor" ${creatingNew ? 'open' : ''}>
+    <!-- Tocar numa versão já cadastrada abre o editor dela direto: era um
+         toque a mais para fazer o que o toque anterior já pedia. -->
+    <details class="card-editor" ${creatingNew || abriuVarianteEspecifica ? 'open' : ''}>
       <summary>${existingId ? 'Editar dados completos desta versão' : 'Cadastrar nova versão'}</summary>
     <section class="registration-section">
       <h3>${existingId ? 'Editar variante' : 'Nova variante'}</h3>
@@ -4702,7 +4781,7 @@ function openCard(cardId, variantId = undefined) {
       <div class="registration-grid two-columns">
         ${registrationField('Quantidade', `<div class="quantity-stepper"><button type="button" class="quantity-step-btn" onclick="changeRegistrationQuantity(-1)" aria-label="Diminuir quantidade">−</button><input id="regQuantity" class="field quantity-step-value" type="number" inputmode="numeric" min="0" step="1" value="${Math.max(0, Number(draft.quantity) || 0)}"><button type="button" class="quantity-step-btn" onclick="changeRegistrationQuantity(1)" aria-label="Aumentar quantidade">+</button></div>`)}
         ${registrationField('Condição', `<select id="regCondition" class="field" onchange="handleRegistrationVariantChange('${esc(card.id)}')">${['Mint','Near Mint','Excelente','Bom','Regular','Danificada'].map(value => option(value,value,draft.condition)).join('')}</select>`)}
-        ${registrationField('Idioma da carta', `<select id="regLanguage" class="field" onchange="handleRegistrationVariantChange('${esc(card.id)}')">${optionListForCard(card,'languages',draft.language,true)}</select>`)}
+        ${registrationField('Idioma da carta', `<select id="regLanguage" class="field" onchange="handleRegistrationVariantChange('${esc(card.id)}')">${PRICE_LANGUAGES.map(value => option(value, PRICE_LANGUAGE_LABELS[value] || value, draft.language)).join('')}</select>`)}
         <div id="regVarianteBloco" class="registration-field span-2">
           <label>Acabamento desta carta</label>
           <select id="regFinish" class="hidden" aria-hidden="true" tabindex="-1">${optionListForCard(card,'finishes',draft.finish,Boolean(selected?.manualVariationOverride))}</select>
@@ -4713,8 +4792,8 @@ function openCard(cardId, variantId = undefined) {
         ${registrationField('Preço automático', `<div id="automaticPriceBox">${automaticPriceBox(card.id, draft.finish, existingId, draft)}</div>`, 'span-2')}
       </div>
 
-      <details class="registration-group" open>
-        <summary>Detalhes da impressão <span id="regVarianteResumo" class="registration-group-hint">${esc(friendlyVariantLabel(draft.pricingVariant))}</span></summary>
+      <details class="registration-group">
+        <summary>Mostrar detalhes da impressão <span id="regVarianteResumo" class="registration-group-hint">${esc(friendlyVariantLabel(draft.pricingVariant))}</span></summary>
         <div class="registration-grid two-columns">
         ${registrationField('Edição', `<select id="regEdition" class="field" onchange="handleRegistrationVariantChange('${esc(card.id)}')">${optionListForCard(card,'editions',draft.edition,Boolean(selected?.manualVariationOverride))}</select>`)}
         ${registrationField('Carimbo', `<select id="regDistribution" class="field" onchange="handleRegistrationVariantChange('${esc(card.id)}')">${optionListForCard(card,'distributions',draft.distribution,Boolean(selected?.manualVariationOverride))}</select>`)}
@@ -4738,7 +4817,11 @@ function openCard(cardId, variantId = undefined) {
           <input type="hidden" id="regPokemonId" value="${manualPokemonId || ''}" data-automatic="${automaticLinked.length ? '1' : '0'}">
           <input id="regPokemonSearch" class="field" type="search" autocomplete="off" inputmode="search" placeholder="Digite o nome ou número do Pokémon" value="${manualPokemonId ? esc(pokemonLinkDisplayValue(manualPokemonId)) : ''}" oninput="updatePokemonLinkSearch(this.value)" onfocus="updatePokemonLinkSearch(this.value)">
           <div id="regPokemonResults" class="pokemon-link-results">${renderPokemonLinkSearchResults('', manualPokemonId, automaticLinked)}</div>
-        </div><small class="pokemon-link-help">${automaticLinked.length ? `Vínculo automático atual: ${esc(automaticLinked.map(item => item.name).join(' + '))}. Busque para substituir.` : 'A carta não foi reconhecida automaticamente. Digite o nome ou número e toque no resultado.'}</small><small id="regPokemonError" class="field-validation-error hidden">Esta escolha é obrigatória para cadastrar a carta.</small>`, 'span-2')}
+        </div><small class="pokemon-link-help">${automaticLinked.length
+          ? `Vínculo automático atual: ${esc(automaticLinked.map(item => item.name).join(' + '))}. Busque para substituir.`
+          : (categoriaDaCarta(card)
+            ? `Esta carta não representa um Pokémon — ela é ${esc(categoriaDaCarta(card).rotulo)}. Não precisa vincular; só use a busca se quiser ligá-la a um Pokémon mesmo assim.`
+            : 'A carta não foi reconhecida automaticamente. Digite o nome ou número e toque no resultado.')}</small><small id="regPokemonError" class="field-validation-error hidden">Esta escolha é obrigatória para cadastrar a carta.</small>`, 'span-2')}
       </div>
 
       <details class="manual-variation-override">
@@ -4795,6 +4878,55 @@ function changeRegistrationQuantity(delta) {
   const current = Math.max(0, Number.parseInt(input.value || '0', 10) || 0);
   input.value = String(Math.max(0, current + Number(delta || 0)));
   input.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+/**
+ * O que esta carta É.
+ *
+ * Carta de Pokémon mostra o Pokémon a que está ligada. Carta que não
+ * representa Pokémon nenhum — Item, Apoiador, Estádio, Ferramenta, Energia —
+ * mostra a própria categoria, em vez de ficar sem identidade alguma na tela.
+ */
+function categoriaDaCarta(card) {
+  const categoria = String(card?.category || '');
+
+  /* Cerca de um terço das cartas não tem categoria na fonte: são tiragens que
+     só existem em português ou japonês, e a consulta que informa a categoria
+     cobre apenas o catálogo inglês (conferido: essas cartas dão 404 lá).
+     Para elas sobra o nome. Energia é reconhecível com segurança — o nome
+     começa com "Energia" ou termina em "Energy" —, então vale o palpite.
+     Item, Apoiador e Estádio não dão para adivinhar pelo nome, e inventar
+     seria pior do que admitir que não sabemos. */
+  if (!categoria) {
+    const nome = normalize(card?.name);
+    if (/^energia(?:\s|$)/.test(nome) || /\benergy$/.test(nome)) {
+      return { rotulo: 'Energia', classe: 'energia', icone: '⚡' };
+    }
+    if (pokemonIdsForCard(card).length) return { rotulo: 'Pokémon', classe: 'pokemon', icone: '◓' };
+    return null;
+  }
+  if (categoria === 'Trainer') {
+    const tipo = String(card?.trainerType || '');
+    return { rotulo: TREINADOR_ROTULOS[tipo] || 'Treinador', classe: 'treinador', icone: '🎒' };
+  }
+  if (categoria === 'Energy') {
+    const tipo = String(card?.energyType || '');
+    return { rotulo: ENERGIA_ROTULOS[tipo] || 'Energia', classe: 'energia', icone: '⚡' };
+  }
+  if (categoria === 'Pokemon') return { rotulo: 'Pokémon', classe: 'pokemon', icone: '◓' };
+  return { rotulo: CATEGORIA_ROTULOS[categoria] || categoria, classe: 'outra', icone: '◈' };
+}
+
+function identidadeDaCartaHtml(card, linked, manualPokemonId) {
+  // Vínculo com Pokémon tem prioridade: é a informação mais específica.
+  if (linked?.length) {
+    return linked.map(item => `<span class="badge">#${String(item.id).padStart(4, '0')} ${esc(item.name)}</span>`).join('');
+  }
+  const categoria = categoriaDaCarta(card);
+  if (categoria) return `<span class="badge categoria-${categoria.classe}">${categoria.icone} ${esc(categoria.rotulo)}</span>`;
+  // Marcação antiga, de antes de existir categoria vinda da fonte.
+  if (Number(manualPokemonId) === 1026) return '<span class="badge categoria-treinador">🎒 Energia / Ferramenta</span>';
+  return '<span class="badge">Sem categoria — atualize o catálogo</span>';
 }
 
 function pokemonLinkDisplayValue(id) {
@@ -5022,9 +5154,13 @@ function ownedDeckPool() {
 function deckCardClass(card) {
   const name = normalize(card?.name);
   const category = normalize(card?.category || '');
+  // Quando a fonte diz o que a carta é, essa resposta vale mais do que
+  // qualquer palpite pelo nome.
+  if (category === 'energy' || category === 'energia') return 'energy';
+  if (category === 'trainer' || category === 'treinador') return 'trainer';
+  if (category === 'pokemon') return 'pokemon';
   // O vínculo 1026 significa apenas “não representa um Pokémon” e inclui
   // Ferramentas. Ele não pode ser usado para classificar a carta como Energia.
-  if (category === 'energy' || category === 'energia') return 'energy';
   if (/^energia(?:\s|$)/.test(name) || /^(?:basic|double|special)\s+.+\s+energy$/.test(name)) return 'energy';
   if (pokemonIdsForCard(card).length) return 'pokemon';
   return 'trainer';

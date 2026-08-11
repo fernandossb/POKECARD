@@ -3459,3 +3459,59 @@ html.camera-ao-vivo .modal { background: transparent !important; }
   .explore-filtro { min-width: 0; flex: 1 1 45%; font-size: 12px; }
   .explore-contagem { flex: 1 1 100%; text-align: right; }
 }
+
+/* ============================================================
+   v5.10 — Cadastro da carta mais compacto
+
+   A grade virava UMA coluna abaixo de 410px, então campos curtos
+   como Quantidade, Condição e Idioma ocupavam a linha inteira e
+   sobrava metade da tela vazia ao lado de cada um. Agora as duas
+   colunas valem em qualquer largura; só o que precisa de espaço
+   (botões de acabamento, preço, vínculo com Pokémon) atravessa.
+   ============================================================ */
+@media (max-width: 410px) {
+  .registration-grid.two-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* Telas bem estreitas: a busca de Pokémon e o preço continuam inteiros. */
+  .registration-grid.two-columns > .span-2 { grid-column: 1 / -1; }
+}
+
+/* Espaçamento mais apertado — eram 10px entre campos e 14px de
+   margem por seção, o que empurrava o conteúdo para longe. */
+.registration-grid { gap: 9px 10px; }
+.registration-section { margin-top: 10px; padding: 12px; }
+.registration-section h3 { margin: 0 0 9px; font-size: 16px; }
+.registration-field > span,
+.registration-field > label { margin-bottom: 4px; }
+
+/* Cabeçalho: a arte ocupava 82vw e empurrava nome e dados para
+   baixo da dobra. Some da metade para cima em telas pequenas. */
+@media (max-width: 520px) {
+  .registration-image-frame { width: min(190px, 52vw); margin: 2px auto 10px; }
+  .registration-header { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .registration-header h2 { margin: 2px 40px 2px 0; font-size: 19px; }
+}
+
+/* Blocos recolhidos: linha discreta, sem parecer um campo vazio. */
+.registration-group { margin-top: 10px; }
+.registration-group > summary {
+  padding: 11px 12px; border-radius: 11px; cursor: pointer; list-style: none;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: var(--vision-surface-2); border: 1px solid var(--vision-line);
+  font-size: 13px; font-weight: 700;
+}
+.registration-group > summary::-webkit-details-marker { display: none; }
+.registration-group > summary::after { content: '▾'; opacity: .6; font-size: 12px; }
+.registration-group[open] > summary::after { content: '▴'; }
+.registration-group-hint { font-weight: 600; font-size: 11.5px; opacity: .75; }
+.registration-group > .registration-grid { margin-top: 9px; }
+
+/* Lista "Na coleção": duas por linha quando couber, em vez de uma
+   fileira de linhas altas com muito vazio à direita. */
+.owned-variant-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 8px; }
+.owned-variant-row { min-width: 0; }
+
+/* Etiquetas de categoria da carta */
+.badge.categoria-treinador { background: rgba(255, 168, 76, .18); border-color: rgba(255, 168, 76, .5); }
+.badge.categoria-energia   { background: rgba(255, 214, 64, .18); border-color: rgba(255, 214, 64, .55); }
+.badge.categoria-pokemon   { background: rgba(94, 178, 255, .18); border-color: rgba(94, 178, 255, .5); }
+.badge.categoria-outra     { background: rgba(160, 140, 255, .18); border-color: rgba(160, 140, 255, .5); }
