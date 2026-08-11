@@ -3576,3 +3576,6 @@ html.camera-ao-vivo .modal { background: transparent !important; }
 .registration-field .field,
 .registration-field select,
 .registration-field input { max-width: 100%; }
+
+/* v5.11.1 - acoes no topo da camera */
+.camera-topo-acoes { display: flex; gap: 8px; align-items: center; }

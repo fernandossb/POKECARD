@@ -3567,10 +3567,18 @@ function mudarQuantidadeLeitura(linhaId, delta) {
   else salvarSessaoLeitura();
 }
 
+/* O scanner tem um modo só: câmera ao vivo com a lista de leitura.
+   O modo "uma por vez" abria o aplicativo de câmera do celular, tirava uma
+   foto e voltava — fluxo que deixou de existir quando a confirmação passou a
+   acontecer sem sair da câmera. Quem já tinha escolhido esse modo continuava
+   com ele salvo no aparelho e caía na câmera antiga, que travava a tela.
+   Por isso o modo é forçado aqui, ignorando o que estiver guardado. */
 function scannerPreferences() {
-  const defaults = { mode: 'continuous', language: 'pt-br', speed: 'normal', fps: 'balanced', setId: ui.cardSet !== 'all' ? ui.cardSet : 'all' };
-  try { return { ...defaults, ...JSON.parse(localStorage.getItem(SCANNER_PREFS_KEY) || '{}') }; }
-  catch (_) { return defaults; }
+  const defaults = { language: 'pt-br', speed: 'normal', fps: 'balanced', setId: ui.cardSet !== 'all' ? ui.cardSet : 'all' };
+  let salvas = {};
+  try { salvas = JSON.parse(localStorage.getItem(SCANNER_PREFS_KEY) || '{}') || {}; } catch (_) {}
+  delete salvas.mode;
+  return { ...defaults, ...salvas, mode: 'continuous' };
 }
 
 function chooseScannerPreference(group, value, button) {
@@ -3579,50 +3587,55 @@ function chooseScannerPreference(group, value, button) {
   if (field) field.value = value;
 }
 
+/* Tocar no Scanner abre a câmera direto. Não há mais tela de escolha antes:
+   o modo é um só, e idioma e coleção podem ser ajustados pelo ⚙ na própria
+   câmera, sem parar a leitura. */
 function openScannerSetup() {
-  const prefs = scannerPreferences();
-  const choice = (group, value, label, description = '') => `<button type="button" data-scanner-group="${group}" class="scanner-setting-choice ${prefs[group] === value ? 'active' : ''}" onclick="chooseScannerPreference('${group}','${value}',this)"><span><strong>${esc(label)}</strong>${description ? `<small>${esc(description)}</small>` : ''}</span><b></b></button>`;
-  showModal(`
-    <button class="modal-close" onclick="closeModal()" aria-label="Fechar">×</button>
-    <div class="scanner-settings-head"><span></span><h2>Modo de leitura</h2><p>Escolha como a câmera adiciona as cartas.</p></div>
-    <input type="hidden" id="scannerPref-mode" value="${esc(prefs.mode)}"><input type="hidden" id="scannerPref-language" value="${esc(prefs.language)}"><input type="hidden" id="scannerPref-speed" value="${esc(prefs.speed)}"><input type="hidden" id="scannerPref-fps" value="${esc(prefs.fps)}">
-    <div class="scanner-settings-list">
-      ${choice('mode','continuous','Contínuo','Lê em sequência para cadastrar várias cartas.')}
-      ${choice('mode','single','Uma por vez','Pausa em cada carta para confirmar a quantidade.')}
-    </div>
-    <section class="scanner-settings-section"><h3>Idioma da carta</h3><p>Aplicado a cada carta lida nesta sessão.</p><div class="scanner-language-grid">
-      ${choice('language','pt-br','pt-br')}${choice('language','en','en')}${choice('language','ja','ja')}
-    </div></section>
-    <section class="scanner-settings-section"><h3>Velocidade de leitura</h3><p>Tempo de espera antes de ler novamente a mesma carta.</p><div class="scanner-settings-list">
-      ${choice('speed','fast','Rápida','0,8 s — ideal para duplicatas intencionais')}
-      ${choice('speed','normal','Normal','2 s — bom equilíbrio')}
-      ${choice('speed','paused','Pausada','4 s — evita duplicatas acidentais')}
-    </div></section>
-    <section class="scanner-settings-section"><h3>Taxa de leitura</h3><p>Ajuste de consumo para a sessão de câmera.</p><div class="scanner-language-grid three">
-      ${choice('fps','economy','Econômica')}${choice('fps','balanced','Equilibrada')}${choice('fps','high','Alta')}
-    </div></section>
-    <label class="registration-field scanner-set-field compact-picker">
-      <span>Coleção opcional</span>
-      <select id="scannerSet" class="field">
-        <option value="all">Detectar entre todas as coleções</option>
-        ${catalog.sets.slice().sort((a,b) => compareSetsByTimeline(a,b)).map(set => option(set.id, set.name, prefs.setId)).join('')}
-      </select>
-      <small>Selecionar a coleção aumenta muito a precisão quando o número da carta é pequeno.</small>
-    </label>
-    <button class="primary-btn scanner-start-button" onclick="startScannerSessionFromPreferences()">Abrir câmera</button>
-  `, 'scanner-settings-sheet');
+  startScannerSession('normal', scannerPreferences().setId, scannerPreferences());
 }
 
-function startScannerSessionFromPreferences() {
-  const prefs = {
-    mode: document.getElementById('scannerPref-mode')?.value || 'single',
-    language: document.getElementById('scannerPref-language')?.value || 'pt-br',
-    speed: document.getElementById('scannerPref-speed')?.value || 'normal',
-    fps: document.getElementById('scannerPref-fps')?.value || 'balanced',
-    setId: document.getElementById('scannerSet')?.value || 'all',
-  };
-  try { localStorage.setItem(SCANNER_PREFS_KEY, JSON.stringify(prefs)); } catch (_) {}
-  startScannerSession('normal', prefs.setId, prefs);
+/* Ajustes durante a leitura: idioma das cartas e coleção alvo. */
+function abrirAjustesScanner() {
+  pausarCamera();
+  const prefs = scannerPreferences();
+  const html = `
+    <div class="leitura-painel-alca" aria-hidden="true"></div>
+    <div class="busca-manual">
+      <strong>⚙ Ajustes da leitura</strong>
+      <label class="registration-field">
+        <span>Idioma das cartas lidas</span>
+        <select id="scannerAjusteIdioma" class="field">
+          ${PRICE_LANGUAGES.map(value => option(value, PRICE_LANGUAGE_LABELS[value] || value, scannerSession.language || prefs.language)).join('')}
+        </select>
+      </label>
+      <label class="registration-field">
+        <span>Coleção (aumenta a precisão)</span>
+        <select id="scannerAjusteSet" class="field">
+          <option value="all">Detectar entre todas as coleções</option>
+          ${catalog.sets.slice().sort((a, b) => compareSetsByTimeline(a, b)).map(set => option(set.id, set.name, scannerSession.setId || prefs.setId)).join('')}
+        </select>
+      </label>
+      <small>Vale para as próximas cartas lidas. O que já está na lista não muda.</small>
+      <button class="leitura-sim" onclick="salvarAjustesScanner()">Salvar e continuar lendo</button>
+    </div>`;
+  const painel = document.getElementById('leituraPainel');
+  if (painel) { painel.innerHTML = html; painel.classList.add('aberto'); return; }
+  const folha = document.querySelector('.camera-sheet .camera-tela');
+  if (folha) abrirPainelNovo(folha, html);
+}
+
+function salvarAjustesScanner() {
+  const idioma = document.getElementById('scannerAjusteIdioma')?.value || 'pt-br';
+  const setId = document.getElementById('scannerAjusteSet')?.value || 'all';
+  scannerSession.language = idioma;
+  scannerSession.setId = setId;
+  try {
+    const prefs = { ...scannerPreferences(), language: idioma, setId };
+    localStorage.setItem(SCANNER_PREFS_KEY, JSON.stringify(prefs));
+  } catch (_) {}
+  retomarCamera();
+  telaCameraAoVivo();
+  avisarNaCamera(`Idioma: ${PRICE_LANGUAGE_LABELS[idioma] || idioma}`);
 }
 
 function startScannerSession(finish, setId = 'all', preferences = scannerPreferences()) {
@@ -3640,28 +3653,28 @@ function startScannerSession(finish, setId = 'all', preferences = scannerPrefere
 
 function scanNextCard() {
   if (!scannerSession.active) return openScannerSetup();
-  // No modo contínuo a câmera fica aberta dentro do app e vai lendo sozinha.
-  // No modo "uma por vez" usamos o aplicativo de câmera do celular.
-  if (scannerSession.mode === 'continuous' && window.Android?.startLiveScanner) {
+
+  // Caminho único: a câmera fica aberta dentro do app, atrás desta tela, e vai
+  // lendo sozinha. A moldura, a faixa de miniaturas e os botões são desenhados
+  // por cima da imagem.
+  if (window.Android?.startLiveScanner) {
     scannerSession.live = true;
     window.Android.startLiveScanner(scannerSession.finish);
-    // A imagem da câmera fica atrás; esta tela desenha moldura, faixa de
-    // miniaturas e botões por cima dela.
     telaCameraAoVivo();
     return;
   }
-  // Antes o app caía no modo de fotos em silêncio quando a câmera ao vivo não
-  // existia, e ficava parecendo que o contínuo simplesmente não funcionava.
-  if (scannerSession.mode === 'continuous' && !window.Android?.startLiveScanner && !scannerSession.avisouSemLive) {
-    scannerSession.avisouSemLive = true;
-    notify('Este aplicativo ainda não tem a câmera contínua. Instale a versão mais nova para usá-la.');
-  }
-  if (window.Android?.startCardScanner) {
-    scannerSession.live = false;
-    window.Android.startCardScanner(scannerSession.finish);
-    return;
-  }
-  showScannerMessage('Câmera disponível somente no aplicativo Android.', true);
+
+  /* Sem câmera ao vivo não há como continuar. Antes o app caía no aplicativo
+     de câmera do celular: tirava uma foto, voltava, e a tela do scanner ficava
+     desenhada sem imagem nenhuma atrás — parecia travado. Melhor dizer o que
+     está acontecendo do que entregar uma tela morta. */
+  scannerSession.active = false;
+  scannerSession.live = false;
+  document.documentElement.classList.remove('camera-ao-vivo');
+  closeModal();
+  notify(window.Android
+    ? 'Esta versão do aplicativo ainda não tem a câmera do scanner. Instale a versão mais nova.'
+    : 'A câmera do scanner só funciona dentro do aplicativo Android.');
 }
 
 // O aparelho avisa que a câmera ao vivo foi encerrada pelo botão da tela.
@@ -4067,7 +4080,10 @@ function telaCameraAoVivo() {
       <div class="camera-topo">
         <button class="camera-icone" onclick="encerrarLeitura()" aria-label="Voltar">←</button>
         <strong>Escanear</strong>
-        <button class="camera-icone" onclick="comoEscanear()" aria-label="Como escanear">?</button>
+        <span class="camera-topo-acoes">
+          <button class="camera-icone" onclick="abrirAjustesScanner()" aria-label="Ajustes da leitura">⚙</button>
+          <button class="camera-icone" onclick="comoEscanear()" aria-label="Como escanear">?</button>
+        </span>
       </div>
 
       <div class="camera-moldura" aria-hidden="true"></div>
@@ -4140,9 +4156,14 @@ function showScannerPrimaryCandidate() {
     painel.classList.add('aberto');
     return;
   }
-  const folha = document.querySelector('.camera-sheet .camera-tela');
-  if (!folha) { telaCameraAoVivo(); return showScannerPrimaryCandidate(); }
-  abrirPainelNovo(folha, html);
+  let folha = document.querySelector('.camera-sheet .camera-tela');
+  if (!folha) {
+    // A tela da câmera não estava desenhada: desenha e pega de novo. Sem
+    // chamada recursiva — se ainda assim não existir, não há onde encaixar.
+    telaCameraAoVivo();
+    folha = document.querySelector('.camera-sheet .camera-tela');
+  }
+  if (folha) abrirPainelNovo(folha, html);
 }
 
 /* Cria o painel já fechado, obriga o navegador a desenhá-lo nessa posição e
