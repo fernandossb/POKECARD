@@ -922,6 +922,21 @@ public final class MainActivity extends Activity {
                 }
             });
         }
+
+        /* Enquanto o painel de confirmação está aberto a câmera continua
+           ligada — o usuário pediu para não sair da câmera —, mas parar de
+           entregar leituras. Sem isto a carta seguinte chegaria por cima da
+           pergunta que ainda está na tela. */
+        @JavascriptInterface
+        public void pauseLiveScanner() {
+            liveScannerPaused = true;
+        }
+
+        @JavascriptInterface
+        public void resumeLiveScanner() {
+            liveScannerPaused = false;
+            liveScannerLastDelivery = System.currentTimeMillis();
+        }
     }
 
     /* =====================================================================
@@ -950,6 +965,9 @@ public final class MainActivity extends Activity {
     private String pendingLiveFinish = "comum";
     private volatile boolean liveScannerBusy;
     private volatile long liveScannerLastDelivery;
+    /* Ligada enquanto o app mostra o painel "é esta carta?": a câmera segue
+       ligada, só não entrega leitura nova até o usuário responder. */
+    private volatile boolean liveScannerPaused;
 
     /** Ciclo de vida próprio: a tela principal estende Activity simples,
         que a CameraX não aceita como dona da câmera. */
@@ -1012,43 +1030,26 @@ public final class MainActivity extends Activity {
             PreviewView previewView = new PreviewView(this);
             previewView.setScaleType(PreviewView.ScaleType.FILL_CENTER);
 
-            liveScannerHint = new TextView(this);
-            liveScannerHint.setText("Aponte para a carta");
-            liveScannerHint.setTextColor(Color.WHITE);
-            liveScannerHint.setTextSize(15f);
-            liveScannerHint.setPadding(28, 22, 28, 22);
-            liveScannerHint.setBackgroundColor(Color.argb(150, 0, 0, 0));
-            liveScannerHint.setGravity(Gravity.CENTER);
-
-            Button encerrar = new Button(this);
-            encerrar.setText("Encerrar");
-            encerrar.setAllCaps(false);
-            encerrar.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View view) {
-                    closeLiveScanner();
-                    runJavascript("window.receiveLiveScannerClosed&&window.receiveLiveScannerClosed();");
-                }
-            });
-
+            /* A câmera fica ATRÁS da tela do aplicativo, não por cima.
+               Antes este overlay era preto e cobria tudo, então a única coisa
+               possível era um botão nativo "Encerrar" — nada da interface do
+               app aparecia. Colocando a imagem embaixo e deixando a WebView
+               transparente, a moldura, a faixa de miniaturas e o painel de
+               confirmação são desenhados em HTML por cima da imagem ao vivo,
+               junto com o resto do aplicativo. */
             liveScannerOverlay = new FrameLayout(this);
             liveScannerOverlay.setBackgroundColor(Color.BLACK);
             liveScannerOverlay.addView(previewView, new FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
 
-            FrameLayout.LayoutParams hintParams = new FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT);
-            hintParams.gravity = Gravity.TOP;
-            liveScannerOverlay.addView(liveScannerHint, hintParams);
-
-            FrameLayout.LayoutParams botaoParams = new FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
-            botaoParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-            botaoParams.bottomMargin = 70;
-            liveScannerOverlay.addView(encerrar, botaoParams);
-
-            rootView.addView(liveScannerOverlay, new FrameLayout.LayoutParams(
+            // Índice 0 = abaixo da WebView, que já está no rootView.
+            rootView.addView(liveScannerOverlay, 0, new FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+
+            /* Sem isto a WebView pinta o próprio fundo e a câmera não aparece.
+               A cor original é restaurada ao fechar o scanner. */
+            webView.setBackgroundColor(Color.TRANSPARENT);
+            runJavascript("document.documentElement.classList.add('camera-ao-vivo');");
 
             liveScannerLifecycle = new ScannerLifecycle();
             final ListenableFuture<ProcessCameraProvider> futuro = ProcessCameraProvider.getInstance(this);
@@ -1091,7 +1092,8 @@ public final class MainActivity extends Activity {
     @SuppressWarnings("UnsafeOptInUsageError")
     private void analisarQuadro(final ImageProxy proxy) {
         long agora = System.currentTimeMillis();
-        if (liveScannerBusy || agora - liveScannerLastDelivery < LIVE_SCAN_INTERVAL_MS
+        if (liveScannerPaused || liveScannerBusy
+                || agora - liveScannerLastDelivery < LIVE_SCAN_INTERVAL_MS
                 || proxy.getImage() == null || liveRecognizer == null) {
             proxy.close();
             return;
@@ -1169,8 +1171,15 @@ public final class MainActivity extends Activity {
             rootView.removeView(liveScannerOverlay);
             liveScannerOverlay = null;
         }
+        // Devolve o fundo da tela: sem isto o aplicativo fica transparente e
+        // o preto da janela aparece por trás de tudo depois de escanear.
+        if (webView != null) {
+            webView.setBackgroundColor(Color.rgb(255, 248, 220));
+            runJavascript("document.documentElement.classList.remove('camera-ao-vivo');");
+        }
         liveScannerHint = null;
         liveCameraProvider = null;
         liveScannerBusy = false;
+        liveScannerPaused = false;
     }
 }

@@ -3285,6 +3285,91 @@ function scannerFinishLabel(value) {
   return finishPriceLabel(finishKind(value));
 }
 
+/* =====================================================================
+   Sessão de leitura
+
+   A carta lida NÃO entra na coleção na hora. Ela fica numa lista de espera
+   até o usuário conferir tudo e tocar em "Adicionar X cartas". Isso permite
+   corrigir um acabamento errado, mudar o idioma de todas de uma vez ou
+   remover uma leitura repetida antes de sujar a coleção.
+
+   A lista é gravada no aparelho a cada mudança: se o celular fechar o app no
+   meio de cinquenta cartas, nenhuma leitura se perde.
+   ===================================================================== */
+const SCANNER_SESSAO_KEY = 'pokecard-scanner-sessao-v1';
+
+function leiturasPendentes() {
+  if (!Array.isArray(scannerSession.pendentes)) scannerSession.pendentes = [];
+  return scannerSession.pendentes;
+}
+
+function totalLeituras() {
+  return leiturasPendentes().reduce((soma, item) => soma + (Number(item.quantity) || 0), 0);
+}
+
+function salvarSessaoLeitura() {
+  try {
+    const pendentes = leiturasPendentes();
+    if (!pendentes.length) localStorage.removeItem(SCANNER_SESSAO_KEY);
+    else localStorage.setItem(SCANNER_SESSAO_KEY, JSON.stringify({ pendentes, setId: scannerSession.setId, salvoEm: Date.now() }));
+  } catch (_) { /* aparelho sem espaço: a sessão segue só na memória */ }
+}
+
+function lerSessaoGuardada() {
+  try {
+    const bruto = JSON.parse(localStorage.getItem(SCANNER_SESSAO_KEY) || 'null');
+    const pendentes = Array.isArray(bruto?.pendentes) ? bruto.pendentes.filter(item => cardMap.has(item?.cardId)) : [];
+    return pendentes.length ? { pendentes, setId: bruto.setId || 'all' } : null;
+  } catch (_) { return null; }
+}
+
+function descartarSessaoGuardada() {
+  scannerSession.pendentes = [];
+  try { localStorage.removeItem(SCANNER_SESSAO_KEY); } catch (_) {}
+}
+
+// Duas leituras iguais viram uma linha só com quantidade 2 — como no balcão
+// de loja, onde três cópias da mesma carta são "3x", não três linhas.
+function assinaturaLeitura(linha) {
+  return [linha.cardId, linha.pricingVariant, linha.finish, linha.language, linha.condition, linha.edition, linha.distribution].join('|');
+}
+
+function registrarLeitura(cardId, opcoes = {}) {
+  const card = cardMap.get(cardId);
+  if (!card) return null;
+  const linha = {
+    id: `l${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    cardId,
+    quantity: 1,
+    finish: opcoes.finish || scannerSession.finish || 'normal',
+    pricingVariant: opcoes.pricingVariant || scannerSession.pricingVariant || 'normal',
+    language: opcoes.language || scannerSession.language || 'pt-br',
+    condition: opcoes.condition || scannerSession.condition || 'Near Mint',
+    edition: opcoes.edition || scannerSession.edition || 'unlimited',
+    distribution: opcoes.distribution || scannerSession.distribution || 'unstamped',
+    lidoEm: Date.now(),
+  };
+  const pendentes = leiturasPendentes();
+  const igual = pendentes.find(item => assinaturaLeitura(item) === assinaturaLeitura(linha));
+  if (igual) igual.quantity = (Number(igual.quantity) || 0) + 1;
+  else pendentes.unshift(linha);
+  salvarSessaoLeitura();
+  return igual || linha;
+}
+
+function removerLeitura(linhaId) {
+  scannerSession.pendentes = leiturasPendentes().filter(item => item.id !== linhaId);
+  salvarSessaoLeitura();
+}
+
+function mudarQuantidadeLeitura(linhaId, delta) {
+  const linha = leiturasPendentes().find(item => item.id === linhaId);
+  if (!linha) return;
+  linha.quantity = Math.max(0, (Number(linha.quantity) || 0) + Number(delta || 0));
+  if (linha.quantity === 0) removerLeitura(linhaId);
+  else salvarSessaoLeitura();
+}
+
 function scannerPreferences() {
   const defaults = { mode: 'continuous', language: 'pt-br', speed: 'normal', fps: 'balanced', setId: ui.cardSet !== 'all' ? ui.cardSet : 'all' };
   try { return { ...defaults, ...JSON.parse(localStorage.getItem(SCANNER_PREFS_KEY) || '{}') }; }
@@ -3344,9 +3429,15 @@ function startScannerSessionFromPreferences() {
 }
 
 function startScannerSession(finish, setId = 'all', preferences = scannerPreferences()) {
-  scannerSession = { active: true, pricingVariant: 'normal', finish, language: preferences.language || 'pt-br', condition: 'Near Mint', edition: 'unlimited', distribution: 'unstamped', artVariant: 'standard', region: 'Brasil', gradingCompany: 'Não graduada', grade: '', tags: [], manualVariationOverride: false, setId, mode: preferences.mode || 'single', speed: preferences.speed || 'normal', fps: preferences.fps || 'balanced', count: 0, lastIds: [] };
+  // Uma sessão interrompida antes (app fechado, ligação, bateria) volta com as
+  // leituras intactas — só o que já entrou na coleção é que sai da lista.
+  const guardada = lerSessaoGuardada();
+  scannerSession = { active: true, pricingVariant: 'normal', finish, language: preferences.language || 'pt-br', condition: 'Near Mint', edition: 'unlimited', distribution: 'unstamped', artVariant: 'standard', region: 'Brasil', gradingCompany: 'Não graduada', grade: '', tags: [], manualVariationOverride: false, setId, mode: preferences.mode || 'continuous', speed: preferences.speed || 'normal', fps: preferences.fps || 'balanced', count: 0, lastIds: [], pendentes: guardada?.pendentes || [] };
   scannerCandidateBuffer = [];
   closeModal();
+  if (guardada?.pendentes?.length) {
+    notify(`${totalLeituras()} carta(s) lidas antes continuam na lista.`);
+  }
   scanNextCard();
 }
 
@@ -3357,6 +3448,9 @@ function scanNextCard() {
   if (scannerSession.mode === 'continuous' && window.Android?.startLiveScanner) {
     scannerSession.live = true;
     window.Android.startLiveScanner(scannerSession.finish);
+    // A imagem da câmera fica atrás; esta tela desenha moldura, faixa de
+    // miniaturas e botões por cima dela.
+    telaCameraAoVivo();
     return;
   }
   // Antes o app caía no modo de fotos em silêncio quando a câmera ao vivo não
@@ -3380,13 +3474,18 @@ window.receiveLiveScannerClosed = function () {
 };
 
 function stopScannerSession() {
+  const pendentes = totalLeituras();
   scannerSession.active = false;
   scannerCandidateBuffer = [];
   // Fecha também a câmera ao vivo, senão ela continuaria ligada por cima do app.
   if (scannerSession.live && window.Android?.stopLiveScanner) window.Android.stopLiveScanner();
   scannerSession.live = false;
   closeModal();
-  notify(`Sessão finalizada: ${scannerSession.count} carta(s) cadastrada(s).`);
+  // As leituras não adicionadas ficam guardadas; elas reaparecem na próxima
+  // vez que o scanner abrir, em vez de irem para o lixo em silêncio.
+  notify(pendentes
+    ? `${pendentes} carta(s) lidas continuam esperando — abra o scanner para concluir.`
+    : `Sessão finalizada: ${scannerSession.count} carta(s) cadastrada(s).`);
 }
 
 function showScannerMessage(message, failed = false) {
@@ -3566,7 +3665,11 @@ function refreshCardSpecificVariationFields(card) {
 }
 
 function refreshCardVariationAvailability(card) {
-  if (scannerCandidateBuffer[0]?.card?.id === card.id && document.querySelector('.scanner-primary-card')) showScannerPrimaryCandidate();
+  // A fonte respondeu quais versões esta carta tem: se o painel de confirmação
+  // dela está aberto, os botões provisórios dão lugar aos verdadeiros.
+  if (scannerCandidateBuffer[0]?.card?.id === card.id && document.getElementById('leituraPainel')) {
+    showScannerPrimaryCandidate();
+  }
   refreshCardSpecificVariationFields(card);
 }
 
@@ -3683,58 +3786,268 @@ function selectScannerLanguage(value) {
   showScannerPrimaryCandidate();
 }
 
+/* Acabamentos padrão do jogo, usados só enquanto a lista real não chegou.
+   São os mesmos códigos que o banco de preços publica, então a carta salva
+   com um deles continua achando preço. */
+const VARIANTES_PADRAO = ['normal', 'holofoil', 'reverse-holofoil'];
+
+/**
+ * Versões oferecidas na hora de escanear.
+ *
+ * O catálogo que vem dentro do aplicativo não guarda quais versões cada carta
+ * tem — essa informação chega do banco de preços, pela internet, e pode
+ * demorar. Sem uma reserva, o painel apareceria sem nenhum botão justamente no
+ * momento em que o usuário precisa escolher. Então: se já sabemos as versões
+ * reais desta carta, mostramos só elas; se ainda não, oferecemos os três
+ * acabamentos padrão e trocamos assim que a resposta chegar.
+ */
+function variantesParaEscolher(card, idioma, atual) {
+  const conhecidas = pricingVariantDetailsForCard(card, idioma).map(item => item.value);
+  const visiveis = variantesVisiveis(card?.id || '', conhecidas, atual, idioma);
+  if (visiveis.length) return visiveis;
+  return uniqueValues(VARIANTES_PADRAO, atual ? [atual] : []);
+}
+
+/* ---------- Tela da câmera ----------
+   A imagem da câmera é desenhada pelo Android ATRÁS desta tela. Tudo aqui é
+   HTML por cima: a moldura é só uma borda com o meio vazado, e a faixa de
+   baixo mostra as artes já lidas. */
+function telaCameraAoVivo() {
+  const pendentes = leiturasPendentes();
+  const total = totalLeituras();
+  const tiras = pendentes.slice(0, 12).map(linha => {
+    const card = cardMap.get(linha.cardId);
+    const arte = card?.imageUrl ? upgradeCardImageUrl(card.imageUrl) : '';
+    return `<div class="leitura-tira">
+      ${arte ? `<img src="${esc(arte)}" alt="${esc(card.name)}" loading="lazy">` : `<span class="leitura-tira-vazia">TCG</span>`}
+      ${linha.quantity > 1 ? `<b class="leitura-tira-qtd">${linha.quantity}x</b>` : ''}
+      <button class="leitura-tira-x" onclick="removerLeituraDaTira('${esc(linha.id)}')" aria-label="Remover ${esc(card?.name || 'carta')}">×</button>
+    </div>`;
+  }).join('');
+
+  showModal(`
+    <div class="camera-tela">
+      <div class="camera-topo">
+        <button class="camera-icone" onclick="encerrarLeitura()" aria-label="Voltar">←</button>
+        <strong>Escanear</strong>
+        <button class="camera-icone" onclick="comoEscanear()" aria-label="Como escanear">?</button>
+      </div>
+
+      <div class="camera-moldura" aria-hidden="true"></div>
+      <p class="camera-dica" id="cameraDica">Encaixe a carta dentro da moldura</p>
+
+      <div class="camera-rodape">
+        ${pendentes.length ? `<div class="leitura-tiras">${tiras}</div>` : '<p class="camera-vazio">Nenhuma carta lida ainda.</p>'}
+        <div class="camera-atalhos">
+          <button class="camera-atalho" onclick="abrirBuscaManual()">⌨ Digitar carta</button>
+          <button class="camera-atalho" onclick="comoEscanear()">? Como escanear</button>
+        </div>
+        <div class="camera-acoes">
+          <button class="camera-cancelar" onclick="encerrarLeitura()">Cancelar</button>
+          <button class="camera-revisar" ${total ? '' : 'disabled'} onclick="abrirRevisaoSessao()">✓ Revisar (${total})</button>
+        </div>
+      </div>
+    </div>
+  `, 'camera-sheet');
+}
+
+/* ---------- Painel flutuante "é esta carta?" ----------
+   Sobe de baixo até o meio da tela, sem fechar a câmera. Traz a miniatura em
+   tamanho de conferência (2 × 3 cm) e só as versões que a carta realmente
+   tem, nos mesmos botões coloridos do cadastro. */
 function showScannerPrimaryCandidate() {
   const candidate = scannerCandidateBuffer[0];
-  if (!candidate) return showScannerMessage('Nenhuma correspondência disponível. Tire outra foto.', true);
+  if (!candidate) return telaCameraAoVivo();
   const { card, score } = candidate;
-  const selectedSet = scannerSession.setId === 'all' ? null : catalog.sets.find(set => set.id === scannerSession.setId);
-  const variationProfile = cardVariationProfile(card);
-  showModal(`
-    <button class="modal-close" onclick="stopScannerSession()" aria-label="Fechar">×</button>
-    <h2>Esta é a carta?</h2>
-    <p class="screen-subtitle">Confira a arte antes de adicionar ao fichário.</p>
-    <div class="scanner-primary-card">
-      ${card.imageUrl ? `<img src="${esc(upgradeCardImageUrl(card.imageUrl))}" alt="Arte de ${esc(card.name)}">` : '<div class="card-placeholder">TCG</div>'}
-      <strong>${esc(card.name)}</strong>
-      <span>${esc(card.number)} · ${esc(card.setName)}</span>
-      <small>${Math.min(99, score)}% de correspondência · ${esc(scannerFinishLabel(scannerSession.finish))}${selectedSet ? ` · ${esc(selectedSet.name)}` : ''}</small>
-    </div>
-    <div class="scanner-variation-picker">
-      <strong>Qual é a variação desta carta?</strong>
-      <small>Escolha a versão exata da carta. O preço é buscado para essa versão.</small>
-      <div class="scanner-variation-options">
-        ${scannerFinishOptionsHtml(card)}
-      </div>
-      <div class="scanner-variation-details">
-        <label>Idioma<select class="field" onchange="selectScannerLanguage(this.value)">
-          ${uniqueValues(variationProfile.languages, [scannerSession.language]).map(value => option(value, value, scannerSession.language)).join('')}
-        </select></label>
-        <label>Condição<select class="field" onchange="scannerSession.condition=this.value">
-          ${['Mint','Near Mint','Excelente','Bom','Regular','Danificada'].map(value => option(value, value, scannerSession.condition)).join('')}
-        </select></label>
-        ${scannerContextualIdentityHtml(card)}
-      </div>
-      <details class="scanner-advanced-variation">
-        <summary>Variação não listada</summary>
-        <div class="scanner-variation-details">
-          <label>Acabamento<select class="field" onchange="scannerSession.finish=this.value;scannerSession.manualVariationOverride=true">${PRICE_FINISHES.map(value => option(value,finishPriceLabel(value),scannerSession.finish)).join('')}</select></label>
-          <label>Edição<select class="field" onchange="scannerSession.edition=this.value;scannerSession.manualVariationOverride=true">${PRICE_PRINT_VARIATIONS.map(value => option(value,value,scannerSession.edition)).join('')}</select></label>
-          <label>Distribuição / carimbo<select class="field" onchange="scannerSession.distribution=this.value;scannerSession.manualVariationOverride=true">${PRICE_STAMPS.map(value => option(value,value,scannerSession.distribution)).join('')}</select></label>
+  pausarCamera();
 
-          <label>Região<select class="field" onchange="scannerSession.region=this.value">${['Brasil','Estados Unidos','Europa','Japão','Coreia','China','Outra região'].map(value => option(value,value,scannerSession.region)).join('')}</select></label>
-          <label>Graduação<select class="field" onchange="scannerSession.gradingCompany=this.value">${['Não graduada','PSA','CGC','Beckett BGS','Beckett Black Label','SGC','Outra certificadora'].map(value => option(value,value,scannerSession.gradingCompany)).join('')}</select></label>
-          <label>Nota<input class="field" inputmode="decimal" placeholder="Ex.: 10" value="${esc(scannerSession.grade)}" oninput="scannerSession.grade=this.value"></label>
-          <label class="scanner-tags-field">Tags adicionais<input class="field" placeholder="Ex.: error, miscut" value="${esc(scannerSession.tags.join(', '))}" oninput="scannerSession.tags=this.value.split(',').map(v=>v.trim()).filter(Boolean)"></label>
-        </div>
-      </details>
+  const idioma = scannerSession.language || 'pt-br';
+  const visiveis = variantesParaEscolher(card, idioma, scannerSession.pricingVariant);
+  if (visiveis.length && !visiveis.includes(scannerSession.pricingVariant)) {
+    scannerSession.pricingVariant = visiveis[0];
+  }
+  // A lista definitiva vem do banco de preços; enquanto ela não chega, os
+  // botões mostram os acabamentos padrão. Quando chegar, o painel se redesenha.
+  loadScannerVariantAvailability(card);
+  const botoes = visiveis.map(value => {
+    const estilo = variantEstilo(value);
+    const ativo = value === scannerSession.pricingVariant ? ' ativo' : '';
+    return `<button type="button" class="variante-pill ${estilo.classe}${ativo}" data-pill="${esc(value)}"
+      onclick="escolherVarianteLeitura('${esc(value)}')">
+      <span class="variante-icone" aria-hidden="true">${estilo.icone}</span>${esc(friendlyVariantLabel(value))}
+    </button>`;
+  }).join('');
+
+  const arte = card.imageUrl ? upgradeCardImageUrl(card.imageUrl) : '';
+  const painel = document.getElementById('leituraPainel');
+  const html = `
+    <div class="leitura-painel-alca" aria-hidden="true"></div>
+    <div class="leitura-painel-corpo">
+      <div class="leitura-arte">
+        ${arte ? `<img src="${esc(arte)}" alt="Arte de ${esc(card.name)}">` : '<span class="card-placeholder">TCG</span>'}
+      </div>
+      <div class="leitura-info">
+        <strong>${esc(card.name)}</strong>
+        <span>${esc(formatCardNumber(card.localId || card.number, card.setTotal))} · ${esc(card.setName)}</span>
+        <small>${Math.min(99, score)}% de correspondência</small>
+        <div class="variante-pills leitura-variantes">${botoes}</div>
+      </div>
     </div>
-    <div class="scanner-confirm-actions" aria-label="Confirmar arte">
-      <button class="scanner-confirm-yes" onclick="confirmScannedCard('${esc(card.id)}')" aria-label="Sim, adicionar esta carta">✓</button>
-      <button class="scanner-confirm-no" onclick="rejectScannedCandidate()" aria-label="Não é esta carta">×</button>
-    </div>
-    ${scannerOcrDiagnosticHtml()}
-    <button class="secondary-btn scanner-retake-btn" onclick="closeModal();scanNextCard()">Tirar outra foto</button>
-  `);
+    <div class="leitura-painel-acoes">
+      <button class="leitura-nao" onclick="recusarLeitura()">Não é essa</button>
+      <button class="leitura-sim" onclick="confirmScannedCard('${esc(card.id)}')">✓ Adicionar</button>
+    </div>`;
+
+  if (painel) {
+    painel.innerHTML = html;
+    painel.classList.add('aberto');
+    return;
+  }
+  const folha = document.querySelector('.camera-sheet .camera-tela');
+  if (!folha) { telaCameraAoVivo(); return showScannerPrimaryCandidate(); }
+  abrirPainelNovo(folha, html);
+}
+
+/* Cria o painel já fechado, obriga o navegador a desenhá-lo nessa posição e
+   só então abre — é isso que faz a animação acontecer.
+
+   Ler `offsetHeight` é o que força esse desenho. Usar o quadro de animação
+   seria o caminho natural, mas ele não dispara com o aplicativo em segundo
+   plano: o painel nasceria escondido embaixo da tela e nunca subiria. */
+function abrirPainelNovo(folha, html) {
+  const novo = document.createElement('div');
+  novo.id = 'leituraPainel';
+  novo.className = 'leitura-painel';
+  novo.innerHTML = html;
+  folha.appendChild(novo);
+  void novo.offsetHeight;
+  novo.classList.add('aberto');
+  return novo;
+}
+
+function fecharPainelLeitura() {
+  const painel = document.getElementById('leituraPainel');
+  if (painel) painel.classList.remove('aberto');
+}
+
+function pausarCamera() {
+  try { window.Android?.pauseLiveScanner?.(); } catch (_) {}
+}
+
+function retomarCamera() {
+  fecharPainelLeitura();
+  try { window.Android?.resumeLiveScanner?.(); } catch (_) {}
+}
+
+function escolherVarianteLeitura(valor) {
+  scannerSession.pricingVariant = valor;
+  scannerSession.finish = /reverse/i.test(valor) ? 'reverse' : /holo/i.test(valor) ? 'holo' : 'normal';
+  const grupo = document.querySelector('.leitura-variantes');
+  if (grupo) grupo.querySelectorAll('.variante-pill').forEach(botao => {
+    botao.classList.toggle('ativo', botao.dataset.pill === valor);
+  });
+}
+
+function recusarLeitura() {
+  const restantes = scannerCandidateBuffer.slice(1);
+  if (restantes.length) {
+    scannerCandidateBuffer = restantes;
+    return showScannerPrimaryCandidate();
+  }
+  notify('Nenhuma outra correspondência. Aproxime a carta e tente de novo.');
+  retomarCamera();
+}
+
+function removerLeituraDaTira(linhaId) {
+  removerLeitura(linhaId);
+  telaCameraAoVivo();
+}
+
+/* ---------- Digitar a carta na mão ----------
+   Para quando o reconhecimento não pega: carta muito gasta, reflexo forte,
+   ou arte sem texto legível. Busca pelo número do rodapé ou pelo nome. */
+function abrirBuscaManual() {
+  pausarCamera();
+  const painel = document.getElementById('leituraPainel');
+  const html = `
+    <div class="leitura-painel-alca" aria-hidden="true"></div>
+    <div class="busca-manual">
+      <strong>⌨ Achar a carta na mão</strong>
+      <small>Digite a numeração do rodapé (ex.: 035/073) ou o nome</small>
+      <input id="buscaManualCampo" class="field" autocomplete="off"
+        placeholder="Nome, número ou 069/086" oninput="buscarCartaManual(this.value)">
+      <div id="buscaManualLista" class="busca-manual-lista">
+        <p class="busca-manual-dica">Digite ao menos 2 caracteres para buscar.</p>
+      </div>
+      <button class="camera-cancelar" onclick="retomarCamera()">Fechar</button>
+    </div>`;
+  if (painel) {
+    painel.innerHTML = html;
+    painel.classList.add('aberto');
+  } else {
+    const folha = document.querySelector('.camera-sheet .camera-tela');
+    if (!folha) return;
+    abrirPainelNovo(folha, html);
+  }
+  setTimeout(() => document.getElementById('buscaManualCampo')?.focus(), 120);
+}
+
+function buscarCartaManual(termo) {
+  const lista = document.getElementById('buscaManualLista');
+  if (!lista) return;
+  const texto = String(termo || '').trim();
+  if (texto.length < 2) {
+    lista.innerHTML = '<p class="busca-manual-dica">Digite ao menos 2 caracteres para buscar.</p>';
+    return;
+  }
+
+  const alvo = normalize(texto);
+  // "35/73" e "035/073" são a mesma carta: comparamos sem os zeros à esquerda.
+  const fracao = texto.match(/(\d{1,4})\s*\/\s*(\d{1,4})/);
+  const numeroSolto = /^\d{1,4}$/.test(texto) ? String(Number(texto)) : '';
+  const pool = scannerSession.setId && scannerSession.setId !== 'all'
+    ? cards.filter(card => card.setId === scannerSession.setId)
+    : cards;
+
+  const achados = pool.filter(card => {
+    const local = String(Number(String(card.localId || '').match(/\d+/)?.[0] ?? -1));
+    if (fracao) {
+      const total = String(Number(card.setTotal || card.number?.split('/')?.[1] || -1));
+      return local === String(Number(fracao[1])) && total === String(Number(fracao[2]));
+    }
+    if (numeroSolto) return local === numeroSolto;
+    return normalize(card.name).includes(alvo);
+  }).slice(0, 24);
+
+  if (!achados.length) {
+    lista.innerHTML = '<p class="busca-manual-dica">Nenhuma carta encontrada com esse termo.</p>';
+    return;
+  }
+  lista.innerHTML = achados.map(card => `<button class="busca-manual-item" onclick="escolherCartaManual('${esc(card.id)}')">
+    ${card.imageUrl ? `<img src="${esc(upgradeCardImageUrl(card.imageUrl))}" alt="" loading="lazy">` : '<span class="card-placeholder">TCG</span>'}
+    <span><strong>${esc(card.name)}</strong><small>${esc(formatCardNumber(card.localId || card.number, card.setTotal))} · ${esc(card.setName)}</small></span>
+  </button>`).join('');
+}
+
+function escolherCartaManual(cardId) {
+  // Entra pelo mesmo caminho de uma leitura da câmera: o painel de confirmação
+  // aparece com as versões daquela carta, e nada é gravado sem confirmar.
+  scannerCandidateBuffer = [{ card: cardMap.get(cardId), score: 100 }];
+  showScannerPrimaryCandidate();
+}
+
+function comoEscanear() {
+  notify('Encaixe a carta na moldura, com o nome e o número do rodapé visíveis. Evite reflexo e sombra.');
+}
+
+/* Sair da câmera sem perder o que já foi lido. */
+function encerrarLeitura() {
+  const total = totalLeituras();
+  if (total) return abrirRevisaoSessao();
+  if (scannerSession.live && window.Android?.stopLiveScanner) window.Android.stopLiveScanner();
+  scannerSession.live = false;
+  scannerSession.active = false;
+  closeModal();
 }
 
 function scannerFinishOption(value, label, description) {
@@ -3794,79 +4107,213 @@ window.receiveScannerCancelled = function receiveScannerCancelled() {
   if (scannerSession.active) showScannerMessage('A captura foi cancelada.', true);
 };
 
+/* Confirmar a leitura NÃO grava na coleção: só põe a carta na lista de
+   espera. A gravação acontece uma vez só, em `adicionarCartasDaSessao`. */
 function confirmScannedCard(cardId) {
   const card = cardMap.get(cardId);
-  if (!card) return showScannerMessage('A carta escolhida não está mais disponível no catálogo.', true);
-  if (!pokemonIdsForCard(card).length && Number(state?.entries?.[card.id]?.manualPokemonId) !== 1026) {
-    scannerDraftFinish = scannerSession.finish;
-    scannerDraftLanguage = scannerSession.language;
-    scannerDraftCondition = scannerSession.condition;
-    scannerDraftMetadata = {
-      pricingVariant: scannerSession.pricingVariant,
-      edition: scannerSession.edition, distribution: scannerSession.distribution,
-      artVariant: scannerSession.artVariant, region: scannerSession.region,
-      gradingCompany: scannerSession.gradingCompany, grade: scannerSession.grade,
-      variantTags: scannerSession.tags, manualVariationOverride: scannerSession.manualVariationOverride,
-    };
-    openCard(cardId, null);
-    notify('Confirme o Pokémon ou Energia / Ferramenta antes de concluir.');
+  if (!card) { notify('Esta carta não está mais no catálogo.'); return retomarCamera(); }
+  registrarLeitura(cardId);
+  notify(`${card.name} — ${totalLeituras()} na lista`);
+  retomarCamera();
+  telaCameraAoVivo();
+}
+
+/* ---------- Tela de revisão ----------
+   Última parada antes de a coleção ser tocada. Aqui dá para trocar o idioma
+   de todas de uma vez, mudar acabamento, condição e quantidade, remover uma
+   leitura errada e acrescentar a versão Reverse da mesma carta. */
+function abrirRevisaoSessao() {
+  const pendentes = leiturasPendentes();
+  if (!pendentes.length) return notify('Nenhuma carta lida ainda.');
+  pausarCamera();
+  const total = totalLeituras();
+
+  const linhas = pendentes.map(linha => {
+    const card = cardMap.get(linha.cardId);
+    if (!card) return '';
+    const arte = card.imageUrl ? upgradeCardImageUrl(card.imageUrl) : '';
+    const idioma = linha.language || 'pt-br';
+    const variantes = variantesParaEscolher(card, idioma, linha.pricingVariant);
+    const pills = variantes.map(value => {
+      const estilo = variantEstilo(value);
+      return `<button type="button" class="variante-pill ${estilo.classe}${value === linha.pricingVariant ? ' ativo' : ''}"
+        onclick="mudarVarianteRevisao('${esc(linha.id)}','${esc(value)}')">
+        <span class="variante-icone" aria-hidden="true">${estilo.icone}</span>${esc(friendlyVariantLabel(value))}
+      </button>`;
+    }).join('');
+    // Versões desta carta que ainda não estão na lista: viram atalho "+".
+    const faltando = variantes.filter(value => value !== linha.pricingVariant
+      && !pendentes.some(item => item.cardId === linha.cardId && item.pricingVariant === value));
+    const preco = centralPriceQuote(card.id, { ...linha, gradingCompany: 'Não graduada', variantTags: [], artVariant: 'standard', region: 'Brasil' });
+
+    return `<article class="revisao-carta">
+      <div class="revisao-arte">${arte ? `<img src="${esc(arte)}" alt="" loading="lazy">` : '<span class="card-placeholder">TCG</span>'}</div>
+      <div class="revisao-dados">
+        <div class="revisao-cabeca">
+          <strong>${esc(card.name)}</strong>
+          <button class="revisao-remover" onclick="removerLinhaRevisao('${esc(linha.id)}')" aria-label="Remover">×</button>
+        </div>
+        <span class="revisao-sub">${esc(card.setName)} · ${esc(formatCardNumber(card.localId || card.number, card.setTotal))}</span>
+        ${card.rarity ? `<span class="revisao-raridade">${esc(card.rarity)}</span>` : ''}
+        <div class="variante-pills revisao-pills">${pills}</div>
+        <div class="revisao-linha-controles">
+          <select class="revisao-campo" onchange="mudarIdiomaRevisao('${esc(linha.id)}',this.value)">
+            ${PRICE_LANGUAGES.map(value => option(value, value, idioma)).join('')}
+          </select>
+          <select class="revisao-campo" onchange="mudarCondicaoRevisao('${esc(linha.id)}',this.value)">
+            ${['Mint','Near Mint','Excelente','Bom','Regular','Danificada'].map(value => option(value, value, linha.condition)).join('')}
+          </select>
+          <div class="revisao-qtd">
+            <button onclick="mudarQuantidadeRevisao('${esc(linha.id)}',-1)" aria-label="Menos uma">−</button>
+            <b>${Number(linha.quantity) || 0}</b>
+            <button onclick="mudarQuantidadeRevisao('${esc(linha.id)}',1)" aria-label="Mais uma">+</button>
+          </div>
+        </div>
+        <span class="revisao-preco">${preco ? esc(money(preco.brl)) : 'sem preço publicado'}</span>
+        ${faltando.length ? `<div class="revisao-atalhos">${faltando.map(value => `<button onclick="acrescentarVersao('${esc(linha.cardId)}','${esc(value)}')">+ ${esc(friendlyVariantLabel(value))}</button>`).join('')}</div>` : ''}
+      </div>
+    </article>`;
+  }).join('');
+
+  showModal(`
+    <div class="revisao-tela">
+      <div class="revisao-topo">
+        <button class="camera-icone" onclick="voltarParaCamera()" aria-label="Voltar">←</button>
+        <strong>Revisar (${total})</strong>
+        <span class="revisao-contador">${pendentes.length} linha(s)</span>
+      </div>
+      <label class="revisao-global">
+        <span>Idioma de todas as cartas</span>
+        <select class="revisao-campo" onchange="aplicarIdiomaEmTodas(this.value)">
+          ${PRICE_LANGUAGES.map(value => option(value, value, pendentes[0]?.language || 'pt-br')).join('')}
+        </select>
+      </label>
+      <div class="revisao-lista">${linhas}</div>
+      <div class="revisao-acoes">
+        <button class="camera-cancelar" onclick="voltarParaCamera()">Voltar</button>
+        <button class="camera-revisar" onclick="adicionarCartasDaSessao()">Adicionar ${total} carta${total === 1 ? '' : 's'}</button>
+      </div>
+    </div>
+  `, 'revisao-sheet');
+}
+
+function linhaRevisao(linhaId) {
+  return leiturasPendentes().find(item => item.id === linhaId);
+}
+
+function mudarVarianteRevisao(linhaId, valor) {
+  const linha = linhaRevisao(linhaId);
+  if (!linha) return;
+  linha.pricingVariant = valor;
+  linha.finish = /reverse/i.test(valor) ? 'reverse' : /holo/i.test(valor) ? 'holo' : 'normal';
+  salvarSessaoLeitura();
+  abrirRevisaoSessao();
+}
+
+function mudarIdiomaRevisao(linhaId, valor) {
+  const linha = linhaRevisao(linhaId);
+  if (!linha) return;
+  linha.language = valor;
+  salvarSessaoLeitura();
+  abrirRevisaoSessao();
+}
+
+function mudarCondicaoRevisao(linhaId, valor) {
+  const linha = linhaRevisao(linhaId);
+  if (!linha) return;
+  linha.condition = valor;
+  salvarSessaoLeitura();
+}
+
+function mudarQuantidadeRevisao(linhaId, delta) {
+  mudarQuantidadeLeitura(linhaId, delta);
+  abrirRevisaoSessao();
+}
+
+function removerLinhaRevisao(linhaId) {
+  removerLeitura(linhaId);
+  if (!leiturasPendentes().length) return voltarParaCamera();
+  abrirRevisaoSessao();
+}
+
+function aplicarIdiomaEmTodas(valor) {
+  leiturasPendentes().forEach(linha => { linha.language = valor; });
+  salvarSessaoLeitura();
+  abrirRevisaoSessao();
+}
+
+function acrescentarVersao(cardId, valor) {
+  registrarLeitura(cardId, {
+    pricingVariant: valor,
+    finish: /reverse/i.test(valor) ? 'reverse' : /holo/i.test(valor) ? 'holo' : 'normal',
+  });
+  abrirRevisaoSessao();
+}
+
+function voltarParaCamera() {
+  if (scannerSession.active && scannerSession.live) {
+    telaCameraAoVivo();
+    retomarCamera();
     return;
   }
-  const entry = state.entries[cardId] || { quantity: 0, priceBrl: null, wishlist: false, variants: [] };
-  state.entries[cardId] = entry;
-  entry.variants = Array.isArray(entry.variants) ? entry.variants : [];
-  let variant = entry.variants.find(item => exactSourceEnum(item.pricingVariant) === exactSourceEnum(scannerSession.pricingVariant)
-    && finishKind(item.finish) === finishKind(scannerSession.finish)
-    && item.language === scannerSession.language && item.condition === scannerSession.condition
-    && item.edition === scannerSession.edition && item.distribution === scannerSession.distribution
-    && item.artVariant === scannerSession.artVariant && item.region === scannerSession.region
-    && item.gradingCompany === scannerSession.gradingCompany && item.grade === scannerSession.grade
-    && JSON.stringify(item.variantTags || []) === JSON.stringify(scannerSession.tags || []));
-  if (!variant) {
-    variant = defaultVariant(0, {
-      pricingVariant: scannerSession.pricingVariant,
-      finish: scannerSession.finish, language: scannerSession.language, condition: scannerSession.condition,
-      edition: scannerSession.edition, distribution: scannerSession.distribution,
-      artVariant: scannerSession.artVariant, region: scannerSession.region,
-      gradingCompany: scannerSession.gradingCompany, grade: scannerSession.grade,
-      variantTags: scannerSession.tags, manualVariationOverride: scannerSession.manualVariationOverride,
-    });
-    entry.variants.push(variant);
+  closeModal();
+}
+
+/* O único ponto do scanner que escreve na coleção. */
+function adicionarCartasDaSessao() {
+  const pendentes = leiturasPendentes().slice();
+  if (!pendentes.length) return notify('Nenhuma carta para adicionar.');
+
+  let gravadas = 0;
+  const cardIds = new Set();
+  for (const linha of pendentes) {
+    const card = cardMap.get(linha.cardId);
+    const quantidade = Math.max(0, Number(linha.quantity) || 0);
+    if (!card || !quantidade) continue;
+
+    const entry = state.entries[linha.cardId] || { quantity: 0, priceBrl: null, wishlist: false, variants: [] };
+    state.entries[linha.cardId] = entry;
+    entry.variants = Array.isArray(entry.variants) ? entry.variants : [];
+
+    let variant = entry.variants.find(item => exactSourceEnum(item.pricingVariant) === exactSourceEnum(linha.pricingVariant)
+      && finishKind(item.finish) === finishKind(linha.finish)
+      && item.language === linha.language && item.condition === linha.condition
+      && item.edition === linha.edition && item.distribution === linha.distribution
+      && item.gradingCompany === 'Não graduada' && !(item.variantTags || []).length);
+    if (!variant) {
+      variant = defaultVariant(0, {
+        pricingVariant: linha.pricingVariant, finish: linha.finish, language: linha.language,
+        condition: linha.condition, edition: linha.edition, distribution: linha.distribution,
+        artVariant: 'standard', region: 'Brasil', gradingCompany: 'Não graduada', grade: '', variantTags: [],
+      });
+      entry.variants.push(variant);
+    }
+    variant.quantity = Math.max(0, Number(variant.quantity) || 0) + quantidade;
+    variant.updatedAt = new Date().toISOString();
+    syncEntry(linha.cardId);
+    gravadas += quantidade;
+    cardIds.add(linha.cardId);
+
+    fetchVariantImage(card, variant.language).then(image => {
+      if (!image?.url) return;
+      variant.imageUrl = image.url;
+      variant.imageSource = image.source;
+      saveState();
+    }).catch(() => {});
+    fetchCardPricing(linha.cardId, true, variant)
+      .then(() => { persistAutomaticPricesForCard(linha.cardId); })
+      .catch(() => {});
   }
-  variant.quantity = Math.max(0, Number(variant.quantity) || 0) + 1;
-  variant.updatedAt = new Date().toISOString();
-  syncEntry(cardId);
+
   saveState();
-  fetchVariantImage(card, variant.language).then(image => {
-    if (!image?.url) return;
-    variant.imageUrl = image.url;
-    variant.imageSource = image.source;
-    saveState();
-  }).catch(() => {});
-  fetchCardPricing(cardId, true, variant)
-    .then(() => { persistAutomaticPricesForCard(cardId); })
-    .catch(() => {});
-  scannerSession.count++;
-  scannerSession.lastIds.unshift(cardId);
-  scannerSession.lastIds = scannerSession.lastIds.slice(0, 12);
-  showScannerMessage(`${card.name} cadastrada como ${scannerSession.pricingVariant}.`);
-  if (scannerSession.mode === 'continuous' && scannerSession.live) {
-    // A câmera ao vivo continua aberta atrás: basta fechar o aviso para
-    // voltar a enxergá-la. Reabrir criaria uma segunda câmera por cima.
-    const espera = scannerSession.speed === 'fast' ? 700 : scannerSession.speed === 'paused' ? 3000 : 1400;
-    setTimeout(() => {
-      if (scannerSession.active && scannerSession.live) closeModal();
-    }, espera);
-    return;
-  }
-  if (scannerSession.mode === 'continuous') {
-    const delay = scannerSession.speed === 'fast' ? 800 : scannerSession.speed === 'paused' ? 4000 : 2000;
-    setTimeout(() => {
-      if (!scannerSession.active || scannerSession.mode !== 'continuous') return;
-      closeModal();
-      scanNextCard();
-    }, delay);
-  }
+  scannerSession.count += gravadas;
+  descartarSessaoGuardada();
+  if (scannerSession.live && window.Android?.stopLiveScanner) window.Android.stopLiveScanner();
+  scannerSession.live = false;
+  scannerSession.active = false;
+  closeModal();
+  render();
+  notify(`${gravadas} carta(s) adicionada(s) à coleção · ${cardIds.size} carta(s) diferente(s).`);
 }
 
 function renderCardRow(card) {
