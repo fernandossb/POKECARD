@@ -1872,6 +1872,61 @@ function quantityFor(cardId) {
   return variantsFor(cardId).reduce((sum, item) => sum + Math.max(0, Math.trunc(Number(item.quantity) || 0)), 0);
 }
 
+/* =====================================================================
+   Cartas repetidas
+
+   Repetida é a MESMA carta em tudo: mesma versão, mesmo idioma, mesma
+   condição, mesma edição, mesmo carimbo, mesma graduação, mesmas marcações.
+   Um Bulbasaur normal e um Bulbasaur holo são duas cartas diferentes para
+   quem coleciona — nenhuma delas sobra.
+
+   Antes o app somava as quantidades de todas as variantes e chamava de
+   repetida qualquer carta com total acima de 1. Quem tivesse o normal e o
+   reverse via a carta na aba Duplicadas sem ter nenhuma sobrando.
+   ===================================================================== */
+function assinaturaVariante(variant) {
+  return [
+    exactSourceEnum(variant?.pricingVariant),
+    finishKind(variant?.finish),
+    variant?.language || '',
+    variant?.condition || '',
+    variant?.edition || '',
+    variant?.distribution || '',
+    variant?.artVariant || '',
+    variant?.region || '',
+    variant?.gradingCompany || '',
+    variant?.grade || '',
+    (variant?.variantTags || []).slice().sort().join(','),
+  ].join('|');
+}
+
+/**
+ * Quantas cópias existem de cada versão idêntica desta carta.
+ * Agrupa por identidade completa: duas linhas separadas com exatamente os
+ * mesmos campos contam como cópias da mesma carta, não como versões distintas.
+ */
+function copiasPorVersaoIdentica(cardId) {
+  const grupos = new Map();
+  for (const variant of variantsFor(cardId)) {
+    if (variant?.isWishlist) continue;
+    const quantidade = Math.max(0, Math.trunc(Number(variant.quantity) || 0));
+    if (!quantidade) continue;
+    const chave = assinaturaVariante(variant);
+    grupos.set(chave, (grupos.get(chave) || 0) + quantidade);
+  }
+  return [...grupos.values()];
+}
+
+/** Quantas cópias sobram, somando todas as versões desta carta. */
+function copiasRepetidas(cardId) {
+  return copiasPorVersaoIdentica(cardId).reduce((soma, q) => soma + Math.max(0, q - 1), 0);
+}
+
+/** A carta tem alguma versão com duas ou mais cópias iguais? */
+function temVersaoRepetida(cardId) {
+  return copiasPorVersaoIdentica(cardId).some(q => q > 1);
+}
+
 function pokemonIdsForCard(cardOrId) {
   const card = typeof cardOrId === 'string' ? cardMap.get(cardOrId) : cardOrId;
   if (!card) return [];
@@ -2237,7 +2292,7 @@ function collectionSummary() {
     const quantity = quantityFor(cardId);
     totalCopies += quantity;
     if (quantity > 0) uniqueOwned++;
-    if (quantity > 1) repeated += quantity - 1;
+    repeated += copiasRepetidas(cardId);
     if (entry.wishlist) wishlist++;
     if (quantity > 0) {
       const variants = variantsFor(cardId);
@@ -3306,7 +3361,7 @@ function cardsForCurrentFilter(filter) {
     const quantity = Number(entry.quantity) || 0;
     if (filter === 'owned' && quantity > 0) result.push(card);
     else if (filter === 'wishlist' && entry.wishlist) result.push(card);
-    else if (filter === 'repeated' && quantity > 1) result.push(card);
+    else if (filter === 'repeated' && temVersaoRepetida(cardId)) result.push(card);
     else if (filter === 'price-review' && cardNeedsPriceValidation(cardId)) result.push(card);
   }
   return result;
