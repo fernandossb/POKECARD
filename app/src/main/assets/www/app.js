@@ -3713,6 +3713,42 @@ function showScannerMessage(message, failed = false) {
   `);
 }
 
+/**
+ * A leitura veio mesmo de uma carta, ou é a mesa vazia?
+ *
+ * A câmera manda para o app qualquer texto que consiga ler. Apontada para uma
+ * mesa, ela lê veio da madeira, sombra e reflexo como se fossem letras. Sem
+ * esta conferência, esse ruído entrava no reconhecimento e às vezes casava com
+ * alguma carta — o app cadastrava carta sem carta nenhuma na frente.
+ *
+ * Toda carta de Pokémon traz marcas fixas: a numeração do rodapé, a linha de
+ * direitos autorais com a palavra "Pokémon", o crédito do ilustrador, o HP e
+ * as palavras de fraqueza/resistência/recuo. Ruído de mesa não produz nenhuma
+ * delas. Exigimos duas evidências para aceitar a leitura — uma só poderia ser
+ * coincidência.
+ */
+function pareceUmaCarta(ocrText) {
+  const texto = String(ocrText || '');
+  const normalizado = normalize(texto);
+  const numerico = texto.toUpperCase().replace(/O/g, '0').replace(/[IL]/g, '1');
+
+  let pontos = 0;
+  const achados = [];
+  if (/\b\d{1,4}\s*\/\s*\d{1,4}\b/.test(numerico)) { pontos += 3; achados.push('numeração'); }
+  if (/pok[eé]mon/i.test(normalizado)) { pontos += 2; achados.push('marca'); }
+  if (/\billus\b|\bilust/i.test(normalizado)) { pontos += 2; achados.push('ilustrador'); }
+  if (/\d{2,3}\s*hp\b|\bhp\s*\d{2,3}/i.test(normalizado)) { pontos += 2; achados.push('HP'); }
+  if (/fraqueza|resist[eê]ncia|recuo|weakness|resistance|retreat/i.test(normalizado)) { pontos += 2; achados.push('rodapé'); }
+  if (/nintendo|creatures|game\s*freak/i.test(normalizado)) { pontos += 2; achados.push('direitos'); }
+
+  // Texto de carta tem várias linhas com palavras de verdade; ruído não tem.
+  const linhasComPalavras = texto.split(/\r?\n/).filter(linha => (linha.match(/[A-Za-zÀ-ÿ]/g) || []).length >= 4).length;
+  if (linhasComPalavras >= 3) { pontos += 1; achados.push('linhas'); }
+  if ((normalizado.match(/[a-z]/g) || []).length >= 25) { pontos += 1; achados.push('volume'); }
+
+  return { aceita: pontos >= 2, pontos, achados };
+}
+
 function scannerCandidates(ocrText) {
   const canonical = value => normalize(value)
     .replace(/\bhisuian\b/g, 'hisui')
@@ -3765,13 +3801,21 @@ function scannerCandidates(ocrText) {
     score += Math.round(nameSimilarity * 175);
     score += Math.round(pokemonSimilarity * 70);
     score += Math.round(setSimilarity * 35);
-    if (numbers.has(localNumber)) score += 24;
+    const numberMatch = numbers.has(localNumber);
+    if (numberMatch) score += 24;
     if (fractionMatch) score += 210;
     if (numbers.has(official)) score += 8;
     if (scannerSession.setId !== 'all') score += 65;
     if (!fractionMatch && nameSimilarity < .54 && pokemonSimilarity < .68) score -= scannerSession.setId === 'all' ? 55 : 20;
-    return { card, score, nameSimilarity, pokemonSimilarity, fractionMatch };
-  }).filter(item => item.score >= 55 && (item.nameSimilarity >= .46 || item.pokemonSimilarity >= .66 || item.fractionMatch || scannerSession.setId !== 'all'))
+    return { card, score, nameSimilarity, pokemonSimilarity, fractionMatch, numberMatch };
+  }).filter(item => item.score >= 55 && (
+    item.nameSimilarity >= .46 || item.pokemonSimilarity >= .66 || item.fractionMatch
+    /* Ter uma coleção escolhida deixava passar QUALQUER carta dela, mesmo sem
+       nenhuma semelhança com o que foi lido: eram +65 de bônus e o filtro
+       aceitava só por estar no set. Bastava qualquer ruído para o app escolher
+       uma carta. Agora a coleção ajuda, mas ainda é preciso ter lido o número
+       ou algo do nome. */
+    || (scannerSession.setId !== 'all' && (item.numberMatch || item.nameSimilarity >= .42 || item.pokemonSimilarity >= .5))))
     .sort((a, b) => b.score - a.score
       || Number(b.fractionMatch) - Number(a.fractionMatch)
       || b.nameSimilarity - a.nameSimilarity
@@ -3834,6 +3878,15 @@ window.receiveScannerText = function receiveScannerText(text, finish) {
   if (!scannerSession.active) return;
   scannerSession.finish = finish || scannerSession.finish;
   scannerLastOcrText = String(text || '').trim();
+
+  /* Primeiro: isto é uma carta? A câmera lê a madeira da mesa como se fossem
+     letras, e esse ruído chegava até o reconhecimento. */
+  const conferencia = pareceUmaCarta(text);
+  if (!conferencia.aceita) {
+    if (scannerSession.live) return avisarNaCamera('Nenhuma carta na moldura');
+    return showScannerMessage('Nenhuma carta reconhecida na imagem.', true);
+  }
+
   const candidates = scannerCandidates(String(text || ''));
 
   if (!candidates.length) {
