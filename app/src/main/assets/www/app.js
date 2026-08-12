@@ -2921,6 +2921,67 @@ async function fetchCategoriasGraphQL(totalEstimado) {
   return mapa;
 }
 
+/* =====================================================================
+   Data de lançamento das coleções
+
+   A listagem de coleções do TCGdex devolve só id, nome e contagem de cartas —
+   nenhuma data. Por isso quase todas as coleções ficavam sem mês, e a ordem
+   cronológica caía no ano aproximado de uma tabela interna: dentro do mesmo
+   ano, as coleções apareciam fora de ordem.
+
+   A consulta GraphQL traz `releaseDate` completo (ano-mês-dia) de todas elas,
+   num único pedido.
+   ===================================================================== */
+async function fetchDatasDeLancamento() {
+  const mapa = new Map();
+  try {
+    const resposta = await fetch('https://api.tcgdex.net/v2/graphql', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ query: '{ sets(filters: {}, pagination: {page: 1, itemsPerPage: 1000}) { id releaseDate } }' }),
+    });
+    if (!resposta.ok) return mapa;
+    const lista = (await resposta.json())?.data?.sets;
+    if (!Array.isArray(lista)) return mapa;
+    for (const item of lista) {
+      if (item?.id && item?.releaseDate) mapa.set(item.id, item.releaseDate);
+    }
+  } catch (_) { /* sem internet: fica a ordem antiga, por ano */ }
+  return mapa;
+}
+
+/* Subconjuntos como "swsh9.5tg" (galeria de treinadores) saem junto com a
+   coleção principal e não têm data própria na fonte. Herdam a do pai. */
+function dataHerdadaDoConjuntoPai(setId, mapa) {
+  const id = String(setId || '');
+  const pai = id.replace(/(?:tg|gg)$/i, '');
+  return pai !== id ? mapa.get(pai) : null;
+}
+
+/* A consulta GraphQL cobre só o catálogo internacional. As coleções japonesas
+   têm data, mas apenas quando pedidas uma a uma. São poucas para justificar
+   deixá-las de fora da ordem cronológica — e em lotes paralelos a busca leva
+   segundos, não minutos. */
+async function completarDatasFaltantes(ids, aoProgredir) {
+  const encontradas = new Map();
+  const lote = 6;
+  for (let i = 0; i < ids.length; i += lote) {
+    const fatia = ids.slice(i, i + lote);
+    aoProgredir?.(i, ids.length);
+    await Promise.all(fatia.map(async id => {
+      for (const base of [TCGDEX_API_JAPANESE, TCGDEX_API_FALLBACK]) {
+        try {
+          const resposta = await fetch(`${base}/sets/${encodeURIComponent(id)}`);
+          if (!resposta.ok) continue;
+          const detalhe = await resposta.json();
+          if (detalhe?.releaseDate) { encontradas.set(id, detalhe.releaseDate); return; }
+        } catch (_) { /* tenta o próximo idioma */ }
+      }
+    }));
+  }
+  return encontradas;
+}
+
 async function startCatalogUpdate() {
   if (catalogUpdating) return;
   catalogUpdating = true;
@@ -2960,6 +3021,31 @@ async function startCatalogUpdate() {
       });
     }
 
+    // Data de lançamento completa, para a ordem cronológica ficar certa.
+    setCatalogUpdateProgress('Buscando as datas de lançamento das coleções...', 0, 1, true);
+    const datas = await fetchDatasDeLancamento();
+    for (const [id] of localSets) {
+      const herdada = datas.has(id) ? null : dataHerdadaDoConjuntoPai(id, datas);
+      if (herdada) datas.set(id, herdada);
+    }
+
+    // As que a consulta em lote não cobriu são buscadas uma a uma.
+    const faltantes = [...localSets.keys()].filter(id => !datas.get(id));
+    if (faltantes.length) {
+      const extras = await completarDatasFaltantes(faltantes, (feitos, total) => {
+        setCatalogUpdateProgress(`Datas de lançamento: ${feitos} de ${total} coleções restantes...`, feitos, total, true);
+      });
+      for (const [id, data] of extras) datas.set(id, data);
+    }
+
+    let comData = 0;
+    for (const [id, set] of localSets) {
+      const data = datas.get(id);
+      if (!data) continue;
+      localSets.set(id, { ...set, releaseDate: data });
+      comData += 1;
+    }
+
     // Classificação: Pokémon, Item, Apoiador, Estádio, Ferramenta, Energia.
     const categorias = await fetchCategoriasGraphQL(localCards.size);
     let classificadas = 0;
@@ -2989,6 +3075,7 @@ async function startCatalogUpdate() {
       setsTotal: localSets.size,
       cardsTotal: localCards.size,
       classificadas,
+      comData,
       failures: ptResult.failures + enResult.failures + jaResult.failures,
       enListedCards: enResult.listedCards || enResult.cards.size,
       ptListedCards: ptResult.listedCards || ptResult.cards.size,
@@ -3138,6 +3225,24 @@ function setSequence(item) {
 function setReleaseTime(item) {
   const value = Date.parse(String(item?.releaseDate || ''));
   return Number.isFinite(value) ? value : 0;
+}
+
+const MESES_CURTOS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+
+/**
+ * "mar/2023" a partir da data de lançamento.
+ *
+ * A data vem como texto puro ("2023-03-31"). Passar isso por `new Date` e
+ * formatar interpretaria como meia-noite em Londres e converteria para o fuso
+ * do Brasil, três horas atrás — datas de dia 1º voltavam para o mês anterior,
+ * e as de janeiro voltavam um ano inteiro. Aqui os pedaços são lidos direto do
+ * texto, sem passar por fuso nenhum.
+ */
+function mesAnoDoLancamento(item) {
+  const partes = String(item?.releaseDate || '').match(/^(\d{4})-(\d{2})/);
+  if (!partes) return '';
+  const mes = MESES_CURTOS[Number(partes[2]) - 1];
+  return mes ? `${mes}/${partes[1]}` : partes[1];
 }
 
 function compareSetsByTimeline(a, b) {
@@ -3297,7 +3402,7 @@ function renderSetCard(item) {
   const logo = imageCandidates[0] || '';
   const fallbacks = imageCandidates.slice(1).join('|');
   const releaseYear = setReleaseYear(item);
-  const releaseDate = item.releaseDate ? new Date(item.releaseDate).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }) : releaseYear;
+  const releaseDate = mesAnoDoLancamento(item) || releaseYear;
   return `<button class="set-card timeline-set-card ${owned ? 'owned' : 'missing'}" onclick="openSet('${esc(item.id)}')">
     ${logo
       ? `<img class="set-logo-background" src="${esc(logo)}" loading="lazy" decoding="async" alt=""${fallbacks ? ` data-fallbacks="${esc(fallbacks)}"` : ''} onerror="loadNextSetImage(this)"><span class="set-logo-fallback" hidden>◓</span>`
