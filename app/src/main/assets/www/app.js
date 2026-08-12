@@ -2164,6 +2164,7 @@ function saveCardVariant(cardId, variantId) {
   entry.wishlist = entry.variants.some(item => item.isWishlist);
   syncEntry(cardId);
   saveState();
+  conferirColecaoCompleta();
   if (scannerDraftFinish && scannerSession.active) {
     const scannedFinish = scannerDraftFinish;
     scannerDraftFinish = '';
@@ -2901,7 +2902,7 @@ async function fetchCategoriasGraphQL(totalEstimado) {
     setCatalogUpdateProgress(`Classificando cartas (Item, Apoiador, Energia...): página ${pagina}`,
       mapa.size, Math.max(totalEstimado, mapa.size + 1), true);
     const corpo = JSON.stringify({
-      query: `{ cards(filters: {}, pagination: {page: ${pagina}, itemsPerPage: ${porPagina}}) { id category trainerType energyType } }`,
+      query: `{ cards(filters: {}, pagination: {page: ${pagina}, itemsPerPage: ${porPagina}}) { id category trainerType energyType rarity } }`,
     });
     let lote;
     try {
@@ -2914,7 +2915,7 @@ async function fetchCategoriasGraphQL(totalEstimado) {
     } catch (_) { break; }
     if (!Array.isArray(lote) || !lote.length) break;
     for (const item of lote) {
-      if (item?.id) mapa.set(item.id, { category: item.category || '', trainerType: item.trainerType || '', energyType: item.energyType || '' });
+      if (item?.id) mapa.set(item.id, { category: item.category || '', trainerType: item.trainerType || '', energyType: item.energyType || '', rarity: item.rarity || '' });
     }
     if (lote.length < porPagina) break;
   }
@@ -3052,7 +3053,10 @@ async function startCatalogUpdate() {
     for (const [id, dados] of categorias) {
       const card = localCards.get(id);
       if (!card || !dados.category) continue;
-      localCards.set(id, { ...card, category: dados.category, trainerType: dados.trainerType, energyType: dados.energyType });
+      // "None" é como a fonte diz "esta carta não tem raridade" — não é uma
+      // raridade chamada None, e guardá-la assim confundiria a tela.
+      const raridade = dados.rarity && dados.rarity !== 'None' ? dados.rarity : (card.rarity || null);
+      localCards.set(id, { ...card, category: dados.category, trainerType: dados.trainerType, energyType: dados.energyType, rarity: raridade });
       classificadas += 1;
     }
 
@@ -3409,7 +3413,12 @@ function renderSetCard(item) {
       : '<span class="set-logo-fallback">◓</span>'}
     <span class="set-card-content">
       <span class="set-base-row"><small>BASE ${item.ownedUnique}/${total}</small><b>${item.progress}%</b></span>
-      <span class="progress"><span style="width:${item.progress}%"></span></span>
+      <!-- A Pokébola enche junto com a barra: a barra continua ali, dando a
+           leitura exata, e a bola dá a leitura de relance. -->
+      <span class="progresso-linha">
+        <span class="pokebola-progresso${item.progress >= 100 ? ' cheia' : ''}" aria-hidden="true"><i style="height:${item.progress}%"></i></span>
+        <span class="progress"><span style="width:${item.progress}%"></span></span>
+      </span>
       <span class="set-name">${esc(item.name)}</span>
       <span class="set-card-meta"><small>${total} cartas</small><small>${esc(releaseDate)}</small></span>
     </span>
@@ -4740,6 +4749,7 @@ function adicionarCartasDaSessao() {
   }
 
   saveState();
+  conferirColecaoCompleta();
   scannerSession.count += gravadas;
   descartarSessaoGuardada();
   sairDaCamera();
@@ -4747,6 +4757,92 @@ function adicionarCartasDaSessao() {
   closeModal();
   render();
   notify(`${gravadas} carta(s) adicionada(s) à coleção · ${cardIds.size} carta(s) diferente(s).`);
+}
+
+/* =====================================================================
+   Comemoração
+
+   Fechar uma coleção ou destravar um troféu é o momento que o app inteiro
+   existe para produzir, e até agora passava em branco. As faíscas duram menos
+   de dois segundos e somem sozinhas; nada fica na tela atrapalhando.
+   ===================================================================== */
+function comemorar(mensagem, detalhe = '') {
+  const antigo = document.getElementById('comemoracao');
+  if (antigo) antigo.remove();
+
+  const faiscas = Array.from({ length: 14 }, (_, i) => {
+    const esquerda = 6 + Math.round(Math.random() * 88);
+    const atraso = Math.round(Math.random() * 420);
+    const giro = Math.round(Math.random() * 360);
+    return `<i style="left:${esquerda}%;animation-delay:${atraso}ms;transform:rotate(${giro}deg)"></i>`;
+  }).join('');
+
+  const caixa = document.createElement('div');
+  caixa.id = 'comemoracao';
+  caixa.className = 'comemoracao';
+  caixa.setAttribute('role', 'status');
+  caixa.innerHTML = `<div class="comemoracao-faiscas" aria-hidden="true">${faiscas}</div>
+    <div class="comemoracao-aviso">
+      <strong>${esc(mensagem)}</strong>
+      ${detalhe ? `<span>${esc(detalhe)}</span>` : ''}
+    </div>`;
+  document.body.appendChild(caixa);
+  setTimeout(() => { caixa.classList.add('saindo'); }, 2200);
+  setTimeout(() => { caixa.remove(); }, 2900);
+}
+
+/* Guarda quais coleções já estavam completas, para comemorar só quando uma
+   nova fecha — e não toda vez que a tela é desenhada. */
+const COLECOES_COMPLETAS_KEY = 'pokecard-colecoes-completas-v1';
+
+function conferirColecaoCompleta() {
+  let conhecidas = [];
+  try { conhecidas = JSON.parse(localStorage.getItem(COLECOES_COMPLETAS_KEY) || '[]') || []; } catch (_) {}
+  const antes = new Set(conhecidas);
+  const completas = buildSetStats().filter(item => {
+    const total = item.officialCardCount || item.totalCardCount || 0;
+    return total > 0 && item.ownedUnique >= total;
+  });
+  const novas = completas.filter(item => !antes.has(item.id));
+  try { localStorage.setItem(COLECOES_COMPLETAS_KEY, JSON.stringify(completas.map(item => item.id))); } catch (_) {}
+  if (novas.length) {
+    comemorar(`Coleção completa: ${novas[0].name}`, novas.length > 1 ? `e mais ${novas.length - 1}` : 'Todas as cartas cadastradas');
+  }
+}
+
+/* =====================================================================
+   Decoração das cartas
+
+   Tudo aqui sai de dado que o app já tem: o tipo do Pokémon ligado à carta,
+   o acabamento da versão cadastrada e a raridade do catálogo. Nenhuma consulta
+   nova, nenhum arquivo novo — só marcas no HTML para o CSS pintar.
+   ===================================================================== */
+function tipoPrincipalDaCarta(card) {
+  for (const id of pokemonIdsForCard(card)) {
+    const tipo = pokemonMap.get(Number(id))?.types?.[0];
+    if (tipo) return normalize(tipo).replace(/\s+/g, '-');
+  }
+  // Carta sem Pokémon: a categoria vira a cor (treinador, energia).
+  const categoria = categoriaDaCarta(card);
+  return categoria ? categoria.classe : '';
+}
+
+/** Holo e reverse ganham reflexo; carta comum não. */
+function brilhoDaVariante(variant) {
+  const valor = `${variant?.pricingVariant || ''} ${variant?.finish || ''}`;
+  if (/reverse/i.test(valor)) return 'reverse';
+  if (/holo/i.test(valor)) return 'holo';
+  return '';
+}
+
+/** Selo só para o que é realmente raro — senão perde a graça. */
+function seloDeRaridade(card) {
+  const raridade = normalize(card?.rarity || '');
+  if (!raridade || raridade === 'none') return '';
+  if (/secret|rainbow|arco|hyper|crown|coroa/.test(raridade)) return 'secreta';
+  if (/promo/.test(raridade)) return 'promo';
+  if (/ultra|illustration|ilustra|especial|special|amazing|radiant|shiny|brilhante|double rare|dupla/.test(raridade)) return 'ultra';
+  return '';
 }
 
 function renderCardRow(card) {
@@ -4757,8 +4853,13 @@ function renderCardRow(card) {
   const displayImage = variantDisplayImage(card, displayVariant);
   const priceBadge = priceBadgeForCard(card.id);
   const finishLabel = displayVariant ? finishPriceLabel(finishKind(displayVariant.finish)) : '';
-  return `<article class="card-row vision-card-tile ${quantity > 0 ? '' : 'missing'}" data-card-id="${esc(card.id)}" onclick="openCard('${esc(card.id)}')">
-    <div class="vision-card-art">
+  // Marcas para a decoração: tipo pinta a moldura e o símbolo de fundo,
+  // acabamento liga o brilho holográfico, raridade liga o selo.
+  const tipo = tipoPrincipalDaCarta(card);
+  const brilho = brilhoDaVariante(displayVariant);
+  const selo = seloDeRaridade(card);
+  return `<article class="card-row vision-card-tile ${quantity > 0 ? '' : 'missing'}" data-card-id="${esc(card.id)}"${tipo ? ` data-tipo="${esc(tipo)}"` : ''}${selo ? ` data-raridade="${esc(selo)}"` : ''} onclick="openCard('${esc(card.id)}')">
+    <div class="vision-card-art${brilho ? ` brilho-${brilho}` : ''}">
       ${displayImage ? `<img class="card-thumb" src="${esc(displayImage)}" loading="lazy" decoding="async" fetchpriority="low" onerror="this.outerHTML='<div class=&quot;card-placeholder&quot;>TCG</div>'">` : '<div class="card-placeholder">TCG</div>'}
       ${finishLabel ? `<span class="tile-finish-badge">${esc(finishLabel)}</span>` : ''}
       ${quantity ? `<span class="tile-quantity-badge">x${quantity}</span>` : ''}

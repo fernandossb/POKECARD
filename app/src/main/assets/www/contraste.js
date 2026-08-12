@@ -233,7 +233,12 @@
        desnecessária, a cor voltava a ser ilegível e na varredura seguinte tudo
        se repetia. Em telas que se redesenham várias vezes — como o cadastro da
        carta, que recarrega preço e imagem — isso aparecia como texto piscando. */
-    var corTexto = parseCor(el.getAttribute(COR_BASE) || cs.color);
+    /* A cor que o olho vê pode não ser `color`. Quando existe
+       `-webkit-text-fill-color`, é ELA que pinta a letra — e o CSS deste app
+       usa isso em dezenas de regras, justamente nas listas de cartas. Mexer só
+       em `color` não mudava nada na tela: a correção era aplicada, a medição
+       dizia que tinha funcionado, e o texto continuava ilegível. */
+    var corTexto = parseCor(el.getAttribute(COR_BASE) || cs.webkitTextFillColor || cs.color);
     if (!corTexto) return null;
 
     // O fundo onde a letra encosta: se a caixa tem cor própria (campo, botão,
@@ -253,7 +258,7 @@
     // Já está exatamente nesta cor: nada a escrever, e a varredura seguinte
     // também não vai encontrar trabalho — o estado estabiliza.
     if (el.getAttribute(MARCA) === nova) return null;
-    return { el: el, cor: nova, base: el.getAttribute(COR_BASE) || cs.color };
+    return { el: el, cor: nova, base: el.getAttribute(COR_BASE) || cs.webkitTextFillColor || cs.color };
   }
 
   // FASE 2 — só escrita, depois de todas as medições terem sido feitas.
@@ -264,6 +269,9 @@
     // não há nada a mudar em vez de reescrever o mesmo valor.
     if (!el.hasAttribute(COR_BASE)) el.setAttribute(COR_BASE, tarefa.base);
     el.style.setProperty('color', tarefa.cor, 'important');
+    // As duas juntas: `-webkit-text-fill-color` vence `color` quando existe, e
+    // sem ela a correção não aparecia nas listas de cartas.
+    el.style.setProperty('-webkit-text-fill-color', tarefa.cor, 'important');
     el.setAttribute(MARCA, tarefa.cor);
     // O texto de dica dos campos acompanha a cor corrigida do campo.
     var tag = el.tagName;
@@ -272,6 +280,7 @@
 
   function desfazer(el) {
     el.style.removeProperty('color');
+    el.style.removeProperty('-webkit-text-fill-color');
     el.style.removeProperty('--ph-cor');
     el.removeAttribute(MARCA);
     el.removeAttribute(COR_BASE);

@@ -3579,3 +3579,172 @@ html.camera-ao-vivo .modal { background: transparent !important; }
 
 /* v5.11.1 - acoes no topo da camera */
 .camera-topo-acoes { display: flex; gap: 8px; align-items: center; }
+
+/* ============================================================
+   v5.13 — Decorações
+
+   Regra que vale para todas: nada aqui pode atrapalhar a leitura.
+   Brilho e símbolos ficam ATRÁS do texto e com opacidade baixa; as
+   molduras são bordas, não fundos. O corretor de contraste continua
+   mandando na cor da letra.
+   ============================================================ */
+
+/* ---- 1. Brilho holográfico ----
+   Um reflexo atravessa a arte devagar, como girar a carta na luz.
+   Só nas versões holo e reverse — carta comum não brilha, senão a
+   distinção que dá graça se perde. */
+.vision-card-art.brilho-holo,
+.vision-card-art.brilho-reverse { position: relative; overflow: hidden; }
+
+.vision-card-art.brilho-holo::after,
+.vision-card-art.brilho-reverse::after {
+  content: ''; position: absolute; inset: -40%;
+  pointer-events: none; mix-blend-mode: screen;
+  animation: brilho-passa 4.5s ease-in-out infinite;
+}
+.vision-card-art.brilho-holo::after {
+  background: linear-gradient(115deg,
+    transparent 38%, rgba(255,214,120,.5) 46%, rgba(255,140,190,.55) 52%,
+    rgba(150,220,255,.5) 58%, transparent 66%);
+}
+.vision-card-art.brilho-reverse::after {
+  background: linear-gradient(115deg,
+    transparent 38%, rgba(140,200,255,.5) 47%, rgba(200,170,255,.55) 53%,
+    transparent 63%);
+  animation-duration: 5.6s;
+}
+@keyframes brilho-passa {
+  0%, 12% { transform: translateX(-58%); }
+  55%, 100% { transform: translateX(58%); }
+}
+
+/* ---- 2. Moldura por tipo ----
+   Borda na cor do tipo do Pokémon. Fina de propósito: marca a carta
+   sem virar um quadro colorido. */
+/* `!important` porque as camadas antigas do CSS já fixam a borda das cartas
+   com prioridade; sem isto a moldura fica na cor cinza padrão. */
+.card-row[data-tipo] { border-left: 3px solid var(--cor-tipo, var(--vision-line)) !important; }
+.card-row[data-tipo] .vision-card-art { box-shadow: inset 0 0 0 1.5px var(--cor-tipo, transparent); }
+/* Carta que é Pokémon mas não tem vínculo: cor neutra, sem inventar tipo. */
+.card-row[data-tipo="pokemon"] { --cor-tipo: #7fb2d9; }
+
+.card-row[data-tipo="fogo"]      { --cor-tipo: #ef6a3c; }
+.card-row[data-tipo="agua"]      { --cor-tipo: #4aa3e8; }
+.card-row[data-tipo="planta"]    { --cor-tipo: #58c46a; }
+.card-row[data-tipo="eletrico"]  { --cor-tipo: #f2c53d; }
+.card-row[data-tipo="psiquico"]  { --cor-tipo: #f2749c; }
+.card-row[data-tipo="lutador"]   { --cor-tipo: #e0704f; }
+.card-row[data-tipo="sombrio"]   { --cor-tipo: #9b8874; }
+.card-row[data-tipo="metalico"]  { --cor-tipo: #a9bfcc; }
+.card-row[data-tipo="fada"]      { --cor-tipo: #f28fce; }
+.card-row[data-tipo="dragao"]    { --cor-tipo: #8f79f0; }
+.card-row[data-tipo="fantasma"]  { --cor-tipo: #a864de; }
+.card-row[data-tipo="venenoso"]  { --cor-tipo: #c66ae0; }
+.card-row[data-tipo="terrestre"] { --cor-tipo: #dfae4e; }
+.card-row[data-tipo="voador"]    { --cor-tipo: #92b2f2; }
+.card-row[data-tipo="inseto"]    { --cor-tipo: #a8cc3a; }
+.card-row[data-tipo="pedra"]     { --cor-tipo: #c5a765; }
+.card-row[data-tipo="gelo"]      { --cor-tipo: #62cfe0; }
+.card-row[data-tipo="normal"]    { --cor-tipo: #c3ba9e; }
+.card-row[data-tipo="treinador"] { --cor-tipo: #ffa84c; }
+.card-row[data-tipo="energia"]   { --cor-tipo: #ffd640; }
+
+/* ---- 3. Símbolo de energia ao fundo ----
+   Bem apagado, atrás do texto e recortado pela caixa da carta. */
+.card-row[data-tipo] { position: relative; overflow: hidden; }
+.card-row[data-tipo]::before {
+  content: ''; position: absolute; right: -14px; top: 50%;
+  width: 74px; height: 74px; transform: translateY(-50%);
+  background: var(--cor-tipo, transparent);
+  opacity: .07; border-radius: 50%;
+  pointer-events: none; z-index: 0;
+}
+.card-row > * { position: relative; z-index: 1; }
+
+/* ---- 5. Selo de raridade ----
+   Só nas cartas que merecem destaque. Fita no canto da arte. */
+.card-row[data-raridade] .vision-card-art { position: relative; }
+.card-row[data-raridade] .vision-card-art::before {
+  content: ''; position: absolute; top: 0; right: 0; z-index: 2;
+  width: 0; height: 0; border-style: solid;
+  border-width: 0 20px 20px 0;
+  border-color: transparent var(--cor-selo, #fff) transparent transparent;
+}
+.card-row[data-raridade="secreta"] .vision-card-art::before { --cor-selo: #ff5fa2; }
+.card-row[data-raridade="ultra"]   .vision-card-art::before { --cor-selo: #ffc43d; }
+.card-row[data-raridade="promo"]   .vision-card-art::before { --cor-selo: #55c9ff; }
+
+/* Secret rare ganha borda arco-íris, que é a cara dela na vida real. */
+.card-row[data-raridade="secreta"] .vision-card-art {
+  box-shadow: inset 0 0 0 2px transparent;
+  background-image: linear-gradient(135deg, #ff5fa2, #ffc43d, #58c46a, #55c9ff, #a86ade);
+  padding: 2px;
+}
+
+/* ---- 6. Progresso em Pokébola ---- */
+.progresso-linha { display: flex; align-items: center; gap: 8px; }
+.progresso-linha .progress { flex: 1; }
+.pokebola-progresso {
+  position: relative; flex: 0 0 auto;
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 1.5px solid currentColor; overflow: hidden;
+  background: transparent;
+}
+.pokebola-progresso i {
+  position: absolute; left: 0; right: 0; bottom: 0; display: block;
+  background: currentColor; opacity: .55;
+  transition: height .35s ease-out;
+}
+.pokebola-progresso::after {
+  content: ''; position: absolute; left: 0; right: 0; top: 50%;
+  height: 1.5px; margin-top: -.75px; background: currentColor;
+}
+.pokebola-progresso.cheia { color: #ffd640; }
+.pokebola-progresso.cheia i { opacity: 1; }
+
+/* ---- 4. Comemoração ---- */
+.comemoracao {
+  position: fixed; inset: 0; z-index: 9999;
+  pointer-events: none; display: grid; place-items: center;
+  transition: opacity .55s ease-out;
+}
+.comemoracao.saindo { opacity: 0; }
+
+.comemoracao-faiscas { position: absolute; inset: 0; overflow: hidden; }
+.comemoracao-faiscas i {
+  position: absolute; top: -18px; width: 9px; height: 9px; border-radius: 2px;
+  background: #ffd640;
+  animation: faisca-cai 1.9s cubic-bezier(.25,.6,.4,1) forwards;
+}
+.comemoracao-faiscas i:nth-child(3n)   { background: #ff5fa2; }
+.comemoracao-faiscas i:nth-child(3n+1) { background: #55c9ff; }
+.comemoracao-faiscas i:nth-child(5n)   { border-radius: 50%; }
+@keyframes faisca-cai {
+  0%   { opacity: 0; transform: translateY(0) rotate(0deg); }
+  12%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(78vh) rotate(420deg); }
+}
+
+.comemoracao-aviso {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 16px 26px; border-radius: 16px; text-align: center;
+  background: rgba(12, 22, 20, .92); color: #fff;
+  border: 1px solid rgba(255, 214, 64, .55);
+  animation: aviso-entra .4s cubic-bezier(.2,.8,.3,1.2);
+}
+.comemoracao-aviso strong { font-size: 16px; }
+.comemoracao-aviso span { font-size: 12px; opacity: .8; }
+@keyframes aviso-entra {
+  from { opacity: 0; transform: scale(.86); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* Quem prefere menos movimento não vê nada disso se mexer. */
+@media (prefers-reduced-motion: reduce) {
+  .vision-card-art.brilho-holo::after,
+  .vision-card-art.brilho-reverse::after,
+  .comemoracao-faiscas i,
+  .comemoracao-aviso { animation: none; }
+  .vision-card-art.brilho-holo::after,
+  .vision-card-art.brilho-reverse::after { opacity: .25; }
+}
