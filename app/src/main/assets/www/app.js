@@ -2230,7 +2230,7 @@ function renderTabs() {
     <button class="tab ${ui.tab === value ? 'active' : ''}" onclick="setTab('${value}')" aria-label="${label}">
       <span class="tab-icon">${tabIcon(icon)}</span><span class="tab-label">${label}</span>
     </button>`).join('') + `
-    <button class="tab ${['pokedex','wishlist','repeated'].includes(ui.tab) ? 'active' : ''}" onclick="openMoreNavigation()" aria-label="Mais opções">
+    <button class="tab ${['pokedex','wishlist','repeated','produtos'].includes(ui.tab) ? 'active' : ''}" onclick="openMoreNavigation()" aria-label="Mais opções">
       <span class="tab-icon">${tabIcon('decks')}</span><span class="tab-label">Mais</span>
     </button>`;
 }
@@ -2243,6 +2243,7 @@ function openMoreNavigation() {
       <button onclick="closeModal();setTab('decks')"><span class="quick-action-icon">${tabIcon('decks')}</span><span><strong>Decks</strong><small>Monte e organize seus decks</small></span></button>
       <button onclick="closeModal();setTab('wishlist')"><span class="quick-action-icon">${tabIcon('wishlist')}</span><span><strong>Wishlist</strong><small>Cartas que você procura</small></span></button>
       <button onclick="closeModal();setTab('repeated')"><span class="quick-action-icon">${tabIcon('repeated')}</span><span><strong>Repetidas</strong><small>Estoque para troca ou venda</small></span></button>
+      <button onclick="closeModal();setTab('produtos')"><span class="quick-action-icon">${tabIcon('collections')}</span><span><strong>Produtos prontos</strong><small>Baralhos de batalha, kits e caixas</small></span></button>
       <button onclick="closeModal();abrirTrofeus()"><span class="quick-action-icon">🏆</span><span><strong>Troféus</strong><small>${(() => { const r = typeof resumoTrofeus === 'function' ? resumoTrofeus() : null; return r ? `${r.conquistadas} de ${r.total} medalhas conquistadas` : 'Medalhas por coleção, tipo e região'; })()}</small></span></button>
       <button onclick="closeModal();abrirTemaPokemon()"><span class="quick-action-icon">${tabIcon('pokedex')}</span><span><strong>Tema do aplicativo</strong><small>${esc(window.__TEMA_ATUAL__?.nome || 'Gengar')} · deixe o app com a cara do seu favorito</small></span></button>
       <button onclick="closeModal();openBackupPanel()"><span class="quick-action-icon">${tabIcon('collections')}</span><span><strong>Backup e ajustes</strong><small>Proteja e configure seus dados</small></span></button>
@@ -2271,6 +2272,7 @@ function render() {
   else if (ui.tab === 'sets') content.innerHTML = renderSets();
   else if (ui.tab === 'pokedex') content.innerHTML = renderPokedex();
   else if (ui.tab === 'decks') content.innerHTML = renderDecks();
+  else if (ui.tab === 'produtos') content.innerHTML = renderProdutos();
   else content.innerHTML = renderCards();
   labRecord('render_completo', performance.now() - labStart, { tab: ui.tab, htmlLength: content.innerHTML.length });
 }
@@ -3397,6 +3399,362 @@ function resumoCatalogo() {
     ? `atualizado em ${formatCatalogUpdateDate(catalogUpdateMeta.updatedAt)}`
     : 'nunca atualizado pela internet';
   return `${cards.length.toLocaleString('pt-BR')} cartas · ${catalog.sets.length} coleções · ${quando}`;
+}
+
+/* =====================================================================
+   Produtos prontos — baralhos de batalha, kits e caixas
+
+   O TCGdex e o pokemontcg.io publicam 218 e 174 coleções, e nenhuma das
+   duas traz os Battle Decks: para elas, baralho pronto é produto lacrado,
+   não coleção. Conferido também que não existe nada de Eevee.
+
+   Então o app trabalha com duas origens:
+   · os 21 kits que a fonte JÁ publica como coleção (Trainer Kits, Kalos
+     Starter Set) — aparecem sozinhos, sem trabalho manual;
+   · os que faltam, montados aqui uma vez e guardados no aparelho.
+
+   Os dois aparecem juntos e são acompanhados igual: quantas cartas do
+   produto você já tem.
+   ===================================================================== */
+function produtosDaFonte() {
+  return (catalog.sets || []).filter(set => {
+    const id = String(set.id || '');
+    const nome = normalize(set.name || '');
+    return /^tk[-_]/i.test(id) || id === 'xy0'
+      || /trainer kit|starter set|battle deck|baralho de batalha/.test(nome);
+  });
+}
+
+function produtosProprios() {
+  if (!Array.isArray(state.produtos)) state.produtos = [];
+  return state.produtos;
+}
+
+/** Progresso de um produto próprio: quantas das cartas dele você tem. */
+function progressoDoProduto(produto) {
+  const ids = Object.keys(produto?.cartas || {});
+  if (!ids.length) return { tenho: 0, total: 0, porcento: 0 };
+  const tenho = ids.filter(id => quantityFor(id) > 0).length;
+  return { tenho, total: ids.length, porcento: Math.round((tenho / ids.length) * 100) };
+}
+
+function renderProdutos() {
+  const daFonte = produtosDaFonte().sort(compareSetsByTimeline);
+  const meus = produtosProprios();
+  const stats = new Map(buildSetStats().map(item => [item.id, item]));
+
+  const cartaoProprio = produto => {
+    const p = progressoDoProduto(produto);
+    return `<button class="set-card timeline-set-card ${p.tenho ? 'owned' : 'missing'}${p.total && p.tenho >= p.total ? ' completa' : ''}" onclick="abrirProduto('${esc(produto.id)}')">
+      <span class="set-logo-fallback">◧</span>
+      <span class="set-card-content">
+        <span class="set-base-row"><small>MEU · ${p.tenho}/${p.total}</small><b>${p.porcento}%</b></span>
+        <span class="progresso-linha">
+          <span class="pokebola-progresso${p.porcento >= 100 ? ' cheia' : ''}" aria-hidden="true"><i style="height:${p.porcento}%"></i></span>
+          <span class="progress"><span style="width:${p.porcento}%"></span></span>
+        </span>
+        <span class="set-name">${esc(produto.nome)}</span>
+        <span class="set-card-meta"><small>${p.total} cartas</small><small>${esc(produto.ano || 'sem ano')}</small></span>
+      </span>
+    </button>`;
+  };
+
+  return `
+    <section class="screen">
+      <div class="vision-screen-head"><h2>Produtos prontos</h2><button onclick="novoProduto()">+ Criar</button></div>
+      <p class="screen-subtitle">Baralhos de batalha, kits e caixas. Os que a fonte publica aparecem sozinhos; os demais você monta uma vez.</p>
+
+      <h3 class="section-title">Meus produtos</h3>
+      ${meus.length
+        ? `<div class="set-timeline">${meus.map(cartaoProprio).join('')}</div>`
+        : `<div class="empty catalogo-vazio">
+             <strong>Nenhum produto montado ainda</strong>
+             <span>Baralhos de batalha não vêm prontos de nenhuma fonte pública — nem o da Eevee de 2022. Monte o seu uma vez e o app acompanha o progresso como faz com as coleções.</span>
+             <button class="primary-btn" onclick="novoProduto()">Criar meu primeiro produto</button>
+           </div>`}
+
+      ${secaoLacrados()}
+
+      <h3 class="section-title">Kits publicados pela fonte</h3>
+      <p class="screen-subtitle">${daFonte.length} produtos que o catálogo já traz completos.</p>
+      <div class="set-timeline">${daFonte.map(set => renderSetCard(stats.get(set.id) || { ...set, ownedUnique: 0, progress: 0 })).join('')}</div>
+    </section>`;
+}
+
+function secaoLacrados() {
+  const lista = lacrados();
+  const r = resumoLacrados();
+  const lucro = r.valor - r.pago;
+
+  return `
+    <div class="secao-lacrados-topo">
+      <h3 class="section-title">Lacrados</h3>
+      <button class="mini-btn" onclick="novoLacrado()">+ Adicionar</button>
+    </div>
+    ${lista.length ? `
+      <div class="lacrados-resumo">
+        <span><small>Unidades</small><b>${r.unidades}</b></span>
+        <span><small>Pago</small><b>${esc(money(r.pago))}</b></span>
+        <span><small>Vale hoje</small><b>${esc(money(r.valor))}</b></span>
+        ${r.pago && r.valor ? `<span><small>Diferença</small><b class="${lucro >= 0 ? 'sobe' : 'desce'}">${lucro >= 0 ? '+' : ''}${esc(money(lucro))}</b></span>` : ''}
+      </div>
+      <div class="lacrados-lista">${lista.map(cartaoLacrado).join('')}</div>`
+      : `<div class="empty catalogo-vazio">
+           <strong>Nenhum lacrado cadastrado</strong>
+           <span>Caixas, latas e blisters fechados. Como o conteúdo é sorteado, aqui não há progresso de cartas — o app acompanha quantidade e valor.</span>
+           <button class="primary-btn" onclick="novoLacrado()">Adicionar lacrado</button>
+         </div>`}`;
+}
+
+/* =====================================================================
+   Produtos lacrados
+
+   Lacrado é diferente de baralho pronto: uma caixa de booster não tem
+   lista de cartas — o conteúdo é sorteado. Não existe "progresso" nem
+   "completar" aqui, e fingir que existe seria mentir.
+
+   O que faz sentido acompanhar é inventário: o que você tem, quantas
+   unidades, quanto pagou e quanto vale hoje. Nenhuma fonte pública
+   publica preço de lacrado de graça — o TCGdex e o pokemontcg.io só
+   trazem cartas —, então o valor é informado por você. O app faz a
+   conta e o acompanhamento; o número de mercado é seu.
+   ===================================================================== */
+const TIPOS_LACRADO = [
+  'Caixa de booster',
+  'Elite Trainer Box',
+  'Blister',
+  'Lata',
+  'Caixa de coleção',
+  'Baralho lacrado',
+  'Pacote avulso',
+  'Outro',
+];
+
+function lacrados() {
+  if (!Array.isArray(state.lacrados)) state.lacrados = [];
+  return state.lacrados;
+}
+
+function resumoLacrados() {
+  return lacrados().reduce((soma, item) => {
+    const unidades = Math.max(0, Number(item.quantidade) || 0);
+    soma.unidades += unidades;
+    soma.pago += (Number(item.precoPago) || 0) * unidades;
+    soma.valor += (Number(item.valorAtual) || 0) * unidades;
+    return soma;
+  }, { unidades: 0, pago: 0, valor: 0 });
+}
+
+function cartaoLacrado(item) {
+  const unidades = Math.max(0, Number(item.quantidade) || 0);
+  const valor = (Number(item.valorAtual) || 0) * unidades;
+  const pago = (Number(item.precoPago) || 0) * unidades;
+  const lucro = valor - pago;
+  const set = item.setId ? catalog.sets.find(s => s.id === item.setId) : null;
+  return `<button class="lacrado-card" onclick="editarLacrado('${esc(item.id)}')">
+    <span class="lacrado-tipo">${esc(item.tipo || 'Outro')}</span>
+    <span class="lacrado-nome">${esc(item.nome)}</span>
+    <span class="lacrado-meta">${set ? esc(set.name) : 'sem coleção'}${item.comprado ? ` · ${esc(item.comprado)}` : ''}</span>
+    <span class="lacrado-numeros">
+      <b>${unidades}x</b>
+      <em>${valor ? esc(money(valor)) : 'sem valor'}</em>
+      ${pago && valor ? `<i class="${lucro >= 0 ? 'sobe' : 'desce'}">${lucro >= 0 ? '+' : ''}${esc(money(lucro))}</i>` : ''}
+    </span>
+  </button>`;
+}
+
+function formularioLacrado(item) {
+  const ehNovo = !item;
+  const dados = item || { tipo: TIPOS_LACRADO[0], nome: '', setId: '', quantidade: 1, precoPago: '', valorAtual: '', comprado: '', notas: '' };
+  return `
+    <button class="modal-close" onclick="closeModal()" aria-label="Fechar">×</button>
+    <h2>${ehNovo ? 'Novo produto lacrado' : 'Editar lacrado'}</h2>
+    <p class="screen-subtitle">Caixas, latas e blisters fechados. O conteúdo é sorteado, então aqui não há progresso de cartas — o que se acompanha é quantidade e valor.</p>
+    <div class="registration-grid two-columns">
+      ${registrationField('Tipo', `<select id="lacTipo" class="field">${TIPOS_LACRADO.map(t => option(t, t, dados.tipo)).join('')}</select>`)}
+      ${registrationField('Quantidade', `<input id="lacQtd" class="field" type="number" inputmode="numeric" min="0" step="1" value="${Math.max(0, Number(dados.quantidade) || 0)}">`)}
+      ${registrationField('Nome do produto', `<input id="lacNome" class="field" placeholder="Ex.: Caixa de booster Ilha Mítica" value="${esc(dados.nome)}">`, 'span-2')}
+      ${registrationField('Coleção (opcional)', `<select id="lacSet" class="field"><option value="">Nenhuma</option>${catalog.sets.slice().sort(compareSetsByTimeline).map(s => option(s.id, s.name, dados.setId)).join('')}</select>`, 'span-2')}
+      ${registrationField('Preço pago (por unidade)', `<input id="lacPago" class="field" inputmode="decimal" placeholder="0,00" value="${esc(dados.precoPago)}">`)}
+      ${registrationField('Valor hoje (por unidade)', `<input id="lacValor" class="field" inputmode="decimal" placeholder="0,00" value="${esc(dados.valorAtual)}">`)}
+      ${registrationField('Comprado em', `<input id="lacComprado" class="field" placeholder="Ex.: mar/2024" value="${esc(dados.comprado)}">`)}
+      ${registrationField('Observações', `<input id="lacNotas" class="field" placeholder="Onde comprou, estado da caixa..." value="${esc(dados.notas)}">`, 'span-2')}
+    </div>
+    <small class="screen-subtitle">Nenhuma fonte pública publica preço de lacrado sem custo — o valor aqui é o que você informar.</small>
+    <div class="modal-actions">
+      <button class="primary-btn" onclick="salvarLacrado('${esc(item?.id || '')}')">Salvar</button>
+      ${ehNovo ? '' : `<button class="danger-btn" onclick="apagarLacrado('${esc(item.id)}')">Apagar</button>`}
+    </div>`;
+}
+
+function novoLacrado() { showModal(formularioLacrado(null), 'produto-sheet'); }
+
+function editarLacrado(id) {
+  const item = lacrados().find(x => x.id === id);
+  if (item) showModal(formularioLacrado(item), 'produto-sheet');
+}
+
+function numeroDoCampo(id) {
+  const bruto = String(document.getElementById(id)?.value || '').replace(/\./g, '').replace(',', '.');
+  const valor = Number(bruto);
+  return Number.isFinite(valor) && valor > 0 ? valor : 0;
+}
+
+function salvarLacrado(id) {
+  const nome = String(document.getElementById('lacNome')?.value || '').trim();
+  if (!nome) return notify('Dê um nome ao produto.');
+  const dados = {
+    tipo: document.getElementById('lacTipo')?.value || 'Outro',
+    nome,
+    setId: document.getElementById('lacSet')?.value || '',
+    quantidade: Math.max(0, Math.trunc(Number(document.getElementById('lacQtd')?.value) || 0)),
+    precoPago: numeroDoCampo('lacPago'),
+    valorAtual: numeroDoCampo('lacValor'),
+    comprado: String(document.getElementById('lacComprado')?.value || '').trim(),
+    notas: String(document.getElementById('lacNotas')?.value || '').trim(),
+  };
+  const existente = id ? lacrados().find(x => x.id === id) : null;
+  if (existente) Object.assign(existente, dados);
+  else lacrados().push({ id: `lac-${Date.now().toString(36)}`, ...dados });
+  saveState();
+  closeModal();
+  render();
+  notify(existente ? 'Produto atualizado.' : 'Produto lacrado adicionado.');
+}
+
+function apagarLacrado(id) {
+  const item = lacrados().find(x => x.id === id);
+  if (!item || !window.confirm(`Apagar "${item.nome}"?`)) return;
+  state.lacrados = lacrados().filter(x => x.id !== id);
+  saveState();
+  closeModal();
+  render();
+}
+
+function novoProduto() {
+  const nome = prompt('Nome do produto (ex.: Baralho de Batalha Eevee):');
+  if (!nome?.trim()) return;
+  const ano = prompt('Ano de lançamento (ex.: 2022):') || '';
+  if (!Array.isArray(state.produtos)) state.produtos = [];
+  const produto = {
+    id: `prod-${Date.now().toString(36)}`,
+    nome: nome.trim(),
+    ano: String(ano).trim(),
+    cartas: {},
+    criadoEm: new Date().toISOString(),
+  };
+  state.produtos.push(produto);
+  saveState();
+  abrirProduto(produto.id);
+}
+
+function produtoPorId(id) {
+  return produtosProprios().find(item => item.id === id) || null;
+}
+
+function abrirProduto(id) {
+  const produto = produtoPorId(id);
+  if (!produto) return;
+  const p = progressoDoProduto(produto);
+  const linhas = Object.keys(produto.cartas).map(cardId => {
+    const card = cardMap.get(cardId);
+    if (!card) return '';
+    const tenho = quantityFor(cardId);
+    return `<button class="busca-manual-item ${tenho ? 'tenho' : ''}" onclick="openCard('${esc(cardId)}')">
+      ${card.imageUrl ? `<img src="${esc(upgradeCardImageUrl(card.imageUrl))}" alt="" loading="lazy">` : '<span class="card-placeholder">TCG</span>'}
+      <span><strong>${esc(card.name)}</strong><small>${esc(formatCardNumber(card.localId || card.number, card.setTotal))} · ${esc(card.setName)}</small></span>
+      <b class="produto-tenho">${tenho ? `✓ ${tenho}` : '—'}</b>
+      <i class="produto-remover" onclick="event.stopPropagation();removerDoProduto('${esc(produto.id)}','${esc(cardId)}')">×</i>
+    </button>`;
+  }).join('');
+
+  showModal(`
+    <button class="modal-close" onclick="closeModal()" aria-label="Fechar">×</button>
+    <h2>${esc(produto.nome)}</h2>
+    <p class="screen-subtitle">${esc(produto.ano || 'sem ano')} · ${p.tenho} de ${p.total} cartas${p.total ? ` · ${p.porcento}%` : ''}</p>
+    <div class="progresso-linha" style="margin:12px 0">
+      <span class="pokebola-progresso${p.porcento >= 100 ? ' cheia' : ''}" aria-hidden="true"><i style="height:${p.porcento}%"></i></span>
+      <span class="progress"><span style="width:${p.porcento}%"></span></span>
+    </div>
+
+    <label class="registration-field">
+      <span>Acrescentar carta</span>
+      <input id="produtoBusca" class="field" placeholder="Nome, número ou 069/086" autocomplete="off"
+        oninput="buscarParaProduto('${esc(produto.id)}', this.value)">
+    </label>
+    <div id="produtoResultados" class="busca-manual-lista"></div>
+
+    <h3 class="section-title">Cartas do produto</h3>
+    <div class="busca-manual-lista produto-lista">${linhas || '<p class="busca-manual-dica">Nenhuma carta ainda. Use a busca acima.</p>'}</div>
+
+    <div class="modal-actions">
+      <button class="secondary-btn" onclick="renomearProduto('${esc(produto.id)}')">Renomear</button>
+      <button class="danger-btn" onclick="apagarProduto('${esc(produto.id)}')">Apagar produto</button>
+    </div>
+  `, 'produto-sheet');
+}
+
+function buscarParaProduto(produtoId, termo) {
+  const lista = document.getElementById('produtoResultados');
+  if (!lista) return;
+  const texto = String(termo || '').trim();
+  if (texto.length < 2) { lista.innerHTML = ''; return; }
+
+  const alvo = normalize(texto);
+  const fracao = texto.match(/(\d{1,4})\s*\/\s*(\d{1,4})/);
+  const numero = /^\d{1,4}$/.test(texto) ? String(Number(texto)) : '';
+  const achados = cards.filter(card => {
+    const local = String(Number(String(card.localId || '').match(/\d+/)?.[0] ?? -1));
+    if (fracao) {
+      const total = String(Number(card.setTotal || card.number?.split('/')?.[1] || -1));
+      return local === String(Number(fracao[1])) && total === String(Number(fracao[2]));
+    }
+    if (numero) return local === numero;
+    return normalize(card.name).includes(alvo);
+  }).slice(0, 15);
+
+  lista.innerHTML = achados.length
+    ? achados.map(card => `<button class="busca-manual-item" onclick="acrescentarAoProduto('${esc(produtoId)}','${esc(card.id)}')">
+        ${card.imageUrl ? `<img src="${esc(upgradeCardImageUrl(card.imageUrl))}" alt="" loading="lazy">` : '<span class="card-placeholder">TCG</span>'}
+        <span><strong>${esc(card.name)}</strong><small>${esc(formatCardNumber(card.localId || card.number, card.setTotal))} · ${esc(card.setName)}</small></span>
+      </button>`).join('')
+    : '<p class="busca-manual-dica">Nenhuma carta encontrada.</p>';
+}
+
+function acrescentarAoProduto(produtoId, cardId) {
+  const produto = produtoPorId(produtoId);
+  if (!produto) return;
+  produto.cartas[cardId] = (Number(produto.cartas[cardId]) || 0) + 1;
+  saveState();
+  abrirProduto(produtoId);
+}
+
+function removerDoProduto(produtoId, cardId) {
+  const produto = produtoPorId(produtoId);
+  if (!produto) return;
+  delete produto.cartas[cardId];
+  saveState();
+  abrirProduto(produtoId);
+}
+
+function renomearProduto(produtoId) {
+  const produto = produtoPorId(produtoId);
+  if (!produto) return;
+  const nome = prompt('Novo nome:', produto.nome);
+  if (!nome?.trim()) return;
+  produto.nome = nome.trim();
+  saveState();
+  abrirProduto(produtoId);
+}
+
+function apagarProduto(produtoId) {
+  const produto = produtoPorId(produtoId);
+  if (!produto) return;
+  if (!window.confirm(`Apagar "${produto.nome}"? As cartas continuam na sua coleção.`)) return;
+  state.produtos = produtosProprios().filter(item => item.id !== produtoId);
+  saveState();
+  closeModal();
+  render();
 }
 
 function renderSetCard(item) {
@@ -4835,6 +5193,92 @@ function brilhoDaVariante(variant) {
   return '';
 }
 
+/* =====================================================================
+   Etiquetas de versão na miniatura
+
+   Uma etiqueta por versão que a carta tem, com a sigla do acabamento.
+   A que você possui vem marcada; as que faltam ficam apagadas — dá para
+   ver de relance o que ainda falta sem abrir a carta.
+
+   Só aparecem versões CONHECIDAS: as que o Price Database publica para
+   aquela carta, mais as que você já cadastrou. Enquanto o preço daquela
+   coleção não foi baixado, aparecem só as suas — melhor mostrar pouco e
+   certo do que inventar três versões para toda carta.
+   ===================================================================== */
+const SIGLAS_VARIANTE = {
+  'normal': 'N',
+  'holo': 'F',
+  'holofoil': 'F',
+  'reverse': 'RF',
+  'reverse-holofoil': 'RF',
+  '1st-edition': '1E',
+  '1st-edition-holofoil': '1F',
+  'unlimited': 'U',
+  'unlimited-holofoil': 'UF',
+  'wPromo': 'P',
+  'firstEdition': '1E',
+};
+
+function siglaDaVariante(valor) {
+  const exato = exactSourceEnum(valor);
+  if (SIGLAS_VARIANTE[exato]) return SIGLAS_VARIANTE[exato];
+  // Enum novo que a fonte inventar: duas primeiras letras, sem travar.
+  const limpo = exato.replace(/[^a-z0-9]/gi, '');
+  return (limpo.slice(0, 2) || '?').toUpperCase();
+}
+
+/**
+ * O que esta carta tem, o que você tem, e se está completa.
+ *
+ * "Completa" exige que a FONTE conheça as versões da carta. Enquanto o preço
+ * daquela coleção não foi baixado, o app só sabe das versões que você mesmo
+ * cadastrou — e aí toda carta pareceria completa, o que seria mentira
+ * justamente na informação que o dourado promete.
+ */
+function analiseDeVariantes(card) {
+  const idioma = 'pt-br';
+  const conhecidas = centralVariantEntries(card.id, idioma).map(item => item.value).filter(Boolean);
+  const minhas = variantsFor(card.id)
+    .filter(item => !item.isWishlist && (Number(item.quantity) || 0) > 0)
+    .map(item => exactSourceEnum(item.pricingVariant) || finishKind(item.finish));
+
+  // Uma etiqueta por sigla: "reverse" e "reverse-holofoil" são a mesma
+  // coisa para quem olha a carta, como já vale nos botões do cadastro.
+  const porSigla = new Map();
+  for (const valor of [...conhecidas, ...minhas]) {
+    const sigla = siglaDaVariante(valor);
+    const tenho = minhas.some(meu => siglaDaVariante(meu) === sigla);
+    if (!porSigla.has(sigla)) porSigla.set(sigla, { sigla, valor, tenho });
+    else if (tenho) porSigla.get(sigla).tenho = true;
+  }
+
+  const siglasDaFonte = new Set(conhecidas.map(siglaDaVariante));
+  const completa = siglasDaFonte.size > 0
+    && [...siglasDaFonte].every(sigla => porSigla.get(sigla)?.tenho);
+
+  return {
+    // As que você tem vêm primeiro: é a informação que o olho procura.
+    lista: [...porSigla.values()].sort((a, b) => Number(b.tenho) - Number(a.tenho)),
+    completa,
+    totalDaFonte: siglasDaFonte.size,
+  };
+}
+
+function etiquetasDeVariante(analise) {
+  const porSigla = new Map((analise?.lista || []).map(item => [item.sigla, item]));
+  if (!porSigla.size) return '';
+  const lista = analise.lista;
+  const cabem = lista.slice(0, 4);
+  const sobra = lista.length - cabem.length;
+
+  const etiquetas = cabem.map(item => {
+    const estilo = variantEstilo(item.valor);
+    return `<span class="etiqueta-variante ${estilo.classe}${item.tenho ? ' tenho' : ''}" title="${esc(friendlyVariantLabel(item.valor))}${item.tenho ? ' · você tem' : ''}">${esc(item.sigla)}</span>`;
+  }).join('');
+
+  return `<span class="etiquetas-variante">${etiquetas}${sobra ? `<span class="etiqueta-variante mais">+${sobra}</span>` : ''}</span>`;
+}
+
 /** Selo só para o que é realmente raro — senão perde a graça. */
 function seloDeRaridade(card) {
   const raridade = normalize(card?.rarity || '');
@@ -4852,18 +5296,22 @@ function renderCardRow(card) {
   const displayVariant = cardVariants.find(item => item.imageUrl) || cardVariants[0];
   const displayImage = variantDisplayImage(card, displayVariant);
   const priceBadge = priceBadgeForCard(card.id);
-  const finishLabel = displayVariant ? finishPriceLabel(finishKind(displayVariant.finish)) : '';
+  // A etiqueta única de acabamento saiu: as etiquetas de versão embaixo da
+  // arte dizem a mesma coisa e ainda mostram o que falta.
   // Marcas para a decoração: tipo pinta a moldura e o símbolo de fundo,
   // acabamento liga o brilho holográfico, raridade liga o selo.
   const tipo = tipoPrincipalDaCarta(card);
   const brilho = brilhoDaVariante(displayVariant);
   const selo = seloDeRaridade(card);
-  return `<article class="card-row vision-card-tile ${quantity > 0 ? '' : 'missing'}" data-card-id="${esc(card.id)}"${tipo ? ` data-tipo="${esc(tipo)}"` : ''}${selo ? ` data-raridade="${esc(selo)}"` : ''} onclick="openCard('${esc(card.id)}')">
+  // Uma única análise serve para as etiquetas e para o estado dourado.
+  const variantes = analiseDeVariantes(card);
+  return `<article class="card-row vision-card-tile ${quantity > 0 ? '' : 'missing'}${variantes.completa ? ' completa' : ''}" data-card-id="${esc(card.id)}"${tipo ? ` data-tipo="${esc(tipo)}"` : ''}${selo ? ` data-raridade="${esc(selo)}"` : ''} onclick="openCard('${esc(card.id)}')">
     <div class="vision-card-art${brilho ? ` brilho-${brilho}` : ''}">
       ${displayImage ? `<img class="card-thumb" src="${esc(displayImage)}" loading="lazy" decoding="async" fetchpriority="low" onerror="this.outerHTML='<div class=&quot;card-placeholder&quot;>TCG</div>'">` : '<div class="card-placeholder">TCG</div>'}
-      ${finishLabel ? `<span class="tile-finish-badge">${esc(finishLabel)}</span>` : ''}
       ${quantity ? `<span class="tile-quantity-badge">x${quantity}</span>` : ''}
       ${entry.wishlist ? '<span class="tile-wishlist-badge">Quero</span>' : ''}
+      ${variantes.completa ? '<span class="marca-completa" title="Você tem todas as versões desta carta">★</span>' : ''}
+      ${etiquetasDeVariante(variantes)}
     </div>
     <div class="card-main">
       <div class="card-name">${esc(card.name)}</div>
