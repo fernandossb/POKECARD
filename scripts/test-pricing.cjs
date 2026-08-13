@@ -21,6 +21,12 @@ const context = {
   variantsFor: () => [],
   document: { getElementById: () => null },
   scannerSession: { language: 'pt-br' },
+  // O Ampharos 1/64 do Neo Revelation: carta só holográfica, com 1ª edição.
+  // É o catálogo que diz isso, e é o que permite descartar os nomes de mercado
+  // que não correspondem a carta nenhuma.
+  cardMap: new Map([
+    ['neo3-1', { id: 'neo3-1', name: 'Ampharos', variants: { normal: false, holo: true, reverse: false, firstEdition: true, wPromo: false } }],
+  ]),
   centralPriceData: {
     meta: { generatedAt: '2026-08-05T12:00:00Z', schemaVersion: 4 },
     variantCatalog: {},
@@ -89,26 +95,53 @@ assert.strictEqual(published.priceMarket, 'cardmarket', 'Sem TCGplayer, cai para
 // Um mercado só: a prioridade não muda nada e o valor publicado fica de pé.
 assert.strictEqual(quote.priceMarket, 'tcgplayer');
 
-// --- Botões de versão: sem repetir nome e sem opção sem preço ---
+// --- Botões de versão: uma opção por carta física ---
 
 // O array volta de dentro do vm, de outro "realm": comparar com deepStrictEqual
 // falharia pelo protótipo mesmo com o conteúdo certo. Comparamos como texto.
 const visiveis = (cardId, valores, selecionada) =>
   context.variantesVisiveis(cardId, valores, selecionada, 'pt-br').join('|');
 
-// Só `reverse-holofoil` tem preço nesta carta; `reverse` e `normal` somem.
+/* Esconder versão sem preço deixava de fora carta que existe de verdade: quem
+   coleciona precisa registrar a cópia mesmo antes de o mercado publicar valor.
+   Agora aparecem todas — o que não pode é a MESMA carta aparecer duas vezes só
+   porque cada mercado a batiza de um jeito. */
 assert.strictEqual(
   visiveis('sv03.5-001', ['normal', 'reverse', 'reverse-holofoil'], 'reverse-holofoil'),
-  'reverse-holofoil',
-  'Só deve sobrar a versão com preço publicado'
+  'normal|reverse-holofoil',
+  'A comum deve aparecer mesmo sem preço; reverse e reverse-holofoil são a mesma carta'
 );
 
-// Sem preço nenhum, mostramos as opções — mas "reverse" e "reverse-holofoil"
-// têm o mesmo nome na tela, então vira um botão só.
+// Entre nomes da mesma carta física, fica o que tem preço publicado.
+assert.strictEqual(
+  visiveis('sv03.5-001', ['reverse', 'reverse-holofoil'], ''),
+  'reverse-holofoil',
+  'Empatando na carta, deve ficar o nome que tem preço'
+);
+
+// Sem preço nenhum, sobra o primeiro — mas continua sendo um botão só.
 assert.strictEqual(
   visiveis('carta-sem-preco', ['reverse', 'reverse-holofoil'], ''),
   'reverse',
-  'Nomes repetidos devem virar um botão só'
+  'Nomes da mesma carta devem virar um botão só'
+);
+
+/* O caso Ampharos 1/64: cinco nomes de mercado para duas cartas de verdade.
+   "1st-edition-holofoil" e "firstEdition" são a 1ª edição holográfica;
+   "holo" e "unlimited-holofoil" são a holográfica de tiragem normal;
+   "normal" não corresponde a carta nenhuma — o catálogo diz normal:false. */
+assert.strictEqual(
+  visiveis('neo3-1', ['1st-edition-holofoil', 'firstEdition', 'holo', 'normal', 'unlimited-holofoil'], ''),
+  '1st-edition-holofoil|holo',
+  'Ampharos 1/64: cinco nomes do mercado devem virar duas versões'
+);
+
+// Sem o catálogo dizendo o contrário, nada é descartado: carta nova que a
+// fonte ainda não marcou precisa aparecer inteira.
+assert.strictEqual(
+  visiveis('carta-sem-catalogo', ['normal', 'holo', 'reverse-holofoil'], ''),
+  'normal|holo|reverse-holofoil',
+  'Sem marcação no catálogo, todas as versões do mercado valem'
 );
 
 console.log('Precificação exclusiva pelo Price Database, prioridade de mercado e variantes visíveis aprovados.');

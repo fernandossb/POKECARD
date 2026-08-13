@@ -749,7 +749,9 @@ function chaveDaVersao(value, acabamentoPadrao) {
  */
 function variantesVisiveis(cardId, valores, selecionada, language = '') {
   const idioma = language || document.getElementById('regLanguage')?.value || 'pt-br';
-  const card = cardMap.get(cardId);
+  // O teste de build roda esta função fora do aplicativo, sem o índice de
+  // cartas montado. Sem catálogo, vale o que o mercado publicar.
+  const card = typeof cardMap !== 'undefined' && cardMap ? cardMap.get(cardId) : null;
   const doCatalogo = acabamentosDoCatalogo(card);
   const acabamentoPadrao = doCatalogo[0] || 'comum';
   const lista = [...new Set((valores || []).filter(Boolean).map(exactSourceEnum))];
