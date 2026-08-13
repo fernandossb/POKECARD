@@ -80,16 +80,21 @@ jobs:
       - name: Juntar os manifestos
         run: |
           python - <<'FIM'
-          import json, glob, os
+          import json, glob, os, time
           junto = {}
           for caminho in glob.glob('pedacos/manifesto-*.json'):
               with open(caminho, encoding='utf-8') as arquivo:
                   junto.update(json.load(arquivo))
               os.remove(caminho)
+          tamanho = sum(junto.values()) / 1024 / 1024
+          # A versao marca esta geracao. O aplicativo guarda cada sprite no
+          # aparelho para sempre; sem essa marca, quem ja tivesse baixado a
+          # versao antiga nunca receberia a nova.
+          junto['_versao'] = time.strftime('%Y%m%d%H%M')
           with open('pedacos/manifesto.json', 'w', encoding='utf-8') as arquivo:
               json.dump(junto, arquivo)
-          tamanho = sum(junto.values()) / 1024 / 1024
-          print(f'{len(junto)} sprites, {tamanho:.1f} MB no total')
+          print(f'{len(junto) - 1} sprites, {tamanho:.1f} MB no total')
+          print(f'versao: {junto["_versao"]}')
           FIM
 
       - name: Conferir antes de publicar

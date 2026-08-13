@@ -37,6 +37,7 @@
      consulta falha em silêncio e o app segue usando a fonte de sempre. */
   var HD_BASE = 'https://cdn.jsdelivr.net/gh/fernandossb/POKECARD@sprites-hd/output/';
   var hdDisponiveis = null;   // Set com os números que têm versão HD
+  var hdVersao = '';          // marca da geração, para renovar o que está guardado
   var hdConsultado = false;
 
   function carregarManifestoHD() {
@@ -46,7 +47,10 @@
     return fetch(HD_BASE + 'manifesto.json')
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (dados) {
-        hdDisponiveis = dados ? new Set(Object.keys(dados)) : null;
+        if (!dados) { hdDisponiveis = null; return null; }
+        hdVersao = String(dados._versao || '');
+        var numeros = Object.keys(dados).filter(function (k) { return k.charAt(0) !== '_'; });
+        hdDisponiveis = new Set(numeros);
         return hdDisponiveis;
       })
       .catch(function () { hdDisponiveis = null; return null; });
@@ -185,43 +189,76 @@
     img.classList.toggle('arte-pixelada', Boolean(arte.pixelada));
   }
 
-  /* A arte guardada leva o modo junto na chave: trocar entre animada e nítida
-     não pode devolver a imagem do modo anterior. */
-  function chaveDaArte(id) { return Number(id) + ':' + modoAtual(); }
+  /* A chave carrega o modo E a versão da geração HD.
+
+     Cada arte fica guardada no aparelho para sempre — é isso que faz a Pokédex
+     abrir sem baixar nada da segunda vez em diante. Só que "para sempre" tem
+     um custo: se a chave não mudasse ao gerar sprites novos, quem já tivesse
+     baixado continuaria vendo os antigos, sem jeito de atualizar. */
+  function chaveDaArte(id, temHD) {
+    return Number(id) + ':' + modoAtual() + (temHD ? ':hd' + hdVersao : '');
+  }
 
   function carregar(img) {
     var id = Number(img.getAttribute('data-arte3d'));
     if (!id) return;
-    var chave = chaveDaArte(id);
-    if (falhou.has(chave)) return;
 
-    if (memoria.has(chave)) { aplicar(img, memoria.get(chave)); return; }
-    if (baixando.has(chave)) return;
-    baixando.add(chave);
+    // O manifesto é consultado uma vez só; daí em diante responde na hora.
+    carregarManifestoHD().then(function (disponiveis) {
+      var temHD = Boolean(disponiveis && disponiveis.has(String(id)));
+      var chave = chaveDaArte(id, temHD);
+      if (falhou.has(chave)) return null;
+      if (memoria.has(chave)) { aplicar(img, memoria.get(chave)); return null; }
+      if (baixando.has(chave)) return null;
+      baixando.add(chave);
 
-    lerGuardada(chave).then(function (guardada) {
-      if (guardada && guardada.dataUrl) {
-        memoria.set(chave, guardada);
+      return lerGuardada(chave).then(function (guardada) {
+        if (guardada && guardada.dataUrl) {
+          memoria.set(chave, guardada);
+          baixando.delete(chave);
+          aplicar(img, guardada);
+          return null;
+        }
+        // A versão melhorada tem preferência; sem ela, segue a fonte de sempre.
+        return (temHD ? buscarHD(id) : Promise.resolve(null)).then(function (hd) {
+          return hd || buscarNasFontes(id, 0);
+        }).then(function (arte) {
+          memoria.set(chave, arte);
+          guardar(chave, arte);
+          baixando.delete(chave);
+          aplicar(img, arte);
+          return null;
+        });
+      }).catch(function () {
+        // Sem internet ou arte inexistente: fica o sprite local, sem erro.
         baixando.delete(chave);
-        aplicar(img, guardada);
-        return null;
-      }
-      // A versão melhorada tem preferência; sem ela, segue a fonte de sempre.
-      return buscarHD(id).then(function (hd) {
-        return hd || buscarNasFontes(id, 0);
-      }).then(function (arte) {
-        memoria.set(chave, arte);
-        guardar(chave, arte);
-        baixando.delete(chave);
-        aplicar(img, arte);
-        return null;
+        falhou.add(chave);
       });
-    }).catch(function () {
-      // Sem internet ou arte inexistente: fica o sprite local, sem erro na tela.
-      baixando.delete(chave);
-      falhou.add(chave);
     });
   }
+
+  /** Apaga tudo o que está guardado e baixa de novo. */
+  window.limparArtesGuardadas = function () {
+    memoria.clear();
+    falhou.clear();
+    hdConsultado = false;
+    return abrirBanco().then(function (db) {
+      return new Promise(function (resolve) {
+        var tx = db.transaction(LOJA, 'readwrite');
+        tx.objectStore(LOJA).clear();
+        tx.oncomplete = function () { resolve(true); };
+        tx.onerror = function () { resolve(false); };
+      });
+    }).then(function (ok) {
+      var alvos = document.querySelectorAll('img[data-arte3d]');
+      for (var i = 0; i < alvos.length; i++) {
+        alvos[i].removeAttribute('data-arte3d-visto');
+        alvos[i].classList.remove('arte3d-carregada');
+      }
+      registrar();
+      return ok;
+    }).catch(function () { return false; });
+  };
 
   /* Trocar entre animada e nítida: limpa o que está na tela e redesenha. */
   window.definirArtePokedex = function (modo) {

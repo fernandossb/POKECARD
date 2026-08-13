@@ -4231,3 +4231,9 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 .arte-opcao.ativo { border-color: var(--vision-primary); background: var(--vision-primary-soft); }
 .arte-opcao strong { font-size: var(--fs-sm); font-weight: var(--peso-forte); }
 .arte-opcao small { font-size: var(--fs-xs); color: var(--vision-muted); line-height: 1.35; }
+.arte-limpar {
+  margin-top: 8px; width: 100%; min-height: var(--toque-min);
+  padding: 10px 14px; border-radius: var(--raio-md); cursor: pointer;
+  border: 1px solid var(--vision-line); background: transparent;
+  color: var(--vision-text); font-size: var(--fs-sm);
+}

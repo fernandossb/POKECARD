@@ -470,8 +470,21 @@
       + ' onclick="trocarArtePokedex(\'animada\')"><strong>Animada</strong><small>Mexe. Pixel art de 60px, desenhada sem borrão.</small></button>'
       + '<button type="button" class="arte-opcao' + (modo === 'nitida' ? ' ativo' : '') + '"'
       + ' onclick="trocarArtePokedex(\'nitida\')"><strong>Nítida</strong><small>Modelo 3D de 512px. Bem mais definida, mas parada.</small></button>'
-      + '</div></div>';
+      + '</div>'
+      + '<button type="button" class="arte-limpar" onclick="limparArtes()">Baixar as artes de novo</button>'
+      + '<small>As artes ficam guardadas no aparelho e não são baixadas de novo. Use isto se gerar sprites novos ou quiser liberar espaço.</small>'
+      + '</div>';
   }
+
+  window.limparArtes = function () {
+    if (typeof window.limparArtesGuardadas !== 'function') return;
+    if (typeof notify === 'function') notify('Limpando…');
+    window.limparArtesGuardadas().then(function (ok) {
+      if (typeof notify === 'function') {
+        notify(ok ? 'Artes apagadas. Serão baixadas de novo conforme você rolar.' : 'Não foi possível limpar agora.');
+      }
+    });
+  };
 
   window.trocarArtePokedex = function (modo) {
     if (typeof window.definirArtePokedex === 'function') window.definirArtePokedex(modo);
