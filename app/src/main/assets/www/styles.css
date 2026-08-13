@@ -4217,3 +4217,17 @@ h3 {
 .pokedex-progress-card em { color: var(--vision-muted) !important; -webkit-text-fill-color: var(--vision-muted) !important; }
 .pokedex-progress-card i { background: var(--vision-surface-3); }
 .pokedex-progress-card i span { background: var(--vision-primary); }
+/* ---- Arte da Pokedex ----
+   Pixel art ampliada sem suavizacao: as bordas ficam limpas em vez de
+   borradas. E o que faz a arte de 60px parecer proposital e nao defeito. */
+img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
+
+.arte-opcoes { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; margin-top: 8px; }
+.arte-opcao {
+  display: grid; gap: 3px; padding: 12px; text-align: left; cursor: pointer;
+  min-height: var(--toque-min); border-radius: var(--raio-md);
+  border: 1px solid var(--vision-line); background: var(--vision-surface-2); color: var(--vision-text);
+}
+.arte-opcao.ativo { border-color: var(--vision-primary); background: var(--vision-primary-soft); }
+.arte-opcao strong { font-size: var(--fs-sm); font-weight: var(--peso-forte); }
+.arte-opcao small { font-size: var(--fs-xs); color: var(--vision-muted); line-height: 1.35; }

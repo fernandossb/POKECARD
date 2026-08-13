@@ -459,12 +459,34 @@
       + '</div>';
   }
 
+  /* Animada é 60×60 e anima; nítida é 512×512 e fica parada. Não existe
+     fonte que seja as duas coisas — a única que anima é pixel art. */
+  function barraArtePokedex() {
+    var modo = (typeof window.arteDaPokedex === 'function') ? window.arteDaPokedex() : 'animada';
+    return '<div class="claridade-caixa">'
+      + '<div class="claridade-topo"><span>Arte da Pokédex</span></div>'
+      + '<div class="arte-opcoes">'
+      + '<button type="button" class="arte-opcao' + (modo === 'animada' ? ' ativo' : '') + '"'
+      + ' onclick="trocarArtePokedex(\'animada\')"><strong>Animada</strong><small>Mexe. Pixel art de 60px, desenhada sem borrão.</small></button>'
+      + '<button type="button" class="arte-opcao' + (modo === 'nitida' ? ' ativo' : '') + '"'
+      + ' onclick="trocarArtePokedex(\'nitida\')"><strong>Nítida</strong><small>Modelo 3D de 512px. Bem mais definida, mas parada.</small></button>'
+      + '</div></div>';
+  }
+
+  window.trocarArtePokedex = function (modo) {
+    if (typeof window.definirArtePokedex === 'function') window.definirArtePokedex(modo);
+    var caixa = document.querySelector('.arte-opcoes');
+    if (caixa) caixa.parentElement.outerHTML = barraArtePokedex();
+    if (typeof notify === 'function') notify(modo === 'nitida' ? 'Arte nítida (parada).' : 'Arte animada.');
+  };
+
   function corpo() {
     return '<button class="modal-close" onclick="closeModal()" aria-label="Fechar">×</button>'
       + '<h2>Tema do aplicativo</h2>'
       + '<p class="screen-subtitle">Escolha seu Pokémon favorito. O app assume as cores do tipo dele e mostra a arte no topo e ao fundo.</p>'
       + cabecalho()
       + barraClaridade()
+      + barraArtePokedex()
       + '<input class="field" placeholder="Buscar Pokémon por nome ou número" oninput="filtrarTemaPokemon(this.value)">'
       + grade();
   }

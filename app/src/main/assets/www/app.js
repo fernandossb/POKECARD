@@ -5957,7 +5957,9 @@ function renderPokemonDetail(id) {
   return `<section class="screen">
     <button class="back-btn" onclick="ui.selectedPokemon=null;render();window.scrollTo(0,0)">← Voltar à Pokédex</button>
     <div class="pokemon-hero">
-      <img src="${esc(pokemon.sprite)}" alt="${esc(pokemon.name)}">
+      <!-- Faltava o data-arte3d aqui: a tela de detalhe era a única que ficava
+           com o sprite embutido de 96px esticado, a maior ampliação do app. -->
+      <img src="${esc(pokemon.sprite)}" alt="${esc(pokemon.name)}" data-arte3d="${Number(pokemon.id)}">
       <div><span class="pokemon-number">Nº ${String(pokemon.id).padStart(4,'0')} · ${esc(pokemon.region)}</span><h2>${esc(pokemon.name)}</h2><div class="badges">${pokemon.types.map(type=>`<span class="badge">${esc(type)}</span>`).join('')}</div></div>
     </div>
     <div class="stats-grid">
