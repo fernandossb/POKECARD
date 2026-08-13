@@ -1196,6 +1196,45 @@ function centralShardFileName(index) {
   return `shard-${String(index).padStart(2, '0')}.json`;
 }
 
+/* =====================================================================
+   Adiantar os lotes das cartas que estão na tela
+
+   As etiquetas de versão e o dourado da carta completa dependem de saber
+   quais versões a carta tem — e isso vem do Price Database, em lotes.
+   Antes o lote só era baixado quando a carta era ABERTA, então a lista
+   ficava um tempo mostrando só as versões que o usuário já cadastrou, e as
+   demais apareciam aos poucos.
+
+   Aqui os lotes das cartas visíveis são buscados juntos, em segundo plano.
+   Cada lote cobre centenas de cartas, então normalmente são dois ou três
+   pedidos para a lista inteira — não um por carta.
+   ===================================================================== */
+let lotesEmAndamento = new Set();
+
+function adiantarLotesDaLista(listaDeCartas) {
+  if (!centralPriceIndex?.cards) return;
+  const lotes = new Set();
+  for (const card of listaDeCartas.slice(0, 60)) {
+    const indice = Number(centralPriceIndex.cards[card.id]);
+    if (Number.isInteger(indice) && indice >= 0
+      && !centralPriceLoadedShards.has(indice) && !lotesEmAndamento.has(indice)) {
+      lotes.add(indice);
+    }
+  }
+  if (!lotes.size) return;
+
+  // Poucos por vez: a lista precisa continuar rolando sem travar.
+  for (const indice of [...lotes].slice(0, 3)) {
+    lotesEmAndamento.add(indice);
+    const carta = listaDeCartas.find(item => Number(centralPriceIndex.cards[item.id]) === indice);
+    if (!carta) { lotesEmAndamento.delete(indice); continue; }
+    ensureCentralPriceShard(carta.id)
+      .then(carregou => { if (carregou) renderKeepingScroll(); })
+      .catch(() => {})
+      .then(() => { lotesEmAndamento.delete(indice); });
+  }
+}
+
 async function ensureCentralPriceShard(cardId, force = false) {
   const shardIndex = Number(centralPriceIndex?.cards?.[cardId]);
   if (!Number.isInteger(shardIndex) || shardIndex < 0) throw new Error(`Carta ${cardId} não encontrada no índice do Price Database.`);
@@ -3875,6 +3914,8 @@ function filteredCardsForUi() {
 
 function renderCardSearchResults() {
   const { result, visible } = filteredCardsForUi();
+  // Busca em segundo plano o que falta para as etiquetas e o dourado.
+  adiantarLotesDaLista(visible);
   return `
     <p class="card-results-count">${result.length.toLocaleString('pt-BR')} cartas encontradas</p>
     <div class="card-list">${visible.length ? visible.map(renderCardRow).join('') : emptyCards()}</div>

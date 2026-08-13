@@ -4237,3 +4237,27 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
   border: 1px solid var(--vision-line); background: transparent;
   color: var(--vision-text); font-size: var(--fs-sm);
 }
+/* ============================================================
+   v5.23 - Pokedex fluida
+
+   Sao 180 sprites na tela ao mesmo tempo, cada um com 33 a 47
+   quadros. O celular decodificava TODOS de uma vez, inclusive os
+   que estavam fora de vista, dezenas de telas abaixo. Dai a
+   animacao engasgada e fora de compasso.
+
+   content-visibility: auto manda o navegador pular o desenho do
+   que esta fora da tela -- e pular o desenho significa parar de
+   animar. So os que voce esta vendo gastam trabalho. O app ja usa
+   isso na lista de cartas; faltava na Pokedex.
+
+   contain-intrinsic-size reserva o espaco de cada quadradinho
+   para a rolagem nao pular quando o conteudo e ignorado.
+   ============================================================ */
+.pokemon-tile {
+  content-visibility: auto;
+  contain-intrinsic-size: 132px 148px;
+}
+
+/* A propria grade tambem: isola o calculo de posicao dela do resto
+   da tela, para rolar sem recalcular a pagina inteira. */
+.pokemon-grid, .pokedex-grid { contain: layout style; }
