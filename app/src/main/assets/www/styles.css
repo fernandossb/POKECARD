@@ -4261,3 +4261,253 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 /* A propria grade tambem: isola o calculo de posicao dela do resto
    da tela, para rolar sem recalcular a pagina inteira. */
 .pokemon-grid, .pokedex-grid { contain: layout style; }
+/* ---------- v5.24 — leitor ---------- */
+.leitura-aviso{
+  display:block;margin-top:var(--esp-1,4px);
+  color:var(--aviso,#c98a12);font-weight:var(--peso-forte,700);
+  font-size:var(--fs-menor,12px);line-height:1.35;
+}
+.camera-atalho[hidden]{display:none;}
+/* ---------- v5.25 — painel de confirmacao do scanner ---------- */
+
+/* Selo do topo: diz de cara se a numeracao foi lida ou nao. */
+.leitura-selo{
+  display:flex;align-items:center;gap:var(--esp-2,8px);
+  font-size:var(--fs-menor,12px);font-weight:var(--peso-forte,700);
+  letter-spacing:.06em;text-transform:uppercase;
+  padding:0 var(--esp-3,12px);margin-bottom:var(--esp-2,8px);
+}
+.leitura-selo.ok{color:var(--ok,#3ddc97);}
+.leitura-selo.duvida{color:var(--aviso,#c98a12);}
+.leitura-selo em{
+  margin-left:auto;font-style:normal;opacity:.7;
+  font-weight:var(--peso-normal,400);letter-spacing:0;
+}
+
+/* A estrela dourada: Pokemon que ainda falta na Pokedex. */
+.leitura-estrela{
+  position:absolute;top:var(--esp-3,12px);right:var(--esp-3,12px);z-index:3;
+  width:var(--toque-min,44px);height:var(--toque-min,44px);
+  display:grid;place-items:center;
+  border:0;border-radius:var(--raio-redondo,999px);
+  background:radial-gradient(circle at 35% 30%,#ffe89a,#f5c134 55%,#c98a12);
+  color:#4a3400;font-size:22px;line-height:1;cursor:pointer;
+  box-shadow:0 0 0 3px rgba(245,193,52,.25),0 4px 14px rgba(245,193,52,.45);
+  animation:estrela-pulsa 1.6s ease-in-out infinite;
+}
+@keyframes estrela-pulsa{
+  0%,100%{box-shadow:0 0 0 3px rgba(245,193,52,.25),0 4px 14px rgba(245,193,52,.45);}
+  50%{box-shadow:0 0 0 7px rgba(245,193,52,.08),0 4px 20px rgba(245,193,52,.65);}
+}
+@media (prefers-reduced-motion:reduce){.leitura-estrela{animation:none;}}
+
+/* Miniatura com lupa. */
+.leitura-arte{position:relative;border:0;background:none;padding:0;cursor:pointer;}
+.leitura-lupa{
+  position:absolute;right:4px;bottom:4px;
+  width:26px;height:26px;display:grid;place-items:center;
+  border-radius:var(--raio-redondo,999px);
+  background:rgba(0,0,0,.68);color:#fff;font-size:15px;
+}
+.leitura-zoom{
+  position:absolute;inset:0;z-index:5;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:var(--esp-3,12px);background:rgba(0,0,0,.9);cursor:zoom-out;
+}
+.leitura-zoom img{max-width:86%;max-height:74%;border-radius:var(--raio-medio,10px);}
+.leitura-zoom span{color:#fff;font-size:var(--fs-corpo,15px);text-align:center;padding:0 var(--esp-4,16px);}
+.leitura-painel.recuado{opacity:0;pointer-events:none;}
+
+.leitura-preco{font-size:var(--fs-corpo,15px);}
+.leitura-preco b{color:var(--ok,#3ddc97);font-weight:var(--peso-forte,700);}
+
+/* Bloco "sua copia". */
+.leitura-copia{
+  padding:var(--esp-3,12px);margin:var(--esp-2,8px) var(--esp-3,12px) 0;
+  border-radius:var(--raio-medio,10px);
+  border:1px solid var(--borda-suave,rgba(255,255,255,.12));
+}
+.leitura-copia-titulo{
+  display:block;font-size:var(--fs-menor,12px);letter-spacing:.08em;
+  text-transform:uppercase;opacity:.65;margin-bottom:var(--esp-2,8px);
+}
+.leitura-campos{
+  display:flex;align-items:center;gap:var(--esp-2,8px);
+  margin-top:var(--esp-2,8px);flex-wrap:wrap;
+}
+.leitura-campo{
+  flex:1 1 auto;min-width:0;min-height:var(--toque-min,44px);
+  padding:0 var(--esp-2,8px);
+  border-radius:var(--raio-medio,10px);
+  border:1px solid var(--borda-suave,rgba(255,255,255,.16));
+  background:var(--fundo-campo,rgba(255,255,255,.06));
+  color:inherit;font-size:var(--fs-corpo,15px);
+}
+.leitura-qtd{
+  display:flex;align-items:center;gap:var(--esp-2,8px);
+  border-radius:var(--raio-medio,10px);
+  border:1px solid var(--borda-suave,rgba(255,255,255,.16));
+  padding:0 var(--esp-2,8px);
+}
+.leitura-qtd button{
+  min-width:var(--toque-min,44px);min-height:var(--toque-min,44px);
+  border:0;background:none;color:inherit;font-size:var(--fs-titulo,20px);cursor:pointer;
+}
+.leitura-qtd b{min-width:1.6em;text-align:center;font-size:var(--fs-corpo,15px);}
+
+.leitura-jatem,.leitura-outra{
+  display:flex;align-items:center;justify-content:center;gap:var(--esp-2,8px);
+  width:100%;min-height:var(--toque-min,44px);margin-top:var(--esp-2,8px);
+  border:0;background:none;color:inherit;cursor:pointer;
+  font-size:var(--fs-corpo,15px);
+}
+.leitura-jatem{justify-content:flex-start;opacity:.8;}
+.leitura-outra em{font-style:normal;opacity:.65;}
+/* O painel cresceu ao ganhar preco, campos e quantidade. Sem teto, num
+   celular de tela curta ele cobriria a moldura da camera inteira e a pessoa
+   nao veria mais a carta que esta tentando ler. */
+.leitura-painel{max-height:72vh;overflow-y:auto;overscroll-behavior:contain;}
+.leitura-painel-acoes{position:sticky;bottom:0;padding-bottom:2px;}
+/* ---------- v5.26 — versoes da carta empilhadas ---------- */
+.leitura-copia-topo{
+  display:flex;align-items:center;gap:var(--esp-2,8px);
+  margin-bottom:var(--esp-2,8px);
+}
+.leitura-copia-topo .leitura-copia-titulo{margin:0;flex:1 1 auto;}
+.leitura-copia-topo .leitura-campo{flex:0 0 auto;width:auto;max-width:44%;}
+
+.leitura-versoes{display:flex;flex-direction:column;gap:var(--esp-2,8px);}
+
+/* Uma linha por versao: cor da versao a esquerda, preco proprio, contador. */
+.leitura-versao{
+  display:flex;align-items:center;gap:var(--esp-2,8px);
+  border-radius:var(--raio-medio,10px);
+  border:1px solid var(--borda-suave,rgba(255,255,255,.14));
+  background:var(--fundo-campo,rgba(255,255,255,.04));
+  overflow:hidden;
+}
+.leitura-versao.escolhida{
+  border-color:currentColor;
+  box-shadow:inset 3px 0 0 currentColor;
+}
+.leitura-versao.tem{background:rgba(255,255,255,.09);}
+
+.leitura-versao-nome{
+  flex:1 1 auto;min-width:0;
+  display:flex;align-items:center;gap:var(--esp-2,8px);
+  min-height:var(--toque-min,44px);padding:0 var(--esp-3,12px);
+  border:0;background:none;color:inherit;cursor:pointer;text-align:left;
+  font-size:var(--fs-corpo,15px);
+}
+.leitura-versao-rotulo{
+  flex:1 1 auto;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.leitura-versao-preco{
+  flex:0 0 auto;opacity:.75;
+  font-size:var(--fs-menor,12px);font-variant-numeric:tabular-nums;
+}
+.leitura-versao.escolhida .leitura-versao-preco{opacity:1;font-weight:var(--peso-forte,700);}
+
+.leitura-versao .leitura-qtd{flex:0 0 auto;border:0;border-radius:0;}
+.leitura-versao-mais{
+  flex:0 0 auto;
+  min-width:var(--toque-min,44px);min-height:var(--toque-min,44px);
+  border:0;border-left:1px solid var(--borda-suave,rgba(255,255,255,.14));
+  background:none;color:inherit;font-size:var(--fs-titulo,20px);cursor:pointer;
+}
+.leitura-versao-mais b{font-size:var(--fs-corpo,15px);}
+
+.leitura-sim[disabled]{opacity:.45;pointer-events:none;}
+.leitura-jatem{margin-top:var(--esp-1,4px);font-size:var(--fs-menor,12px);}
+/* ---------- v5.27 — ajuste de largura das linhas de versao ----------
+   Medido no modelo: a linha tem 281px, o contador comia 144px e sobravam 34px
+   para o nome, que precisa de 56px. "Comum" virava "Co...". O preco passa a
+   ficar embaixo do nome: assim nenhum dos dois e cortado, em qualquer largura
+   de tela e com qualquer nome de versao. */
+.leitura-versao-nome{
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr);
+  align-items:center;
+  column-gap:var(--esp-2,8px);row-gap:1px;
+  padding:var(--esp-1,4px) var(--esp-3,12px);
+}
+.leitura-versao-nome .variante-icone{grid-row:1 / span 2;}
+.leitura-versao-rotulo{grid-column:2;white-space:normal;overflow:visible;text-overflow:clip;}
+.leitura-versao-preco{grid-column:2;justify-self:start;font-size:var(--fs-menor,12px);}
+
+/* Contador mais estreito: 44px de altura continuam, a largura e que cede. */
+.leitura-versao .leitura-qtd{padding:0;}
+.leitura-versao .leitura-qtd button{min-width:38px;}
+.leitura-versao .leitura-qtd b{min-width:1.2em;}
+
+/* O titulo nao pode quebrar em duas linhas, e os campos ganham a linha de baixo
+   inteira em vez de disputar espaco com ele. */
+.leitura-copia-topo{flex-wrap:wrap;}
+.leitura-copia-titulo{white-space:nowrap;}
+.leitura-copia-topo .leitura-campo{flex:1 1 40%;max-width:none;}
+.leitura-copia-topo .leitura-copia-titulo{flex:1 1 100%;}
+/* O campo de idioma mostra so "PT"; o de estado mostra "NM - quase nova" e
+   estava sendo cortado pela seta. Cada um leva a largura que precisa. */
+.leitura-copia-topo .leitura-campo:first-of-type{flex:0 0 auto;width:auto;min-width:5.5em;}
+.leitura-copia-topo .leitura-campo:last-of-type{flex:1 1 auto;}
+/* ---------- v5.28 — o cartao estica em vez de rolar ----------
+   O teto de 72% da tela fazia o conteudo rolar por dentro do cartao, e rolagem
+   dentro de um painel que ja esta por cima da camera confunde: a pessoa arrasta
+   achando que vai fechar. Agora ele cresce ate caber tudo.
+   O unico limite e a altura da tela menos a barra de cima, para o botao de
+   voltar continuar alcancavel e os botoes de baixo nunca sairem do alcance.
+   Com 3 versoes da o tamanho de sempre; mesmo com 6 ainda cabe sem rolar. */
+.leitura-painel{
+  max-height:calc(100vh - 56px);
+  max-height:calc(100dvh - 56px);
+}
+/* A rolagem fica so como rede de seguranca, para o caso extremo de uma carta
+   com muitas versoes num aparelho de tela muito curta. */
+.leitura-painel-acoes{position:static;}
+/* Os botoes de acao nunca podem sair do alcance. No caso extremo em que nem
+   compactando o conteudo cabe, eles ficam colados no rodape do cartao. */
+.leitura-painel-acoes{
+  position:sticky;bottom:0;
+  padding-bottom:2px;
+  background:inherit;
+}
+
+/* Tela curta: em vez de rolar, o cartao encolhe o que da para encolher —
+   miniatura menor, linhas mais justas, menos respiro. O caso real (ate 3
+   versoes) passa a caber inteiro mesmo num aparelho de 600px de altura. */
+@media (max-height:700px){
+  .leitura-painel{padding-top:6px;}
+  .leitura-arte{width:60px;}
+  .leitura-painel-corpo{gap:10px;}
+  .leitura-selo{margin-bottom:4px;}
+  .leitura-copia{padding:8px;margin-top:6px;}
+  .leitura-versoes{gap:6px;}
+  .leitura-versao-nome{padding-top:2px;padding-bottom:2px;}
+  .leitura-outra{min-height:38px;margin-top:4px;}
+  .leitura-painel-acoes{margin-top:8px;}
+}
+/* Botao que revela a quarta versao em diante, logo abaixo da terceira. */
+.leitura-mais-versoes{
+  display:flex;align-items:center;justify-content:center;gap:var(--esp-2,8px);
+  width:100%;min-height:var(--toque-min,44px);margin-top:var(--esp-2,8px);
+  border:1px dashed var(--borda-suave,rgba(255,255,255,.22));
+  border-radius:var(--raio-medio,10px);
+  background:none;color:inherit;cursor:pointer;
+  font-size:var(--fs-menor,12px);
+}
+@media (max-height:700px){ .leitura-mais-versoes{min-height:38px;margin-top:6px;} }
+/* Tela curta com o botao de "mostrar mais" na jogada: sobravam ~23px para o
+   cartao caber sem rolar. Sai do miolo, nao dos alvos de toque. */
+@media (max-height:700px){
+  .leitura-painel{padding-top:4px;padding-bottom:8px;}
+  .leitura-painel-alca{margin:0 auto 6px;}
+  .leitura-selo{margin-bottom:2px;}
+  .leitura-copia{padding:6px;margin-top:4px;}
+  .leitura-copia-topo{margin-bottom:6px;}
+  .leitura-versoes{gap:4px;}
+  .leitura-outra{min-height:34px;margin-top:2px;}
+  .leitura-mais-versoes{min-height:34px;margin-top:4px;}
+  .leitura-painel-acoes{margin-top:6px;}
+  .leitura-jatem{margin-top:0;}
+}

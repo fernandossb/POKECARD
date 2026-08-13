@@ -4240,26 +4240,81 @@ function showScannerMessage(message, failed = false) {
  * delas. Exigimos duas evidências para aceitar a leitura — uma só poderia ser
  * coincidência.
  */
+/* Conserto de leitura só onde existe número de verdade.
+   A câmera troca O por 0, I por 1, S por 5, T por 7 e assim por diante. Desfazer
+   essas trocas no texto inteiro parecia esperto e foi o erro: palavras comuns
+   viravam números. "TO" virava 70, "IS" virava 15, "IT" virava 17 — e cada um
+   desses números falsos entregava pontos a centenas de cartas erradas.
+   Agora um pedaço só é tratado como número se ele JÁ tiver ao menos um
+   algarismo de verdade. "0O1" vira 001 (é numeração mal lida); "TO" continua
+   sendo a palavra "to". */
+const LETRAS_CONFUNDIDAS = /[OQDILSZBGT|!]/g;
+function consertarAlgarismos(pedaco) {
+  return String(pedaco).toUpperCase()
+    .replace(/[OQD]/g, '0').replace(/[IL|!]/g, '1')
+    .replace(/[SZ]/g, '5').replace(/B/g, '8')
+    .replace(/G/g, '6').replace(/T/g, '7');
+}
+function temAlgarismoDeVerdade(pedaco) {
+  return /[0-9]/.test(pedaco);
+}
+
+/* Devolve os números e as frações realmente impressos na carta. */
+function numerosDaLeitura(ocrText) {
+  /* Fora o HP: "330 HP" não é o número da carta, mas casava com a carta 330 de
+     qualquer coleção e ainda levava o bônus cheio. */
+  const texto = String(ocrText || '').replace(/\b\d{1,3}\s*HP\b/gi, ' ');
+  const miolo = '[0-9OQDILSZBGT!]';
+  const numbers = new Set();
+  const fractions = new Set();
+
+  // Frações: os dois lados precisam ter algarismo. Mata "GO/TO" e "IS/OL".
+  const acheiFracoes = texto.toUpperCase().match(new RegExp(`\\b${miolo}{1,4}\\s*[\\/\\\\|]\\s*${miolo}{1,4}\\b`, 'g')) || [];
+  for (const bruta of acheiFracoes) {
+    const [esquerda, direita] = bruta.split(/[\/\\|]/).map(parte => parte.trim());
+    if (!temAlgarismoDeVerdade(esquerda) || !temAlgarismoDeVerdade(direita)) continue;
+    const local = Number(consertarAlgarismos(esquerda));
+    const total = Number(consertarAlgarismos(direita));
+    if (!Number.isFinite(local) || !Number.isFinite(total) || !total) continue;
+    fractions.add(`${local}/${total}`);
+    numbers.add(String(local));
+  }
+
+  // Números soltos: mesma exigência de ter algarismo de verdade.
+  const acheiNumeros = texto.toUpperCase().match(new RegExp(`\\b${miolo}{1,4}\\b`, 'g')) || [];
+  for (const bruto of acheiNumeros) {
+    if (!temAlgarismoDeVerdade(bruto)) continue;
+    const valor = Number(consertarAlgarismos(bruto));
+    if (Number.isFinite(valor)) numbers.add(String(valor));
+  }
+
+  return { numbers, fractions };
+}
+
 function pareceUmaCarta(ocrText) {
   const texto = String(ocrText || '');
   const normalizado = normalize(texto);
-  const numerico = texto.toUpperCase().replace(/O/g, '0').replace(/[IL]/g, '1');
 
-  let pontos = 0;
-  const achados = [];
-  if (/\b\d{1,4}\s*\/\s*\d{1,4}\b/.test(numerico)) { pontos += 3; achados.push('numeração'); }
-  if (/pok[eé]mon/i.test(normalizado)) { pontos += 2; achados.push('marca'); }
-  if (/\billus\b|\bilust/i.test(normalizado)) { pontos += 2; achados.push('ilustrador'); }
-  if (/\d{2,3}\s*hp\b|\bhp\s*\d{2,3}/i.test(normalizado)) { pontos += 2; achados.push('HP'); }
-  if (/fraqueza|resist[eê]ncia|recuo|weakness|resistance|retreat/i.test(normalizado)) { pontos += 2; achados.push('rodapé'); }
-  if (/nintendo|creatures|game\s*freak/i.test(normalizado)) { pontos += 2; achados.push('direitos'); }
+  /* Sinais que SÓ carta tem, e sinais que qualquer papel escrito tem.
+     Antes os dois valiam pontos no mesmo bolo, e duas marcas genéricas
+     ("tem várias linhas" + "tem muitas letras") já abriam a porta sozinhas —
+     era por isso que a mesa com qualquer coisa escrita virava leitura. Agora o
+     genérico só reforça: sem nenhum sinal de carta, nada passa. */
+  const especificos = [];
+  const genericos = [];
+  if (numerosDaLeitura(texto).fractions.size) especificos.push('numeração');
+  if (/pok[eé]mon/i.test(normalizado)) especificos.push('marca');
+  if (/\billus\b|\bilust/i.test(normalizado)) especificos.push('ilustrador');
+  if (/\d{2,3}\s*hp\b|\bhp\s*\d{2,3}/i.test(normalizado)) especificos.push('HP');
+  if (/fraqueza|resist[eê]ncia|recuo|weakness|resistance|retreat/i.test(normalizado)) especificos.push('rodapé');
+  if (/nintendo|creatures|game\s*freak/i.test(normalizado)) especificos.push('direitos');
 
-  // Texto de carta tem várias linhas com palavras de verdade; ruído não tem.
   const linhasComPalavras = texto.split(/\r?\n/).filter(linha => (linha.match(/[A-Za-zÀ-ÿ]/g) || []).length >= 4).length;
-  if (linhasComPalavras >= 3) { pontos += 1; achados.push('linhas'); }
-  if ((normalizado.match(/[a-z]/g) || []).length >= 25) { pontos += 1; achados.push('volume'); }
+  if (linhasComPalavras >= 3) genericos.push('linhas');
+  if ((normalizado.match(/[a-z]/g) || []).length >= 25) genericos.push('volume');
 
-  return { aceita: pontos >= 2, pontos, achados };
+  const aceita = especificos.length >= 2 || (especificos.length >= 1 && genericos.length >= 2);
+  return { aceita, achados: [...especificos, ...genericos], especificos, genericos };
 }
 
 function scannerCandidates(ocrText) {
@@ -4279,17 +4334,13 @@ function scannerCandidates(ocrText) {
      "Bulbasaur" existe em treze impressões diferentes; "001/165" existe em
      uma só. Por isso a leitura numérica recebe tratamento próprio, com as
      confusões clássicas do reconhecimento de caracteres desfeitas. */
-  const numberFriendly = String(ocrText || '')
-    .toUpperCase()
-    .replace(/[OQD]/g, '0')
-    .replace(/[IL|!]/g, '1')
-    .replace(/[SZ]/g, '5')
-    .replace(/B/g, '8')
-    .replace(/G/g, '6')
-    .replace(/T/g, '7');
-  const numbers = new Set((numberFriendly.match(/\b\d{1,4}\b/g) || []).map(value => String(Number(value))));
-  const fractions = new Set((numberFriendly.match(/\b\d{1,4}\s*[\/\\|]\s*\d{1,4}\b/g) || [])
-    .map(value => value.replace(/[\s\\|]/g, m => m === '\\' || m === '|' ? '/' : '').split('/').map(part => String(Number(part))).join('/')));
+  const { numbers, fractions } = numerosDaLeitura(ocrText);
+  /* O Android manda a faixa de baixo da carta ampliada, colada no fim do texto.
+     É lá que fica o número da carta. Um número lido nessa faixa vale muito mais
+     do que um número solto no meio do texto, que quase sempre é dano de ataque
+     ou ano de impressão. */
+  const rodape = String(ocrText || '').split(/\[FAIXA INFERIOR AMPLIADA\]/i).slice(1).join('\n');
+  const numerosDoRodape = rodape ? numerosDaLeitura(rodape).numbers : new Set();
 
   // Total impresso na fração: "015/094" diz que a coleção tem 94 cartas.
   // Sozinho já elimina quase todas as coleções.
@@ -4299,26 +4350,36 @@ function scannerCandidates(ocrText) {
     ? cards.filter(card => card.setId === scannerSession.setId)
     : cards;
 
-  /* Quando a fração foi lida, ela MANDA. Antes ela era só um bônus grande de
-     pontos, e o nome — que vale 175 — conseguia levar a carta errada quando o
-     Pokémon batia. Agora, se existe alguma carta com aquela numeração exata,
-     as demais nem entram na disputa. É a correção do "acerta o Pokémon, erra
-     a coleção". */
+  /* Atalho de certeza: numeração E nome concordando.
+     A numeração sozinha mandava em tudo, e isso quebrou o leitor. O rodapé é a
+     letra menor da carta e a primeira a sair errada na mão trêmula: bastava um
+     algarismo trocado para o app devolver, com toda a confiança, uma carta que
+     não tinha nada a ver — e a carta certa, cujo nome estava perfeitamente
+     legível, nem entrava na disputa.
+     Agora o atalho só vale quando os dois sinais independentes concordam. Se
+     só a numeração bateu, ela continua valendo muito (+260 lá embaixo), mas
+     disputa com o nome em vez de calar o nome. */
   if (fractions.size) {
     const exatas = pool.filter(card => {
       const local = String(Number(String(card.localId || '').match(/\d+/)?.[0] ?? -1));
       const total = String(Number(String(card.number || '').split('/')[1] ?? -1));
       return fractions.has(`${local}/${total}`);
     });
-    if (exatas.length) {
-      return exatas.map(card => ({
+    const nomeConfere = card => {
+      const nome = canonical(card.name);
+      if (nome && compact.includes(nome)) return true;
+      const tokens = scannerMeaningfulTokens(nome);
+      if (tokens.length && tokens.every(token => compact.includes(token))) return true;
+      return pokemonIdsForCard(card).some(id => {
+        const pokemon = canonical(pokemonMap.get(id)?.name || '');
+        return pokemon && compact.includes(pokemon);
+      });
+    };
+    const concordam = exatas.filter(nomeConfere);
+    if (concordam.length) {
+      return concordam.map(card => ({
         card, score: 999, nameSimilarity: 1, pokemonSimilarity: 1, fractionMatch: true, numberMatch: true,
-      })).sort((a, b) => {
-        // Empate entre impressões com a mesma numeração: decide o nome lido.
-        const na = compact.includes(canonical(a.card.name)) ? 1 : 0;
-        const nb = compact.includes(canonical(b.card.name)) ? 1 : 0;
-        return nb - na || a.card.name.localeCompare(b.card.name, 'pt-BR');
-      }).slice(0, 6);
+      })).sort((a, b) => a.card.name.localeCompare(b.card.name, 'pt-BR')).slice(0, 6);
     }
   }
   const candidatePool = scannerSession.setId !== 'all' ? pool : pool.filter(card => {
@@ -4331,7 +4392,7 @@ function scannerCandidates(ocrText) {
       return pokemonName && compact.includes(pokemonName);
     });
   });
-  return candidatePool.map(card => {
+  const medidas = candidatePool.map(card => {
     const cardName = canonical(card.name);
     const setName = canonical(card.setName);
     const localNumber = String(Number(String(card.localId || '').match(/\d+/)?.[0] || -1));
@@ -4346,22 +4407,38 @@ function scannerCandidates(ocrText) {
     const pokemonNames = pokemonIdsForCard(card).map(id => canonical(pokemonMap.get(id)?.name || '')).filter(Boolean);
     const pokemonSimilarity = pokemonNames.reduce((best, name) => Math.max(best, scannerBestTextSimilarity(name, lines), compact.includes(name) ? 1 : 0), 0);
     const setSimilarity = setName.length >= 3 ? scannerBestTextSimilarity(setName, lines) : 0;
+    const numberMatch = numbers.has(localNumber);
+    return { card, cardName, localNumber, official, fractionMatch, nameSimilarity, pokemonSimilarity, setSimilarity, numberMatch };
+  });
+
+  /* O nome grande da carta é a coisa mais fácil de ler; a numeração do rodapé é
+     a mais difícil. Quando os dois discordam, quem provavelmente saiu errado é
+     a numeração. Sem esta regra, um único algarismo trocado no rodapé fazia o
+     app devolver, com 501 pontos de confiança, um Squirtle no lugar de um
+     Bulbasaur cujo nome estava perfeitamente legível na tela. */
+  const nomeForteLido = medidas.some(m => m.nameSimilarity >= .85 || m.pokemonSimilarity >= .9);
+
+  return medidas.map(item => {
+    const { fractionMatch, nameSimilarity, pokemonSimilarity, setSimilarity, numberMatch, localNumber, official } = item;
+    const desmentido = nomeForteLido && nameSimilarity < .5 && pokemonSimilarity < .5;
     let score = 0;
     score += Math.round(nameSimilarity * 175);
     score += Math.round(pokemonSimilarity * 70);
     score += Math.round(setSimilarity * 35);
-    const numberMatch = numbers.has(localNumber);
-    /* O número do rodapé pesa mais que o nome. Um Pokémon repete em dezenas
-       de impressões; o número repete em poucas. Antes valia 24 contra 175 do
-       nome, e por isso o app escolhia a impressão errada do Pokémon certo. */
-    if (numberMatch) score += 120;
-    if (fractionMatch) score += 260;
+    /* O número do rodapé pesa mais que o nome: um Pokémon repete em dezenas de
+       impressões, o número repete em poucas. Mas só o número lido NA FAIXA DO
+       RODAPÉ ganha esse peso. Número solto no meio da carta costuma ser dano de
+       ataque ou ano de impressão, e dar 120 pontos a ele fazia o app escolher
+       com confiança a impressão errada. */
+    if (numerosDoRodape.has(localNumber)) score += desmentido ? 25 : 120;
+    else if (numberMatch) score += desmentido ? 10 : 40;
+    if (fractionMatch) score += desmentido ? 55 : 260;
     // O total impresso ("/094") sozinho já aponta a coleção.
     if (totaisLidos.has(official)) score += 70;
     if (numbers.has(official)) score += 8;
     if (scannerSession.setId !== 'all') score += 65;
     if (!fractionMatch && nameSimilarity < .54 && pokemonSimilarity < .68) score -= scannerSession.setId === 'all' ? 55 : 20;
-    return { card, score, nameSimilarity, pokemonSimilarity, fractionMatch, numberMatch };
+    return { ...item, score };
   }).filter(item => item.score >= 55 && (
     item.nameSimilarity >= .46 || item.pokemonSimilarity >= .66 || item.fractionMatch
     /* Ter uma coleção escolhida deixava passar QUALQUER carta dela, mesmo sem
@@ -4417,6 +4494,60 @@ function scannerStringSimilarity(a, b) {
 }
 
 /* Aviso curto sobre a imagem da câmera, sem tirar a câmera da tela. */
+/* ---------- Diagnóstico da leitura ----------
+   Quando o leitor erra, ninguém consegue ajudar sem saber o que a câmera de
+   fato leu: a imagem some junto com o quadro. Aqui a última leitura recusada
+   fica guardada e pode ser vista — e copiada — pelo botão "O que a câmera leu"
+   na tela da câmera. */
+let ultimaRecusa = null;
+function registrarRecusa(texto, motivo, conferencia) {
+  ultimaRecusa = {
+    texto: String(texto || '').trim(),
+    motivo,
+    achados: conferencia?.achados || [],
+    quando: Date.now(),
+  };
+  const botao = document.getElementById('cameraDiagnostico');
+  if (botao) botao.hidden = false;
+}
+
+function abrirDiagnosticoLeitura() {
+  if (!ultimaRecusa) return notify('Nenhuma leitura recusada ainda.');
+  const { numbers, fractions } = numerosDaLeitura(ultimaRecusa.texto);
+  const legivel = ultimaRecusa.texto
+    .replace(/\[(?:FAIXA INFERIOR|CANTO INFERIOR|NUMERO)[^\]]*\]/gi, '\n— parte de baixo, ampliada —\n')
+    .replace(/\n{3,}/g, '\n\n').trim();
+  showModal(`
+    <button class="modal-close" onclick="telaCameraAoVivo()">×</button>
+    <h2>O que a câmera leu</h2>
+    <p class="screen-subtitle">${esc(ultimaRecusa.motivo)}</p>
+    <div class="panel">
+      <strong>Marcas de carta encontradas</strong>
+      <p class="card-meta">${ultimaRecusa.achados.length ? esc(ultimaRecusa.achados.join(', ')) : 'nenhuma'}</p>
+      <strong>Numeração entendida</strong>
+      <p class="card-meta">${fractions.size ? esc([...fractions].join(', ')) : 'nenhuma fração legível'}${numbers.size ? ` · números soltos: ${esc([...numbers].slice(0, 12).join(', '))}` : ''}</p>
+    </div>
+    <details class="scanner-ocr-debug" open><summary>Texto reconhecido</summary><pre>${esc(legivel || 'Nada legível.')}</pre></details>
+    <div class="modal-actions">
+      <button class="secondary-btn" onclick="copiarDiagnosticoLeitura()">Copiar</button>
+      <button class="primary-btn" onclick="telaCameraAoVivo()">Voltar à câmera</button>
+    </div>
+  `);
+}
+window.abrirDiagnosticoLeitura = abrirDiagnosticoLeitura;
+
+function copiarDiagnosticoLeitura() {
+  if (!ultimaRecusa) return;
+  const corpo = `${ultimaRecusa.motivo}\nMarcas: ${ultimaRecusa.achados.join(', ') || 'nenhuma'}\n\n${ultimaRecusa.texto}`;
+  try {
+    navigator.clipboard.writeText(corpo);
+    notify('Copiado. Pode colar para eu ver.');
+  } catch (_) {
+    notify('Não consegui copiar neste aparelho.');
+  }
+}
+window.copiarDiagnosticoLeitura = copiarDiagnosticoLeitura;
+
 function avisarNaCamera(mensagem) {
   const dica = document.getElementById('cameraDica');
   if (!dica) return notify(mensagem);
@@ -4437,6 +4568,7 @@ window.receiveScannerText = function receiveScannerText(text, finish) {
      letras, e esse ruído chegava até o reconhecimento. */
   const conferencia = pareceUmaCarta(text);
   if (!conferencia.aceita) {
+    registrarRecusa(text, 'Não reconheci nenhuma marca de carta (nome, HP, numeração, rodapé).', conferencia);
     if (scannerSession.live) return avisarNaCamera('Nenhuma carta na moldura');
     return showScannerMessage('Nenhuma carta reconhecida na imagem.', true);
   }
@@ -4444,6 +4576,7 @@ window.receiveScannerText = function receiveScannerText(text, finish) {
   const candidates = scannerCandidates(String(text || ''));
 
   if (!candidates.length) {
+    registrarRecusa(text, 'Vi que é uma carta, mas não achei ela no catálogo.', conferencia);
     /* Com a câmera ao vivo, não dá para abrir um aviso em cima da tela: ele
        cobriria a imagem e os botões, e o caminho de volta reabria a câmera por
        cima dela mesma. Aqui a leitura falha em silêncio e a câmera continua. */
@@ -4460,6 +4593,11 @@ window.receiveScannerText = function receiveScannerText(text, finish) {
   }
 
   scannerCandidateBuffer = candidates;
+  // Cada carta lida começa do zero: a versão normal em 1, o resto zerado e a
+  // lista de versões recolhida de novo.
+  scannerSession.pricingVariant = 'normal';
+  scannerSession.quantidades = null;
+  scannerSession.verTodasVersoes = false;
   showScannerPrimaryCandidate();
   loadScannerVariantAvailability(primeira);
 };
@@ -4700,7 +4838,7 @@ function telaCameraAoVivo() {
         ${pendentes.length ? `<div class="leitura-tiras">${tiras}</div>` : '<p class="camera-vazio">Nenhuma carta lida ainda.</p>'}
         <div class="camera-atalhos">
           <button class="camera-atalho" onclick="abrirBuscaManual()">⌨ Digitar carta</button>
-          <button class="camera-atalho" onclick="comoEscanear()">? Como escanear</button>
+          <button class="camera-atalho" id="cameraDiagnostico" ${ultimaRecusa ? '' : 'hidden'} onclick="abrirDiagnosticoLeitura()">👁 O que a câmera leu</button>
         </div>
         <div class="camera-acoes">
           <button class="camera-cancelar" onclick="encerrarLeitura()">Cancelar</button>
@@ -4729,33 +4867,124 @@ function showScannerPrimaryCandidate() {
   // A lista definitiva vem do banco de preços; enquanto ela não chega, os
   // botões mostram os acabamentos padrão. Quando chegar, o painel se redesenha.
   loadScannerVariantAvailability(card);
-  const botoes = visiveis.map(value => {
+
+  /* Uma linha por versão da carta, empilhadas — a mesma ideia da tela de
+     cadastro. Cada linha tem o preço DAQUELA versão (holo não vale o mesmo que
+     normal) e a sua própria quantidade. Os botões − e + ficam na linha
+     selecionada; nas outras aparece só um + para trazer o foco para ela.
+     Assim uma leitura só resolve "tenho 2 normais e 1 reverse". */
+  const quantidades = quantidadesDaLeitura();
+  /* A comum vem sempre em primeiro: é o padrão e a mais frequente no bulk.
+     Depois holo, reverse e, por último, as versões especiais. Ordenar só por
+     "tem holo no nome" deixava a comum em segundo, porque nomes como
+     "illustration-rare" vinham antes de "normal" no alfabeto. */
+  const ordenadas = visiveis.slice().sort((a, b) => {
+    /* Comum, holo e reverse são as três de sempre — e são justamente as três
+       que ficam à vista antes do "mostrar mais". As especiais (pokébola,
+       masterball, ilustração rara) vão para o fim. Testar só por "holo no
+       nome" jogava masterball-holofoil na frente da Reverse Holo. */
+    const peso = value => value === 'normal' ? 0
+      : /^holo(foil)?$/i.test(value) ? 1
+        : /reverse/i.test(value) ? 2 : 3;
+    return peso(a) - peso(b) || a.localeCompare(b, 'pt-BR');
+  });
+  /* Da quarta versão em diante fica escondido atrás de um botão. Três linhas
+     dão conta de quase toda carta, e é o que garante o cartão inteiro na tela
+     sem rolagem por dentro, mesmo em aparelho de tela curta. Versão que já tem
+     quantidade escolhida nunca some — sumir com o que a pessoa marcou seria
+     esconder trabalho feito. */
+  const LIMITE_VERSOES = 3;
+  const marcadas = new Set(ordenadas.filter(value => Number(quantidades[value]) > 0));
+  const mostrarTodas = Boolean(scannerSession.verTodasVersoes);
+  const naLista = mostrarTodas
+    ? ordenadas
+    : ordenadas.filter((value, indice) => indice < LIMITE_VERSOES || marcadas.has(value));
+  const escondidas = ordenadas.length - naLista.length;
+
+  const linhasVariante = naLista.map(value => {
     const estilo = variantEstilo(value);
-    const ativo = value === scannerSession.pricingVariant ? ' ativo' : '';
-    return `<button type="button" class="variante-pill ${estilo.classe}${ativo}" data-pill="${esc(value)}"
-      onclick="escolherVarianteLeitura('${esc(value)}')">
-      <span class="variante-icone" aria-hidden="true">${estilo.icone}</span>${esc(friendlyVariantLabel(value))}
-    </button>`;
+    const escolhida = value === scannerSession.pricingVariant;
+    const quantas = Number(quantidades[value]) || 0;
+    const valor = precoDaVariante(card, value, idioma);
+    return `<div class="leitura-versao ${estilo.classe}${escolhida ? ' escolhida' : ''}${quantas ? ' tem' : ''}">
+      <button type="button" class="leitura-versao-nome" onclick="escolherVarianteLeitura('${esc(value)}')">
+        <span class="variante-icone" aria-hidden="true">${estilo.icone}</span>
+        <span class="leitura-versao-rotulo">${esc(friendlyVariantLabel(value))}</span>
+        <span class="leitura-versao-preco">${esc(valor)}</span>
+      </button>
+      ${escolhida
+        ? `<div class="leitura-qtd">
+             <button type="button" onclick="mudarQuantidadeDaLeitura(-1)" aria-label="Menos uma ${esc(friendlyVariantLabel(value))}">−</button>
+             <b>${quantas}</b>
+             <button type="button" onclick="mudarQuantidadeDaLeitura(1)" aria-label="Mais uma ${esc(friendlyVariantLabel(value))}">+</button>
+           </div>`
+        : `<button type="button" class="leitura-versao-mais" onclick="somarNaVariante('${esc(value)}')"
+             aria-label="Adicionar uma ${esc(friendlyVariantLabel(value))}">${quantas ? `<b>${quantas}</b>` : '+'}</button>`}
+    </div>`;
   }).join('');
 
   const arte = card.imageUrl ? upgradeCardImageUrl(card.imageUrl) : '';
   const painel = document.getElementById('leituraPainel');
+  const novoNaDex = pokemonInedito(card);
+  const jaTem = quantityFor(card.id);
+  const totalEscolhido = Object.values(quantidades).reduce((soma, n) => soma + (Number(n) || 0), 0);
+  const outras = scannerCandidateBuffer.length - 1;
+
   const html = `
     <div class="leitura-painel-alca" aria-hidden="true"></div>
+    ${novoNaDex ? `<button type="button" class="leitura-estrela" onclick="explicarEstrela()"
+      title="Pokémon que ainda falta na sua Pokédex" aria-label="Pokémon novo na Pokédex">★</button>` : ''}
+
+    <div class="leitura-selo ${candidate.fractionMatch ? 'ok' : 'duvida'}">
+      ${candidate.fractionMatch ? '✓ CARTA IDENTIFICADA' : '⚠ CONFIRA A COLEÇÃO'}
+      <em>${Math.min(99, score)}%</em>
+    </div>
+
     <div class="leitura-painel-corpo">
-      <div class="leitura-arte">
+      <button type="button" class="leitura-arte" onclick="abrirZoomLeitura('${esc(card.id)}')" aria-label="Ampliar a carta">
         ${arte ? `<img src="${esc(arte)}" alt="Arte de ${esc(card.name)}">` : '<span class="card-placeholder">TCG</span>'}
-      </div>
+        <span class="leitura-lupa" aria-hidden="true">⌕</span>
+      </button>
       <div class="leitura-info">
         <strong>${esc(card.name)}</strong>
-        <span>${esc(formatCardNumber(card.localId || card.number, card.setTotal))} · ${esc(card.setName)}</span>
-        <small>${Math.min(99, score)}% de correspondência</small>
-        <div class="variante-pills leitura-variantes">${botoes}</div>
+        <span>${esc(card.setName)} · ${esc(String(card.number || '').includes('/')
+          ? card.number
+          : formatCardNumber(card.localId || card.number, card.setTotal))}</span>
+        ${candidate.fractionMatch ? '' : `<small class="leitura-aviso">Não li a numeração do rodapé — confira a coleção antes de adicionar.</small>`}
+        ${jaTem ? `<button type="button" class="leitura-jatem" onclick="verNaColecao('${esc(card.id)}')">
+          <span aria-hidden="true">▤</span> Você já tem ${jaTem} <span aria-hidden="true">›</span></button>` : ''}
       </div>
     </div>
+
+    <div class="leitura-copia">
+      <div class="leitura-copia-topo">
+        <span class="leitura-copia-titulo">SUA CÓPIA</span>
+        <select class="leitura-campo" onchange="escolherIdiomaLeitura(this.value)" aria-label="Idioma da carta">
+          ${PRICE_LANGUAGES.map(value => option(value, IDIOMA_CURTO[value] || value, idioma)).join('')}
+        </select>
+        <select class="leitura-campo" onchange="escolherCondicaoLeitura(this.value)" aria-label="Estado da carta">
+          ${['Mint', 'Near Mint', 'Excelente', 'Bom', 'Regular', 'Danificada']
+            .map(value => option(value, CONDICAO_CURTA[value] || value, scannerSession.condition)).join('')}
+        </select>
+      </div>
+      <div class="leitura-versoes">${linhasVariante}</div>
+      ${escondidas > 0 || mostrarTodas && ordenadas.length > LIMITE_VERSOES
+        ? `<button type="button" class="leitura-mais-versoes" onclick="alternarVersoesEscondidas()">
+             ${escondidas > 0
+               ? `▾ Mostrar mais ${escondidas} ${escondidas > 1 ? 'versões' : 'versão'}`
+               : '▴ Mostrar menos'}
+           </button>`
+        : ''}
+      <button type="button" class="leitura-outra" onclick="recusarLeitura()">
+        ⇄ Não é essa carta?${outras > 0 ? ` <em>(${outras} parecida${outras > 1 ? 's' : ''})</em>` : ''}
+      </button>
+    </div>
+
     <div class="leitura-painel-acoes">
-      <button class="leitura-nao" onclick="recusarLeitura()">Não é essa</button>
-      <button class="leitura-sim" onclick="confirmScannedCard('${esc(card.id)}')">✓ Adicionar</button>
+      <button class="leitura-nao" onclick="encerrarLeituraAtual()">✕ Recusar</button>
+      <button class="leitura-sim" ${totalEscolhido ? '' : 'disabled'} onclick="confirmScannedCard('${esc(card.id)}')">
+        ✓ Adicionar${totalEscolhido > 1 ? ` ${totalEscolhido}` : ''}
+      </button>
     </div>`;
 
   if (painel) {
@@ -4814,13 +5043,137 @@ function retomarCamera() {
   try { window.Android?.resumeLiveScanner?.(); } catch (_) {}
 }
 
+/* ---------- Peças do painel de confirmação ---------- */
+
+const IDIOMA_CURTO = { 'pt-br': '🇧🇷 PT', en: '🇺🇸 EN', ja: '🇯🇵 JA' };
+const CONDICAO_CURTA = {
+  'Mint': 'M — perfeita',
+  'Near Mint': 'NM — quase nova',
+  'Excelente': 'EX — excelente',
+  'Bom': 'GD — boa',
+  'Regular': 'LP — usada',
+  'Danificada': 'DMG — danificada',
+};
+
+/* A estrela dourada.
+   Vale quando NENHUM Pokémon da carta tem carta na coleção ainda. Serve para
+   garimpar bulk: o monte passa na frente da câmera e só as que fecham buraco
+   na Pokédex chamam atenção. Carta sem Pokémon (energia, item) nunca acende. */
+function pokemonInedito(card) {
+  const ids = pokemonIdsForCard(card);
+  if (!ids.length) return false;
+  const stats = buildPokemonStats();
+  return ids.every(id => !(stats.get(id)?.copies > 0));
+}
+
+function explicarEstrela() {
+  const nomes = pokemonIdsForCard(scannerCandidateBuffer[0]?.card)
+    .map(id => pokemonMap.get(id)?.name).filter(Boolean).join(' e ');
+  notify(`★ ${nomes || 'Este Pokémon'} ainda não tem nenhuma carta na sua Pokédex.`);
+}
+
+/* Preço da versão exata, não da carta em geral.
+   Um holo e um normal da mesma carta são preços muito diferentes; mostrar um só
+   número para a carta inteira dava a impressão de que o app tinha errado o
+   valor. Cada linha traz o preço da sua própria versão. */
+function precoDaVariante(card, versao, idioma) {
+  /* O preço mora num lote do banco que só é baixado sob demanda. Sem pedir o
+     lote aqui, o painel mostraria "—" para sempre: nada mais na tela da câmera
+     dispara esse download. */
+  ensureCentralPriceShard(card.id).then(chegou => {
+    if (chegou && document.getElementById('leituraPainel') && scannerCandidateBuffer[0]?.card?.id === card.id) {
+      showScannerPrimaryCandidate();
+    }
+  }).catch(() => {});
+
+  const cotacao = automaticPriceQuote(card.id, {
+    pricingVariant: versao, finish: versao, language: idioma,
+    condition: scannerSession.condition || 'Near Mint',
+    edition: 'unlimited', distribution: 'unstamped', artVariant: 'standard',
+    region: idioma === 'pt-br' ? 'Brasil' : 'Internacional',
+  });
+  const valor = Number(cotacao?.brl ?? cotacao?.basePriceBrl);
+  return Number.isFinite(valor) && valor > 0 ? money(valor) : '—';
+}
+
+/* Quantidade por versão. A carta normal já começa com 1: é o caso de longe
+   mais comum, e obrigar um toque para cada carta de um bulk seria pior. */
+function quantidadesDaLeitura() {
+  if (!scannerSession.quantidades) {
+    scannerSession.quantidades = { [scannerSession.pricingVariant || 'normal']: 1 };
+  }
+  return scannerSession.quantidades;
+}
+
+function mudarQuantidadeDaLeitura(delta) {
+  const versao = scannerSession.pricingVariant || 'normal';
+  const quantidades = quantidadesDaLeitura();
+  const atual = Number(quantidades[versao]) || 0;
+  quantidades[versao] = Math.min(99, Math.max(0, atual + Number(delta || 0)));
+  showScannerPrimaryCandidate();
+}
+
+/* Tocar no + de uma versão que não está selecionada faz as duas coisas de uma
+   vez: seleciona aquela versão e soma uma. Sem isso seriam dois toques para o
+   que a pessoa claramente quis num só. */
+function alternarVersoesEscondidas() {
+  scannerSession.verTodasVersoes = !scannerSession.verTodasVersoes;
+  showScannerPrimaryCandidate();
+}
+
+function somarNaVariante(versao) {
+  scannerSession.pricingVariant = versao;
+  scannerSession.finish = /reverse/i.test(versao) ? 'reverse' : /holo/i.test(versao) ? 'holo' : 'normal';
+  const quantidades = quantidadesDaLeitura();
+  quantidades[versao] = Math.min(99, (Number(quantidades[versao]) || 0) + 1);
+  showScannerPrimaryCandidate();
+}
+
+function escolherIdiomaLeitura(valor) {
+  scannerSession.language = valor;
+  showScannerPrimaryCandidate();   // o preço e as versões mudam com o idioma
+}
+
+function escolherCondicaoLeitura(valor) {
+  scannerSession.condition = valor;
+  showScannerPrimaryCandidate();   // a condição muda o preço
+}
+
+function verNaColecao(cardId) {
+  sairDaCamera();
+  openCard(cardId);
+}
+
+/* "Recusar" joga a carta fora e volta a ler; "Não é essa carta?" oferece as
+   outras parecidas. Eram o mesmo botão antes, e recusar mostrava um palpite
+   pior em vez de simplesmente seguir em frente. */
+function encerrarLeituraAtual() {
+  scannerCandidateBuffer = [];
+  retomarCamera();
+  telaCameraAoVivo();
+}
+
+function abrirZoomLeitura(cardId) {
+  const card = cardMap.get(cardId);
+  if (!card?.imageUrl) return notify('Esta carta não tem imagem grande.');
+  const painel = document.getElementById('leituraPainel');
+  if (painel) painel.classList.add('recuado');
+  const caixa = document.createElement('div');
+  caixa.className = 'leitura-zoom';
+  caixa.innerHTML = `<img src="${esc(upgradeCardImageUrl(card.imageUrl))}" alt="Arte de ${esc(card.name)}">
+    <span>${esc(card.name)} · ${esc(card.setName)}</span>`;
+  caixa.onclick = () => { caixa.remove(); painel?.classList.remove('recuado'); };
+  document.querySelector('.camera-sheet .camera-tela')?.appendChild(caixa);
+}
+
 function escolherVarianteLeitura(valor) {
   scannerSession.pricingVariant = valor;
   scannerSession.finish = /reverse/i.test(valor) ? 'reverse' : /holo/i.test(valor) ? 'holo' : 'normal';
-  const grupo = document.querySelector('.leitura-variantes');
-  if (grupo) grupo.querySelectorAll('.variante-pill').forEach(botao => {
-    botao.classList.toggle('ativo', botao.dataset.pill === valor);
-  });
+  // Escolher uma versão que ainda está zerada já deixa ela em 1: quem tocou na
+  // linha quis essa carta, não quis apenas mover o foco.
+  const quantidades = quantidadesDaLeitura();
+  if (!Number(quantidades[valor])) quantidades[valor] = 1;
+  showScannerPrimaryCandidate();
 }
 
 function recusarLeitura() {
@@ -4992,13 +5345,33 @@ window.receiveScannerCancelled = function receiveScannerCancelled() {
 function confirmScannedCard(cardId) {
   const card = cardMap.get(cardId);
   if (!card) { notify('Esta carta não está mais no catálogo.'); return retomarCamera(); }
-  registrarLeitura(cardId);
+  const inedito = pokemonInedito(card);
+  /* Cada versão vira sua própria entrada na lista, com o acabamento certo.
+     Antes só existia uma quantidade para a carta toda, e quem tinha o normal e
+     o reverse na mão precisava ler a mesma carta duas vezes. */
+  const quantidades = quantidadesDaLeitura();
+  let quantas = 0;
+  for (const [versao, numero] of Object.entries(quantidades)) {
+    const vezes = Math.max(0, Number(numero) || 0);
+    for (let i = 0; i < vezes; i += 1) {
+      registrarLeitura(cardId, {
+        pricingVariant: versao,
+        finish: /reverse/i.test(versao) ? 'reverse' : /holo/i.test(versao) ? 'holo' : 'normal',
+      });
+    }
+    quantas += vezes;
+  }
+  if (!quantas) return notify('Escolha ao menos uma versão antes de adicionar.');
+  scannerSession.quantidades = null;
   scannerSession.ultimaConfirmada = cardId;
   scannerSession.confirmadaEm = Date.now();
   scannerCandidateBuffer = [];
   retomarCamera();
   telaCameraAoVivo();
-  avisarNaCamera(`${card.name} adicionada · ${totalLeituras()} na lista`);
+  const quanto = quantas > 1 ? `${quantas}× ${card.name}` : card.name;
+  avisarNaCamera(inedito
+    ? `★ ${quanto} — Pokémon novo na Pokédex! · ${totalLeituras()} na lista`
+    : `${quanto} adicionada · ${totalLeituras()} na lista`);
 }
 
 /* ---------- Tela de revisão ----------
