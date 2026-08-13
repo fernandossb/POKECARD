@@ -1694,6 +1694,7 @@ async function init() {
       loadCatalogData(),
       loadJson('data/pokedex.json'),
       loadJson('data/collection-seed.json'),
+      carregarFormasRegionais(),
     ]);
     rebuildCatalogIndexes();
     catalogUpdateMeta = loadCatalogUpdateMeta();
@@ -6358,8 +6359,42 @@ function renderPokemonTile(item, stat) {
 
 function openPokemon(id) {
   ui.selectedPokemon = Number(id);
+  ui.formaPokemon = '';   // abrir outro Pokémon não herda a forma do anterior
   render();
   window.scrollTo(0,0);
+}
+
+/* ---------- Formas regionais ----------
+   Alola, Galar, Hisui e Paldea não são Pokémon novos: são o mesmo Pokémon com
+   outra cara. Por isso NÃO entram na contagem da Pokédex — ela continua com
+   1.025, e uma carta de Vulpix de Alola continua marcando o Vulpix. O que muda
+   é aqui dentro: a tela do Pokémon passa a mostrar cada forma com o sprite
+   dela e só as cartas daquela forma.
+
+   A separação é feita pelo nome da carta, que é a única pista que o catálogo
+   dá — "Vulpix de Alola", "Alolan Vulpix". Carta antiga sem o nome da região
+   cai na forma original, que é onde ela deve mesmo ficar. */
+let formasRegionais = {};
+
+async function carregarFormasRegionais() {
+  try { formasRegionais = await loadJson('data/formas-regionais.json') || {}; }
+  catch (_) { formasRegionais = {}; }
+}
+
+function formasDoPokemon(pokemonId) {
+  const lista = formasRegionais[String(Number(pokemonId))];
+  return Array.isArray(lista) ? lista : [];
+}
+
+/* A qual forma esta carta pertence? Devolve a região ou '' para a original. */
+function regiaoDaCarta(card, regioes) {
+  const nome = normalize(card?.name);
+  for (const regiao of regioes) {
+    const chave = normalize(regiao);
+    // "vulpix de alola", "alolan vulpix", "alolan" em inglês vira "alola" aqui.
+    if (nome.includes(chave)) return regiao;
+  }
+  return '';
 }
 
 function renderPokemonDetail(id) {
@@ -6368,23 +6403,72 @@ function renderPokemonDetail(id) {
   const stat = buildPokemonStats().get(pokemon.id);
   const related = cards.filter(card => pokemonIdsForCard(card).includes(pokemon.id))
     .sort((a,b) => quantityFor(b.id)-quantityFor(a.id) || a.setName.localeCompare(b.setName,'pt-BR') || numericLocal(a)-numericLocal(b));
+
+  const formas = formasDoPokemon(pokemon.id);
+  const regioes = [...new Set(formas.map(f => f.regiao))];
+  const escolhida = ui.formaPokemon && regioes.includes(ui.formaPokemon) ? ui.formaPokemon : '';
+  const daForma = regioes.length
+    ? related.filter(card => regiaoDaCarta(card, regioes) === escolhida)
+    : related;
+
+  /* Uma aba por REGIÃO, não por forma. O Tauros de Paldea tem três raças
+     (Combate, Chamas, Água) e elas davam três abas iguais, todas com as mesmas
+     onze cartas: o nome da carta é "Tauros de Paldea" nas três, então não há
+     como separá-las. Uma aba por região é o que o catálogo consegue sustentar. */
+  const daRegiao = regiao => formas.find(f => f.regiao === regiao);
+  const forma = escolhida ? daRegiao(escolhida) : null;
+  const arteId = forma ? forma.id : pokemon.id;
+  const irmas = escolhida ? formas.filter(f => f.regiao === escolhida) : [];
+  const titulo = !forma ? pokemon.name
+    : irmas.length > 1 ? `${pokemon.name} de ${escolhida}` : forma.nome;
+
+  const abas = regioes.length ? `
+    <div class="formas-abas" role="tablist">
+      <button class="forma-aba${escolhida ? '' : ' ativa'}" role="tab" aria-selected="${!escolhida}"
+        onclick="escolherFormaPokemon('')">
+        <img src="${esc(pokemon.sprite)}" alt="" data-arte3d="${Number(pokemon.id)}" loading="lazy">
+        <span>Original</span>
+        <b>${related.filter(card => !regiaoDaCarta(card, regioes)).length}</b>
+      </button>
+      ${regioes.map(regiao => {
+        const f = daRegiao(regiao);
+        const quantas = related.filter(card => regiaoDaCarta(card, regioes) === regiao).length;
+        const ativa = escolhida === regiao;
+        return `<button class="forma-aba${ativa ? ' ativa' : ''}" role="tab" aria-selected="${ativa}"
+          onclick="escolherFormaPokemon('${esc(regiao)}')">
+          <img src="${esc(pokemon.sprite)}" alt="" data-arte3d="${Number(f.id)}" loading="lazy">
+          <span>${esc(regiao)}</span>
+          <b>${quantas}</b>
+        </button>`;
+      }).join('')}
+    </div>` : '';
+
   return `<section class="screen">
-    <button class="back-btn" onclick="ui.selectedPokemon=null;render();window.scrollTo(0,0)">← Voltar à Pokédex</button>
+    <button class="back-btn" onclick="ui.selectedPokemon=null;ui.formaPokemon='';render();window.scrollTo(0,0)">← Voltar à Pokédex</button>
     <div class="pokemon-hero">
       <!-- Faltava o data-arte3d aqui: a tela de detalhe era a única que ficava
            com o sprite embutido de 96px esticado, a maior ampliação do app. -->
-      <img src="${esc(pokemon.sprite)}" alt="${esc(pokemon.name)}" data-arte3d="${Number(pokemon.id)}">
-      <div><span class="pokemon-number">Nº ${String(pokemon.id).padStart(4,'0')} · ${esc(pokemon.region)}</span><h2>${esc(pokemon.name)}</h2><div class="badges">${pokemon.types.map(type=>`<span class="badge">${esc(type)}</span>`).join('')}</div></div>
+      <img src="${esc(pokemon.sprite)}" alt="${esc(titulo)}" data-arte3d="${Number(arteId)}" data-arte3d-modo="nitida">
+      <div><span class="pokemon-number">Nº ${String(pokemon.id).padStart(4,'0')} · ${esc(forma ? forma.regiao : pokemon.region)}</span><h2>${esc(titulo)}</h2><div class="badges">${pokemon.types.map(type=>`<span class="badge">${esc(type)}</span>`).join('')}</div></div>
     </div>
+    ${abas}
     <div class="stats-grid">
       ${statCard(stat.copies,'Cartas no fichário')}
       ${statCard(stat.cardIds.size,'Cartas únicas')}
     </div>
-    <h3 class="section-title">Todas as cartas de ${esc(pokemon.name)}</h3>
-    <p class="screen-subtitle">As suas aparecem primeiro e totalmente visíveis. Você pode atualizar a quantidade aqui mesmo.</p>
-    <div class="card-list">${related.length ? related.map(renderCardRow).join('') : '<div class="empty">Nenhuma carta desse Pokémon foi encontrada no catálogo atual.</div>'}</div>
+    <h3 class="section-title">${escolhida ? `Cartas de ${esc(titulo)}` : `Todas as cartas de ${esc(pokemon.name)}`}</h3>
+    <p class="screen-subtitle">${regioes.length
+      ? 'As formas regionais contam para o mesmo Pokémon na Pokédex — aqui elas ficam separadas para você achar mais fácil.'
+      : 'As suas aparecem primeiro e totalmente visíveis. Você pode atualizar a quantidade aqui mesmo.'}</p>
+    <div class="card-list">${daForma.length ? daForma.map(renderCardRow).join('') : '<div class="empty">Nenhuma carta dessa forma foi encontrada no catálogo atual.</div>'}</div>
   </section>`;
 }
+
+function escolherFormaPokemon(regiao) {
+  ui.formaPokemon = regiao || '';
+  render();
+}
+window.escolherFormaPokemon = escolherFormaPokemon;
 
 function ownedDeckPool() {
   return cards.map(card => ({ card, owned: quantityFor(card.id) }))

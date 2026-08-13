@@ -459,17 +459,18 @@
       + '</div>';
   }
 
-  /* Animada é 60×60 e anima; nítida é 512×512 e fica parada. Não existe
-     fonte que seja as duas coisas — a única que anima é pixel art. */
+  /* A animação saiu: 180 GIFs na tela ao mesmo tempo engasgavam a rolagem por
+     mais que se limitasse o desenho. Sobraram duas artes paradas — uma leve e
+     uma bonita —, e a escolha agora é entre rolagem lisa e definição. */
   function barraArtePokedex() {
-    var modo = (typeof window.arteDaPokedex === 'function') ? window.arteDaPokedex() : 'animada';
+    var modo = (typeof window.arteDaPokedex === 'function') ? window.arteDaPokedex() : 'leve';
     return '<div class="claridade-caixa">'
       + '<div class="claridade-topo"><span>Arte da Pokédex</span></div>'
       + '<div class="arte-opcoes">'
-      + '<button type="button" class="arte-opcao' + (modo === 'animada' ? ' ativo' : '') + '"'
-      + ' onclick="trocarArtePokedex(\'animada\')"><strong>Animada</strong><small>Mexe. Pixel art de 60px, desenhada sem borrão.</small></button>'
+      + '<button type="button" class="arte-opcao' + (modo === 'leve' ? ' ativo' : '') + '"'
+      + ' onclick="trocarArtePokedex(\'leve\')"><strong>Leve</strong><small>Sprite do Switch, 1 KB cada. Rolagem lisa até no aparelho fraco.</small></button>'
       + '<button type="button" class="arte-opcao' + (modo === 'nitida' ? ' ativo' : '') + '"'
-      + ' onclick="trocarArtePokedex(\'nitida\')"><strong>Nítida</strong><small>Modelo 3D de 512px. Bem mais definida, mas parada.</small></button>'
+      + ' onclick="trocarArtePokedex(\'nitida\')"><strong>Nítida</strong><small>Arte 3D do HOME, 512px. Bem mais bonita e 98 KB cada.</small></button>'
       + '</div>'
       + '<button type="button" class="arte-limpar" onclick="limparArtes()">Baixar as artes de novo</button>'
       + '<small>As artes ficam guardadas no aparelho e não são baixadas de novo. Use isto se gerar sprites novos ou quiser liberar espaço.</small>'
@@ -490,7 +491,7 @@
     if (typeof window.definirArtePokedex === 'function') window.definirArtePokedex(modo);
     var caixa = document.querySelector('.arte-opcoes');
     if (caixa) caixa.parentElement.outerHTML = barraArtePokedex();
-    if (typeof notify === 'function') notify(modo === 'nitida' ? 'Arte nítida (parada).' : 'Arte animada.');
+    if (typeof notify === 'function') notify(modo === 'nitida' ? 'Arte nítida do HOME.' : 'Sprite leve do Switch.');
   };
 
   function corpo() {

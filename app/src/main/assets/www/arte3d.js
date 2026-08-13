@@ -35,7 +35,18 @@
   /* Branch separada do próprio repositório, servida pelo CDN. Enquanto o
      serviço "Gerar sprites HD" não tiver rodado, o manifesto não existe, a
      consulta falha em silêncio e o app segue usando a fonte de sempre. */
-  var HD_BASE = 'https://cdn.jsdelivr.net/gh/fernandossb/POKECARD@sprites-hd/output/';
+  /* DESLIGADO de propósito.
+
+     Os 1.011 arquivos publicados nessa branch são WebP ANIMADOS de 126 KB cada
+     — foram gerados quando a Pokédex ainda animava, justamente para deixar a
+     animação mais nítida. Como eles têm preferência sobre qualquer outra fonte,
+     passaram a ser a arte de verdade da lista: 180 na tela davam 22 MB e 180
+     animações ao mesmo tempo, quatro vezes mais pesado que os GIFs originais.
+     Era essa a lentidão.
+
+     A branch continua no GitHub, intacta. Basta devolver o endereço aqui se um
+     dia forem gerados sprites HD PARADOS. */
+  var HD_BASE = '';
   var hdDisponiveis = null;   // Set com os números que têm versão HD
   var hdVersao = '';          // marca da geração, para renovar o que está guardado
   var hdConsultado = false;
@@ -56,15 +67,38 @@
       .catch(function () { hdDisponiveis = null; return null; });
   }
 
+  /* ---- Por que a animação saiu ----
+
+     São até 180 Pokémon desenhados na lista ao mesmo tempo, cada GIF com 33 a
+     47 quadros. O aparelho decodificava todos de uma vez e a rolagem engasgava.
+     Limitar o desenho ao que está na tela ajudou, mas não resolveu: animação
+     nenhuma sai de graça quando são dezenas ao mesmo tempo.
+
+     Medido no CDN, por Pokémon e para 180 na tela:
+
+       GIF animado (showdown, 60×60)       31,6 KB   →  5,5 MB   e anima
+       HOME 3D (512×512)                   98,0 KB   → 17,2 MB   parado
+       Ícone Switch (68×56)                 1,0 KB   →  0,2 MB   parado
+
+     Daí os dois modos de hoje, ambos SEM animação:
+
+       "leve"   — ícone Switch na lista. 27 vezes mais leve que o GIF e não
+                  gasta nada para se manter na tela. É o padrão.
+       "nitida" — arte 3D do HOME. Muito mais bonita, mas 98 KB cada: pesada
+                  para a lista inteira, perfeita para a tela de um Pokémon só.
+
+     A tela de detalhe usa sempre a arte grande, independentemente do modo:
+     ali é UM Pokémon, e 98 KB não custam nada. */
   var CONJUNTOS = {
-    animada: [
-      { caminho: 'other/showdown/', ext: '.gif', pixelada: true },   //  60×60, anima
-      { caminho: 'other/home/', ext: '.png', pixelada: false }       // 512×512, parada
+    leve: [
+      { caminho: 'versions/generation-viii/icons/', ext: '.png', pixelada: true },  // 68×56
+      { caminho: 'other/home/', ext: '.png', pixelada: false },                     // 512×512
+      { caminho: '', ext: '.png', pixelada: true }                                  // 96×96
     ],
     nitida: [
       { caminho: 'other/home/', ext: '.png', pixelada: false },              // 512×512
       { caminho: 'other/official-artwork/', ext: '.png', pixelada: false },  // 475×475
-      { caminho: 'other/showdown/', ext: '.gif', pixelada: true }
+      { caminho: 'versions/generation-viii/icons/', ext: '.png', pixelada: true }
     ]
   };
 
@@ -72,11 +106,17 @@
     try {
       var v = localStorage.getItem(PREFERENCIA_KEY);
       if (v === 'nitida') return 'nitida';
+      // "animada" era o padrão antigo. Quem tinha essa preferência guardada
+      // cairia num modo que não existe mais e ficaria sem arte nenhuma.
+      if (v === 'animada') return 'leve';
     } catch (e) {}
-    return 'animada';
+    return 'leve';
   }
 
-  function fontes() { return CONJUNTOS[modoAtual()] || CONJUNTOS.animada; }
+  /* `forcado` existe para a tela de um Pokémon só: ali sempre vale a arte
+     grande, mesmo com o modo leve escolhido para a lista. Um Pokémon na tela
+     custa 98 KB uma vez; a lista inteira custaria 17 MB. */
+  function fontes(forcado) { return CONJUNTOS[forcado] || CONJUNTOS[modoAtual()] || CONJUNTOS.leve; }
 
   var DB_NOME = 'fichario-pokemon-arte3d';
   var LOJA = 'imagens';
@@ -151,8 +191,8 @@
   }
 
   /** Tenta a arte animada e, se não existir para este Pokémon, a parada. */
-  function buscarNasFontes(id, indice) {
-    var lista = fontes();
+  function buscarNasFontes(id, indice, forcado) {
+    var lista = fontes(forcado);
     if (indice >= lista.length) return Promise.reject(new Error('sem arte'));
     var fonte = lista[indice];
     return fetch(BASE + fonte.caminho + id + fonte.ext).then(function (r) {
@@ -162,7 +202,7 @@
       // Guardamos junto se a arte é pixel art: é o que decide como desenhar.
       return { dataUrl: dataUrl, pixelada: fonte.pixelada };
     }).catch(function () {
-      return buscarNasFontes(id, indice + 1);
+      return buscarNasFontes(id, indice + 1, forcado);
     });
   }
 
@@ -195,18 +235,21 @@
      abrir sem baixar nada da segunda vez em diante. Só que "para sempre" tem
      um custo: se a chave não mudasse ao gerar sprites novos, quem já tivesse
      baixado continuaria vendo os antigos, sem jeito de atualizar. */
-  function chaveDaArte(id, temHD) {
-    return Number(id) + ':' + modoAtual() + (temHD ? ':hd' + hdVersao : '');
+  function chaveDaArte(id, temHD, forcado) {
+    return Number(id) + ':' + (forcado || modoAtual()) + (temHD ? ':hd' + hdVersao : '');
   }
 
   function carregar(img) {
     var id = Number(img.getAttribute('data-arte3d'));
     if (!id) return;
+    // data-arte3d-modo="nitida" na tela de detalhe: ignora o modo da lista.
+    var forcado = img.getAttribute('data-arte3d-modo') || '';
+    if (!CONJUNTOS[forcado]) forcado = '';
 
     // O manifesto é consultado uma vez só; daí em diante responde na hora.
     carregarManifestoHD().then(function (disponiveis) {
       var temHD = Boolean(disponiveis && disponiveis.has(String(id)));
-      var chave = chaveDaArte(id, temHD);
+      var chave = chaveDaArte(id, temHD, forcado);
       if (falhou.has(chave)) return null;
       if (memoria.has(chave)) { aplicar(img, memoria.get(chave)); return null; }
       if (baixando.has(chave)) return null;
@@ -221,7 +264,7 @@
         }
         // A versão melhorada tem preferência; sem ela, segue a fonte de sempre.
         return (temHD ? buscarHD(id) : Promise.resolve(null)).then(function (hd) {
-          return hd || buscarNasFontes(id, 0);
+          return hd || buscarNasFontes(id, 0, forcado);
         }).then(function (arte) {
           memoria.set(chave, arte);
           guardar(chave, arte);
@@ -260,9 +303,9 @@
     }).catch(function () { return false; });
   };
 
-  /* Trocar entre animada e nítida: limpa o que está na tela e redesenha. */
+  /* Trocar entre leve e nítida: limpa o que está na tela e redesenha. */
   window.definirArtePokedex = function (modo) {
-    try { localStorage.setItem(PREFERENCIA_KEY, modo === 'nitida' ? 'nitida' : 'animada'); } catch (e) {}
+    try { localStorage.setItem(PREFERENCIA_KEY, modo === 'nitida' ? 'nitida' : 'leve'); } catch (e) {}
     memoria.clear();
     falhou.clear();
     var alvos = document.querySelectorAll('img[data-arte3d]');
