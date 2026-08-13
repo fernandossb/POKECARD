@@ -649,6 +649,9 @@ const VARIANT_FRIENDLY_LABELS = {
   'firstEdition': '1ª Edição',
   'unstamped': 'Sem carimbo',
   'stamped': 'Com carimbo',
+  // Padrões de fundo das coleções novas: são cartas diferentes, não acabamento.
+  'pokeball-holofoil': 'Padrão Poké Bola',
+  'masterball-holofoil': 'Padrão Master Ball',
 };
 
 function friendlyVariantLabel(value) {
@@ -667,37 +670,113 @@ const VARIANT_ESTILO = {
   '1st-edition-holofoil': { classe: 'v-primeira', icone: '❶' },
   'unlimited': { classe: 'v-comum', icone: '◻' },
   'unlimited-holofoil': { classe: 'v-holo', icone: '✦' },
+  'firstEdition': { classe: 'v-primeira', icone: '❶' },
+  'pokeball-holofoil': { classe: 'v-pokebola', icone: '◉' },
+  'masterball-holofoil': { classe: 'v-masterball', icone: '◍' },
 };
 
 function variantEstilo(value) {
   return VARIANT_ESTILO[exactSourceEnum(value)] || { classe: 'v-outra', icone: '◈' };
 }
 
+/* ---------- Uma versão = uma carta física ----------
+
+   Cada mercado dá um nome diferente para a MESMA carta. O Ampharos 1/64 do Neo
+   Revelation mostra bem: o banco publica cinco entradas para ela —
+
+     1st-edition-holofoil   (TCGplayer)
+     firstEdition           (marca do catálogo, sem preço)
+     holo                   (Cardmarket)
+     unlimited-holofoil     (TCGplayer)
+     normal                 (Cardmarket)
+
+   — mas fisicamente existem DUAS cartas: a holográfica de 1ª edição e a
+   holográfica de tiragem normal. "1st-edition-holofoil" e "firstEdition" são a
+   mesma; "holo" e "unlimited-holofoil" são a mesma; e "normal" nem existe (o
+   catálogo diz normal:false — é uma carta holo-only, e esse preço do
+   Cardmarket é resíduo).
+
+   Tratando cada nome como uma versão diferente, a carta pedia cinco cópias que
+   não existem — era impossível completá-la.
+
+   A saída é traduzir cada nome para o par (acabamento, edição), que é o que
+   define a carta de verdade, e ficar com um nome por par. */
+const ACABAMENTO_DO_ENUM = {
+  'normal': 'comum',
+  'holo': 'holo',
+  'holofoil': 'holo',
+  'unlimited-holofoil': 'holo',
+  '1st-edition-holofoil': 'holo',
+  'reverse': 'reverse',
+  'reverse-holofoil': 'reverse',
+  'pokeball-holofoil': 'pokebola',
+  'masterball-holofoil': 'masterball',
+};
+const EDICAO_DO_ENUM = {
+  '1st-edition': 'primeira',
+  '1st-edition-holofoil': 'primeira',
+  'firstEdition': 'primeira',
+};
+// Nomes que só dizem a edição, sem dizer o acabamento: herdam o acabamento
+// que a carta realmente tem.
+const ENUM_SEM_ACABAMENTO = new Set(['1st-edition', 'firstEdition', 'unlimited', 'wPromo']);
+
+/** O acabamento que esta carta tem de verdade, segundo o catálogo. */
+function acabamentosDoCatalogo(card) {
+  const flags = card?.variants && typeof card.variants === 'object' ? card.variants : {};
+  const lista = [];
+  if (flags.normal === true) lista.push('comum');
+  if (flags.holo === true) lista.push('holo');
+  if (flags.reverse === true) lista.push('reverse');
+  return lista;
+}
+
+function chaveDaVersao(value, acabamentoPadrao) {
+  const enumero = exactSourceEnum(value);
+  const edicao = EDICAO_DO_ENUM[enumero] || 'normal';
+  const acabamento = ENUM_SEM_ACABAMENTO.has(enumero)
+    ? (acabamentoPadrao || 'comum')
+    : (ACABAMENTO_DO_ENUM[enumero] || enumero);
+  return `${acabamento}|${edicao}`;
+}
+
 /**
  * Versões que valem a pena mostrar como botão.
  *
- * 1. Só entram as que têm preço de verdade no banco. O idioma não conta aqui:
- *    se a versão só tem valor no mercado inglês, ela continua sendo uma versão
- *    válida da carta — é a mesma regra que o preço já usa.
- * 2. Nomes repetidos viram um botão só. "reverse" e "reverse-holofoil" são a
- *    mesma coisa para quem olha a carta; mostrar os dois só confunde.
- * 3. Se nenhuma tiver preço, mostramos todas — melhor uma escolha imperfeita
- *    do que um bloco vazio.
+ * Aparecem TODAS as versões que a carta tem, com preço ou sem — quem coleciona
+ * precisa registrar a carta mesmo quando o mercado ainda não publicou valor.
+ * O que não aparece é nome repetido: uma versão por carta física.
  */
 function variantesVisiveis(cardId, valores, selecionada, language = '') {
   const idioma = language || document.getElementById('regLanguage')?.value || 'pt-br';
-  const lista = (valores || []).filter(Boolean);
-  const comPreco = lista.filter(value => Boolean(centralPriceResolveKey(cardId, idioma, value)));
-  let base = comPreco.length ? comPreco : lista;
-  if (selecionada && !base.includes(selecionada) && lista.includes(selecionada)) base = [...base, selecionada];
+  const card = cardMap.get(cardId);
+  const doCatalogo = acabamentosDoCatalogo(card);
+  const acabamentoPadrao = doCatalogo[0] || 'comum';
+  const lista = [...new Set((valores || []).filter(Boolean).map(exactSourceEnum))];
 
-  const porRotulo = new Map();
-  for (const value of base) {
-    const rotulo = friendlyVariantLabel(value);
-    // A versão escolhida sempre ganha a vaga do nome dela.
-    if (!porRotulo.has(rotulo) || value === selecionada) porRotulo.set(rotulo, value);
+  /* Quando o catálogo diz quais acabamentos a carta tem, ele manda: mercado às
+     vezes publica preço de acabamento que aquela carta não teve. Sem catálogo
+     (carta nova, ainda sem marcação), aceita-se o que o mercado disser. */
+  const permitido = acabamento => !doCatalogo.length
+    || doCatalogo.includes(acabamento)
+    || !['comum', 'holo', 'reverse'].includes(acabamento);
+
+  const porVersao = new Map();
+  for (const value of lista) {
+    const chave = chaveDaVersao(value, acabamentoPadrao);
+    if (!permitido(chave.split('|')[0]) && value !== selecionada) continue;
+    const temPreco = Boolean(centralPriceResolveKey(cardId, idioma, value));
+    const atual = porVersao.get(chave);
+    // Entre nomes da mesma carta, fica o que tem preço; empatou, fica o
+    // primeiro. A versão escolhida sempre garante a própria vaga.
+    if (!atual || value === selecionada || (temPreco && !atual.temPreco)) {
+      porVersao.set(chave, { value, temPreco, travado: value === selecionada });
+    }
   }
-  return [...porRotulo.values()];
+  if (selecionada && ![...porVersao.values()].some(item => item.value === selecionada) && lista.includes(selecionada)) {
+    porVersao.set(chaveDaVersao(selecionada, acabamentoPadrao), { value: selecionada, temPreco: false, travado: true });
+  }
+  return [...porVersao.values()].map(item => item.value);
 }
 
 function pillHtml(cardId, value, ativo, semPreco) {
@@ -5724,10 +5803,14 @@ const SIGLAS_VARIANTE = {
   'reverse-holofoil': 'RF',
   '1st-edition': '1E',
   '1st-edition-holofoil': '1F',
-  'unlimited': 'U',
-  'unlimited-holofoil': 'UF',
+  // "unlimited-holofoil" (TCGplayer) e "holo" (Cardmarket) são a mesma carta:
+  // a holográfica de tiragem normal. Sigla igual, senão viram duas etiquetas.
+  'unlimited': 'N',
+  'unlimited-holofoil': 'F',
   'wPromo': 'P',
   'firstEdition': '1E',
+  'pokeball-holofoil': 'PB',
+  'masterball-holofoil': 'MB',
 };
 
 function siglaDaVariante(valor) {
@@ -6442,6 +6525,23 @@ let formasRegionais = {};
 async function carregarFormasRegionais() {
   try { formasRegionais = await loadJson('data/formas-regionais.json') || {}; }
   catch (_) { formasRegionais = {}; }
+
+  /* Formas que o jogo separa mas a CARTA não.
+     Mega X e Mega Y são dois Pokémon diferentes no jogo; no card ambos se
+     chamam "M Charizard EX". Deixá-las como duas abas fazia a primeira levar
+     todas as cartas e a segunda mostrar zero — uma mentira com cara de dado.
+     Viram uma aba "Mega" só, com o sprite da primeira. */
+  for (const chave of Object.keys(formasRegionais)) {
+    const vistos = new Set();
+    formasRegionais[chave] = (formasRegionais[chave] || []).map(forma => ({
+      ...forma,
+      nome: /^Mega( [XYZ])?$/.test(forma.nome) ? 'Mega' : forma.nome,
+    })).filter(forma => {
+      if (vistos.has(forma.nome)) return false;
+      vistos.add(forma.nome);
+      return true;
+    });
+  }
 }
 
 function formasDoPokemon(pokemonId) {
@@ -6449,13 +6549,33 @@ function formasDoPokemon(pokemonId) {
   return Array.isArray(lista) ? lista : [];
 }
 
-/* A qual forma esta carta pertence? Devolve a região ou '' para a original. */
-function regiaoDaCarta(card, regioes) {
-  const nome = normalize(card?.name);
-  for (const regiao of regioes) {
-    const chave = normalize(regiao);
-    // "vulpix de alola", "alolan vulpix", "alolan" em inglês vira "alola" aqui.
-    if (nome.includes(chave)) return regiao;
+/* A qual forma esta carta pertence? Devolve o nome da forma ou '' para a base.
+
+   Cada forma traz as palavras que a denunciam no nome da carta: Alola aceita
+   "alola" e "alolan"; Gigantamax aceita "vmax" e "gigantamax", que é como o
+   jogo de cartas chama essas cartas. A primeira forma que casar leva. */
+function formaDaCarta(card, formas) {
+  const limpo = normalize(card?.name);
+  const palavras = new Set(limpo.split(' ').filter(Boolean));
+  const cercado = ` ${limpo} `;
+  for (const forma of formas) {
+    const chaves = Array.isArray(forma.chaves) && forma.chaves.length
+      ? forma.chaves
+      : [forma.nome];
+    const bate = chaves.some(chave => {
+      const alvo = normalize(chave);
+      if (!alvo) return false;
+      if (alvo.includes(' ')) return cercado.includes(` ${alvo} `);
+      /* Chave curta exige a palavra inteira; chave longa aceita o começo dela.
+         A chave "m" das Megas ("M Charizard EX") chegava a casar com qualquer
+         carta que tivesse a letra M: o Mewtwo inteiro caiu na aba Mega e a Base
+         ficou com zero. Já as longas precisam do começo porque a fonte cola
+         palavras — "Kyogre PrimitivoEX" é uma palavra só para o computador. */
+      return alvo.length >= 4
+        ? [...palavras].some(palavra => palavra.startsWith(alvo))
+        : palavras.has(alvo);
+    });
+    if (bate) return forma.nome;
   }
   return '';
 }
@@ -6467,40 +6587,36 @@ function renderPokemonDetail(id) {
   const related = cards.filter(card => pokemonIdsForCard(card).includes(pokemon.id))
     .sort((a,b) => quantityFor(b.id)-quantityFor(a.id) || a.setName.localeCompare(b.setName,'pt-BR') || numericLocal(a)-numericLocal(b));
 
+  /* Uma aba por NOME de forma. Formas que o catálogo de cartas não consegue
+     separar — o Tauros de Paldea tem três raças e as três cartas se chamam
+     "Tauros de Paldea" — viram uma aba só, que é o que dá para sustentar. */
   const formas = formasDoPokemon(pokemon.id);
-  const regioes = [...new Set(formas.map(f => f.regiao))];
-  const escolhida = ui.formaPokemon && regioes.includes(ui.formaPokemon) ? ui.formaPokemon : '';
-  const daForma = regioes.length
-    ? related.filter(card => regiaoDaCarta(card, regioes) === escolhida)
+  const nomes = [...new Set(formas.map(f => f.nome))];
+  const escolhida = ui.formaPokemon && nomes.includes(ui.formaPokemon) ? ui.formaPokemon : '';
+  const daForma = nomes.length
+    ? related.filter(card => formaDaCarta(card, formas) === escolhida)
     : related;
 
-  /* Uma aba por REGIÃO, não por forma. O Tauros de Paldea tem três raças
-     (Combate, Chamas, Água) e elas davam três abas iguais, todas com as mesmas
-     onze cartas: o nome da carta é "Tauros de Paldea" nas três, então não há
-     como separá-las. Uma aba por região é o que o catálogo consegue sustentar. */
-  const daRegiao = regiao => formas.find(f => f.regiao === regiao);
-  const forma = escolhida ? daRegiao(escolhida) : null;
+  const forma = escolhida ? formas.find(f => f.nome === escolhida) : null;
   const arteId = forma ? forma.id : pokemon.id;
-  const irmas = escolhida ? formas.filter(f => f.regiao === escolhida) : [];
-  const titulo = !forma ? pokemon.name
-    : irmas.length > 1 ? `${pokemon.name} de ${escolhida}` : forma.nome;
+  const titulo = forma ? `${pokemon.name} ${forma.nome}` : pokemon.name;
 
-  const abas = regioes.length ? `
+  const abas = nomes.length ? `
     <div class="formas-abas" role="tablist">
       <button class="forma-aba${escolhida ? '' : ' ativa'}" role="tab" aria-selected="${!escolhida}"
         onclick="escolherFormaPokemon('')">
         <img src="${esc(pokemon.sprite)}" alt="" data-arte3d="${Number(pokemon.id)}" loading="lazy">
-        <span>Original</span>
-        <b>${related.filter(card => !regiaoDaCarta(card, regioes)).length}</b>
+        <span>Base</span>
+        <b>${related.filter(card => !formaDaCarta(card, formas)).length}</b>
       </button>
-      ${regioes.map(regiao => {
-        const f = daRegiao(regiao);
-        const quantas = related.filter(card => regiaoDaCarta(card, regioes) === regiao).length;
-        const ativa = escolhida === regiao;
+      ${nomes.map(nome => {
+        const f = formas.find(item => item.nome === nome);
+        const quantas = related.filter(card => formaDaCarta(card, formas) === nome).length;
+        const ativa = escolhida === nome;
         return `<button class="forma-aba${ativa ? ' ativa' : ''}" role="tab" aria-selected="${ativa}"
-          onclick="escolherFormaPokemon('${esc(regiao)}')">
+          onclick="escolherFormaPokemon('${esc(nome)}')">
           <img src="${esc(pokemon.sprite)}" alt="" data-arte3d="${Number(f.id)}" loading="lazy">
-          <span>${esc(regiao)}</span>
+          <span>${esc(nome)}</span>
           <b>${quantas}</b>
         </button>`;
       }).join('')}
@@ -6512,7 +6628,7 @@ function renderPokemonDetail(id) {
       <!-- Faltava o data-arte3d aqui: a tela de detalhe era a única que ficava
            com o sprite embutido de 96px esticado, a maior ampliação do app. -->
       <img src="${esc(pokemon.sprite)}" alt="${esc(titulo)}" data-arte3d="${Number(arteId)}" data-arte3d-modo="nitida">
-      <div><span class="pokemon-number">Nº ${String(pokemon.id).padStart(4,'0')} · ${esc(forma ? forma.regiao : pokemon.region)}</span><h2>${esc(titulo)}</h2><div class="badges">${pokemon.types.map(type=>`<span class="badge">${esc(type)}</span>`).join('')}</div></div>
+      <div><span class="pokemon-number">Nº ${String(pokemon.id).padStart(4,'0')} · ${esc(forma ? forma.nome : pokemon.region)}</span><h2>${esc(titulo)}</h2><div class="badges">${pokemon.types.map(type=>`<span class="badge">${esc(type)}</span>`).join('')}</div></div>
     </div>
     ${abas}
     <div class="stats-grid">
@@ -6520,8 +6636,8 @@ function renderPokemonDetail(id) {
       ${statCard(stat.cardIds.size,'Cartas únicas')}
     </div>
     <h3 class="section-title">${escolhida ? `Cartas de ${esc(titulo)}` : `Todas as cartas de ${esc(pokemon.name)}`}</h3>
-    <p class="screen-subtitle">${regioes.length
-      ? 'As formas regionais contam para o mesmo Pokémon na Pokédex — aqui elas ficam separadas para você achar mais fácil.'
+    <p class="screen-subtitle">${nomes.length
+      ? 'As formas contam para o mesmo Pokémon na Pokédex — aqui elas ficam separadas para você achar mais fácil.'
       : 'As suas aparecem primeiro e totalmente visíveis. Você pode atualizar a quantidade aqui mesmo.'}</p>
     <div class="card-list">${daForma.length ? daForma.map(renderCardRow).join('') : '<div class="empty">Nenhuma carta dessa forma foi encontrada no catálogo atual.</div>'}</div>
   </section>`;

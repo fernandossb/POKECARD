@@ -4533,3 +4533,8 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 .forma-aba img{width:44px;height:44px;object-fit:contain;image-rendering:pixelated;}
 .forma-aba b{opacity:.7;font-weight:var(--peso-normal,400);}
 .forma-aba.ativa b{opacity:1;}
+/* Padroes de fundo das colecoes novas (Poke Bola, Master Ball). */
+.v-pokebola{color:#e8544a;}
+.v-pokebola.ativo,.etiqueta-variante.v-pokebola.tenho{background:rgba(232,84,74,.22);border-color:#e8544a;}
+.v-masterball{color:#a259d9;}
+.v-masterball.ativo,.etiqueta-variante.v-masterball.tenho{background:rgba(162,89,217,.22);border-color:#a259d9;}
