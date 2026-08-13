@@ -1,0 +1,136 @@
+name: Gerar sprites HD
+
+# Amplia os 1.025 sprites animados da Pokedex nos servidores do GitHub.
+# Nada e instalado na maquina de ninguem e nao ha custo: repositorio publico
+# tem minutos ilimitados.
+#
+# O resultado NAO vai para a branch main: ele fica numa branch propria
+# chamada "sprites-hd". Assim o repositorio que monta o APK continua leve, e
+# o CDN jsdelivr serve os arquivos direto dessa branch.
+on:
+  workflow_dispatch:
+    inputs:
+      escala:
+        description: 'Quanto ampliar (2, 3, 4 ou 6). Maior = melhor e mais pesado.'
+        required: true
+        default: '3'
+      qualidade:
+        description: 'Qualidade do arquivo final, de 1 a 100'
+        required: true
+        default: '88'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sprites-hd
+  cancel-in-progress: false
+
+jobs:
+  # Cada parte processa um pedaco intercalado da Pokedex. Seis em paralelo
+  # mantem cada uma bem abaixo do limite de 6 horas por servico.
+  gerar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        parte: [1, 2, 3, 4, 5, 6]
+    steps:
+      - name: Baixar projeto
+        uses: actions/checkout@v4
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar bibliotecas
+        run: pip install numpy pillow requests
+
+      - name: Ampliar os sprites
+        run: |
+          python scripts/sprites-hd/gerar-sprites-hd.py \
+            --escala ${{ github.event.inputs.escala }} \
+            --qualidade ${{ github.event.inputs.qualidade }} \
+            --parte ${{ matrix.parte }} --de 6
+
+      - name: Guardar o pedaco
+        uses: actions/upload-artifact@v4
+        with:
+          name: sprites-parte-${{ matrix.parte }}
+          path: scripts/sprites-hd/output/
+          retention-days: 1
+
+  # Junta os seis pedacos e publica tudo numa branch separada.
+  publicar:
+    needs: gerar
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar projeto
+        uses: actions/checkout@v4
+
+      - name: Recolher os pedacos
+        uses: actions/download-artifact@v4
+        with:
+          path: pedacos
+          pattern: sprites-parte-*
+          merge-multiple: true
+
+      - name: Juntar os manifestos
+        run: |
+          python - <<'FIM'
+          import json, glob, os
+          junto = {}
+          for caminho in glob.glob('pedacos/manifesto-*.json'):
+              with open(caminho, encoding='utf-8') as arquivo:
+                  junto.update(json.load(arquivo))
+              os.remove(caminho)
+          with open('pedacos/manifesto.json', 'w', encoding='utf-8') as arquivo:
+              json.dump(junto, arquivo)
+          tamanho = sum(junto.values()) / 1024 / 1024
+          print(f'{len(junto)} sprites, {tamanho:.1f} MB no total')
+          FIM
+
+      - name: Conferir antes de publicar
+        shell: bash
+        run: |
+          QUANTOS=$(find pedacos -name '*.webp' | wc -l)
+          echo "sprites gerados: $QUANTOS"
+          du -sh pedacos
+          if [ "$QUANTOS" -lt 500 ]; then
+            echo "Poucos sprites. Algo deu errado — nada sera publicado."
+            exit 1
+          fi
+
+      - name: Publicar na branch sprites-hd
+        shell: bash
+        run: |
+          git config user.name "pokecard-sprites-bot"
+          git config user.email "actions@users.noreply.github.com"
+
+          # Branch orfa: guarda so os sprites, sem o historico do projeto.
+          # E o que impede o repositorio principal de inchar.
+          git checkout --orphan sprites-hd
+          git rm -rf . > /dev/null 2>&1 || true
+
+          mkdir -p output
+          cp pedacos/*.webp output/ 2>/dev/null || true
+          cp pedacos/manifesto.json output/
+
+          cat > README.md <<'TXT'
+          # Sprites HD da Pokedex
+
+          Gerados pelo servico "Gerar sprites HD" do POKECARD.
+          Nao edite a mao: qualquer alteracao e sobrescrita na proxima execucao.
+
+          Endereco usado pelo aplicativo:
+          https://cdn.jsdelivr.net/gh/fernandossb/POKECARD@sprites-hd/output/
+          TXT
+
+          git add output README.md
+          git commit -m "Sprites HD $(date -u +%F)"
+          git push --force origin sprites-hd
+
+          echo "Pronto. Endereco para o app:"
+          echo "https://cdn.jsdelivr.net/gh/fernandossb/POKECARD@sprites-hd/output/"

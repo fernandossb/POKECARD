@@ -25,6 +25,33 @@
   var BASE = 'https://cdn.jsdelivr.net/gh/PokeAPI/sprites@master/sprites/pokemon/';
   var PREFERENCIA_KEY = 'pokecard-arte-pokedex-v1';
 
+  /* ---- Sprites melhorados (opcional) ----
+     Quando existir um repositório com as versões em alta, o app passa a
+     preferi-las. O manifesto diz quais Pokémon têm arquivo — sem ele o app
+     tentaria baixar 1.025 endereços inexistentes, um por vez, a cada rolagem.
+
+     Enquanto o endereço estiver vazio, nada muda: o app usa a fonte de
+     sempre. É só preencher para ligar. */
+  /* Branch separada do próprio repositório, servida pelo CDN. Enquanto o
+     serviço "Gerar sprites HD" não tiver rodado, o manifesto não existe, a
+     consulta falha em silêncio e o app segue usando a fonte de sempre. */
+  var HD_BASE = 'https://cdn.jsdelivr.net/gh/fernandossb/POKECARD@sprites-hd/output/';
+  var hdDisponiveis = null;   // Set com os números que têm versão HD
+  var hdConsultado = false;
+
+  function carregarManifestoHD() {
+    if (hdConsultado) return Promise.resolve(hdDisponiveis);
+    hdConsultado = true;
+    if (!HD_BASE) { hdDisponiveis = null; return Promise.resolve(null); }
+    return fetch(HD_BASE + 'manifesto.json')
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (dados) {
+        hdDisponiveis = dados ? new Set(Object.keys(dados)) : null;
+        return hdDisponiveis;
+      })
+      .catch(function () { hdDisponiveis = null; return null; });
+  }
+
   var CONJUNTOS = {
     animada: [
       { caminho: 'other/showdown/', ext: '.gif', pixelada: true },   //  60×60, anima
@@ -105,6 +132,20 @@
     }).catch(function () {});
   }
 
+  /** A versão melhorada, quando existir para este Pokémon. */
+  function buscarHD(id) {
+    return carregarManifestoHD().then(function (disponiveis) {
+      if (!disponiveis || !disponiveis.has(String(id))) return null;
+      return fetch(HD_BASE + id + '.webp').then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.blob();
+      }).then(comoDataUrl).then(function (dataUrl) {
+        // Arte reconstruída não é pixel art: desenhar suavizado fica melhor.
+        return { dataUrl: dataUrl, pixelada: false, hd: true };
+      }).catch(function () { return null; });
+    });
+  }
+
   /** Tenta a arte animada e, se não existir para este Pokémon, a parada. */
   function buscarNasFontes(id, indice) {
     var lista = fontes();
@@ -165,7 +206,10 @@
         aplicar(img, guardada);
         return null;
       }
-      return buscarNasFontes(id, 0).then(function (arte) {
+      // A versão melhorada tem preferência; sem ela, segue a fonte de sempre.
+      return buscarHD(id).then(function (hd) {
+        return hd || buscarNasFontes(id, 0);
+      }).then(function (arte) {
         memoria.set(chave, arte);
         guardar(chave, arte);
         baixando.delete(chave);
