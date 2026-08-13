@@ -4172,3 +4172,48 @@ h3 {
 .lacrado-numeros b { font-size: var(--fs-md); font-weight: var(--peso-forte); }
 .lacrado-numeros em { font-style: normal; font-size: var(--fs-sm); color: var(--vision-primary); }
 .lacrado-numeros i { font-style: normal; font-size: var(--fs-xs); }
+/* ---- Moldura maior ----
+   O numero do rodape e o que identifica a carta, e e o menor texto dela.
+   Moldura pequena convidava a segurar longe: o nome saia legivel e o numero
+   nao. Ocupando quase a largura da tela, a carta encosta na camera e o
+   numero fica grande o suficiente para ser lido. */
+.camera-moldura {
+  width: min(86vw, 380px) !important;
+  margin-top: 2vh !important;
+}
+/* Marca a faixa do rodape, onde fica a numeracao: e ali que o usuario
+   precisa mirar. */
+.camera-moldura::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0;
+  height: 22%; border-top: 1px dashed rgba(255,255,255,.45);
+  background: linear-gradient(0deg, rgba(255,255,255,.10), transparent);
+  border-radius: 0 0 12px 12px;
+}
+.camera-moldura { position: relative; }
+/* ============================================================
+   v5.20 - Anel da Pokedex seguindo o tema
+
+   O numero da porcentagem fica sobre um disco desenhado com
+   ::before. Esse disco tinha cor fixa (#0c211f, quase preto) e nao
+   acompanhava o tema, enquanto o numero usa a cor de destaque -- que
+   em tema claro e escura. Escuro sobre escuro: o numero sumia.
+
+   O corretor de contraste nao pegava porque pseudo-elemento nao
+   aparece em getComputedStyle de nenhum elemento real: ele media o
+   numero contra o degrade do anel, nao contra o disco que esta
+   realmente atras.
+   ============================================================ */
+.pokedex-ring::before { background: var(--vision-surface) !important; }
+.pokedex-ring { background: conic-gradient(var(--vision-primary) var(--progress), var(--vision-surface-3) 0) !important; }
+.pokedex-ring b {
+  color: var(--vision-text) !important;
+  -webkit-text-fill-color: var(--vision-text) !important;
+  font-weight: var(--peso-forte);
+}
+
+/* O resto do cartao tambem estava com cores fixas. */
+.pokedex-progress-card small { color: var(--vision-muted) !important; -webkit-text-fill-color: var(--vision-muted) !important; }
+.pokedex-progress-card strong { color: var(--vision-primary) !important; -webkit-text-fill-color: var(--vision-primary) !important; }
+.pokedex-progress-card em { color: var(--vision-muted) !important; -webkit-text-fill-color: var(--vision-muted) !important; }
+.pokedex-progress-card i { background: var(--vision-surface-3); }
+.pokedex-progress-card i span { background: var(--vision-primary); }

@@ -168,6 +168,32 @@
     return { r: 12, g: 14, b: 18, a: 1 };
   }
 
+  /* Disco, faixa ou véu desenhado com ::before / ::after.
+     É um recurso comum de CSS e um ponto cego de qualquer medição: o
+     pseudo-elemento pinta por cima do pai, mas não aparece no estilo
+     calculado de nenhum elemento de verdade. Foi assim que o número da
+     Pokédex ficou invisível — ele estava sobre um disco ::before quase preto,
+     enquanto a medição via o degradê do anel atrás.
+
+     Só conta o pseudo que realmente cobre a área: posicionado de forma
+     absoluta e opaco. Um ::before de 8px no canto não é fundo de nada. */
+  function fundoDePseudo(el) {
+    for (var i = 0; i < 2; i++) {
+      var qual = i === 0 ? '::before' : '::after';
+      var ps;
+      try { ps = getComputedStyle(el, qual); } catch (_) { continue; }
+      if (!ps || ps.content === 'none' || ps.position !== 'absolute') continue;
+      var cor = parseCor(ps.backgroundColor);
+      if (!cor || cor.a < 0.999) continue;
+      // Precisa ser grande o bastante para servir de fundo ao texto.
+      var largura = parseFloat(ps.width) || 0;
+      var altura = parseFloat(ps.height) || 0;
+      var caixa = el.getBoundingClientRect();
+      if (largura >= caixa.width * 0.5 && altura >= caixa.height * 0.5) return cor;
+    }
+    return null;
+  }
+
   /* Sobe pelos elementos somando as camadas até achar algo opaco. É assim que
      descobrimos a cor que está de fato atrás da letra, e não só a do cartão
      mais próximo — que muitas vezes é transparente. */
@@ -176,7 +202,10 @@
     if (cacheFundo && cacheFundo.has(el)) return cacheFundo.get(el);
 
     var cs = getComputedStyle(el);
-    var cor = parseCor(cs.backgroundColor);
+    // O pseudo vem primeiro: ele é desenhado por cima do fundo do próprio
+    // elemento, então é ele que o olho enxerga.
+    var cor = fundoDePseudo(el);
+    if (!cor) cor = parseCor(cs.backgroundColor);
     if (!cor || cor.a === 0) cor = corDoGradiente(cs.backgroundImage);
 
     var resolvida;

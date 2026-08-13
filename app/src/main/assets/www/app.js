@@ -4234,16 +4234,52 @@ function scannerCandidates(ocrText) {
   const lines = [...new Set(String(ocrText || '').split(/\r?\n/)
     .flatMap(line => [canonical(line), canonical(line.replace(/\d+\s*\/?\s*\d*/g, ' '))])
     .filter(line => line.length >= 3 && line.length <= 70 && !/ampliad|numero|faixa|canto/.test(line)))];
+  /* O número do rodapé é a única coisa que identifica a carta sozinha.
+     "Bulbasaur" existe em treze impressões diferentes; "001/165" existe em
+     uma só. Por isso a leitura numérica recebe tratamento próprio, com as
+     confusões clássicas do reconhecimento de caracteres desfeitas. */
   const numberFriendly = String(ocrText || '')
     .toUpperCase()
-    .replace(/O/g, '0')
-    .replace(/[IL]/g, '1');
+    .replace(/[OQD]/g, '0')
+    .replace(/[IL|!]/g, '1')
+    .replace(/[SZ]/g, '5')
+    .replace(/B/g, '8')
+    .replace(/G/g, '6')
+    .replace(/T/g, '7');
   const numbers = new Set((numberFriendly.match(/\b\d{1,4}\b/g) || []).map(value => String(Number(value))));
-  const fractions = new Set((numberFriendly.match(/\b\d{1,4}\s*\/\s*\d{1,4}\b/g) || [])
-    .map(value => value.replace(/\s/g, '').split('/').map(part => String(Number(part))).join('/')));
+  const fractions = new Set((numberFriendly.match(/\b\d{1,4}\s*[\/\\|]\s*\d{1,4}\b/g) || [])
+    .map(value => value.replace(/[\s\\|]/g, m => m === '\\' || m === '|' ? '/' : '').split('/').map(part => String(Number(part))).join('/')));
+
+  // Total impresso na fração: "015/094" diz que a coleção tem 94 cartas.
+  // Sozinho já elimina quase todas as coleções.
+  const totaisLidos = new Set([...fractions].map(f => f.split('/')[1]));
+
   const pool = scannerSession.setId && scannerSession.setId !== 'all'
     ? cards.filter(card => card.setId === scannerSession.setId)
     : cards;
+
+  /* Quando a fração foi lida, ela MANDA. Antes ela era só um bônus grande de
+     pontos, e o nome — que vale 175 — conseguia levar a carta errada quando o
+     Pokémon batia. Agora, se existe alguma carta com aquela numeração exata,
+     as demais nem entram na disputa. É a correção do "acerta o Pokémon, erra
+     a coleção". */
+  if (fractions.size) {
+    const exatas = pool.filter(card => {
+      const local = String(Number(String(card.localId || '').match(/\d+/)?.[0] ?? -1));
+      const total = String(Number(String(card.number || '').split('/')[1] ?? -1));
+      return fractions.has(`${local}/${total}`);
+    });
+    if (exatas.length) {
+      return exatas.map(card => ({
+        card, score: 999, nameSimilarity: 1, pokemonSimilarity: 1, fractionMatch: true, numberMatch: true,
+      })).sort((a, b) => {
+        // Empate entre impressões com a mesma numeração: decide o nome lido.
+        const na = compact.includes(canonical(a.card.name)) ? 1 : 0;
+        const nb = compact.includes(canonical(b.card.name)) ? 1 : 0;
+        return nb - na || a.card.name.localeCompare(b.card.name, 'pt-BR');
+      }).slice(0, 6);
+    }
+  }
   const candidatePool = scannerSession.setId !== 'all' ? pool : pool.filter(card => {
     const localNumber = String(Number(String(card.localId || '').match(/\d+/)?.[0] || -1));
     if (numbers.has(localNumber)) return true;
@@ -4274,8 +4310,13 @@ function scannerCandidates(ocrText) {
     score += Math.round(pokemonSimilarity * 70);
     score += Math.round(setSimilarity * 35);
     const numberMatch = numbers.has(localNumber);
-    if (numberMatch) score += 24;
-    if (fractionMatch) score += 210;
+    /* O número do rodapé pesa mais que o nome. Um Pokémon repete em dezenas
+       de impressões; o número repete em poucas. Antes valia 24 contra 175 do
+       nome, e por isso o app escolhia a impressão errada do Pokémon certo. */
+    if (numberMatch) score += 120;
+    if (fractionMatch) score += 260;
+    // O total impresso ("/094") sozinho já aponta a coleção.
+    if (totaisLidos.has(official)) score += 70;
     if (numbers.has(official)) score += 8;
     if (scannerSession.setId !== 'all') score += 65;
     if (!fractionMatch && nameSimilarity < .54 && pokemonSimilarity < .68) score -= scannerSession.setId === 'all' ? 55 : 20;

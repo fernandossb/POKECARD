@@ -56,6 +56,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.net.URLDecoder;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
@@ -1095,6 +1096,56 @@ public final class MainActivity extends Activity {
                 CameraSelector.DEFAULT_BACK_CAMERA, preview, analise);
     }
 
+    /**
+     * Converte o quadro da câmera numa imagem em tons de cinza.
+     *
+     * Usa apenas o plano de luminância (Y) do formato YUV. É de onde vem toda
+     * a informação que o reconhecimento de texto aproveita — a cor não ajuda a
+     * ler um número — e evita a conversão completa de cor, que é cara e
+     * introduz manchas nas bordas das letras.
+     */
+    private Bitmap bitmapCinzaDoQuadro(ImageProxy proxy) {
+        ImageProxy.PlaneProxy plano = proxy.getPlanes()[0];
+        ByteBuffer buffer = plano.getBuffer();
+        int largura = proxy.getWidth();
+        int altura = proxy.getHeight();
+        int rowStride = plano.getRowStride();
+        int pixelStride = plano.getPixelStride();
+
+        int[] pixels = new int[largura * altura];
+        byte[] linha = new byte[rowStride];
+        int destino = 0;
+        for (int y = 0; y < altura; y++) {
+            int inicio = y * rowStride;
+            if (inicio >= buffer.limit()) break;
+            buffer.position(inicio);
+            int lidos = Math.min(rowStride, buffer.remaining());
+            buffer.get(linha, 0, lidos);
+            for (int x = 0; x < largura; x++) {
+                int posicao = x * pixelStride;
+                int v = posicao < lidos ? (linha[posicao] & 0xFF) : 0;
+                pixels[destino++] = 0xFF000000 | (v << 16) | (v << 8) | v;
+            }
+        }
+
+        Bitmap bitmap = Bitmap.createBitmap(pixels, largura, altura, Bitmap.Config.ARGB_8888);
+        int giro = proxy.getImageInfo().getRotationDegrees();
+        if (giro == 0) return bitmap;
+        Matrix matriz = new Matrix();
+        matriz.postRotate(giro);
+        Bitmap girado = Bitmap.createBitmap(bitmap, 0, 0, largura, altura, matriz, true);
+        if (girado != bitmap) bitmap.recycle();
+        return girado;
+    }
+
+    /**
+     * Lê o quadro duas vezes: inteiro e só a metade de baixo, ampliada.
+     *
+     * A numeração do rodapé ("015/094") é o menor texto da carta e o único que
+     * a identifica sozinha — o nome do Pokémon se repete em dezenas de
+     * impressões. Lido junto com o resto, esse número quase nunca sai; ampliado
+     * três vezes e com o contraste puxado, sai quase sempre.
+     */
     @SuppressWarnings("UnsafeOptInUsageError")
     private void analisarQuadro(final ImageProxy proxy) {
         long agora = System.currentTimeMillis();
@@ -1105,35 +1156,83 @@ public final class MainActivity extends Activity {
             return;
         }
         liveScannerBusy = true;
-        InputImage imagem = InputImage.fromMediaImage(
-                proxy.getImage(), proxy.getImageInfo().getRotationDegrees());
-        liveRecognizer.process(imagem)
+
+        final Bitmap quadro;
+        try {
+            quadro = bitmapCinzaDoQuadro(proxy);
+        } catch (Exception erro) {
+            liveScannerBusy = false;
+            proxy.close();
+            return;
+        } finally {
+            // O quadro já virou bitmap: soltar cedo evita travar a câmera.
+            proxy.close();
+        }
+
+        final TextRecognizer reconhecedor = liveRecognizer;
+        if (reconhecedor == null) { quadro.recycle(); liveScannerBusy = false; return; }
+
+        reconhecedor.process(InputImage.fromBitmap(quadro, 0))
                 .addOnSuccessListener(new OnSuccessListener<Text>() {
                     @Override
                     public void onSuccess(Text resultado) {
-                        String texto = resultado == null ? "" : resultado.getText();
-                        if (texto.trim().length() >= LIVE_MIN_TEXT_LENGTH) {
-                            liveScannerLastDelivery = System.currentTimeMillis();
-                            final String finish = pendingLiveFinish;
-                            runOnUiThread(new Runnable() {
-                                @Override
-                                public void run() {
-                                    if (liveScannerHint != null) liveScannerHint.setText("Carta lida — procurando…");
-                                    deliverScannerText(texto, finish);
-                                }
-                            });
+                        final String textoCheio = resultado == null ? "" : resultado.getText();
+                        Bitmap rodape = null;
+                        try {
+                            // Metade de baixo, ampliada e com contraste: é onde
+                            // fica a numeração e o código da coleção.
+                            rodape = enhancedScannerCrop(quadro, 0f, .55f, 1f, .45f);
+                        } catch (Exception ignorado) {
                         }
-                        liveScannerBusy = false;
-                        proxy.close();
+                        if (rodape == null) {
+                            concluirLeitura(textoCheio, "", quadro, null);
+                            return;
+                        }
+                        final Bitmap recorte = rodape;
+                        reconhecedor.process(InputImage.fromBitmap(recorte, 0))
+                                .addOnSuccessListener(new OnSuccessListener<Text>() {
+                                    @Override
+                                    public void onSuccess(Text baixo) {
+                                        concluirLeitura(textoCheio, baixo == null ? "" : baixo.getText(), quadro, recorte);
+                                    }
+                                })
+                                .addOnFailureListener(new OnFailureListener() {
+                                    @Override
+                                    public void onFailure(@NonNull Exception e) {
+                                        concluirLeitura(textoCheio, "", quadro, recorte);
+                                    }
+                                });
                     }
                 })
                 .addOnFailureListener(new OnFailureListener() {
                     @Override
                     public void onFailure(@NonNull Exception e) {
+                        quadro.recycle();
                         liveScannerBusy = false;
-                        proxy.close();
                     }
                 });
+    }
+
+    private void concluirLeitura(String textoCheio, String textoRodape, Bitmap quadro, Bitmap recorte) {
+        if (quadro != null) quadro.recycle();
+        if (recorte != null) recorte.recycle();
+        liveScannerBusy = false;
+
+        String junto = textoRodape == null || textoRodape.trim().isEmpty()
+                ? textoCheio
+                : textoCheio + "\n[FAIXA INFERIOR AMPLIADA]\n" + textoRodape;
+        if (junto.trim().length() < LIVE_MIN_TEXT_LENGTH) return;
+
+        liveScannerLastDelivery = System.currentTimeMillis();
+        final String finish = pendingLiveFinish;
+        final String entrega = junto;
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (liveScannerHint != null) liveScannerHint.setText("Carta lida — procurando…");
+                deliverScannerText(entrega, finish);
+            }
+        });
     }
 
     /** Chamado pelo app quando a carta foi cadastrada, para voltar a ler. */
