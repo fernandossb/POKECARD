@@ -1636,16 +1636,64 @@ async function loadCatalogData() {
   return { ...updated, sets: mergedSets };
 }
 
+/* Descobre de qual Pokémon é a carta pelo nome dela.
+
+   O teste antigo aceitava o nome no começo ("Meowth de Alola") e no meio, mas
+   NUNCA no fim. E é justamente assim que a fonte escreve em inglês: "Alolan
+   Meowth", "Galarian Ponyta", "Hisuian Zorua", "Dark Charizard", "Team
+   Rocket's Meowth". Todas essas cartas ficavam sem Pokémon nenhum — não
+   contavam na Pokédex, não apareciam na tela do Pokémon e não recebiam a
+   moldura do tipo.
+
+   Cercar o texto com espaços resolve os três casos de uma vez: começo, meio e
+   fim viram a mesma comparação. */
+/* Sobe este número sempre que a regra de vínculo mudar: é o que manda o app
+   refazer o cálculo no catálogo que já está gravado no aparelho. */
+const VINCULO_POKEMON_VERSAO = 2;
+const VINCULO_POKEMON_KEY = 'fichario-pokemon-vinculo-versao';
+
+function lerMarcaDeVinculo() {
+  try { return Number(localStorage.getItem(VINCULO_POKEMON_KEY)) || 0; } catch (_) { return 0; }
+}
+
+function gravarMarcaDeVinculo() {
+  try { localStorage.setItem(VINCULO_POKEMON_KEY, String(VINCULO_POKEMON_VERSAO)); } catch (_) {}
+}
+
+/* Recalcular na memória não basta: o catálogo atualizado fica gravado no
+   aparelho e, sem regravar, a próxima abertura leria de novo os vínculos
+   errados. A marca de versão só é gravada DEPOIS que a gravação deu certo —
+   se falhar, o app tenta de novo na próxima abertura em vez de dar o conserto
+   como feito. */
+async function regravarVinculosNoCatalogo() {
+  try {
+    const guardado = await readUpdatedCatalog();
+    // Sem catálogo atualizado, só existe o embutido: nada a regravar.
+    if (!guardado?.cards?.length) { gravarMarcaDeVinculo(); return; }
+    const novos = new Map(cards.map(card => [card.id, card.pokemonIds]));
+    let mudaram = 0;
+    for (const card of guardado.cards) {
+      const novo = novos.get(card.id);
+      if (!novo) continue;
+      if (String(card.pokemonIds || '') !== String(novo)) { card.pokemonIds = novo; mudaram += 1; }
+    }
+    if (mudaram) await saveUpdatedCatalog(guardado);
+    gravarMarcaDeVinculo();
+    if (mudaram) {
+      notify(`${mudaram.toLocaleString('pt-BR')} carta(s) ganharam o Pokémon certo na Pokédex.`);
+      renderKeepingScroll();
+    }
+  } catch (_) { /* tenta de novo na próxima abertura */ }
+}
+
 function inferPokemonIds(cardName) {
   const normalized = normalize(cardName);
   if (!normalized) return [];
   if (pokemonInferenceCache.has(normalized)) return pokemonInferenceCache.get(normalized).slice();
+  const cercado = ` ${normalized} `;
   const found = [];
   for (const item of pokemonNameIndex) {
-    const pattern = item.normalized;
-    if (normalized === pattern || normalized.startsWith(`${pattern} `) || normalized.includes(` ${pattern} `)) {
-      found.push(item.id);
-    }
+    if (cercado.includes(` ${item.normalized} `)) found.push(item.id);
   }
   const result = [...new Set(found)];
   pokemonInferenceCache.set(normalized, result);
@@ -1671,12 +1719,19 @@ function rebuildCatalogIndexes() {
     .map(item => ({ id: item.id, normalized: normalize(item.name) }))
     .filter(item => item.normalized)
     .sort((a, b) => b.normalized.length - a.normalized.length);
+  /* O vínculo carta → Pokémon fica gravado junto com o catálogo. Como a regra
+     que o calcula tinha um defeito (nome do Pokémon no fim do nome da carta
+     não era reconhecido), o que já está gravado precisa ser refeito UMA vez.
+     A marca abaixo é o que garante "uma vez": depois de refeito, as aberturas
+     seguintes voltam a aproveitar o que está guardado. */
+  const precisaRefazer = lerMarcaDeVinculo() !== VINCULO_POKEMON_VERSAO;
   for (const card of cards) {
     card.imageUrl = upgradeCardImageUrl(card.imageUrl);
     // Catálogos antigos podem não ter este índice. Arrays vazios são válidos
     // (Treinadores, Energias etc.) e não devem ser recalculados a cada abertura.
-    if (!Array.isArray(card.pokemonIds)) card.pokemonIds = inferPokemonIds(card.name);
+    if (precisaRefazer || !Array.isArray(card.pokemonIds)) card.pokemonIds = inferPokemonIds(card.name);
   }
+  if (precisaRefazer) regravarVinculosNoCatalogo();
   cardMap = new Map(cards.map(card => [card.id, card]));
   pokemonCards = new Map(pokedex.map(item => [item.id, []]));
   rebuildPerformanceIndexes();
@@ -5693,7 +5748,15 @@ function siglaDaVariante(valor) {
  */
 function analiseDeVariantes(card) {
   const idioma = 'pt-br';
-  const conhecidas = centralVariantEntries(card.id, idioma).map(item => item.value).filter(Boolean);
+  /* Só entra na conta o que dá para cadastrar de verdade.
+
+     A fonte publica versões que o cadastro não oferece — as que não têm preço
+     são escondidas lá, de propósito. Contando essas aqui, a carta exigia
+     versões que não existem como opção: era possível marcar as quatro do
+     cadastro e a carta nunca ficar dourada. Agora as duas telas olham para a
+     mesma lista. */
+  const daFonte = centralVariantEntries(card.id, idioma).map(item => item.value).filter(Boolean);
+  const conhecidas = daFonte.length ? variantesVisiveis(card.id, daFonte, '', idioma) : [];
   const minhas = variantsFor(card.id)
     .filter(item => !item.isWishlist && (Number(item.quantity) || 0) > 0)
     .map(item => exactSourceEnum(item.pricingVariant) || finishKind(item.finish));
