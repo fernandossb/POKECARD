@@ -67,10 +67,13 @@ import android.view.Gravity;
 import android.widget.Button;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
+import android.util.Size;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.ImageProxy;
 import androidx.camera.core.Preview;
+import androidx.camera.core.resolutionselector.ResolutionSelector;
+import androidx.camera.core.resolutionselector.ResolutionStrategy;
 import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.camera.view.PreviewView;
 import androidx.core.app.ActivityCompat;
@@ -332,8 +335,27 @@ public final class MainActivity extends Activity {
         int width = Math.max(1, Math.min(source.getWidth() - left, Math.round(source.getWidth() * widthRatio)));
         int height = Math.max(1, Math.min(source.getHeight() - top, Math.round(source.getHeight() * heightRatio)));
         Bitmap crop = Bitmap.createBitmap(source, left, top, width, height);
-        float scale = Math.min(4f, Math.max(1f, 3000f / Math.max(1, crop.getWidth())));
-        Bitmap enlarged = Bitmap.createScaledBitmap(crop, Math.round(crop.getWidth() * scale), Math.round(crop.getHeight() * scale), true);
+
+        /* Ampliação com teto de memória.
+         *
+         * A conta antiga mirava 3000 pixels de largura, o que fazia sentido
+         * enquanto o quadro tinha 640: dava 4× e uma imagem pequena. Com o
+         * quadro em 1080, a faixa de baixo viraria 3000×2400 — quase 29 MB só
+         * nela, e o mesmo de novo na cópia com contraste. Dois recortes assim
+         * derrubariam o aplicativo por falta de memória.
+         *
+         * Agora existe um orçamento de pixels: amplia o quanto der até 2,5×,
+         * respeitando o limite. O ganho de nitidez veio da captura, não do
+         * esticão — quem já foi capturado grande não precisa esticar tanto. */
+        final int TETO_DE_PIXELS = 4_000_000;   // ~16 MB por bitmap ARGB
+        float escala = Math.max(1f, Math.min(2.5f, 1800f / Math.max(1, crop.getWidth())));
+        long previsto = (long) (crop.getWidth() * escala) * (long) (crop.getHeight() * escala);
+        if (previsto > TETO_DE_PIXELS) {
+            escala = (float) Math.sqrt((double) TETO_DE_PIXELS / (double) (crop.getWidth() * crop.getHeight()));
+            escala = Math.max(1f, escala);
+        }
+        Bitmap enlarged = escala <= 1.01f ? crop : Bitmap.createScaledBitmap(
+                crop, Math.round(crop.getWidth() * escala), Math.round(crop.getHeight() * escala), true);
         if (crop != enlarged) crop.recycle();
         Bitmap enhanced = Bitmap.createBitmap(enlarged.getWidth(), enlarged.getHeight(), Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(enhanced);
@@ -847,6 +869,59 @@ public final class MainActivity extends Activity {
             });
         }
 
+        /**
+         * Backup sem perguntar nada, direto na pasta Download.
+         *
+         * O `exportBackup` abre o seletor de arquivos do sistema — ótimo para
+         * um backup pedido, impossível para um automático: apareceria uma
+         * janela do nada. Aqui a gravação é silenciosa, e vai para a pasta
+         * Download pública de propósito: a pasta privada do aplicativo some
+         * junto com ele na desinstalação, que é justamente um dos casos de que
+         * o backup deveria proteger.
+         */
+        @JavascriptInterface
+        public void salvarBackupAutomatico(final String json, final String nomeArquivo) {
+            final String nome = (nomeArquivo == null || nomeArquivo.trim().isEmpty())
+                    ? "pokecard-backup-automatico.json" : nomeArquivo.trim();
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    String resultado;
+                    try {
+                        OutputStream saida = null;
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            android.content.ContentValues dados = new android.content.ContentValues();
+                            dados.put(MediaStore.MediaColumns.DISPLAY_NAME, nome);
+                            dados.put(MediaStore.MediaColumns.MIME_TYPE, "application/json");
+                            dados.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
+                            Uri destino = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, dados);
+                            if (destino != null) saida = getContentResolver().openOutputStream(destino, "wt");
+                        } else {
+                            File pasta = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+                            if (pasta != null && (pasta.exists() || pasta.mkdirs())) {
+                                saida = new java.io.FileOutputStream(new File(pasta, nome));
+                            }
+                        }
+                        if (saida == null) throw new Exception("sem acesso à pasta Download");
+                        saida.write(json.getBytes(StandardCharsets.UTF_8));
+                        saida.flush();
+                        saida.close();
+                        resultado = "ok";
+                    } catch (Exception erro) {
+                        resultado = erro.getMessage() == null ? "falhou" : erro.getMessage();
+                    }
+                    final String aviso = resultado;
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            runJavascript("window.receberBackupAutomatico&&window.receberBackupAutomatico("
+                                    + JSONObject.quote(aviso) + "," + JSONObject.quote(nome) + ");");
+                        }
+                    });
+                }
+            }).start();
+        }
+
         @JavascriptInterface
         public void exportCsv(String csv, String fileName) {
             pendingCsvExport = csv;
@@ -1080,7 +1155,24 @@ public final class MainActivity extends Activity {
         Preview preview = new Preview.Builder().build();
         preview.setSurfaceProvider(previewView.getSurfaceProvider());
 
+        /* Resolução da análise: 1920×1080, não os 640×480 do padrão.
+         *
+         * Era esta a razão de o número do rodapé nunca sair. A 640×480, com a
+         * carta ocupando metade da altura do quadro, "049/193" mede cerca de
+         * SEIS pixels de altura — ampliar não recupera o que não foi captado.
+         * O nome e os ataques, que são letras grandes, saíam bem; só o número
+         * é que ficava fora de alcance, e o número é o que identifica a carta.
+         *
+         * A 1080 de largura o mesmo número passa dos vinte pixels, que é o
+         * mínimo confortável para o reconhecimento de texto. */
+        ResolutionSelector seletor = new ResolutionSelector.Builder()
+                .setResolutionStrategy(new ResolutionStrategy(
+                        new Size(1080, 1920),
+                        ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER))
+                .build();
+
         ImageAnalysis analise = new ImageAnalysis.Builder()
+                .setResolutionSelector(seletor)
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build();
         analise.setAnalyzer(liveScannerExecutor, new ImageAnalysis.Analyzer() {
@@ -1178,28 +1270,58 @@ public final class MainActivity extends Activity {
                     public void onSuccess(Text resultado) {
                         final String textoCheio = resultado == null ? "" : resultado.getText();
                         Bitmap rodape = null;
+                        Bitmap faixaNumero = null;
                         try {
                             // Metade de baixo, ampliada e com contraste: é onde
                             // fica a numeração e o código da coleção.
                             rodape = enhancedScannerCrop(quadro, 0f, .55f, 1f, .45f);
+                            /* E uma segunda passada só na tira do número.
+                             *
+                             * O recorte grande traz junto o texto de ataque e a
+                             * história da carta, que são letras bem maiores. O
+                             * reconhecimento se firma nelas e passa por cima da
+                             * numeração, que é a menor coisa impressa na carta.
+                             * Numa tira estreita não há concorrência: só sobra
+                             * o rodapé, e ele vem ampliado o dobro. */
+                            faixaNumero = enhancedScannerCrop(quadro, 0f, .80f, 1f, .20f);
                         } catch (Exception ignorado) {
                         }
                         if (rodape == null) {
-                            concluirLeitura(textoCheio, "", quadro, null);
+                            concluirLeitura(textoCheio, "", quadro, null, null);
                             return;
                         }
                         final Bitmap recorte = rodape;
+                        final Bitmap tira = faixaNumero;
                         reconhecedor.process(InputImage.fromBitmap(recorte, 0))
                                 .addOnSuccessListener(new OnSuccessListener<Text>() {
                                     @Override
                                     public void onSuccess(Text baixo) {
-                                        concluirLeitura(textoCheio, baixo == null ? "" : baixo.getText(), quadro, recorte);
+                                        final String textoBaixo = baixo == null ? "" : baixo.getText();
+                                        if (tira == null) {
+                                            concluirLeitura(textoCheio, textoBaixo, quadro, recorte, null);
+                                            return;
+                                        }
+                                        reconhecedor.process(InputImage.fromBitmap(tira, 0))
+                                                .addOnSuccessListener(new OnSuccessListener<Text>() {
+                                                    @Override
+                                                    public void onSuccess(Text numero) {
+                                                        concluirLeitura(textoCheio, textoBaixo,
+                                                                numero == null ? "" : numero.getText(),
+                                                                quadro, recorte, tira);
+                                                    }
+                                                })
+                                                .addOnFailureListener(new OnFailureListener() {
+                                                    @Override
+                                                    public void onFailure(@NonNull Exception e) {
+                                                        concluirLeitura(textoCheio, textoBaixo, quadro, recorte, tira);
+                                                    }
+                                                });
                                     }
                                 })
                                 .addOnFailureListener(new OnFailureListener() {
                                     @Override
                                     public void onFailure(@NonNull Exception e) {
-                                        concluirLeitura(textoCheio, "", quadro, recorte);
+                                        concluirLeitura(textoCheio, "", quadro, recorte, tira);
                                     }
                                 });
                     }
@@ -1213,14 +1335,25 @@ public final class MainActivity extends Activity {
                 });
     }
 
-    private void concluirLeitura(String textoCheio, String textoRodape, Bitmap quadro, Bitmap recorte) {
+    private void concluirLeitura(String textoCheio, String textoRodape, Bitmap quadro, Bitmap recorte, Bitmap tira) {
+        concluirLeitura(textoCheio, textoRodape, "", quadro, recorte, tira);
+    }
+
+    private void concluirLeitura(String textoCheio, String textoRodape, String textoNumero,
+                                 Bitmap quadro, Bitmap recorte, Bitmap tira) {
         if (quadro != null) quadro.recycle();
         if (recorte != null) recorte.recycle();
+        if (tira != null) tira.recycle();
         liveScannerBusy = false;
 
-        String junto = textoRodape == null || textoRodape.trim().isEmpty()
-                ? textoCheio
-                : textoCheio + "\n[FAIXA INFERIOR AMPLIADA]\n" + textoRodape;
+        StringBuilder juntar = new StringBuilder(textoCheio == null ? "" : textoCheio);
+        if (textoRodape != null && !textoRodape.trim().isEmpty()) {
+            juntar.append("\n[FAIXA INFERIOR AMPLIADA]\n").append(textoRodape);
+        }
+        if (textoNumero != null && !textoNumero.trim().isEmpty()) {
+            juntar.append("\n[NUMERO AMPLIADO]\n").append(textoNumero);
+        }
+        String junto = juntar.toString();
         if (junto.trim().length() < LIVE_MIN_TEXT_LENGTH) return;
 
         liveScannerLastDelivery = System.currentTimeMillis();

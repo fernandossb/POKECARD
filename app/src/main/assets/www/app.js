@@ -1340,6 +1340,11 @@ async function ensureCentralPriceShard(cardId, force = false) {
   Object.assign(centralPriceData.prices, payload.prices);
   Object.assign(centralPriceData.variantCatalog, payload.variantCatalog);
   centralPriceLoadedShards.add(shardIndex);
+  /* O resumo da coleção fica guardado e só é refeito quando o ESTADO muda.
+     Só que baixar preço não muda estado nenhum: o valor total continuava sendo
+     o que foi calculado antes de os preços existirem — normalmente baixo
+     demais, às vezes zero. Chegou preço novo, o resumo precisa ser refeito. */
+  collectionSummaryCache = { revision: -1, value: null };
   await saveCentralPriceCache();
   return true;
 }
@@ -1898,6 +1903,12 @@ async function init() {
     if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(scheduleCentralSync, { timeout: 8000 });
     else setTimeout(scheduleCentralSync, 3500);
     setTimeout(() => checkForAppUpdate(false), 1800);
+    // Depois que a tela já está de pé: gravar o backup não pode atrasar a abertura.
+    setTimeout(() => { talvezSalvarBackup(); }, 6000);
+    /* A anotação do dia espera os preços chegarem — só o valor completo conta.
+       Se ainda estiverem carregando, a próxima abertura anota; e a regra do
+       "maior valor do dia" conserta qualquer anotação feita pela metade. */
+    setTimeout(() => { registrarValorDoDia(); renderKeepingScroll(); }, 12000);
     labRecord('startup', performance.now() - labInitStart, { cards: cards.length });
   } catch (error) {
     document.getElementById('loading').innerHTML = `
@@ -2474,6 +2485,15 @@ function collectionSummary() {
   let repeated = 0;
   let wishlist = 0;
   let estimatedValue = 0;
+  /* "Preço que paguei" era pedido em toda carta e não ia para lugar nenhum:
+     ficava salvo e era devolvido só no próprio campo. Somando aqui, o app
+     passa a saber quanto a coleção custou, e não apenas quanto ela vale.
+     `valorComCusto` guarda o valor de mercado SÓ das cópias que têm preço
+     pago anotado — comparar o total gasto com o valor da coleção inteira
+     mediria coisas diferentes e inventaria um lucro que não existe. */
+  let totalPago = 0;
+  let valorComCusto = 0;
+  let copiasComCusto = 0;
   for (const [cardId, entry] of Object.entries(state.entries)) {
     const quantity = quantityFor(cardId);
     totalCopies += quantity;
@@ -2487,6 +2507,11 @@ function collectionSummary() {
           const variantQuantity = Math.max(0, Math.trunc(Number(variant.quantity) || 0));
           const quote = effectiveVariantPrice(cardId, variant);
           if (variantQuantity && quote?.brl != null) estimatedValue += Number(quote.brl) * variantQuantity;
+          if (variantQuantity && hasFiniteNumber(variant.paidPrice)) {
+            totalPago += Number(variant.paidPrice) * variantQuantity;
+            copiasComCusto += variantQuantity;
+            if (quote?.brl != null) valorComCusto += Number(quote.brl) * variantQuantity;
+          }
         }
       } else if (hasFiniteNumber(entry.priceBrl)) {
         estimatedValue += Number(entry.priceBrl) * quantity;
@@ -2495,7 +2520,8 @@ function collectionSummary() {
   }
   const pokemonStats = buildPokemonStats();
   const pokemonOwned = [...pokemonStats.values()].filter(item => item.copies > 0).length;
-  const value = { totalCopies, uniqueOwned, repeated, wishlist, estimatedValue, pokemonOwned };
+  const value = { totalCopies, uniqueOwned, repeated, wishlist, estimatedValue, pokemonOwned,
+    totalPago, valorComCusto, copiasComCusto };
   collectionSummaryCache = { revision: stateRevision, value };
   return value;
 }
@@ -2711,6 +2737,7 @@ function renderDashboard() {
         <div><span>${dashboardGreeting()}</span><h2>POKECARD Brasil</h2></div>
         <button class="vision-profile-button" onclick="openBackupPanel()" aria-label="Abrir perfil e backup">PB</button>
       </div>
+      ${avisoDeBackup()}
 
       <section class="portfolio-card">
         <div class="portfolio-title"><span>${tabIcon('cards')}</span><strong>PORTFÓLIO</strong><button onclick="updateAllCollectionPrices()">Atualizar</button></div>
@@ -2731,9 +2758,186 @@ function renderDashboard() {
         <button onclick="ui.cardFilter='owned';setTab('cards')"><span>${tabIcon('collections')}</span><strong>${ownedVariants}</strong><small>Versões</small></button>
         <button onclick="ui.cardFilter='owned';setTab('cards')"><span>${tabIcon('pokedex')}</span><strong>${specialCopies}</strong><small>Especiais</small></button>
       </div>
+      ${graficoDeValor()}
+      ${painelInvestimento()}
       ${topColecoesPanel()}
       ${pricingPanel()}
     </section>`;
+}
+
+/**
+ * Quanto você pagou × quanto vale hoje.
+ *
+ * Só aparece quando existe ao menos uma carta com o preço pago anotado —
+ * sem isso o painel seria uma linha de zeros ocupando espaço. A comparação
+ * usa apenas as cópias que TÊM custo anotado: medir o gasto conhecido contra
+ * o valor da coleção inteira mostraria um lucro imaginário.
+ */
+function painelInvestimento() {
+  const summary = collectionSummary();
+  if (!summary.copiasComCusto || summary.totalPago <= 0) return '';
+  const diferenca = summary.valorComCusto - summary.totalPago;
+  const percentual = summary.totalPago > 0 ? (diferenca / summary.totalPago) * 100 : 0;
+  const subiu = diferenca >= 0;
+
+  const destaques = cartasQueMaisValorizaram().slice(0, 5);
+  return `
+    <section class="investimento-card">
+      <div class="portfolio-title"><span>${tabIcon('cards')}</span><strong>PAGOU × VALE HOJE</strong></div>
+      <div class="investimento-linhas">
+        <div><small>Você pagou</small><strong>${money(summary.totalPago)}</strong></div>
+        <div><small>Vale hoje</small><strong>${money(summary.valorComCusto)}</strong></div>
+        <div class="${subiu ? 'subiu' : 'caiu'}">
+          <small>Diferença</small>
+          <strong>${subiu ? '+' : '−'}${money(Math.abs(diferenca)).replace('-', '')}</strong>
+          <em>${subiu ? '+' : '−'}${Math.abs(percentual).toFixed(1).replace('.', ',')}%</em>
+        </div>
+      </div>
+      <small class="investimento-base">Comparando ${summary.copiasComCusto} ${summary.copiasComCusto === 1 ? 'cópia' : 'cópias'} com o preço pago anotado.</small>
+      ${destaques.length ? `
+        <div class="investimento-topo">
+          <strong>Onde você mais ganhou</strong>
+          <ol>${destaques.map(item => `<li onclick="openCard('${esc(item.cardId)}')">
+            <span>${esc(item.nome)}</span>
+            <b class="${item.ganho >= 0 ? 'subiu' : 'caiu'}">${item.ganho >= 0 ? '+' : '−'}${money(Math.abs(item.ganho)).replace('-', '')}</b>
+          </li>`).join('')}</ol>
+        </div>` : ''}
+    </section>`;
+}
+
+/* ---------- Valorização da coleção, dia a dia ----------
+
+   Uma anotação por dia: a data e quanto a coleção valia. O banco de preços é
+   atualizado todo dia, então a linha conta a história de verdade — hoje R$
+   100, amanhã R$ 102.
+
+   Duas decisões que evitam gráfico mentiroso:
+
+   • Só anota depois que os preços chegaram. Abrir o app sem internet daria um
+     valor baixo demais, e a linha mostraria um tombo que nunca aconteceu.
+   • No mesmo dia, fica o MAIOR valor visto. Ao abrir o app, os preços entram
+     aos poucos; o primeiro cálculo do dia é sempre incompleto. */
+const VALOR_HISTORICO_KEY = 'pokecard-historico-valor-v1';
+const VALOR_HISTORICO_DIAS = 400;
+
+function diaDeHoje() {
+  const agora = new Date();
+  const mes = String(agora.getMonth() + 1).padStart(2, '0');
+  const dia = String(agora.getDate()).padStart(2, '0');
+  return `${agora.getFullYear()}-${mes}-${dia}`;
+}
+
+function historicoDeValor() {
+  try {
+    const bruto = JSON.parse(localStorage.getItem(VALOR_HISTORICO_KEY) || '[]');
+    return Array.isArray(bruto) ? bruto.filter(item => item && item.dia && Number.isFinite(Number(item.valor))) : [];
+  } catch (_) { return []; }
+}
+
+function registrarValorDoDia() {
+  const summary = collectionSummary();
+  const valor = Number(summary.estimatedValue);
+  // Sem coleção ou sem preço nenhum, não há o que anotar.
+  if (!summary.uniqueOwned || !Number.isFinite(valor) || valor <= 0) return;
+
+  const historico = historicoDeValor();
+  const hoje = diaDeHoje();
+  const ultimo = historico[historico.length - 1];
+  if (ultimo && ultimo.dia === hoje) {
+    if (valor <= Number(ultimo.valor)) return;   // parcial: não rebaixa o dia
+    ultimo.valor = valor;
+  } else {
+    historico.push({ dia: hoje, valor });
+  }
+  while (historico.length > VALOR_HISTORICO_DIAS) historico.shift();
+  try { localStorage.setItem(VALOR_HISTORICO_KEY, JSON.stringify(historico)); } catch (_) {}
+}
+
+function rotuloCurtoDeDia(dia) {
+  const [, mes, diaDoMes] = String(dia).split('-');
+  return `${diaDoMes}/${mes}`;
+}
+
+/**
+ * Gráfico de linha do valor da coleção.
+ *
+ * SVG desenhado à mão, sem biblioteca: são poucas linhas e evita carregar
+ * qualquer coisa de fora, o que o aplicativo não consegue fazer mesmo.
+ */
+function graficoDeValor() {
+  const historico = historicoDeValor();
+  if (historico.length < 2) {
+    // Com um ponto só não há linha para desenhar — mas vale explicar.
+    if (!historico.length) return '';
+    return `<section class="valor-card">
+      <div class="portfolio-title"><span>${tabIcon('collections')}</span><strong>VALORIZAÇÃO</strong></div>
+      <p class="valor-vazio">Primeira anotação feita hoje: <b>${esc(money(historico[0].valor))}</b>.
+      A linha começa a aparecer amanhã, com o segundo dia.</p>
+    </section>`;
+  }
+
+  const pontos = historico.slice(-90);
+  const valores = pontos.map(item => Number(item.valor));
+  const menor = Math.min(...valores);
+  const maior = Math.max(...valores);
+  const faixa = maior - menor || Math.max(1, maior * 0.1);
+  const L = 1000;
+  const A = 260;
+  const margem = 26;
+
+  const coordenadas = pontos.map((item, indice) => {
+    const x = pontos.length === 1 ? L / 2 : (indice / (pontos.length - 1)) * L;
+    const y = A - margem - ((Number(item.valor) - menor) / faixa) * (A - margem * 2);
+    return [x, y];
+  });
+  const linha = coordenadas.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
+  const area = `${linha} L${L} ${A} L0 ${A} Z`;
+
+  const primeiro = valores[0];
+  const ultimo = valores[valores.length - 1];
+  const diferenca = ultimo - primeiro;
+  const percentual = primeiro > 0 ? (diferenca / primeiro) * 100 : 0;
+  const subiu = diferenca >= 0;
+
+  return `
+    <section class="valor-card">
+      <div class="portfolio-title"><span>${tabIcon('collections')}</span><strong>VALORIZAÇÃO</strong></div>
+      <div class="valor-topo">
+        <strong>${esc(money(ultimo))}</strong>
+        <span class="${subiu ? 'subiu' : 'caiu'}">${subiu ? '▲' : '▼'} ${esc(money(Math.abs(diferenca)).replace('-', ''))}
+          <em>${subiu ? '+' : '−'}${Math.abs(percentual).toFixed(1).replace('.', ',')}%</em></span>
+      </div>
+      <svg class="valor-grafico ${subiu ? 'subiu' : 'caiu'}" viewBox="0 0 ${L} ${A}" preserveAspectRatio="none"
+        role="img" aria-label="Valor da coleção de ${esc(rotuloCurtoDeDia(pontos[0].dia))} a ${esc(rotuloCurtoDeDia(pontos[pontos.length-1].dia))}">
+        <path class="valor-area" d="${area}"></path>
+        <path class="valor-linha" d="${linha}"></path>
+        <circle class="valor-ponta" cx="${coordenadas[coordenadas.length-1][0].toFixed(1)}" cy="${coordenadas[coordenadas.length-1][1].toFixed(1)}" r="9"></circle>
+      </svg>
+      <div class="valor-eixo">
+        <span>${esc(rotuloCurtoDeDia(pontos[0].dia))} · ${esc(money(primeiro))}</span>
+        <span>${pontos.length} ${pontos.length === 1 ? 'dia' : 'dias'}</span>
+        <span>${esc(rotuloCurtoDeDia(pontos[pontos.length-1].dia))} · ${esc(money(ultimo))}</span>
+      </div>
+    </section>`;
+}
+
+/** Cartas ordenadas pelo ganho em reais desde a compra. */
+function cartasQueMaisValorizaram() {
+  const lista = [];
+  for (const cardId of Object.keys(state.entries)) {
+    const card = cardMap.get(cardId);
+    if (!card) continue;
+    for (const variant of variantsFor(cardId)) {
+      const quantidade = Math.max(0, Math.trunc(Number(variant.quantity) || 0));
+      if (!quantidade || !hasFiniteNumber(variant.paidPrice)) continue;
+      const cotacao = effectiveVariantPrice(cardId, variant);
+      if (cotacao?.brl == null) continue;
+      const ganho = (Number(cotacao.brl) - Number(variant.paidPrice)) * quantidade;
+      if (!Number.isFinite(ganho) || ganho === 0) continue;
+      lista.push({ cardId, nome: `${card.name} · ${friendlyVariantLabel(variant.pricingVariant)}`, ganho });
+    }
+  }
+  return lista.sort((a, b) => b.ganho - a.ganho);
 }
 
 /**
@@ -4503,14 +4707,21 @@ function pareceUmaCarta(ocrText) {
      ("tem várias linhas" + "tem muitas letras") já abriam a porta sozinhas —
      era por isso que a mesa com qualquer coisa escrita virava leitura. Agora o
      genérico só reforça: sem nenhum sinal de carta, nada passa. */
+  /* As marcas precisam aguentar leitura suja.
+     Numa carta real de Quaxly a câmera devolveu "Ese Pokérmon" e "AME FREAR"
+     — ou seja, leu a marca e a linha de direitos, mas com letras trocadas. Os
+     padrões exatos não reconheceram nada, a carta foi recusada como se fosse
+     mesa vazia, e o usuário só via "nenhuma carta na moldura". */
   const especificos = [];
   const genericos = [];
   if (numerosDaLeitura(texto).fractions.size) especificos.push('numeração');
-  if (/pok[eé]mon/i.test(normalizado)) especificos.push('marca');
+  // "pokemon", "pokermon", "p0kemon", "pokmon" — todas contam.
+  if (/p[o0]k[eé3]?r?m[o0]n/i.test(normalizado)) especificos.push('marca');
   if (/\billus\b|\bilust/i.test(normalizado)) especificos.push('ilustrador');
   if (/\d{2,3}\s*hp\b|\bhp\s*\d{2,3}/i.test(normalizado)) especificos.push('HP');
-  if (/fraqueza|resist[eê]ncia|recuo|weakness|resistance|retreat/i.test(normalizado)) especificos.push('rodapé');
-  if (/nintendo|creatures|game\s*freak/i.test(normalizado)) especificos.push('direitos');
+  if (/fraqu|resist|recuo|weakn|retreat/i.test(normalizado)) especificos.push('rodapé');
+  // "GAME FREAK" costuma sair mutilado; o miolo "ame frea" sobrevive.
+  if (/nintend|creature|ame\s*frea/i.test(normalizado)) especificos.push('direitos');
 
   const linhasComPalavras = texto.split(/\r?\n/).filter(linha => (linha.match(/[A-Za-zÀ-ÿ]/g) || []).length >= 4).length;
   if (linhasComPalavras >= 3) genericos.push('linhas');
@@ -4538,11 +4749,16 @@ function scannerCandidates(ocrText) {
      uma só. Por isso a leitura numérica recebe tratamento próprio, com as
      confusões clássicas do reconhecimento de caracteres desfeitas. */
   const { numbers, fractions } = numerosDaLeitura(ocrText);
-  /* O Android manda a faixa de baixo da carta ampliada, colada no fim do texto.
-     É lá que fica o número da carta. Um número lido nessa faixa vale muito mais
-     do que um número solto no meio do texto, que quase sempre é dano de ataque
-     ou ano de impressão. */
-  const rodape = String(ocrText || '').split(/\[FAIXA INFERIOR AMPLIADA\]/i).slice(1).join('\n');
+  /* O Android manda a parte de baixo ampliada, colada no fim do texto: uma
+     faixa larga e uma tira estreita só do número. É lá que fica a numeração da
+     carta. Um número lido nessas faixas vale muito mais do que um número solto
+     no meio do texto, que quase sempre é dano de ataque ou ano de impressão.
+
+     A moldura da tela é só guia para a pessoa centralizar — o que está fora
+     dela continua sendo lido normalmente. */
+  const rodape = String(ocrText || '')
+    .split(/\[(?:FAIXA INFERIOR AMPLIADA|NUMERO AMPLIADO|CANTO INFERIOR AMPLIADO)\]/i)
+    .slice(1).join('\n');
   const numerosDoRodape = rodape ? numerosDaLeitura(rodape).numbers : new Set();
 
   // Total impresso na fração: "015/094" diz que a coleção tem 94 cartas.
@@ -7322,6 +7538,80 @@ async function exportBackup() {
 
 function importBackup() {
   if (window.Android?.importBackup) window.Android.importBackup();
+}
+
+/* ---------- Backup automático ----------
+
+   A coleção mora só dentro do aplicativo. Limpar os dados, trocar de celular
+   ou desinstalar sem querer apaga cadastro, quantidades, preços pagos,
+   wishlist e decks — e nada disso dá para refazer. O backup manual existia,
+   mas dependia de lembrar.
+
+   Agora o aplicativo salva sozinho na pasta Download a cada sete dias, sem
+   perguntar e sem interromper. Sempre o MESMO arquivo, sobrescrito: o objetivo
+   é ter uma cópia recente, não encher a pasta de cópias antigas. */
+const BACKUP_AUTO_KEY = 'pokecard-backup-automatico-v1';
+const BACKUP_AUTO_DIAS = 7;
+const BACKUP_AVISO_DIAS = 21;
+
+function lerMarcaDeBackup() {
+  try { return JSON.parse(localStorage.getItem(BACKUP_AUTO_KEY) || '{}') || {}; }
+  catch (_) { return {}; }
+}
+
+function gravarMarcaDeBackup(valor) {
+  try { localStorage.setItem(BACKUP_AUTO_KEY, JSON.stringify(valor)); } catch (_) {}
+}
+
+function diasDesdeOBackup() {
+  const marca = lerMarcaDeBackup();
+  if (!marca.em) return null;
+  return Math.floor((Date.now() - Number(marca.em)) / 86400000);
+}
+
+async function talvezSalvarBackup() {
+  // Sem ponte com o Android não há como gravar sem abrir uma janela.
+  if (!window.Android?.salvarBackupAutomatico) return;
+  // Coleção vazia não tem o que proteger.
+  if (!collectionSummary().uniqueOwned) return;
+  const dias = diasDesdeOBackup();
+  if (dias !== null && dias < BACKUP_AUTO_DIAS) return;
+  try {
+    const payload = JSON.stringify({
+      format: 'fichario-pokemon-br-plus-backup',
+      backupVersion: 2,
+      exportedAt: new Date().toISOString(),
+      automatico: true,
+      state,
+      ligaSetCache,
+    });
+    window.Android.salvarBackupAutomatico(payload, 'pokecard-backup-automatico.json');
+  } catch (_) { /* tenta de novo na próxima abertura */ }
+}
+
+window.receberBackupAutomatico = function (resultado, arquivo) {
+  if (resultado === 'ok') {
+    gravarMarcaDeBackup({ em: Date.now(), arquivo });
+    renderKeepingScroll();
+    return;
+  }
+  console.warn('POKECARD: backup automático falhou —', resultado);
+};
+
+/* Faixa de aviso quando a cópia está velha demais — ou quando nunca houve
+   uma. Some sozinha assim que o backup acontece. */
+function avisoDeBackup() {
+  if (!collectionSummary().uniqueOwned) return '';
+  const dias = diasDesdeOBackup();
+  if (dias !== null && dias < BACKUP_AVISO_DIAS) return '';
+  const texto = dias === null
+    ? 'Sua coleção ainda não tem nenhuma cópia de segurança.'
+    : `Faz ${dias} dias desde a última cópia de segurança.`;
+  return `<button type="button" class="aviso-backup" onclick="openBackupPanel()">
+    <span aria-hidden="true">⚠</span>
+    <span><strong>${esc(texto)}</strong><small>Toque para salvar agora. Sem backup, trocar de celular apaga tudo.</small></span>
+    <span aria-hidden="true">›</span>
+  </button>`;
 }
 
 window.receiveImportedBackup = async function(raw) {

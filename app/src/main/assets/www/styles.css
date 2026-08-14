@@ -4646,3 +4646,89 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 /* O quadradinho da forma cresceu uma linha: o tamanho reservado acompanha,
    senao a grade calcula altura errada enquanto o desenho e pulado. */
 .pokemon-tile.e-forma{contain-intrinsic-size:132px 164px;}
+/* ---------- v5.36 — pagou x vale hoje, e aviso de backup ---------- */
+.investimento-card{
+  margin-top:var(--esp-4,16px);padding:var(--esp-3,12px);
+  border-radius:var(--raio-grande,16px);
+  border:1px solid var(--borda-suave,rgba(255,255,255,.14));
+  background:var(--vision-surface,rgba(255,255,255,.05));
+}
+.investimento-linhas{
+  display:grid;grid-template-columns:repeat(3,1fr);
+  gap:var(--esp-2,8px);margin-top:var(--esp-2,8px);
+}
+.investimento-linhas>div{min-width:0;}
+.investimento-linhas small{display:block;opacity:.7;font-size:var(--fs-menor,12px);}
+.investimento-linhas strong{
+  display:block;font-size:var(--fs-corpo,15px);
+  font-variant-numeric:tabular-nums;overflow-wrap:anywhere;
+}
+.investimento-linhas em{font-style:normal;font-size:var(--fs-menor,12px);}
+.investimento-linhas .subiu strong,.investimento-linhas .subiu em,.investimento-topo b.subiu{color:var(--ok,#3ddc97);}
+.investimento-linhas .caiu strong,.investimento-linhas .caiu em,.investimento-topo b.caiu{color:var(--erro,#e8544a);}
+.investimento-base{display:block;margin-top:var(--esp-2,8px);opacity:.65;font-size:var(--fs-menor,12px);}
+.investimento-topo{margin-top:var(--esp-3,12px);}
+.investimento-topo>strong{display:block;font-size:var(--fs-menor,12px);letter-spacing:.06em;text-transform:uppercase;opacity:.7;}
+.investimento-topo ol{list-style:none;margin:var(--esp-2,8px) 0 0;padding:0;}
+.investimento-topo li{
+  display:flex;align-items:center;justify-content:space-between;gap:var(--esp-2,8px);
+  min-height:var(--toque-min,44px);cursor:pointer;
+  border-top:1px solid var(--borda-suave,rgba(255,255,255,.10));
+  font-size:var(--fs-corpo,15px);
+}
+.investimento-topo li span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.investimento-topo li b{flex:0 0 auto;font-variant-numeric:tabular-nums;}
+
+/* Aviso de backup velho: precisa incomodar um pouco, sem virar alarme. */
+.aviso-backup{
+  display:flex;align-items:center;gap:var(--esp-3,12px);width:100%;
+  min-height:var(--toque-min,44px);margin:var(--esp-2,8px) 0;
+  padding:var(--esp-3,12px);text-align:left;cursor:pointer;
+  border-radius:var(--raio-medio,10px);
+  border:1px solid var(--aviso,#c98a12);
+  background:color-mix(in srgb, var(--aviso,#c98a12) 14%, transparent);
+  color:inherit;
+}
+.aviso-backup strong{display:block;font-size:var(--fs-corpo,15px);}
+.aviso-backup small{display:block;opacity:.8;font-size:var(--fs-menor,12px);line-height:1.35;}
+.aviso-backup>span:first-child{font-size:var(--fs-titulo,20px);color:var(--aviso,#c98a12);}
+/* ---------- v5.36 — grafico de valorizacao ---------- */
+.valor-card{
+  margin-top:var(--esp-4,16px);padding:var(--esp-3,12px);
+  border-radius:var(--raio-grande,16px);
+  border:1px solid var(--borda-suave,rgba(255,255,255,.14));
+  background:var(--vision-surface,rgba(255,255,255,.05));
+}
+.valor-topo{
+  display:flex;align-items:baseline;justify-content:space-between;
+  gap:var(--esp-2,8px);margin:var(--esp-2,8px) 0;flex-wrap:wrap;
+}
+.valor-topo>strong{font-size:var(--fs-titulo,20px);font-variant-numeric:tabular-nums;}
+.valor-topo>span{font-size:var(--fs-menor,12px);font-variant-numeric:tabular-nums;}
+.valor-topo em{font-style:normal;opacity:.85;}
+.valor-topo .subiu{color:var(--ok,#3ddc97);}
+.valor-topo .caiu{color:var(--erro,#e8544a);}
+
+.valor-grafico{
+  display:block;width:100%;height:120px;
+  overflow:visible;
+}
+.valor-grafico .valor-linha{
+  fill:none;stroke:var(--ok,#3ddc97);stroke-width:6;
+  stroke-linejoin:round;stroke-linecap:round;
+  vector-effect:non-scaling-stroke;
+}
+.valor-grafico .valor-area{fill:var(--ok,#3ddc97);opacity:.12;stroke:none;}
+.valor-grafico .valor-ponta{fill:var(--ok,#3ddc97);}
+.valor-grafico.caiu .valor-linha,.valor-grafico.caiu .valor-ponta{stroke:var(--erro,#e8544a);fill:var(--erro,#e8544a);}
+.valor-grafico.caiu .valor-linha{fill:none;}
+.valor-grafico.caiu .valor-area{fill:var(--erro,#e8544a);}
+
+.valor-eixo{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:var(--esp-2,8px);margin-top:var(--esp-2,8px);
+  font-size:var(--fs-menor,12px);opacity:.7;
+  font-variant-numeric:tabular-nums;
+}
+.valor-eixo>span:nth-child(2){opacity:.75;}
+.valor-vazio{font-size:var(--fs-menor,12px);opacity:.8;line-height:1.45;margin:var(--esp-2,8px) 0 0;}
