@@ -1606,10 +1606,16 @@ function notify(message) {
   if (window.Android?.toast) window.Android.toast(message);
 }
 
+/* Os dados embutidos chegam como variável global, posta por um <script> do
+   index.html — nunca por leitura de arquivo. O aplicativo abre a partir de
+   file:///android_asset e o `fetch` do navegador RECUSA endereços "file:",
+   independentemente das permissões de arquivo do WebView. Ler por fetch
+   funciona no navegador de teste e falha calado no celular. */
 async function loadJson(path) {
   if (path.endsWith('catalog.json') && window.__CATALOG__) return window.__CATALOG__;
   if (path.endsWith('pokedex.json') && window.__POKEDEX__) return window.__POKEDEX__;
   if (path.endsWith('collection-seed.json') && window.__COLLECTION_SEED__) return window.__COLLECTION_SEED__;
+  if (path.endsWith('formas-regionais.json') && window.__FORMAS__) return window.__FORMAS__;
   const response = await fetch(path);
   if (!response.ok) throw new Error(`Falha ao carregar ${path}`);
   return response.json();
@@ -6628,6 +6634,16 @@ let formasRegionais = {};
 async function carregarFormasRegionais() {
   try { formasRegionais = await loadJson('data/formas-regionais.json') || {}; }
   catch (_) { formasRegionais = {}; }
+
+  /* Falhar calado aqui custou caro: a lista ficava vazia, nenhuma forma
+     aparecia em lugar nenhum e a tela parecia apenas "não implementada".
+     Se o arquivo de formas não chegou, é para dizer. */
+  if (!Object.keys(formasRegionais).length) {
+    console.warn('POKECARD: as formas dos Pokémon não carregaram (data/formas-data.js).');
+    setTimeout(() => {
+      if (typeof notify === 'function') notify('As formas dos Pokémon não carregaram nesta instalação.');
+    }, 2500);
+  }
 
   /* Formas que o jogo separa mas a CARTA não.
      Mega X e Mega Y são dois Pokémon diferentes no jogo; no card ambos se
