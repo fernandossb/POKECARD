@@ -4704,6 +4704,52 @@ function numerosDaLeitura(ocrText) {
   return { numbers, fractions };
 }
 
+/* A categoria que a CARTA declara, lida no texto.
+   Toda carta que não é Pokémon traz a palavra impressa logo abaixo do nome:
+   "Item", "Apoiador", "Estádio", "Ferramenta", "Energia". É a pista mais
+   confiável que existe para não confundir um Treinador com um Pokémon. */
+const CATEGORIA_NO_TEXTO = [
+  [/\bapoiador\b|\bsupporter\b/, 'supporter'],
+  [/\best[aá]dio\b|\bstadium\b/, 'stadium'],
+  [/ferramenta\s+pok|pok[eé]mon\s+tool|\btool\b/, 'tool'],
+  [/\bitem\b/, 'item'],
+  [/\benergia\b|\benergy\b/, 'energy'],
+];
+
+function categoriaLidaNoTexto(normalizado) {
+  for (const [padrao, categoria] of CATEGORIA_NO_TEXTO) {
+    if (padrao.test(normalizado)) return categoria;
+  }
+  return '';
+}
+
+/** A categoria da carta do catálogo, no mesmo vocabulário do texto lido. */
+function categoriaDoCatalogo(card) {
+  const categoria = normalize(card?.category || '');
+  if (categoria === 'energy' || categoria === 'energia') return 'energy';
+  if (categoria === 'pokemon') return 'pokemon';
+  if (categoria === 'trainer' || categoria === 'treinador') {
+    const tipo = normalize(card?.trainerType || '');
+    if (tipo.includes('supporter') || tipo.includes('apoiador')) return 'supporter';
+    if (tipo.includes('stadium') || tipo.includes('estadio')) return 'stadium';
+    if (tipo.includes('tool') || tipo.includes('ferramenta')) return 'tool';
+    return 'item';
+  }
+  /* Catálogo sem o campo `category` — o embutido não tem — ainda dá para
+     separar: Energia pelo nome, Pokémon pelo vínculo de espécie, e o que
+     sobra é Treinador de algum tipo. Sem isto, a comparação de categoria só
+     funcionaria depois de "Buscar cartas e coleções novas". */
+  const nome = normalize(card?.name || '');
+  if (/^energia\b/.test(nome) || /\benergy$/.test(nome)) return 'energy';
+  if (pokemonIdsForCard(card).length) return 'pokemon';
+  return 'treinador';
+}
+
+/** Item, Apoiador, Estádio e Ferramenta são todos Treinadores. */
+function ehFamiliaTreinador(categoria) {
+  return ['item', 'supporter', 'stadium', 'tool', 'treinador'].includes(categoria);
+}
+
 function pareceUmaCarta(ocrText) {
   const texto = String(ocrText || '');
   const normalizado = normalize(texto);
@@ -4726,6 +4772,11 @@ function pareceUmaCarta(ocrText) {
   if (/\billus\b|\bilust/i.test(normalizado)) especificos.push('ilustrador');
   if (/\d{2,3}\s*hp\b|\bhp\s*\d{2,3}/i.test(normalizado)) especificos.push('HP');
   if (/fraqu|resist|recuo|weakn|retreat/i.test(normalizado)) especificos.push('rodapé');
+  /* A palavra que diz O QUE a carta é vem impressa nela.
+     HP, fraqueza, resistência e recuo só existem em Pokémon: com essas marcas,
+     um Item ou uma Energia básica quase nunca juntava as duas evidências
+     exigidas e era recusado como se fosse mesa vazia. */
+  if (categoriaLidaNoTexto(normalizado)) especificos.push('categoria');
   // "GAME FREAK" costuma sair mutilado; o miolo "ame frea" sobrevive.
   if (/nintend|creature|ame\s*frea/i.test(normalizado)) especificos.push('direitos');
 
@@ -4733,7 +4784,15 @@ function pareceUmaCarta(ocrText) {
   if (linhasComPalavras >= 3) genericos.push('linhas');
   if ((normalizado.match(/[a-z]/g) || []).length >= 25) genericos.push('volume');
 
-  const aceita = especificos.length >= 2 || (especificos.length >= 1 && genericos.length >= 2);
+  /* Energia básica é a carta com menos texto que existe: nome, a palavra
+     "Energia" e o símbolo. Não tem HP, nem fraqueza, nem texto de efeito, e
+     muitas nem trazem numeração. Exigir duas evidências dela era exigir o que
+     a carta não tem — e por isso Energia nunca era reconhecida. Dizer
+     "Energia" já é específico o bastante; ruído de mesa não diz isso. */
+  const soEnergia = categoriaLidaNoTexto(normalizado) === 'energy';
+  const aceita = especificos.length >= 2
+    || (especificos.length >= 1 && genericos.length >= 2)
+    || (soEnergia && especificos.length >= 1);
   return { aceita, achados: [...especificos, ...genericos], especificos, genericos };
 }
 
@@ -4836,6 +4895,13 @@ function scannerCandidates(ocrText) {
     return { card, cardName, localNumber, official, fractionMatch, nameSimilarity, pokemonSimilarity, setSimilarity, numberMatch };
   });
 
+  /* A carta diz o que ela é, e isso decide muita coisa.
+     Sem olhar a categoria, Item, Apoiador, Estádio, Ferramenta e Energia
+     disputavam em desvantagem: um Pokémon soma até 245 pontos de nome mais
+     semelhança de espécie, enquanto uma carta de Treinador só tem o nome. Bastava
+     a numeração casar com algum Pokémon para ele passar na frente. */
+  const categoriaLida = categoriaLidaNoTexto(normalize(ocrText));
+
   /* O nome grande da carta é a coisa mais fácil de ler; a numeração do rodapé é
      a mais difícil. Quando os dois discordam, quem provavelmente saiu errado é
      a numeração. Sem esta regra, um único algarismo trocado no rodapé fazia o
@@ -4863,7 +4929,18 @@ function scannerCandidates(ocrText) {
     if (numbers.has(official)) score += 8;
     if (scannerSession.setId !== 'all') score += 65;
     if (!fractionMatch && nameSimilarity < .54 && pokemonSimilarity < .68) score -= scannerSession.setId === 'all' ? 55 : 20;
-    return { ...item, score };
+
+    /* A categoria concordando vale muito; discordando, derruba. Uma carta que
+       diz "Apoiador" não é um Pokémon, por mais que o número bata. */
+    const categoriaDaCandidata = categoriaLida ? categoriaDoCatalogo(item.card) : '';
+    if (categoriaLida && categoriaDaCandidata) {
+      if (categoriaDaCandidata === categoriaLida) score += 90;
+      // Item, Apoiador, Estádio e Ferramenta são a mesma família: quando o
+      // catálogo não diz o subtipo, acertar a família já vale muito.
+      else if (ehFamiliaTreinador(categoriaLida) && ehFamiliaTreinador(categoriaDaCandidata)) score += 60;
+      else score -= 120;
+    }
+    return { ...item, score, categoriaDaCandidata };
   }).filter(item => item.score >= 55 && (
     item.nameSimilarity >= .46 || item.pokemonSimilarity >= .66 || item.fractionMatch
     /* Ter uma coleção escolhida deixava passar QUALQUER carta dela, mesmo sem
