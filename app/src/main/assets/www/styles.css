@@ -4538,3 +4538,75 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 .v-pokebola.ativo,.etiqueta-variante.v-pokebola.tenho{background:rgba(232,84,74,.22);border-color:#e8544a;}
 .v-masterball{color:#a259d9;}
 .v-masterball.ativo,.etiqueta-variante.v-masterball.tenho{background:rgba(162,89,217,.22);border-color:#a259d9;}
+/* ---------- v5.33 — cada forma no seu proprio quadro ---------- */
+.forma-bloco{
+  margin-top:var(--esp-4,16px);
+  padding:var(--esp-3,12px);
+  border-radius:var(--raio-grande,16px);
+  border:1px solid var(--borda-suave,rgba(255,255,255,.14));
+  background:var(--vision-surface,rgba(255,255,255,.05));
+}
+.forma-bloco.principal{background:none;border:0;padding:0;margin-top:var(--esp-3,12px);}
+.forma-cabecalho{
+  display:flex;align-items:center;gap:var(--esp-3,12px);
+  margin-bottom:var(--esp-2,8px);
+}
+.forma-cabecalho img{
+  width:52px;height:52px;object-fit:contain;
+  image-rendering:pixelated;flex:0 0 auto;
+}
+.forma-cabecalho strong{display:block;font-size:var(--fs-corpo,15px);}
+.forma-cabecalho small{display:block;opacity:.7;font-size:var(--fs-menor,12px);}
+
+/* ---------- v5.33 — tela de trofeus ----------
+   Esta tela nunca teve regra de layout: so existiam sobreposicoes de cor.
+   O resultado era medalha, texto e barra empilhados sem tamanho, e a barra
+   com ALTURA ZERO — invisivel. Como ela tambem nao tinha fundo proprio, o
+   papel de parede do tema aparecia no lugar dela. */
+.trofeu-grade{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+  gap:var(--esp-3,12px);
+}
+.trofeu{
+  display:flex;align-items:flex-start;gap:var(--esp-3,12px);
+}
+.trofeu-medalha{
+  position:relative;flex:0 0 auto;
+  width:54px;height:54px;
+  display:grid;place-items:center;
+  border-radius:var(--raio-redondo,999px);
+  background:color-mix(in srgb, var(--tr-cor,#4a4a52) 26%, transparent);
+  font-size:24px;line-height:1;
+}
+.trofeu-nivel{
+  position:absolute;left:50%;bottom:-7px;transform:translateX(-50%);
+  padding:1px 7px;border-radius:var(--raio-redondo,999px);
+  background:var(--tr-cor,#4a4a52);color:#14121a;
+  font-size:10px;font-weight:var(--peso-forte,700);
+  letter-spacing:.03em;white-space:nowrap;
+}
+.trofeu-info{flex:1 1 auto;min-width:0;}
+.trofeu-info strong{display:block;font-size:var(--fs-corpo,15px);}
+.trofeu-info>small{display:block;opacity:.7;font-size:var(--fs-menor,12px);margin-bottom:var(--esp-2,8px);}
+
+/* A barra: altura de verdade, fundo proprio e o preenchimento como bloco. */
+.trofeu-barra{
+  position:relative;overflow:hidden;
+  height:8px;width:100%;
+  border-radius:var(--raio-redondo,999px);
+  background:var(--vision-surface-2,rgba(255,255,255,.14));
+}
+.trofeu-barra>span{
+  display:block;height:100%;min-width:0;
+  border-radius:inherit;
+  background:var(--tr-cor,#4a4a52);
+  transition:width .45s ease;
+}
+.trofeu.bloqueado .trofeu-barra>span{opacity:.65;}
+.trofeu-conta{
+  display:block;margin-top:6px;
+  opacity:.75;font-size:var(--fs-menor,12px);
+  font-variant-numeric:tabular-nums;
+}
+@media (prefers-reduced-motion:reduce){ .trofeu-barra>span{transition:none;} }

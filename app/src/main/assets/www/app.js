@@ -6507,7 +6507,6 @@ function renderPokemonTile(item, stat) {
 
 function openPokemon(id) {
   ui.selectedPokemon = Number(id);
-  ui.formaPokemon = '';   // abrir outro Pokémon não herda a forma do anterior
   render();
   window.scrollTo(0,0);
 }
@@ -6582,6 +6581,13 @@ function formaDaCarta(card, formas) {
   return '';
 }
 
+/* Região leva "de" — "Meowth de Alola". Forma de batalha não: Gigantamax e
+   Mega são estados do próprio Pokémon, e "Meowth de Gigantamax" soa errado. */
+const REGIOES_DE_FORMA = new Set(['Alola', 'Galar', 'Hisui', 'Paldea']);
+function nomeDaForma(nomeBase, forma) {
+  return REGIOES_DE_FORMA.has(forma) ? `${nomeBase} de ${forma}` : `${nomeBase} ${forma}`;
+}
+
 function renderPokemonDetail(id) {
   const pokemon = pokemonMap.get(Number(id));
   if (!pokemon) { ui.selectedPokemon = null; return renderPokedex(); }
@@ -6589,67 +6595,66 @@ function renderPokemonDetail(id) {
   const related = cards.filter(card => pokemonIdsForCard(card).includes(pokemon.id))
     .sort((a,b) => quantityFor(b.id)-quantityFor(a.id) || a.setName.localeCompare(b.setName,'pt-BR') || numericLocal(a)-numericLocal(b));
 
-  /* Uma aba por NOME de forma. Formas que o catálogo de cartas não consegue
-     separar — o Tauros de Paldea tem três raças e as três cartas se chamam
-     "Tauros de Paldea" — viram uma aba só, que é o que dá para sustentar. */
+  /* Um bloco por FORMA, cada um com o seu próprio retrato e a sua lista.
+
+     Antes era uma fila de abas, e as cartas de todas as formas continuavam
+     misturadas até tocar numa aba — a separação existia, mas não se via. Em
+     blocos, o Meowth de Alola e o de Galar aparecem embaixo do Meowth comum,
+     cada um com o sprite e a contagem, sem precisar tocar em nada.
+
+     Formas que o catálogo de cartas não consegue separar — o Tauros de Paldea
+     tem três raças e as três cartas se chamam "Tauros de Paldea" — viram um
+     bloco só, que é o que dá para sustentar. */
   const formas = formasDoPokemon(pokemon.id);
   const nomes = [...new Set(formas.map(f => f.nome))];
-  const escolhida = ui.formaPokemon && nomes.includes(ui.formaPokemon) ? ui.formaPokemon : '';
-  const daForma = nomes.length
-    ? related.filter(card => formaDaCarta(card, formas) === escolhida)
-    : related;
+  const porForma = new Map(nomes.map(nome => [nome, []]));
+  const daBase = [];
+  for (const card of related) {
+    const nome = nomes.length ? formaDaCarta(card, formas) : '';
+    if (nome && porForma.has(nome)) porForma.get(nome).push(card);
+    else daBase.push(card);
+  }
+  // Forma sem nenhuma carta no catálogo não vira bloco vazio na tela.
+  const comCartas = nomes.filter(nome => porForma.get(nome).length);
 
-  const forma = escolhida ? formas.find(f => f.nome === escolhida) : null;
-  const arteId = forma ? forma.id : pokemon.id;
-  const titulo = forma ? `${pokemon.name} ${forma.nome}` : pokemon.name;
-
-  const abas = nomes.length ? `
-    <div class="formas-abas" role="tablist">
-      <button class="forma-aba${escolhida ? '' : ' ativa'}" role="tab" aria-selected="${!escolhida}"
-        onclick="escolherFormaPokemon('')">
-        <img src="${esc(pokemon.sprite)}" alt="" data-arte3d="${Number(pokemon.id)}" loading="lazy">
-        <span>Base</span>
-        <b>${related.filter(card => !formaDaCarta(card, formas)).length}</b>
-      </button>
-      ${nomes.map(nome => {
-        const f = formas.find(item => item.nome === nome);
-        const quantas = related.filter(card => formaDaCarta(card, formas) === nome).length;
-        const ativa = escolhida === nome;
-        return `<button class="forma-aba${ativa ? ' ativa' : ''}" role="tab" aria-selected="${ativa}"
-          onclick="escolherFormaPokemon('${esc(nome)}')">
-          <img src="${esc(pokemon.sprite)}" alt="" data-arte3d="${Number(f.id)}" loading="lazy">
-          <span>${esc(nome)}</span>
-          <b>${quantas}</b>
-        </button>`;
-      }).join('')}
-    </div>` : '';
+  const bloco = (rotulo, arteId, lista, principal) => `
+    <section class="forma-bloco${principal ? ' principal' : ''}">
+      <header class="forma-cabecalho">
+        <img src="${esc(pokemon.sprite)}" alt="" data-arte3d="${Number(arteId)}" loading="lazy">
+        <div>
+          <strong>${esc(rotulo)}</strong>
+          <small>${lista.length} carta${lista.length === 1 ? '' : 's'} no catálogo</small>
+        </div>
+      </header>
+      <div class="card-list">${lista.length
+        ? lista.map(renderCardRow).join('')
+        : '<div class="empty">Nenhuma carta desta forma no catálogo atual.</div>'}</div>
+    </section>`;
 
   return `<section class="screen">
-    <button class="back-btn" onclick="ui.selectedPokemon=null;ui.formaPokemon='';render();window.scrollTo(0,0)">← Voltar à Pokédex</button>
+    <button class="back-btn" onclick="ui.selectedPokemon=null;render();window.scrollTo(0,0)">← Voltar à Pokédex</button>
     <div class="pokemon-hero">
       <!-- Faltava o data-arte3d aqui: a tela de detalhe era a única que ficava
            com o sprite embutido de 96px esticado, a maior ampliação do app. -->
-      <img src="${esc(pokemon.sprite)}" alt="${esc(titulo)}" data-arte3d="${Number(arteId)}" data-arte3d-modo="nitida">
-      <div><span class="pokemon-number">Nº ${String(pokemon.id).padStart(4,'0')} · ${esc(forma ? forma.nome : pokemon.region)}</span><h2>${esc(titulo)}</h2><div class="badges">${pokemon.types.map(type=>`<span class="badge">${esc(type)}</span>`).join('')}</div></div>
+      <img src="${esc(pokemon.sprite)}" alt="${esc(pokemon.name)}" data-arte3d="${Number(pokemon.id)}" data-arte3d-modo="nitida">
+      <div><span class="pokemon-number">Nº ${String(pokemon.id).padStart(4,'0')} · ${esc(pokemon.region)}</span><h2>${esc(pokemon.name)}</h2><div class="badges">${pokemon.types.map(type=>`<span class="badge">${esc(type)}</span>`).join('')}</div></div>
     </div>
-    ${abas}
     <div class="stats-grid">
       ${statCard(stat.copies,'Cartas no fichário')}
       ${statCard(stat.cardIds.size,'Cartas únicas')}
     </div>
-    <h3 class="section-title">${escolhida ? `Cartas de ${esc(titulo)}` : `Todas as cartas de ${esc(pokemon.name)}`}</h3>
-    <p class="screen-subtitle">${nomes.length
-      ? 'As formas contam para o mesmo Pokémon na Pokédex — aqui elas ficam separadas para você achar mais fácil.'
+    <p class="screen-subtitle">${comCartas.length
+      ? `${esc(pokemon.name)} tem ${comCartas.length === 1 ? 'outra forma' : `${comCartas.length} outras formas`}. Todas contam para o mesmo Pokémon na Pokédex — aqui cada uma tem o seu quadro.`
       : 'As suas aparecem primeiro e totalmente visíveis. Você pode atualizar a quantidade aqui mesmo.'}</p>
-    <div class="card-list">${daForma.length ? daForma.map(renderCardRow).join('') : '<div class="empty">Nenhuma carta dessa forma foi encontrada no catálogo atual.</div>'}</div>
+    ${bloco(comCartas.length ? `${pokemon.name} comum` : `Todas as cartas de ${pokemon.name}`, pokemon.id, daBase, true)}
+    ${comCartas.map(nome => bloco(
+      nomeDaForma(pokemon.name, nome),
+      formas.find(item => item.nome === nome).id,
+      porForma.get(nome),
+      false,
+    )).join('')}
   </section>`;
 }
-
-function escolherFormaPokemon(regiao) {
-  ui.formaPokemon = regiao || '';
-  render();
-}
-window.escolherFormaPokemon = escolherFormaPokemon;
 
 function ownedDeckPool() {
   return cards.map(card => ({ card, owned: quantityFor(card.id) }))
