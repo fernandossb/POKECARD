@@ -1899,6 +1899,9 @@ async function init() {
     render();
     document.getElementById('loading').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
+    // As regras de deck saem da mesma pasta dos preços, uma vez por dia.
+    carregarRegrasGuardadas();
+    setTimeout(() => { sincronizarRegrasDeDeck().then(mudou => { if (mudou) renderKeepingScroll(); }); }, 4000);
     const scheduleCentralSync = () => syncCentralPrices(false, true).catch(() => false);
     if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(scheduleCentralSync, { timeout: 8000 });
     else setTimeout(scheduleCentralSync, 3500);
@@ -3350,7 +3353,10 @@ async function fetchCategoriasGraphQL(totalEstimado) {
     setCatalogUpdateProgress(`Classificando cartas (Item, Apoiador, Energia...): página ${pagina}`,
       mapa.size, Math.max(totalEstimado, mapa.size + 1), true);
     const corpo = JSON.stringify({
-      query: `{ cards(filters: {}, pagination: {page: ${pagina}, itemsPerPage: ${porPagina}}) { id category trainerType energyType rarity } }`,
+      // `regulationMark` é a letra impressa na carta que decide se ela ainda
+      // vale no formato Padrão. Sem ela, o aviso de rotação não tem como
+      // existir — e o catálogo embutido não traz esse campo.
+      query: `{ cards(filters: {}, pagination: {page: ${pagina}, itemsPerPage: ${porPagina}}) { id category trainerType energyType rarity regulationMark } }`,
     });
     let lote;
     try {
@@ -3363,7 +3369,7 @@ async function fetchCategoriasGraphQL(totalEstimado) {
     } catch (_) { break; }
     if (!Array.isArray(lote) || !lote.length) break;
     for (const item of lote) {
-      if (item?.id) mapa.set(item.id, { category: item.category || '', trainerType: item.trainerType || '', energyType: item.energyType || '', rarity: item.rarity || '' });
+      if (item?.id) mapa.set(item.id, { category: item.category || '', trainerType: item.trainerType || '', energyType: item.energyType || '', rarity: item.rarity || '', regulationMark: item.regulationMark || '' });
     }
     if (lote.length < porPagina) break;
   }
@@ -3504,7 +3510,7 @@ async function startCatalogUpdate() {
       // "None" é como a fonte diz "esta carta não tem raridade" — não é uma
       // raridade chamada None, e guardá-la assim confundiria a tela.
       const raridade = dados.rarity && dados.rarity !== 'None' ? dados.rarity : (card.rarity || null);
-      localCards.set(id, { ...card, category: dados.category, trainerType: dados.trainerType, energyType: dados.energyType, rarity: raridade });
+      localCards.set(id, { ...card, category: dados.category, trainerType: dados.trainerType, energyType: dados.energyType, rarity: raridade, regulationMark: dados.regulationMark || card.regulationMark || '' });
       classificadas += 1;
     }
 
@@ -7096,6 +7102,246 @@ function deckStrengthScore(card, preferredType = '') {
   return score;
 }
 
+/* =====================================================================
+   Decks — planejamento, custo, conflito, energia, rotação e histórico
+   ===================================================================== */
+
+/* 1. MODO PLANEJAMENTO
+   O deck só podia ser montado com cartas do fichário: a quantidade travava
+   no que você já tem e a busca só oferecia o que estava cadastrado. Mas quem
+   joga monta a lista primeiro e compra depois. Ligado o planejamento, o
+   catálogo inteiro entra e o que falta vira lista de compras. */
+function deckPlanejando(deck) { return Boolean(deck?.planejando); }
+
+function copiasDisponiveis(deck, cardId) {
+  return deckPlanejando(deck) ? Infinity : quantityFor(cardId);
+}
+
+function alternarPlanejamento(deckId) {
+  const deck = (state.decks || []).find(item => item.id === deckId);
+  if (!deck) return;
+  deck.planejando = !deck.planejando;
+  saveState(); render();
+  notify(deck.planejando
+    ? 'Planejamento ligado: dá para usar cartas que você ainda não tem.'
+    : 'Planejamento desligado: só cartas do seu fichário.');
+}
+
+/* 2. QUANTO O DECK VALE E QUANTO FALTA COMPRAR */
+function precoDeUmaCarta(cardId) {
+  const cotacao = automaticPriceQuote(cardId, {
+    pricingVariant: 'normal', finish: 'normal', language: 'pt-br',
+    condition: 'Near Mint', edition: 'unlimited', distribution: 'unstamped',
+    artVariant: 'standard', region: 'Brasil',
+  });
+  const valor = Number(cotacao?.brl ?? cotacao?.basePriceBrl);
+  return Number.isFinite(valor) && valor > 0 ? valor : null;
+}
+
+function custoDoDeck(deck) {
+  let valorTotal = 0;
+  let semPreco = 0;
+  let faltamCartas = 0;
+  let custoDoQueFalta = 0;
+  const comprar = [];
+  for (const [cardId, qtdRaw] of Object.entries(deck?.cards || {})) {
+    const card = cardMap.get(cardId);
+    const qtd = Math.max(0, Number(qtdRaw) || 0);
+    if (!card || !qtd) continue;
+    const preco = precoDeUmaCarta(cardId);
+    if (preco === null) semPreco += qtd; else valorTotal += preco * qtd;
+    const tenho = quantityFor(cardId);
+    const falta = Math.max(0, qtd - tenho);
+    if (falta) {
+      faltamCartas += falta;
+      if (preco !== null) custoDoQueFalta += preco * falta;
+      comprar.push({ cardId, nome: card.name, onde: `${card.setName} ${card.number}`, falta, preco });
+    }
+  }
+  comprar.sort((a, b) => (b.preco || 0) * b.falta - (a.preco || 0) * a.falta);
+  return { valorTotal, semPreco, faltamCartas, custoDoQueFalta, comprar };
+}
+
+/* 3. A MESMA CARTA FÍSICA EM DOIS DECKS
+   A validação comparava o deck com o total que você possui, um deck de cada
+   vez. Com quatro Boss's Orders dava para montar três decks usando quatro em
+   cada, e os três apareciam válidos — mas na mesa você tem quatro. */
+function conflitosEntreDecks(deck) {
+  const conflitos = [];
+  const outros = (state.decks || []).filter(item => item.id !== deck?.id && !item.planejando);
+  if (deckPlanejando(deck)) return conflitos;
+  for (const [cardId, qtdRaw] of Object.entries(deck?.cards || {})) {
+    const qtd = Math.max(0, Number(qtdRaw) || 0);
+    if (!qtd) continue;
+    const card = cardMap.get(cardId);
+    if (!card) continue;
+    let emOutros = 0;
+    const nomes = [];
+    for (const outro of outros) {
+      const usado = Math.max(0, Number(outro.cards?.[cardId]) || 0);
+      if (usado) { emOutros += usado; nomes.push(`${outro.name} (${usado})`); }
+    }
+    const tenho = quantityFor(cardId);
+    if (emOutros && qtd + emOutros > tenho) {
+      conflitos.push({ cardId, nome: card.name, aqui: qtd, emOutros, tenho, nomes });
+    }
+  }
+  return conflitos;
+}
+
+/* 4. ENERGIA POR TIPO
+   O resumo dizia quantas Energias havia, nunca QUAIS. Um deck com oito de
+   Fogo e Pokémon de Água passa em tudo e não funciona na mesa. */
+function energiasDoDeck(deck) {
+  const porTipo = new Map();
+  let basicasSemTipo = 0;
+  for (const [cardId, qtdRaw] of Object.entries(deck?.cards || {})) {
+    const card = cardMap.get(cardId);
+    const qtd = Math.max(0, Number(qtdRaw) || 0);
+    if (!card || !qtd || deckCardClass(card) !== 'energy') continue;
+    const tipo = tipoDaEnergia(card);
+    if (tipo) porTipo.set(tipo, (porTipo.get(tipo) || 0) + qtd);
+    else basicasSemTipo += qtd;
+  }
+  const tiposDosPokemon = new Map();
+  for (const [cardId, qtdRaw] of Object.entries(deck?.cards || {})) {
+    const card = cardMap.get(cardId);
+    const qtd = Math.max(0, Number(qtdRaw) || 0);
+    if (!card || !qtd || deckCardClass(card) !== 'pokemon') continue;
+    for (const tipo of deckCardTypes(card)) tiposDosPokemon.set(tipo, (tiposDosPokemon.get(tipo) || 0) + qtd);
+  }
+  const semEnergia = [...tiposDosPokemon.keys()].filter(tipo => !porTipo.has(tipo));
+  const semPokemon = [...porTipo.keys()].filter(tipo => !tiposDosPokemon.has(tipo));
+  return { porTipo, basicasSemTipo, tiposDosPokemon, semEnergia, semPokemon };
+}
+
+/** O tipo de uma carta de Energia, pelo nome — "Energia de Fogo" → Fogo. */
+function tipoDaEnergia(card) {
+  const tipos = deckCardTypes(card);
+  if (tipos.length) return tipos[0];
+  const nome = normalize(card?.name || '');
+  const conhecidos = ['fogo','agua','planta','eletrico','psiquico','lutador','sombrio','metalico','fada','dragao','incolor'];
+  for (const tipo of conhecidos) if (nome.includes(tipo)) return tipo.charAt(0).toUpperCase() + tipo.slice(1);
+  return '';
+}
+
+/* ---------- Regras de deck: arquivo + online ----------
+
+   Duas origens, cada uma com o seu papel.
+
+   O ARQUIVO guarda o que não muda — 60 cartas, quatro cópias, energia básica
+   sem limite — e serve de ponto de partida para quem nunca conseguiu baixar
+   nada. É rápido e funciona sem internet.
+
+   O ONLINE guarda a ROTAÇÃO, que muda todo ano. Uma lista embutida no
+   aplicativo passa a mentir no dia da rotação e só para de mentir quando
+   alguém recompila; baixada, ela se corrige sozinha.
+
+   O aplicativo não consulta a fonte de legalidade direto: quem faz isso é o
+   serviço do banco de preços, uma vez por dia. Sem chave de API, a fonte
+   limita chamadas — um aplicativo consultando a cada abertura tomaria
+   bloqueio. E fica um lugar só para consertar se a fonte mudar de formato. */
+const REGRAS_DECK_URL = `${CENTRAL_PRICE_BASE}/deck-rules.json`;
+const REGRAS_DECK_KEY = 'pokecard-regras-deck-v1';
+const REGRAS_DECK_TTL = 24 * 60 * 60 * 1000;
+
+let regrasDeDeck = null;
+
+function regrasEmbutidas() {
+  return {
+    construcao: { deckSize: 60, sameNameLimit: 4, basicEnergyUnlimited: true },
+    padrao: [],
+    expandido: [],
+    embutido: true,
+  };
+}
+
+function carregarRegrasGuardadas() {
+  try {
+    const guardado = JSON.parse(localStorage.getItem(REGRAS_DECK_KEY) || 'null');
+    if (guardado?.regras?.padrao) { regrasDeDeck = guardado.regras; return guardado; }
+  } catch (_) {}
+  regrasDeDeck = regrasEmbutidas();
+  return null;
+}
+
+async function sincronizarRegrasDeDeck(forcar = false) {
+  const guardado = carregarRegrasGuardadas();
+  if (!forcar && guardado?.em && Date.now() - Number(guardado.em) < REGRAS_DECK_TTL) return false;
+  try {
+    const resposta = await fetch(`${REGRAS_DECK_URL}?t=${Date.now()}`);
+    if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
+    const baixado = await resposta.json();
+    if (baixado?.formato !== 'pokecard-deck-rules-v1' || !Array.isArray(baixado.padrao) || !baixado.padrao.length) {
+      throw new Error('Arquivo de regras fora do formato.');
+    }
+    regrasDeDeck = baixado;
+    try { localStorage.setItem(REGRAS_DECK_KEY, JSON.stringify({ em: Date.now(), regras: baixado })); } catch (_) {}
+    return true;
+  } catch (erro) {
+    // Sem internet ou serviço fora: fica valendo a última cópia guardada.
+    console.warn('POKECARD: regras de deck não atualizaram —', erro.message);
+    return false;
+  }
+}
+
+/** A coleção desta carta está no formato? Devolve null quando não dá para saber. */
+function colecaoNoFormato(setId, formato = 'padrao') {
+  const lista = regrasDeDeck?.[formato];
+  if (!Array.isArray(lista) || !lista.length) return null;
+  return lista.includes(String(setId || '').toLowerCase());
+}
+
+function legalidadeDoDeck(deck, formato = 'padrao') {
+  const lista = regrasDeDeck?.[formato];
+  if (!Array.isArray(lista) || !lista.length) return null;
+  const fora = [];
+  let dentro = 0;
+  let desconhecidas = 0;
+  for (const [cardId, qtdRaw] of Object.entries(deck?.cards || {})) {
+    const card = cardMap.get(cardId);
+    const qtd = Math.max(0, Number(qtdRaw) || 0);
+    if (!card || !qtd) continue;
+    const legal = colecaoNoFormato(card.setId, formato);
+    if (legal === null) { desconhecidas += qtd; continue; }
+    if (legal) dentro += qtd;
+    else fora.push({ cardId, nome: card.name, onde: card.setName, qtd });
+  }
+  return { dentro, fora, desconhecidas, aviso: regrasDeDeck?.aviso || '' };
+}
+
+/* 7. AVISO DE ROTAÇÃO
+   A letra impressa na carta ("marca de regulamentação") diz de qual bloco ela
+   é. A rotação corta sempre as mais antigas. Como a regra oficial muda todo
+   ano, o app NÃO afirma o que está fora: mostra as letras do deck e destaca
+   as mais velhas, dizendo que é estimativa. Mentir sobre legalidade seria
+   pior do que não falar nada. */
+function marcasDoDeck(deck) {
+  const porMarca = new Map();
+  let semMarca = 0;
+  for (const [cardId, qtdRaw] of Object.entries(deck?.cards || {})) {
+    const card = cardMap.get(cardId);
+    const qtd = Math.max(0, Number(qtdRaw) || 0);
+    if (!card || !qtd) continue;
+    const marca = String(card.regulationMark || '').trim().toUpperCase();
+    if (marca) porMarca.set(marca, (porMarca.get(marca) || 0) + qtd);
+    else semMarca += qtd;
+  }
+  const marcas = [...porMarca.keys()].sort();
+  // A letra mais nova de todo o catálogo é a régua do que é recente.
+  let maisNovaDoCatalogo = '';
+  for (const card of cardMap.values()) {
+    const marca = String(card.regulationMark || '').trim().toUpperCase();
+    if (marca && marca > maisNovaDoCatalogo) maisNovaDoCatalogo = marca;
+  }
+  // Convenção do formato: costumam valer as quatro letras mais recentes.
+  const limite = maisNovaDoCatalogo
+    ? String.fromCharCode(Math.max(65, maisNovaDoCatalogo.charCodeAt(0) - 3))
+    : '';
+  const antigas = limite ? marcas.filter(marca => marca < limite) : [];
+  return { porMarca, marcas, semMarca, maisNovaDoCatalogo, limite, antigas };
+}
+
 function deckValidation(deck) {
   const errors = [];
   const warnings = [];
@@ -7111,15 +7357,35 @@ function deckValidation(deck) {
     const card = cardMap.get(cardId);
     const qty = Math.max(0, Number(qtyRaw) || 0);
     if (!card || !qty) continue;
-    if (qty > quantityFor(cardId)) errors.push(`${card.name}: o deck usa ${qty}, mas você possui ${quantityFor(cardId)}.`);
+    /* No planejamento, faltar carta não é erro — é justamente o ponto. */
+    if (qty > quantityFor(cardId)) {
+      const mensagem = `${card.name}: o deck usa ${qty}, mas você possui ${quantityFor(cardId)}.`;
+      if (deckPlanejando(deck)) warnings.push(`${mensagem} Falta comprar ${qty - quantityFor(cardId)}.`);
+      else errors.push(mensagem);
+    }
     if (deckCardClass(card) !== 'energy') {
       const key = deckNameKey(card);
       byName.set(key, { name: card.name, qty: (byName.get(key)?.qty || 0) + qty });
     }
   }
   for (const item of byName.values()) if (item.qty > 4) errors.push(`${item.name}: máximo de 4 cópias somando todas as versões.`);
+
+  // A mesma carta física em dois decks ao mesmo tempo.
+  for (const conflito of conflitosEntreDecks(deck)) {
+    errors.push(`${conflito.nome}: você tem ${conflito.tenho}, mas está usando ${conflito.aqui} aqui e ${conflito.emOutros} em ${conflito.nomes.join(', ')}.`);
+  }
+
+  // Energia que não serve para nenhum Pokémon do deck, e o contrário.
+  const energia = energiasDoDeck(deck);
+  if (energia.semEnergia.length && split.energy) {
+    warnings.push(`Sem Energia de ${energia.semEnergia.join(', ')} para os Pokémon desses tipos.`);
+  }
+  if (energia.semPokemon.length) {
+    warnings.push(`Energia de ${energia.semPokemon.join(', ')} sem nenhum Pokémon desse tipo.`);
+  }
+
   const score = Math.max(0, Math.min(100, 100 - errors.length * 25 - warnings.length * 7 + (total === 60 ? 10 : 0)));
-  return { valid: !errors.length, errors, warnings, score, total, split };
+  return { valid: !errors.length, errors, warnings, score, total, split, energia };
 }
 
 function addDeckCardQuantity(target, cardId, wanted) {
@@ -7192,6 +7458,131 @@ function renderDeckCardRow(deck, cardId, qty) {
   </div>`;
 }
 
+/* Painéis do editor. Cada um some quando não tem o que dizer — painel vazio
+   só ocupa espaço e ensina a pessoa a rolar sem ler. */
+function painelEnergiaDoDeck(deck) {
+  const energia = energiasDoDeck(deck);
+  if (!energia.porTipo.size && !energia.basicasSemTipo) return '';
+  const linhas = [...energia.porTipo.entries()].sort((a, b) => b[1] - a[1]);
+  return `<section class="deck-painel">
+    <strong>Energia por tipo</strong>
+    <div class="deck-energias">
+      ${linhas.map(([tipo, qtd]) => `<span class="${energia.semPokemon.includes(tipo) ? 'sobrando' : ''}"><b>${qtd}</b> ${esc(tipo)}</span>`).join('')}
+      ${energia.basicasSemTipo ? `<span class="indefinida"><b>${energia.basicasSemTipo}</b> sem tipo identificado</span>` : ''}
+    </div>
+    ${energia.semEnergia.length ? `<small class="deck-alerta">Pokémon de ${esc(energia.semEnergia.join(', '))} sem Energia correspondente.</small>` : ''}
+  </section>`;
+}
+
+function painelCustoDoDeck(deck) {
+  const custo = custoDoDeck(deck);
+  if (!custo.valorTotal && !custo.faltamCartas) return '';
+  return `<section class="deck-painel">
+    <strong>Custo</strong>
+    <div class="deck-custo">
+      <div><small>O deck vale</small><b>${esc(money(custo.valorTotal))}</b></div>
+      ${custo.faltamCartas ? `<div class="falta"><small>Faltam ${custo.faltamCartas} carta(s)</small><b>${esc(money(custo.custoDoQueFalta))}</b></div>` : ''}
+    </div>
+    ${custo.semPreco ? `<small class="deck-nota">${custo.semPreco} cópia(s) ainda sem preço publicado.</small>` : ''}
+    ${custo.comprar.length ? `<details class="deck-compras"><summary>Lista de compras (${custo.comprar.length})</summary>
+      <ol>${custo.comprar.slice(0, 20).map(item => `<li onclick="openCard('${esc(item.cardId)}')">
+        <span>${item.falta}× ${esc(item.nome)}<small>${esc(item.onde)}</small></span>
+        <b>${item.preco === null ? '—' : esc(money(item.preco * item.falta))}</b></li>`).join('')}</ol>
+    </details>` : ''}
+  </section>`;
+}
+
+function painelRotacao(deck) {
+  if (!deckTotal(deck)) return '';
+  const legal = legalidadeDoDeck(deck, 'padrao');
+
+  /* Com a lista baixada, a resposta é por COLEÇÃO — que é como a rotação
+     realmente funciona. As letras de regulamentação viram só o detalhe. */
+  if (legal) {
+    const fora = legal.fora.reduce((soma, item) => soma + item.qtd, 0);
+    return `<section class="deck-painel">
+      <strong>Formato Padrão</strong>
+      <div class="deck-marcas">
+        <span class="${fora ? '' : 'dentro'}"><b>${legal.dentro}</b> no Padrão</span>
+        ${fora ? `<span class="antiga"><b>${fora}</b> fora</span>` : ''}
+        ${legal.desconhecidas ? `<span class="indefinida"><b>${legal.desconhecidas}</b> sem informação</span>` : ''}
+      </div>
+      ${legal.fora.length ? `<details class="deck-compras"><summary>Cartas fora do Padrão (${legal.fora.length})</summary>
+        <ol>${legal.fora.map(item => `<li onclick="openCard('${esc(item.cardId)}')">
+          <span>${item.qtd}× ${esc(item.nome)}<small>${esc(item.onde)}</small></span></li>`).join('')}</ol></details>` : ''}
+      <small class="deck-nota">${esc(legal.aviso || 'Legalidade estimada por fonte da comunidade.')}
+        ${regrasDeDeck?.geradoEm ? `Lista de ${esc(mesAnoDoLancamento?.(regrasDeDeck.geradoEm) || String(regrasDeDeck.geradoEm).slice(0, 10))}.` : ''}</small>
+    </section>`;
+  }
+
+  // Sem a lista online, sobra a estimativa pelas letras impressas.
+  const marcas = marcasDoDeck(deck);
+  if (!marcas.marcas.length) {
+    return `<section class="deck-painel">
+      <strong>Rotação</strong>
+      <small class="deck-nota">Ainda não sei o formato destas cartas. As regras de deck são baixadas uma vez por dia;
+      se você acabou de instalar, abra o app com internet. O catálogo também precisa ter passado por
+      "Buscar cartas e coleções novas".</small>
+    </section>`;
+  }
+  return `<section class="deck-painel">
+    <strong>Rotação</strong>
+    <div class="deck-marcas">
+      ${marcas.marcas.map(marca => `<span class="${marcas.antigas.includes(marca) ? 'antiga' : ''}"><b>${esc(marca)}</b> ${marcas.porMarca.get(marca)}</span>`).join('')}
+      ${marcas.semMarca ? `<span class="indefinida"><b>?</b> ${marcas.semMarca}</span>` : ''}
+    </div>
+    ${marcas.antigas.length
+      ? `<small class="deck-alerta">As cartas com marca ${esc(marcas.antigas.join(', '))} são as mais antigas do deck e costumam ser as primeiras a sair do formato Padrão. É uma estimativa pelas letras do catálogo, não a regra oficial.</small>`
+      : '<small class="deck-nota">Nenhuma carta entre as mais antigas do catálogo.</small>'}
+  </section>`;
+}
+
+function painelRetrospecto(deck) {
+  const r = retrospectoDoDeck(deck);
+  return `<section class="deck-painel">
+    <strong>Partidas</strong>
+    ${r.jogadas ? `<div class="deck-retrospecto">
+      <span class="v"><b>${r.v}</b> vitórias</span>
+      <span class="d"><b>${r.d}</b> derrotas</span>
+      ${r.e ? `<span class="e"><b>${r.e}</b> empates</span>` : ''}
+      <span class="pct"><b>${r.aproveitamento}%</b> de aproveitamento</span>
+    </div>` : '<small class="deck-nota">Nenhuma partida anotada ainda.</small>'}
+    <div class="deck-placar">
+      <button class="v" onclick="registrarPartida('${esc(deck.id)}','v')">+ Vitória</button>
+      <button class="d" onclick="registrarPartida('${esc(deck.id)}','d')">+ Derrota</button>
+      <button class="e" onclick="registrarPartida('${esc(deck.id)}','e')">+ Empate</button>
+      ${r.jogadas ? `<button class="desfazer" onclick="desfazerUltimaPartida('${esc(deck.id)}')">Desfazer</button>` : ''}
+    </div>
+  </section>`;
+}
+
+/* O cartão de um deck na lista.
+   Fica numa função própria porque o montador avançado (deck-auto.js) troca a
+   tela inteira de decks pela dele. Sem um lugar só, a capa, o preço e o
+   retrospecto apareceriam numa versão da tela e sumiriam na outra. */
+function cartaoDeDeck(deck) {
+  const report = deckValidation(deck);
+  const capa = cartaDeCapa(deck);
+  const r = retrospectoDoDeck(deck);
+  const custo = custoDoDeck(deck);
+  return `<button class="deck-cartao ${report.valid ? 'valido' : ''}" onclick="selectedDeckId='${esc(deck.id)}';render()">
+    <span class="deck-capa">${capa?.imageUrl
+      ? `<img src="${esc(upgradeCardImageUrl(capa.imageUrl))}" alt="" loading="lazy">`
+      : '<span class="card-placeholder">TCG</span>'}</span>
+    <span class="deck-cartao-dados">
+      <strong>${esc(deck.name)}${deckPlanejando(deck) ? ' <em>· planejando</em>' : ''}</strong>
+      <small>${report.split.pokemon} Pokémon · ${report.split.trainerTotal} Treinadores · ${report.split.energy} Energias</small>
+      <small class="deck-cartao-linha">
+        <b class="${report.valid ? 'ok' : ''}">${report.total}/60</b>
+        <span>força ${report.score}/100</span>
+        ${custo.valorTotal ? `<span>${esc(money(custo.valorTotal))}</span>` : ''}
+        ${r.jogadas ? `<span class="retro">${r.v}V ${r.d}D${r.e ? ` ${r.e}E` : ''}</span>` : ''}
+      </small>
+      ${custo.faltamCartas ? `<small class="deck-cartao-falta">Faltam ${custo.faltamCartas} carta(s) · ${esc(money(custo.custoDoQueFalta))}</small>` : ''}
+    </span>
+  </button>`;
+}
+
 function renderDeckEditor(deck) {
   const report = deckValidation(deck);
   const entries = Object.entries(deck.cards || {}).filter(([,q]) => Number(q)>0).sort((a,b)=>deckCardClass(cardMap.get(a[0])).localeCompare(deckCardClass(cardMap.get(b[0]))) || (cardMap.get(a[0])?.name||'').localeCompare(cardMap.get(b[0])?.name||'','pt-BR'));
@@ -7201,9 +7592,23 @@ function renderDeckEditor(deck) {
     <div class="deck-editor-head"><div><h2 class="screen-title">${esc(deck.name)}</h2><p class="screen-subtitle">Edite usando somente as cartas que você possui.</p></div><button class="danger-btn compact-btn" onclick="deleteDeck('${esc(deck.id)}')">Excluir</button></div>
     <div class="deck-summary ${report.valid?'valid':'invalid'}"><strong>${report.total}/60 cartas · força ${report.score}/100</strong><span>${report.split.pokemon} Pokémon · ${report.split.trainerTotal} Treinadores · ${report.split.energy} Energias</span><small>${report.valid?'Deck validado para batalha.':'Ainda existem ajustes necessários.'}</small></div>
     ${messages ? `<ul class="deck-validation">${messages}</ul>` : ''}
+    ${painelEnergiaDoDeck(deck)}
+    ${painelCustoDoDeck(deck)}
+    ${painelRotacao(deck)}
+    ${painelRetrospecto(deck)}
     ${deckImprovementPanel(deck)}
-    <div class="deck-actions"><button class="secondary-btn" onclick="renameDeck('${esc(deck.id)}')">Renomear</button><button class="secondary-btn" onclick="duplicateDeck('${esc(deck.id)}')">Duplicar</button><button class="secondary-btn" onclick="exportDeckList('${esc(deck.id)}')">Exportar lista</button></div>
-    <div class="deck-search"><input id="deckCardSearch" class="field" placeholder="Buscar nas minhas cartas"><button class="primary-btn" onclick="openDeckCardPicker('${esc(deck.id)}')">Adicionar carta</button></div>
+    <div class="deck-actions">
+      <button class="secondary-btn ${deckPlanejando(deck) ? 'ativo' : ''}" onclick="alternarPlanejamento('${esc(deck.id)}')">
+        ${deckPlanejando(deck) ? '✓ Planejando' : '✎ Planejar'}
+      </button>
+      <button class="secondary-btn" onclick="abrirImportarLista('${esc(deck.id)}')">Colar lista</button>
+      <button class="secondary-btn" onclick="abrirFolhaDeInscricao('${esc(deck.id)}')">Folha de torneio</button>
+      <button class="secondary-btn" onclick="escolherCapaDoDeck('${esc(deck.id)}')">Capa</button>
+      <button class="secondary-btn" onclick="renameDeck('${esc(deck.id)}')">Renomear</button>
+      <button class="secondary-btn" onclick="duplicateDeck('${esc(deck.id)}')">Duplicar</button>
+      <button class="secondary-btn" onclick="exportDeckList('${esc(deck.id)}')">Exportar lista</button>
+    </div>
+    <div class="deck-search"><input id="deckCardSearch" class="field" placeholder="${deckPlanejando(deck) ? 'Buscar no catálogo inteiro' : 'Buscar nas minhas cartas'}"><button class="primary-btn" onclick="openDeckCardPicker('${esc(deck.id)}')">Adicionar carta</button></div>
     <div class="deck-card-list">${entries.length ? entries.map(([id,q])=>renderDeckCardRow(deck,id,q)).join('') : '<div class="empty">Este deck ainda está vazio.</div>'}</div>
   </section>`;
 }
@@ -7220,7 +7625,8 @@ function renderDecks() {
     <button class="primary-btn deck-auto-btn" onclick="openAutoBuilder()">🧠 Montador avançado — 3 opções analisadas</button>
     <p class="deck-auto-note">O montador avançado simula milhares de mãos iniciais, completa linhas evolutivas, confere energia compatível e pontua legalidade, consistência e velocidade de setup, priorizando o que você já possui.</p>
     <div class="deck-row"><input id="deckName" class="field" placeholder="Nome do novo deck"><button class="primary-btn" onclick="addDeck()">Criar vazio</button></div>
-    <div class="set-list">${decks.length ? decks.map(deck => { const report=deckValidation(deck); return `<button class="panel deck-panel" onclick="selectedDeckId='${esc(deck.id)}';render()"><div class="set-title-row"><span class="set-name">${esc(deck.name)}</span><span class="badge ${report.valid?'owned':''}">${report.total}/60</span></div><p class="card-meta">${report.split.pokemon} Pokémon · ${report.split.trainerTotal} Treinadores · ${report.split.energy} Energias · força ${report.score}/100</p></button>`; }).join('') : '<div class="empty"><strong>Nenhum deck criado</strong>Use o gerador automático ou crie um deck vazio.</div>'}</div>
+    <div class="deck-lista">${decks.length ? decks.map(cartaoDeDeck).join('')
+      : '<div class="empty"><strong>Nenhum deck criado</strong>Use o gerador automático ou crie um deck vazio.</div>'}</div>
   </section>`;
 }
 
@@ -7328,7 +7734,7 @@ function addCardToDeck(deckId, cardId) {
   const card = cardMap.get(cardId);
   if (!deck || !card) return;
   const current = Math.max(0, Number(deck.cards?.[cardId]) || 0);
-  if (current >= quantityFor(cardId)) return notify(`Você já usou todas as suas cópias de ${card.name}.`);
+  if (current >= copiasDisponiveis(deck, cardId)) return notify(`Você já usou todas as suas cópias de ${card.name}.`);
   if (deckTotal(deck) >= 60) return notify('O deck já tem 60 cartas.');
   deck.cards = deck.cards || {};
   deck.cards[cardId] = current + 1;
@@ -7386,7 +7792,7 @@ function changeDeckCard(deckId, cardId, delta) {
   const current = Math.max(0, Number(deck.cards[cardId]) || 0);
   const sameNameElsewhere = deckCardClass(card) === 'energy' ? 0 : deckNameQuantity(deck, card, cardId);
   const nameLimit = deckCardClass(card) === 'energy' ? 60 : Math.max(0, 4-sameNameElsewhere);
-  const max = Math.min(quantityFor(cardId), deckCardLimit(card), nameLimit);
+  const max = Math.min(copiasDisponiveis(deck, cardId), deckCardLimit(card), nameLimit);
   const roomMax = current + Math.max(0, 60-deckTotal(deck));
   const next = Math.max(0, Math.min(max, roomMax, current + Number(delta || 0)));
   if (next) deck.cards[cardId] = next; else delete deck.cards[cardId];
@@ -7398,10 +7804,232 @@ function openDeckCardPicker(deckId) {
   const deck = (state.decks || []).find(item => item.id === deckId);
   if (!deck) return;
   const query = normalize(document.getElementById('deckCardSearch')?.value || '');
-  const pool = ownedDeckPool().filter(item => !query || normalize(`${item.card.name} ${item.card.number} ${item.card.setName}`).includes(query)).sort((a,b)=>deckStrengthScore(b.card,deck.preferredType)-deckStrengthScore(a.card,deck.preferredType)).slice(0,160);
-  showModal(`<button class="modal-close" onclick="closeModal()">×</button><h2>Adicionar carta ao deck</h2><p class="screen-subtitle">Respeita sua quantidade, o limite de 4 cópias pelo mesmo nome e o máximo de 60 cartas.</p><div class="deck-picker">${pool.length ? pool.map(item=>`<button onclick="changeDeckCard('${esc(deckId)}','${esc(item.card.id)}',1);closeModal()"><strong>${esc(item.card.name)}</strong><span>${esc(item.card.number)} · ${esc(item.card.setName)} · você tem ${item.owned} · ${deckCardClass(item.card)}</span></button>`).join('') : '<div class="empty">Nenhuma carta encontrada.</div>'}</div>`);
+  /* No planejamento o catálogo inteiro entra na busca. Sem consulta digitada
+     seriam 36 mil cartas de uma vez: aí a lista fica só com o que você tem,
+     que é o começo natural. */
+  const base = deckPlanejando(deck) && query
+    ? cards.map(card => ({ card, owned: quantityFor(card.id) }))
+    : ownedDeckPool();
+  const pool = base
+    .filter(item => !query || normalize(`${item.card.name} ${item.card.number} ${item.card.setName}`).includes(query))
+    .sort((a,b)=>deckStrengthScore(b.card,deck.preferredType)-deckStrengthScore(a.card,deck.preferredType))
+    .slice(0,160);
+  showModal(`<button class="modal-close" onclick="closeModal()">×</button><h2>Adicionar carta ao deck</h2>
+    <p class="screen-subtitle">${deckPlanejando(deck)
+      ? 'Planejamento ligado: dá para escolher cartas que você ainda não tem. Digite para buscar no catálogo inteiro.'
+      : 'Respeita sua quantidade, o limite de 4 cópias pelo mesmo nome e o máximo de 60 cartas.'}</p>
+    <div class="deck-picker">${pool.length ? pool.map(item=>`<button onclick="changeDeckCard('${esc(deckId)}','${esc(item.card.id)}',1);closeModal()">
+      <strong>${esc(item.card.name)}</strong>
+      <span>${esc(item.card.number)} · ${esc(item.card.setName)} · ${item.owned ? `você tem ${item.owned}` : 'você não tem'} · ${deckCardClass(item.card)}</span>
+    </button>`).join('') : '<div class="empty">Nenhuma carta encontrada.</div>'}</div>`);
 }
 
+
+/* 5. COLAR UMA LISTA PRONTA
+   Exportar já existia; colar, não. Quem joga copia lista da internet o tempo
+   todo. Cada linha vira "quantas" + "nome" (+ coleção e número, quando vêm).
+   O casamento é por nome; havendo coleção e número, eles decidem entre as
+   várias impressões da mesma carta. */
+function abrirImportarLista(deckId) {
+  showModal(`
+    <button class="modal-close" onclick="closeModal()">×</button>
+    <h2>Colar lista de deck</h2>
+    <p class="screen-subtitle">Uma carta por linha. Aceita os formatos mais comuns:<br>
+      <code>4 Charizard ex</code> · <code>4x Charizard ex</code> · <code>4 Charizard ex OBF 125</code></p>
+    <textarea id="listaColada" class="field notes-field" rows="10" placeholder="4 Charizard ex OBF 125&#10;3 Ordens do Chefe&#10;10 Energia de Fogo"></textarea>
+    <div class="modal-actions">
+      <button class="primary-btn" onclick="importarListaDeDeck('${esc(deckId)}')">Conferir e adicionar</button>
+    </div>`);
+  setTimeout(() => document.getElementById('listaColada')?.focus(), 120);
+}
+
+/** Lê uma linha de decklist: quantidade, nome e, se houver, coleção/número. */
+function lerLinhaDeLista(linha) {
+  const limpa = String(linha || '').trim();
+  if (!limpa || /^(pok[eé]mon|treinador|trainer|energia|energy|total)\b\s*[:\-]?\s*\d*$/i.test(limpa)) return null;
+  const casa = limpa.match(/^(\d{1,2})\s*[xX]?\s+(.+)$/);
+  if (!casa) return null;
+  const quantidade = Math.max(1, Math.min(60, Number(casa[1])));
+  let resto = casa[2].replace(/\s*[—–-]\s*/g, ' ').trim();
+  // Cauda "SIGLA 123" ou "SIGLA 123/456" costuma ser a impressão.
+  const cauda = resto.match(/\s+([A-Za-z0-9.]{2,6})\s+(\d{1,3})(?:\/\d{1,3})?$/);
+  let sigla = '';
+  let numero = '';
+  if (cauda) { sigla = cauda[1]; numero = cauda[2]; resto = resto.slice(0, cauda.index).trim(); }
+  return { quantidade, nome: resto, sigla, numero };
+}
+
+function acharCartaDaLista(item) {
+  const alvo = normalize(item.nome);
+  if (!alvo) return null;
+  let candidatas = cards.filter(card => normalize(card.name) === alvo);
+  if (!candidatas.length) candidatas = cards.filter(card => normalize(card.name).startsWith(alvo));
+  if (!candidatas.length) return null;
+  if (item.numero) {
+    const porNumero = candidatas.filter(card => String(Number(String(card.localId || '').match(/\d+/)?.[0] ?? -1)) === String(Number(item.numero)));
+    if (porNumero.length) candidatas = porNumero;
+  }
+  if (item.sigla) {
+    const sigla = normalize(item.sigla);
+    const porSigla = candidatas.filter(card => normalize(card.setId).includes(sigla) || normalize(card.setName).startsWith(sigla));
+    if (porSigla.length) candidatas = porSigla;
+  }
+  // Empate: fica a que você tem mais cópias — é a que você usaria de verdade.
+  return candidatas.sort((a, b) => quantityFor(b.id) - quantityFor(a.id))[0];
+}
+
+function importarListaDeDeck(deckId) {
+  const deck = (state.decks || []).find(item => item.id === deckId);
+  if (!deck) return;
+  const texto = document.getElementById('listaColada')?.value || '';
+  const linhas = texto.split(/\r?\n/).map(lerLinhaDeLista).filter(Boolean);
+  if (!linhas.length) return notify('Não encontrei nenhuma linha no formato esperado.');
+
+  deck.cards = deck.cards || {};
+  const naoAchadas = [];
+  let adicionadas = 0;
+  for (const item of linhas) {
+    const card = acharCartaDaLista(item);
+    if (!card) { naoAchadas.push(`${item.quantidade}× ${item.nome}`); continue; }
+    const antes = Math.max(0, Number(deck.cards[card.id]) || 0);
+    // Lista colada quase sempre traz carta que a pessoa ainda não tem.
+    if (!deckPlanejando(deck)) deck.planejando = true;
+    const limite = deckCardClass(card) === 'energy' ? 60 : 4;
+    const espaco = Math.max(0, 60 - deckTotal(deck));
+    const somar = Math.min(item.quantidade, limite - antes, espaco);
+    if (somar > 0) { deck.cards[card.id] = antes + somar; adicionadas += somar; }
+  }
+  saveState(); closeModal(); render();
+  const aviso = naoAchadas.length ? ` ${naoAchadas.length} não encontrada(s): ${naoAchadas.slice(0, 3).join('; ')}${naoAchadas.length > 3 ? '…' : ''}` : '';
+  notify(`${adicionadas} carta(s) adicionadas.${aviso}`);
+}
+
+/* 6. FOLHA DE INSCRIÇÃO PARA TORNEIO
+   Torneio oficial pede a lista no papel, agrupada e com a coleção e o número
+   de cada carta. Montar isso à mão antes de cada campeonato é o tipo de
+   trabalho que o app já tem tudo para evitar. */
+function abrirFolhaDeInscricao(deckId) {
+  const deck = (state.decks || []).find(item => item.id === deckId);
+  if (!deck) return;
+  const grupos = { pokemon: [], trainer: [], energy: [] };
+  for (const [cardId, qtdRaw] of Object.entries(deck.cards || {})) {
+    const card = cardMap.get(cardId);
+    const qtd = Math.max(0, Number(qtdRaw) || 0);
+    if (!card || !qtd) continue;
+    grupos[deckCardClass(card)].push({ card, qtd });
+  }
+  const linhas = lista => lista
+    .sort((a, b) => a.card.name.localeCompare(b.card.name, 'pt-BR'))
+    .map(item => `<tr><td>${item.qtd}</td><td>${esc(item.card.name)}</td><td>${esc(item.card.setName)}</td><td>${esc(item.card.number)}</td>${item.card.regulationMark ? `<td>${esc(item.card.regulationMark)}</td>` : '<td>—</td>'}</tr>`)
+    .join('');
+  const soma = lista => lista.reduce((total, item) => total + item.qtd, 0);
+  const bloco = (titulo, lista) => lista.length ? `
+    <tbody><tr class="folha-secao"><th colspan="5">${titulo} — ${soma(lista)}</th></tr>${linhas(lista)}</tbody>` : '';
+
+  showModal(`
+    <button class="modal-close" onclick="closeModal()">×</button>
+    <h2>Folha de inscrição</h2>
+    <p class="screen-subtitle">${esc(deck.name)} · ${deckTotal(deck)} cartas${deck.format ? ` · ${esc(deck.format)}` : ''}</p>
+    <table class="folha-deck">
+      <thead><tr><th>Qtd</th><th>Carta</th><th>Coleção</th><th>Nº</th><th>Reg.</th></tr></thead>
+      ${bloco('Pokémon', grupos.pokemon)}
+      ${bloco('Treinadores', grupos.trainer)}
+      ${bloco('Energias', grupos.energy)}
+    </table>
+    <div class="modal-actions">
+      <button class="secondary-btn" onclick="copiarFolhaDeInscricao('${esc(deckId)}')">Copiar como texto</button>
+      <button class="primary-btn" onclick="window.print()">Imprimir</button>
+    </div>`, 'folha-sheet');
+}
+
+function copiarFolhaDeInscricao(deckId) {
+  const deck = (state.decks || []).find(item => item.id === deckId);
+  if (!deck) return;
+  const grupos = { pokemon: [], trainer: [], energy: [] };
+  for (const [cardId, qtdRaw] of Object.entries(deck.cards || {})) {
+    const card = cardMap.get(cardId);
+    const qtd = Math.max(0, Number(qtdRaw) || 0);
+    if (card && qtd) grupos[deckCardClass(card)].push(`${qtd} ${card.name} ${card.setName} ${card.number}`);
+  }
+  const rotulos = { pokemon: 'Pokémon', trainer: 'Treinadores', energy: 'Energias' };
+  const texto = ['pokemon', 'trainer', 'energy']
+    .filter(chave => grupos[chave].length)
+    .map(chave => `${rotulos[chave]} (${grupos[chave].length})\n${grupos[chave].sort().join('\n')}`)
+    .join('\n\n');
+  const completo = `${deck.name}\n\n${texto}\n\nTotal: ${deckTotal(deck)} cartas`;
+  if (navigator.clipboard) navigator.clipboard.writeText(completo).then(() => notify('Folha copiada.')).catch(() => {});
+}
+
+/* 9. CAPA DO DECK
+   A lista de decks era texto sobre texto, todos iguais. A arte da carta
+   principal dá identidade e faz reconhecer o deck de relance. */
+function cartaDeCapa(deck) {
+  if (deck?.capa && cardMap.get(deck.capa)) return cardMap.get(deck.capa);
+  // Sem escolha manual: o Pokémon mais forte do deck.
+  let melhor = null;
+  let melhorNota = -1;
+  for (const [cardId, qtdRaw] of Object.entries(deck?.cards || {})) {
+    const card = cardMap.get(cardId);
+    if (!card || !(Number(qtdRaw) > 0) || deckCardClass(card) !== 'pokemon') continue;
+    const nota = deckStrengthScore(card, deck?.preferredType);
+    if (nota > melhorNota) { melhorNota = nota; melhor = card; }
+  }
+  return melhor;
+}
+
+function escolherCapaDoDeck(deckId) {
+  const deck = (state.decks || []).find(item => item.id === deckId);
+  if (!deck) return;
+  const opcoes = Object.entries(deck.cards || {})
+    .filter(([, qtd]) => Number(qtd) > 0)
+    .map(([cardId]) => cardMap.get(cardId))
+    .filter(card => card && deckCardClass(card) === 'pokemon');
+  if (!opcoes.length) return notify('Adicione um Pokémon ao deck para escolher a capa.');
+  showModal(`<button class="modal-close" onclick="closeModal()">×</button>
+    <h2>Capa do deck</h2>
+    <p class="screen-subtitle">A arte que identifica ${esc(deck.name)} na lista.</p>
+    <div class="deck-capas">${opcoes.map(card => `
+      <button class="${deck.capa === card.id ? 'ativa' : ''}" onclick="definirCapaDoDeck('${esc(deckId)}','${esc(card.id)}')">
+        ${card.imageUrl ? `<img src="${esc(upgradeCardImageUrl(card.imageUrl))}" alt="" loading="lazy">` : '<span class="card-placeholder">TCG</span>'}
+        <small>${esc(card.name)}</small>
+      </button>`).join('')}</div>`);
+}
+
+function definirCapaDoDeck(deckId, cardId) {
+  const deck = (state.decks || []).find(item => item.id === deckId);
+  if (!deck) return;
+  deck.capa = cardId;
+  saveState(); closeModal(); render(); notify('Capa escolhida.');
+}
+
+/* 10. VITÓRIAS E DERROTAS
+   Anotar o resultado das partidas transforma "tenho cinco decks montados" em
+   "este ganha, aquele não". */
+function registrarPartida(deckId, resultado) {
+  const deck = (state.decks || []).find(item => item.id === deckId);
+  if (!deck) return;
+  deck.resultados = Array.isArray(deck.resultados) ? deck.resultados : [];
+  deck.resultados.push({ r: resultado, em: Date.now() });
+  if (deck.resultados.length > 500) deck.resultados = deck.resultados.slice(-500);
+  saveState(); renderKeepingScroll();
+  notify(resultado === 'v' ? 'Vitória anotada.' : resultado === 'd' ? 'Derrota anotada.' : 'Empate anotado.');
+}
+
+function desfazerUltimaPartida(deckId) {
+  const deck = (state.decks || []).find(item => item.id === deckId);
+  if (!deck?.resultados?.length) return notify('Nenhuma partida anotada.');
+  deck.resultados.pop();
+  saveState(); renderKeepingScroll(); notify('Última partida apagada.');
+}
+
+function retrospectoDoDeck(deck) {
+  const lista = Array.isArray(deck?.resultados) ? deck.resultados : [];
+  const v = lista.filter(item => item.r === 'v').length;
+  const d = lista.filter(item => item.r === 'd').length;
+  const e = lista.filter(item => item.r === 'e').length;
+  const jogadas = v + d + e;
+  return { v, d, e, jogadas, aproveitamento: jogadas ? Math.round((v / jogadas) * 100) : 0 };
+}
 
 function option(value, label, selected) {
   return `<option value="${esc(value)}" ${value === selected ? 'selected' : ''}>${esc(label)}</option>`;

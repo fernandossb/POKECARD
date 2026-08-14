@@ -430,7 +430,13 @@
       <button class="auto-deck-hero" onclick="openAutoBuilder()"><span>✨</span><div><strong>Montar deck automaticamente</strong><small>Escolha formato, objetivo e fonte das cartas</small></div></button>
       ${lastCandidates.length?`<h3 class="section-title">Melhores sugestões</h3><div class="candidate-list">${lastCandidates.map(candidateCard).join('')}</div>`:''}
       <div class="deck-row"><input id="deckName" class="field" placeholder="Nome do novo deck"><button class="primary-btn" onclick="addDeck()">Criar vazio</button></div>
-      <h3 class="section-title">Decks salvos</h3><div class="set-list">${decks.length?decks.map(deck=>{const r=validate(deck);return `<button class="panel deck-panel" onclick="selectedDeckId='${esc(deck.id)}';render()"><div class="set-title-row"><span class="set-name">${esc(deck.name)}</span><span class="badge ${r.valid?'owned':''}">${r.total}/60</span></div><p class="card-meta">${deck.format||'Livre / Casual'} · nota ${r.score}/100 · confiança ${r.confidence.label} · ${Math.max(0,deck.missingCards||0)} faltante(s)</p></button>`}).join(''):'<div class="empty"><strong>Nenhum deck criado</strong>Use o montador automático ou crie um deck vazio.</div>'}</div></section>`;
+      <h3 class="section-title">Decks salvos</h3><div class="deck-lista">${decks.length
+        // O cartão vem do app.js: capa, preço e retrospecto ficam iguais nas
+        // duas telas de decks, em vez de existirem só numa delas.
+        ?decks.map(deck=>typeof cartaoDeDeck==='function'
+          ?cartaoDeDeck(deck)
+          :`<button class="panel deck-panel" onclick="selectedDeckId='${esc(deck.id)}';render()"><div class="set-title-row"><span class="set-name">${esc(deck.name)}</span></div></button>`).join('')
+        :'<div class="empty"><strong>Nenhum deck criado</strong>Use o montador automático ou crie um deck vazio.</div>'}</div></section>`;
   };
   window.openAutoBuilder=openAutoBuilder;
   window.runAutoBuilder=runAutoBuilder;
