@@ -4610,3 +4610,39 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
   font-variant-numeric:tabular-nums;
 }
 @media (prefers-reduced-motion:reduce){ .trofeu-barra>span{transition:none;} }
+/* ---------- v5.34 — formas com quadradinho proprio na Pokedex ---------- */
+.dex-formas{
+  display:inline-flex;align-items:center;gap:var(--esp-2,8px);
+  min-height:var(--toque-min,44px);padding:0 var(--esp-3,12px);
+  margin-bottom:var(--esp-2,8px);
+  border-radius:var(--raio-redondo,999px);
+  border:1px solid var(--borda-suave,rgba(255,255,255,.18));
+  background:none;color:inherit;cursor:pointer;
+  font-size:var(--fs-menor,12px);
+}
+.dex-formas.ativo{
+  border-color:var(--acento,#7fd1ff);
+  background:color-mix(in srgb, var(--acento,#7fd1ff) 16%, transparent);
+  font-weight:var(--peso-forte,700);
+}
+.dex-formas b{
+  padding:1px 7px;border-radius:var(--raio-redondo,999px);
+  background:rgba(255,255,255,.12);font-weight:var(--peso-normal,400);
+}
+
+/* O quadradinho de forma: mesma caixa do normal, com o nome da forma embaixo
+   e uma borda que o diferencia de relance sem gritar. */
+.pokemon-tile.e-forma{
+  border-color:color-mix(in srgb, var(--acento,#7fd1ff) 45%, var(--borda-suave,rgba(255,255,255,.16)));
+}
+.pokemon-forma{
+  display:block;
+  font-size:10px;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--acento,#7fd1ff);
+  font-weight:var(--peso-forte,700);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.pokemon-tile.e-forma.missing .pokemon-forma{opacity:.55;}
+/* O quadradinho da forma cresceu uma linha: o tamanho reservado acompanha,
+   senao a grade calcula altura errada enquanto o desenho e pulado. */
+.pokemon-tile.e-forma{contain-intrinsic-size:132px 164px;}

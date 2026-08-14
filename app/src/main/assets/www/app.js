@@ -313,6 +313,7 @@ const ui = {
   dexStatus: 'all',
   dexSort: 'number',
   dexLimit: 180,
+  dexFormas: true,   // formas (Alola, Mega, Gigantamax…) com quadradinho próprio
   selectedPokemon: null,
 };
 
@@ -2510,6 +2511,65 @@ function buildPokemonStats() {
   }
   pokemonStatsCache = { revision: stateRevision, value: stats };
   return stats;
+}
+
+/* Quantas cópias você tem de CADA forma.
+   A chave é "52|Alola". A forma vazia guarda a comum, para o quadradinho do
+   Meowth normal não somar as cartas de Alola e Galar junto. */
+let formaStatsCache = { revision: -1, value: null };
+function buildFormaStats() {
+  if (formaStatsCache.revision === stateRevision && formaStatsCache.value) return formaStatsCache.value;
+  const stats = new Map();
+  const somar = (chave, quantidade, cardId) => {
+    if (!stats.has(chave)) stats.set(chave, { copies: 0, cardIds: new Set() });
+    const item = stats.get(chave);
+    item.copies += quantidade;
+    item.cardIds.add(cardId);
+  };
+  for (const cardId of Object.keys(state.entries)) {
+    const quantity = quantityFor(cardId);
+    if (!quantity) continue;
+    const card = cardMap.get(cardId);
+    if (!card) continue;
+    for (const pokemonId of pokemonIdsForCard(card)) {
+      const formas = formasDoPokemon(pokemonId);
+      const nome = formas.length ? formaDaCarta(card, formas) : '';
+      somar(`${pokemonId}|${nome}`, quantity, cardId);
+    }
+  }
+  formaStatsCache = { revision: stateRevision, value: stats };
+  return stats;
+}
+
+const SEM_ESTATISTICA = { copies: 0, cardIds: new Set() };
+
+/* A Pokédex mostrada: cada Pokémon e, logo depois dele, as suas formas.
+   As formas NÃO entram na contagem de 1.025 — elas são o mesmo Pokémon com
+   outra cara, e é assim que a Pokédex do jogo conta. Aqui elas ganham
+   quadradinho próprio só para você achar e conferir o que falta. */
+function pokedexComFormas() {
+  const lista = [];
+  for (const item of pokedex) {
+    lista.push(item);
+    if (!ui.dexFormas) continue;
+    const vistos = new Set();
+    for (const forma of formasDoPokemon(item.id)) {
+      if (vistos.has(forma.nome)) continue;
+      vistos.add(forma.nome);
+      lista.push({
+        ...item,
+        chave: `${item.id}|${forma.nome}`,
+        arteId: forma.id,
+        forma: forma.nome,
+        /* `name` com a forma junto é o que a busca usa — digitar "meowth alola"
+           precisa achar. No quadradinho aparece só "Meowth": a etiqueta logo
+           abaixo já diz a forma, e o nome inteiro não cabe em 108px. */
+        name: `${item.name} (${forma.nome})`,
+        nomeCurto: item.name,
+      });
+    }
+  }
+  return lista;
 }
 
 
@@ -6417,20 +6477,30 @@ function registrationToggle(id, label, checked) {
   return `<label class="toggle-card"><input id="${id}" type="checkbox" ${checked ? 'checked' : ''}><span class="toggle-ui"></span><strong>${esc(label)}</strong></label>`;
 }
 
+/* Quantas cópias mostrar no quadradinho: da forma, quando é forma; do Pokémon
+   inteiro, quando é o quadradinho principal e as formas estão escondidas. */
+function estatisticaDoQuadro(item) {
+  if (item.forma) return buildFormaStats().get(item.chave) || SEM_ESTATISTICA;
+  if (ui.dexFormas) return buildFormaStats().get(`${item.id}|`) || SEM_ESTATISTICA;
+  return buildPokemonStats().get(item.id) || SEM_ESTATISTICA;
+}
+
 function filteredPokedexForUi() {
   const stats = buildPokemonStats();
   const query = normalize(ui.dexQuery);
-  const result = pokedex.filter(item => {
-    const owned = stats.get(item.id).copies > 0;
+  const result = pokedexComFormas().filter(item => {
+    const owned = estatisticaDoQuadro(item).copies > 0;
     if (ui.dexRegion !== 'all' && item.region !== ui.dexRegion) return false;
     if (ui.dexType !== 'all' && !item.types.includes(ui.dexType)) return false;
     if (ui.dexStatus === 'owned' && !owned) return false;
     if (ui.dexStatus === 'missing' && owned) return false;
     return !query || normalize(`${item.name} ${item.id}`).includes(query);
   });
+  // A ordem por número mantém cada forma logo abaixo do seu Pokémon.
+  const ordem = item => (item.forma ? 1 : 0);
   if (ui.dexSort === 'name') result.sort((a,b) => a.name.localeCompare(b.name,'pt-BR'));
-  else if (ui.dexSort === 'owned') result.sort((a,b) => stats.get(b.id).copies-stats.get(a.id).copies || a.id-b.id);
-  else result.sort((a,b) => a.id-b.id);
+  else if (ui.dexSort === 'owned') result.sort((a,b) => estatisticaDoQuadro(b).copies-estatisticaDoQuadro(a).copies || a.id-b.id || ordem(a)-ordem(b));
+  else result.sort((a,b) => a.id-b.id || ordem(a)-ordem(b));
   const grouped = new Map();
   for (const item of result) {
     if (!grouped.has(item.region)) grouped.set(item.region, []);
@@ -6458,10 +6528,19 @@ function renderPokedex() {
   const stats = buildPokemonStats();
   const ownedCount = pokedex.filter(item => stats.get(item.id).copies > 0).length;
   const types = [...new Set(pokedex.flatMap(item => item.types))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  /* As formas não entram na conta de 1.025: Meowth de Alola é o mesmo 052.
+     Contá-las mudaria a régua da coleção inteira do nada. */
+  const quantasFormas = Object.values(formasRegionais)
+    .reduce((soma, lista) => soma + new Set((lista || []).map(f => f.nome)).size, 0);
   return `<section class="screen">
     <h2 class="screen-title">Pokédex</h2>
     <p class="screen-subtitle">${ownedCount} de ${pokedex.length} Pokémon têm cartas na sua coleção. Os que faltam aparecem transparentes.</p>
     <div class="toolbar">
+      <button type="button" class="dex-formas${ui.dexFormas ? ' ativo' : ''}" onclick="alternarFormasNaDex()"
+        aria-pressed="${Boolean(ui.dexFormas)}">
+        <span aria-hidden="true">✦</span> Formas especiais
+        <b>${quantasFormas}</b>
+      </button>
       <input id="dexSearchInput" class="field search" value="${esc(ui.dexQuery)}" placeholder="Buscar Pokémon por nome ou número"
         oncompositionstart="this.dataset.composing='1'"
         oncompositionend="this.dataset.composing='';searchAndRender('dexQuery', this.value, 'dexSearchInput')"
@@ -6486,30 +6565,53 @@ function renderPokedex() {
 }
 
 function renderRegion(region, items, stats) {
-  const owned = items.filter(item => stats.get(item.id).copies > 0).length;
+  const owned = items.filter(item => estatisticaDoQuadro(item).copies > 0).length;
   return `<section class="region-section">
     <div class="region-heading"><h3>${esc(region)}</h3><span>${owned} com cartas · ${items.length} exibidos</span></div>
-    <div class="pokemon-grid">${items.map(item => renderPokemonTile(item, stats.get(item.id))).join('')}</div>
+    <div class="pokemon-grid">${items.map(item => renderPokemonTile(item, estatisticaDoQuadro(item))).join('')}</div>
   </section>`;
 }
 
+/* Cada forma tem o seu próprio quadradinho, com o sprite dela, a contagem dela
+   e o nome da forma embaixo. O número em cima é sempre o do Pokémon: Meowth de
+   Alola continua sendo o 052 — é a mesma entrada da Pokédex, outra cara. */
 function renderPokemonTile(item, stat) {
   const owned = stat.copies > 0;
+  const arte = Number(item.arteId || item.id);
+  const abrir = item.forma
+    ? `openPokemon(${item.id},'${esc(item.forma)}')`
+    : `openPokemon(${item.id})`;
   // Começa com o sprite local (instantâneo, funciona sem internet) e o
   // arte3d.js troca pela arte 3D quando o quadradinho entra na tela.
-  return `<button class="pokemon-tile ${owned ? '' : 'missing'}" onclick="openPokemon(${item.id})">
+  return `<button class="pokemon-tile ${owned ? '' : 'missing'}${item.forma ? ' e-forma' : ''}" onclick="${abrir}">
     ${owned ? `<span class="pokemon-owned-count">${stat.copies}</span>` : ''}
-    <img src="${esc(item.sprite)}" loading="lazy" alt="${esc(item.name)}" data-arte3d="${Number(item.id)}">
+    <img src="${esc(item.sprite)}" loading="lazy" alt="${esc(item.name)}" data-arte3d="${arte}">
     <span class="pokemon-number">Nº ${String(item.id).padStart(4,'0')}</span>
-    <span class="pokemon-name">${esc(item.name)}</span>
+    <span class="pokemon-name">${esc(item.nomeCurto || item.name)}</span>
+    ${item.forma ? `<span class="pokemon-forma">${esc(item.forma)}</span>` : ''}
   </button>`;
 }
 
-function openPokemon(id) {
+function openPokemon(id, forma) {
   ui.selectedPokemon = Number(id);
   render();
-  window.scrollTo(0,0);
+  window.scrollTo(0, 0);
+  // Veio de um quadradinho de forma: leva direto ao quadro daquela forma.
+  if (forma) {
+    setTimeout(() => {
+      const alvo = [...document.querySelectorAll('.forma-bloco')]
+        .find(bloco => bloco.dataset.forma === forma);
+      if (alvo) alvo.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }, 60);
+  }
 }
+
+function alternarFormasNaDex() {
+  ui.dexFormas = !ui.dexFormas;
+  ui.dexLimit = 180;
+  render();
+}
+window.alternarFormasNaDex = alternarFormasNaDex;
 
 /* ---------- Formas regionais ----------
    Alola, Galar, Hisui e Paldea não são Pokémon novos: são o mesmo Pokémon com
@@ -6617,8 +6719,8 @@ function renderPokemonDetail(id) {
   // Forma sem nenhuma carta no catálogo não vira bloco vazio na tela.
   const comCartas = nomes.filter(nome => porForma.get(nome).length);
 
-  const bloco = (rotulo, arteId, lista, principal) => `
-    <section class="forma-bloco${principal ? ' principal' : ''}">
+  const bloco = (rotulo, arteId, lista, principal, formaNome) => `
+    <section class="forma-bloco${principal ? ' principal' : ''}"${formaNome ? ` data-forma="${esc(formaNome)}"` : ''}>
       <header class="forma-cabecalho">
         <img src="${esc(pokemon.sprite)}" alt="" data-arte3d="${Number(arteId)}" loading="lazy">
         <div>
@@ -6652,6 +6754,7 @@ function renderPokemonDetail(id) {
       formas.find(item => item.nome === nome).id,
       porForma.get(nome),
       false,
+      nome,
     )).join('')}
   </section>`;
 }
