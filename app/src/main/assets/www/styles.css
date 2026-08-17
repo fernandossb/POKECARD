@@ -4864,3 +4864,37 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
   flex:1 1 100%;opacity:.7;font-size:var(--fs-menor,12px);
   font-variant-numeric:tabular-nums;
 }
+/* ---------- v5.41 — filtro Trocar/Vender ---------- */
+.sobra-resumo{
+  display:flex;align-items:flex-start;gap:var(--esp-4,16px);flex-wrap:wrap;
+  margin:var(--esp-2,8px) 0;padding:var(--esp-3,12px);
+  border-radius:var(--raio-grande,16px);
+  border:1px solid var(--borda-suave,rgba(255,255,255,.14));
+  background:var(--vision-surface,rgba(255,255,255,.05));
+}
+.sobra-resumo small{display:block;opacity:.7;font-size:var(--fs-menor,12px);}
+.sobra-resumo strong{display:block;font-size:var(--fs-titulo,20px);font-variant-numeric:tabular-nums;}
+.sobra-aviso{flex:1 1 100%;line-height:1.4;}
+
+/* A linha da sobra reaproveita o cartao da colecao e acrescenta a versao. */
+.sobra-versao{
+  display:inline-flex;align-items:center;gap:4px;
+  margin-top:4px;padding:2px 8px;
+  border-radius:var(--raio-redondo,999px);
+  background:rgba(255,255,255,.08);
+  font-size:var(--fs-menor,12px);
+}
+.sobra-conta{
+  display:flex;align-items:baseline;gap:var(--esp-2,8px);
+  flex-wrap:wrap;margin-top:var(--esp-1,4px);
+}
+.sobra-conta b{
+  font-size:var(--fs-corpo,15px);color:var(--aviso,#c98a12);
+  font-variant-numeric:tabular-nums;
+}
+.sobra-conta small{opacity:.65;font-size:var(--fs-menor,12px);}
+.sobra-conta em{
+  font-style:normal;color:var(--ok,#3ddc97);
+  font-weight:var(--peso-forte,700);font-variant-numeric:tabular-nums;
+}
+.sobra-linha{cursor:pointer;}

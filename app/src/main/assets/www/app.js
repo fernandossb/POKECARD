@@ -2166,7 +2166,8 @@ function updateCardRowInPlace(cardId) {
   if (!['cards', 'wishlist', 'repeated'].includes(ui.tab)) return false;
   const filter = currentCardFilter();
   // Nestes filtros a mudança de quantidade pode incluir/remover o item da lista.
-  if (['owned', 'missing', 'repeated'].includes(filter) || ui.cardSort === 'quantity') {
+  // 'trade' também: vender uma cópia precisa tirar a linha da lista na hora.
+  if (['owned', 'missing', 'repeated', 'trade'].includes(filter) || ui.cardSort === 'quantity') {
     refreshSearchResults('cardQuery', true);
     return true;
   }
@@ -4403,7 +4404,98 @@ function filteredCardsForUi() {
   return { result, visible, forcedFilter, filter };
 }
 
+/* ---------- Trocar/Vender: o que sobra, versão por versão ----------
+
+   Diferente de "Duplicadas", que mostra a CARTA que tem repetida. Aqui cada
+   versão vira uma linha própria: Pikachu comum 9× num cartão, Pikachu foil 2×
+   em outro. Quem vai negociar precisa saber exatamente qual acabamento está
+   levando, e agrupar esconderia isso.
+
+   E uma cópia de cada versão nunca aparece: fica de segurança na coleção, para
+   não acontecer de vender tudo e ficar sem nenhuma. */
+function sobrasParaTrocar() {
+  const lista = [];
+  const consulta = normalize(ui.cardQuery);
+  for (const cardId of Object.keys(state.entries || {})) {
+    const card = cardMap.get(cardId);
+    if (!card) continue;
+    if (ui.cardSet !== 'all' && card.setId !== ui.cardSet) continue;
+    if (consulta && !(cardSearchIndex.get(cardId) || '').includes(consulta)) continue;
+
+    // Agrupa por versão idêntica, somando linhas separadas iguais.
+    const grupos = new Map();
+    for (const variant of variantsFor(cardId)) {
+      if (variant?.isWishlist) continue;
+      const quantidade = Math.max(0, Math.trunc(Number(variant.quantity) || 0));
+      if (!quantidade) continue;
+      const chave = assinaturaVariante(variant);
+      if (!grupos.has(chave)) grupos.set(chave, { variant, quantidade: 0 });
+      grupos.get(chave).quantidade += quantidade;
+    }
+    for (const [chave, grupo] of grupos) {
+      const sobra = grupo.quantidade - 1;   // a primeira fica na coleção
+      if (sobra < 1) continue;
+      const cotacao = effectiveVariantPrice(cardId, grupo.variant);
+      const preco = cotacao?.brl != null ? Number(cotacao.brl) : null;
+      lista.push({
+        card, cardId, chave, variant: grupo.variant,
+        tenho: grupo.quantidade, sobra, preco,
+        valor: preco === null ? null : preco * sobra,
+      });
+    }
+  }
+  // Maior valor primeiro: é o que interessa quem vai trocar ou vender.
+  return lista.sort((a, b) => (b.valor || 0) - (a.valor || 0)
+    || b.sobra - a.sobra
+    || a.card.name.localeCompare(b.card.name, 'pt-BR'));
+}
+
+function renderLinhaDeSobra(item) {
+  const { card, variant } = item;
+  const arte = variantDisplayImage(card, variant);
+  const estilo = variantEstilo(variant.pricingVariant);
+  return `<article class="card-row vision-card-tile sobra-linha" data-card-id="${esc(card.id)}" onclick="openCard('${esc(card.id)}','${esc(variant.id || '')}')">
+    <div class="card-art">${arte
+      ? `<img src="${esc(arte)}" alt="${esc(card.name)}" loading="lazy">`
+      : '<span class="card-placeholder">TCG</span>'}</div>
+    <div class="card-info">
+      <strong class="card-name">${esc(card.name)}</strong>
+      <span class="card-meta">${esc(card.number)} · ${esc(card.setName)}</span>
+      <span class="sobra-versao ${estilo.classe}">
+        <span class="variante-icone" aria-hidden="true">${estilo.icone}</span>
+        ${esc(friendlyVariantLabel(variant.pricingVariant))} · ${esc(languageCode(variant.language))} · ${esc(variant.condition || 'Near Mint')}
+      </span>
+      <span class="sobra-conta">
+        <b>${item.sobra}× para trocar</b>
+        <small>de ${item.tenho} · 1 fica na coleção</small>
+        ${item.valor === null ? '<small>sem preço</small>' : `<em>${esc(money(item.valor))}</em>`}
+      </span>
+    </div>
+  </article>`;
+}
+
+function renderResultadosDeTroca() {
+  const lista = sobrasParaTrocar();
+  const visiveis = lista.slice(0, ui.cardLimit);
+  const total = lista.reduce((soma, item) => soma + (item.valor || 0), 0);
+  const copias = lista.reduce((soma, item) => soma + item.sobra, 0);
+  adiantarLotesDaLista(visiveis.map(item => item.card));
+  return `
+    <div class="sobra-resumo">
+      <div><small>Para trocar ou vender</small><strong>${copias.toLocaleString('pt-BR')} ${copias === 1 ? 'cópia' : 'cópias'}</strong></div>
+      <div><small>Valem</small><strong>${esc(money(total))}</strong></div>
+      <small class="sobra-aviso">Uma cópia de cada versão fica sempre na coleção. Estas são as que sobram.</small>
+    </div>
+    <p class="card-results-count">${lista.length.toLocaleString('pt-BR')} ${lista.length === 1 ? 'versão com sobra' : 'versões com sobra'}</p>
+    <div class="card-list">${visiveis.length
+      ? visiveis.map(renderLinhaDeSobra).join('')
+      : '<div class="empty"><strong>Nada sobrando</strong>Quando você tiver duas ou mais cópias da mesma versão, o excedente aparece aqui.</div>'}</div>
+    ${visiveis.length < lista.length ? `<button class="load-more" onclick="ui.cardLimit+=60;refreshSearchResults('cardQuery', true)">Mostrar mais ${Math.min(60, lista.length - visiveis.length)}</button>` : ''}`;
+}
+
 function renderCardSearchResults() {
+  // O filtro de troca desenha por VERSÃO, não por carta: caminho próprio.
+  if (currentCardFilter() === 'trade') return renderResultadosDeTroca();
   const { result, visible } = filteredCardsForUi();
   // Busca em segundo plano o que falta para as etiquetas e o dourado.
   adiantarLotesDaLista(visible);
@@ -4455,6 +4547,9 @@ function filterChips() {
     ['missing', 'Faltantes'],
     ['wishlist', 'Desejo'],
     ['repeated', 'Duplicadas'],
+    // Duplicadas mostra a CARTA repetida; Trocar/Vender mostra o que SOBRA,
+    // versão por versão, já descontando a cópia que fica na coleção.
+    ['trade', 'Trocar/Vender'],
     ['price-review', 'Preços pendentes'],
   ];
   return chips.map(([value, label]) =>
