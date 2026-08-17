@@ -2497,6 +2497,9 @@ function collectionSummary() {
   let totalPago = 0;
   let valorComCusto = 0;
   let copiasComCusto = 0;
+  // Uma cópia de cada versão × as que sobram, para o total poder sair sem elas.
+  let valorUnicas = 0;
+  let valorDuplicadas = 0;
   for (const [cardId, entry] of Object.entries(state.entries)) {
     const quantity = quantityFor(cardId);
     totalCopies += quantity;
@@ -2506,10 +2509,30 @@ function collectionSummary() {
     if (quantity > 0) {
       const variants = variantsFor(cardId);
       if (variants.length) {
+        /* Separa o valor das cópias que sobram.
+           Duplicada é cópia ALÉM DA PRIMEIRA dentro da mesma versão idêntica —
+           mesma variante, idioma, condição, edição, carimbo e graduação. Duas
+           linhas cadastradas separadas com os mesmos campos contam como cópias
+           da mesma carta, e é por isso que a contagem é por assinatura e não
+           por linha do cadastro. */
+        const jaContadas = new Map();
         for (const variant of variants) {
           const variantQuantity = Math.max(0, Math.trunc(Number(variant.quantity) || 0));
           const quote = effectiveVariantPrice(cardId, variant);
-          if (variantQuantity && quote?.brl != null) estimatedValue += Number(quote.brl) * variantQuantity;
+          if (variantQuantity && quote?.brl != null) {
+            const preco = Number(quote.brl);
+            estimatedValue += preco * variantQuantity;
+            const chave = assinaturaVariante(variant);
+            const contadas = jaContadas.get(chave) || 0;
+            // A primeira cópia de cada versão é a do fichário; o resto sobra.
+            const unicas = contadas === 0 ? 1 : 0;
+            valorUnicas += preco * unicas;
+            valorDuplicadas += preco * Math.max(0, variantQuantity - unicas);
+            jaContadas.set(chave, contadas + variantQuantity);
+          } else if (variantQuantity) {
+            const chave = assinaturaVariante(variant);
+            jaContadas.set(chave, (jaContadas.get(chave) || 0) + variantQuantity);
+          }
           if (variantQuantity && hasFiniteNumber(variant.paidPrice)) {
             totalPago += Number(variant.paidPrice) * variantQuantity;
             copiasComCusto += variantQuantity;
@@ -2518,13 +2541,15 @@ function collectionSummary() {
         }
       } else if (hasFiniteNumber(entry.priceBrl)) {
         estimatedValue += Number(entry.priceBrl) * quantity;
+        valorUnicas += Number(entry.priceBrl);
+        valorDuplicadas += Number(entry.priceBrl) * Math.max(0, quantity - 1);
       }
     }
   }
   const pokemonStats = buildPokemonStats();
   const pokemonOwned = [...pokemonStats.values()].filter(item => item.copies > 0).length;
   const value = { totalCopies, uniqueOwned, repeated, wishlist, estimatedValue, pokemonOwned,
-    totalPago, valorComCusto, copiasComCusto };
+    totalPago, valorComCusto, copiasComCusto, valorUnicas, valorDuplicadas };
   collectionSummaryCache = { revision: stateRevision, value };
   return value;
 }
@@ -2719,6 +2744,32 @@ async function startOwnedPriceUpdate() {
   notify(`${synced ? 'Price Database sincronizado' : 'Price Database já estava atualizado'}: ${verified} exata(s) · ${review} para revisão · ${missing} sem preço.`);
 }
 
+/* ---------- Contar ou não as cartas duplicadas no valor ----------
+
+   Quem tem fichário separado para as repetidas costuma querer saber quanto
+   vale a COLEÇÃO — uma de cada — e não o monte todo. Duplicada aqui é a cópia
+   além da primeira dentro da mesma versão idêntica, que é a mesma definição
+   que a aba Duplicadas já usa. */
+const CONTAR_DUPLICADAS_KEY = 'pokecard-contar-duplicadas-v1';
+
+function contarDuplicadas() {
+  try { return localStorage.getItem(CONTAR_DUPLICADAS_KEY) !== 'nao'; } catch (_) { return true; }
+}
+
+function alternarContarDuplicadas() {
+  const proximo = !contarDuplicadas();
+  try { localStorage.setItem(CONTAR_DUPLICADAS_KEY, proximo ? 'sim' : 'nao'); } catch (_) {}
+  renderKeepingScroll();
+  notify(proximo
+    ? 'Valor com as duplicadas incluídas.'
+    : 'Valor só da coleção: uma cópia de cada versão.');
+}
+
+/** O valor a exibir, respeitando a escolha. */
+function valorDaColecao(summary = collectionSummary()) {
+  return contarDuplicadas() ? summary.estimatedValue : summary.valorUnicas;
+}
+
 function renderDashboard() {
   const summary = collectionSummary();
   const pokemonStats = buildPokemonStats();
@@ -2744,7 +2795,21 @@ function renderDashboard() {
 
       <section class="portfolio-card">
         <div class="portfolio-title"><span>${tabIcon('cards')}</span><strong>PORTFÓLIO</strong><button onclick="updateAllCollectionPrices()">Atualizar</button></div>
-        <div class="portfolio-value"><small>Valor estimado de mercado</small><strong>${money(summary.estimatedValue)}</strong></div>
+        <div class="portfolio-value">
+          <small>${contarDuplicadas() ? 'Valor estimado de mercado' : 'Valor da coleção · sem duplicadas'}</small>
+          <strong>${money(valorDaColecao(summary))}</strong>
+        </div>
+        <div class="portfolio-duplicadas">
+          <button type="button" class="dup-opcao${contarDuplicadas() ? ' ativo' : ''}"
+            onclick="${contarDuplicadas() ? '' : 'alternarContarDuplicadas()'}" aria-pressed="${contarDuplicadas()}">
+            Com duplicadas
+          </button>
+          <button type="button" class="dup-opcao${contarDuplicadas() ? '' : ' ativo'}"
+            onclick="${contarDuplicadas() ? 'alternarContarDuplicadas()' : ''}" aria-pressed="${!contarDuplicadas()}">
+            Só a coleção
+          </button>
+          ${summary.valorDuplicadas > 0 ? `<small>${summary.repeated} ${summary.repeated === 1 ? 'cópia sobrando vale' : 'cópias sobrando valem'} ${esc(money(summary.valorDuplicadas))}</small>` : ''}
+        </div>
         <div class="portfolio-sale"><span>${forSale}</span> ${forSale === 1 ? 'carta disponível' : 'cartas disponíveis'} para venda</div>
         <div class="portfolio-languages">${[...languages.entries()].slice(0,4).map(([language,count]) => `<span><b>${esc(languageCode(language))}</b> ${count}</span>`).join('') || '<span><b>PT</b> coleção local</span>'}</div>
         <small class="portfolio-foot">Preços por acabamento, idioma, condição e demais variações cadastradas</small>
@@ -2840,17 +2905,22 @@ function historicoDeValor() {
 function registrarValorDoDia() {
   const summary = collectionSummary();
   const valor = Number(summary.estimatedValue);
+  const unicas = Number(summary.valorUnicas);
   // Sem coleção ou sem preço nenhum, não há o que anotar.
   if (!summary.uniqueOwned || !Number.isFinite(valor) || valor <= 0) return;
 
   const historico = historicoDeValor();
   const hoje = diaDeHoje();
   const ultimo = historico[historico.length - 1];
+  /* Anota os DOIS valores no mesmo dia: com e sem as duplicadas. Guardar só o
+     que está selecionado hoje faria a linha dar um salto no dia em que a opção
+     mudasse — uma queda ou alta que nunca aconteceu de verdade. */
   if (ultimo && ultimo.dia === hoje) {
     if (valor <= Number(ultimo.valor)) return;   // parcial: não rebaixa o dia
     ultimo.valor = valor;
+    if (Number.isFinite(unicas)) ultimo.unicas = unicas;
   } else {
-    historico.push({ dia: hoje, valor });
+    historico.push({ dia: hoje, valor, unicas: Number.isFinite(unicas) ? unicas : valor });
   }
   while (historico.length > VALOR_HISTORICO_DIAS) historico.shift();
   try { localStorage.setItem(VALOR_HISTORICO_KEY, JSON.stringify(historico)); } catch (_) {}
@@ -2874,13 +2944,21 @@ function graficoDeValor() {
     if (!historico.length) return '';
     return `<section class="valor-card">
       <div class="portfolio-title"><span>${tabIcon('collections')}</span><strong>VALORIZAÇÃO</strong></div>
-      <p class="valor-vazio">Primeira anotação feita hoje: <b>${esc(money(historico[0].valor))}</b>.
+      <p class="valor-vazio">Primeira anotação feita hoje: <b>${esc(money(
+        !contarDuplicadas() && Number.isFinite(Number(historico[0].unicas)) ? historico[0].unicas : historico[0].valor))}</b>.
       A linha começa a aparecer amanhã, com o segundo dia.</p>
     </section>`;
   }
 
   const pontos = historico.slice(-90);
-  const valores = pontos.map(item => Number(item.valor));
+  /* A linha segue a mesma escolha do cartão de preço. Como os dois valores
+     ficam anotados por dia, trocar a opção redesenha a história inteira em vez
+     de criar um degrau falso. */
+  const semDuplicadas = !contarDuplicadas();
+  const valores = pontos.map(item => {
+    const bruto = semDuplicadas && Number.isFinite(Number(item.unicas)) ? item.unicas : item.valor;
+    return Number(bruto);
+  });
   const menor = Math.min(...valores);
   const maior = Math.max(...valores);
   const faixa = maior - menor || Math.max(1, maior * 0.1);
@@ -4834,6 +4912,9 @@ function scannerCandidates(ocrText) {
     ? cards.filter(card => card.setId === scannerSession.setId)
     : cards;
 
+  // Preenchida quando o número identifica a carta e o nome não ajudou.
+  let guardadasPeloNumero = [];
+
   /* Atalho de certeza: numeração E nome concordando.
      A numeração sozinha mandava em tudo, e isso quebrou o leitor. O rodapé é a
      letra menor da carta e a primeira a sair errada na mão trêmula: bastava um
@@ -4865,6 +4946,21 @@ function scannerCandidates(ocrText) {
         card, score: 999, nameSimilarity: 1, pokemonSimilarity: 1, fractionMatch: true, numberMatch: true,
       })).sort((a, b) => a.card.name.localeCompare(b.card.name, 'pt-BR')).slice(0, 6);
     }
+    /* O NÚMERO SOZINHO, quando o nome não ajuda.
+       O catálogo mistura os idiomas: a mesma carta pode estar cadastrada em
+       inglês enquanto a que está na sua mão é em português. Com Pokémon isso
+       quase não pesa — o nome da espécie é igual nos dois idiomas. Com Item,
+       Apoiador, Ferramenta e Estádio, o nome é a única pista, e ela não casa:
+       "Ultra Bola" contra "Ultra Ball".
+       Medido no catálogo: o número completo aparece em UMA carta em 73% dos
+       casos, e em três ou menos em 99,94%. Ou seja, o número quase identifica
+       a carta sozinho — e é exatamente o que sobra quando o idioma atrapalha.
+       Estas entram na FRENTE da lista; os palpites por nome continuam atrás,
+       para o caso de um algarismo ter saído errado. */
+    guardadasPeloNumero = exatas.slice(0, 4).map(card => ({
+      card, score: 900, nameSimilarity: 0, pokemonSimilarity: 0, fractionMatch: true, numberMatch: true,
+      soPeloNumero: true,
+    })).sort((a, b) => a.card.name.localeCompare(b.card.name, 'pt-BR'));
   }
   const candidatePool = scannerSession.setId !== 'all' ? pool : pool.filter(card => {
     const localNumber = String(Number(String(card.localId || '').match(/\d+/)?.[0] || -1));
@@ -4909,9 +5005,16 @@ function scannerCandidates(ocrText) {
      Bulbasaur cujo nome estava perfeitamente legível na tela. */
   const nomeForteLido = medidas.some(m => m.nameSimilarity >= .85 || m.pokemonSimilarity >= .9);
 
-  return medidas.map(item => {
+  /* O veto do nome sobre o número existe para os Pokémon: ali o nome é lido
+     grande e igual em qualquer idioma, então um nome certo desmente um número
+     mal lido. Numa carta de Treinador ou Energia é o contrário — o nome pode
+     estar em outro idioma e não casar com nada, enquanto o texto de efeito
+     menciona Pokémon e faz o veto disparar contra a carta certa. */
+  const vetoValeAqui = !categoriaLida || categoriaLida === 'pokemon';
+
+  const porNome = medidas.map(item => {
     const { fractionMatch, nameSimilarity, pokemonSimilarity, setSimilarity, numberMatch, localNumber, official } = item;
-    const desmentido = nomeForteLido && nameSimilarity < .5 && pokemonSimilarity < .5;
+    const desmentido = vetoValeAqui && nomeForteLido && nameSimilarity < .5 && pokemonSimilarity < .5;
     let score = 0;
     score += Math.round(nameSimilarity * 175);
     score += Math.round(pokemonSimilarity * 70);
@@ -4952,8 +5055,20 @@ function scannerCandidates(ocrText) {
     .sort((a, b) => b.score - a.score
       || Number(b.fractionMatch) - Number(a.fractionMatch)
       || b.nameSimilarity - a.nameSimilarity
-      || a.card.name.localeCompare(b.card.name, 'pt-BR'))
-    .slice(0, 6);
+      || a.card.name.localeCompare(b.card.name, 'pt-BR'));
+
+  /* Quando o número vai na frente do nome.
+     Só nas cartas que NÃO são Pokémon — e é aí que está o problema do idioma.
+     Num Pokémon o nome é igual em qualquer língua e é a letra maior da carta:
+     ali o nome manda, senão um algarismo trocado no rodapé traz Squirtle no
+     lugar de Bulbasaur. Num Item ou Energia o nome pode estar em outro idioma
+     e não casar com nada, então o número é a única pista boa.
+     E se nada casou pelo nome, o número entra de qualquer jeito: melhor uma
+     lista curta de possibilidades do que "não reconheci". */
+  const numeroManda = guardadasPeloNumero.length && (!vetoValeAqui || !porNome.length);
+  if (!numeroManda) return porNome.slice(0, 6);
+  const vistos = new Set(guardadasPeloNumero.map(item => item.card.id));
+  return [...guardadasPeloNumero, ...porNome.filter(item => !vistos.has(item.card.id))].slice(0, 6);
 }
 
 function scannerMeaningfulTokens(value) {
@@ -5453,6 +5568,7 @@ function showScannerPrimaryCandidate() {
           ? card.number
           : formatCardNumber(card.localId || card.number, card.setTotal))}</span>
         ${candidate.fractionMatch ? '' : `<small class="leitura-aviso">Não li a numeração do rodapé — confira a coleção antes de adicionar.</small>`}
+        ${candidate.soPeloNumero ? `<small class="leitura-aviso">Achei pelo número ${esc(card.number)} — o nome não confere, provavelmente por causa do idioma. Confira a arte.</small>` : ''}
         ${jaTem ? `<button type="button" class="leitura-jatem" onclick="verNaColecao('${esc(card.id)}')">
           <span aria-hidden="true">▤</span> Você já tem ${jaTem} <span aria-hidden="true">›</span></button>` : ''}
       </div>

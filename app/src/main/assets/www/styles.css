@@ -4843,3 +4843,24 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
   background:color-mix(in srgb, var(--ok,#3ddc97) 20%, transparent);
   color:var(--ok,#3ddc97);
 }
+/* ---------- v5.40 — contar ou nao as duplicadas no valor ---------- */
+.portfolio-duplicadas{
+  display:flex;align-items:center;gap:var(--esp-2,8px);
+  flex-wrap:wrap;margin-top:var(--esp-2,8px);
+}
+.dup-opcao{
+  min-height:var(--toque-min,44px);padding:0 var(--esp-3,12px);
+  border-radius:var(--raio-redondo,999px);cursor:pointer;color:inherit;
+  border:1px solid var(--borda-suave,rgba(255,255,255,.20));
+  background:none;font-size:var(--fs-menor,12px);
+}
+.dup-opcao.ativo{
+  border-color:var(--acento,#7fd1ff);
+  background:color-mix(in srgb, var(--acento,#7fd1ff) 16%, transparent);
+  font-weight:var(--peso-forte,700);
+  cursor:default;
+}
+.portfolio-duplicadas>small{
+  flex:1 1 100%;opacity:.7;font-size:var(--fs-menor,12px);
+  font-variant-numeric:tabular-nums;
+}
