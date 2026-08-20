@@ -4806,7 +4806,7 @@ function showScannerMessage(message, failed = false) {
       <small>${scannerSession.count} carta(s) cadastrada(s) nesta sessão · ${esc(scannerFinishLabel(scannerSession.finish))}</small>
     </div>
     <div class="modal-actions">
-      <button class="primary-btn" onclick="closeModal();scanNextCard()">Fotografar novamente</button>
+      <button class="primary-btn" onclick="voltarParaCamera()">Fotografar novamente</button>
       <button class="secondary-btn" onclick="stopScannerSession()">Encerrar sessão</button>
     </div>
   `);
@@ -6026,7 +6026,7 @@ function showScannerCandidateList(candidates) {
       </button>`).join('')}
     </div>
     ${scannerOcrDiagnosticHtml()}
-    <div class="modal-actions"><button class="secondary-btn" onclick="closeModal();scanNextCard()">Tirar outra foto</button><button class="danger-btn" onclick="stopScannerSession()">Encerrar sessão</button></div>
+    <div class="modal-actions"><button class="secondary-btn" onclick="voltarParaCamera()">Tirar outra foto</button><button class="danger-btn" onclick="stopScannerSession()">Encerrar sessão</button></div>
   `);
 }
 
@@ -6225,6 +6225,9 @@ function voltarParaCamera() {
     retomarCamera();
     return;
   }
+  // Sessão viva sem câmera (a ponte não respondeu): tenta abrir de novo em vez
+  // de fechar tudo — fechar aqui devolveria a tela vazia que o Voltar causava.
+  if (scannerSession.active) { scanNextCard(); return; }
   closeModal();
 }
 
@@ -8407,6 +8410,17 @@ function showModal(html, className = '') {
 }
 
 function closeModal() {
+  /* Fechar o painel tem de desligar a câmera junto.
+
+     A tela do scanner é um modal como qualquer outro, mas a imagem vem do
+     Android, ATRÁS da página, e só aparece porque o aplicativo fica
+     transparente. Fechando só o modal, some a interface e ficam a câmera
+     ligada e a transparência: a tela trava numa imagem sem nenhum botão.
+
+     Era exatamente isso que o botão Voltar do celular provocava. A proteção
+     fica aqui, no ponto por onde todo fechamento passa, em vez de em cada
+     lugar que fecha um painel. */
+  if (document.documentElement.classList.contains('camera-ao-vivo')) sairDaCamera();
   document.getElementById('modal').classList.add('hidden');
   const sheet = document.getElementById('modal-content');
   sheet.innerHTML = '';
@@ -8752,6 +8766,34 @@ window.receiveUpdateDownload = function(success, message) {
 };
 
 window.handleAndroidBack = function() {
+  /* O scanner tem camadas, e o Voltar precisa desfazer UMA de cada vez.
+     Antes ele chamava o fechamento genérico do modal: a interface sumia e a
+     câmera continuava ligada. E mesmo com a câmera desligando junto, fechar
+     tudo de uma vez seria rude — quem está com cartas lidas esperando perderia
+     a tela de revisão sem aviso. Aqui cada toque volta um passo. */
+  const zoom = document.querySelector('.leitura-zoom');
+  if (zoom) { zoom.remove(); document.getElementById('leituraPainel')?.classList.remove('recuado'); return true; }
+
+  const painel = document.getElementById('leituraPainel');
+  if (painel && painel.classList.contains('aberto')) { encerrarLeituraAtual(); return true; }
+
+  if (scannerSession.active) {
+    /* "Estou na tela da câmera?" se responde pela tela desenhada, não pela
+       classe `camera-ao-vivo`: ela continua ligada na revisão e nos ajustes,
+       porque o aplicativo segue transparente por baixo deles. Testando a
+       classe, o Voltar na revisão caía em `encerrarLeitura()`, que via cartas
+       esperando e reabria a revisão — um laço sem saída. */
+    if (document.querySelector('.camera-sheet .camera-tela')) { encerrarLeitura(); return true; }
+    /* Na revisão, Voltar SAI do scanner. Devolver à câmera aqui prenderia a
+       pessoa num vaivém sem porta de saída: câmera → revisão → câmera, sem
+       nunca sair pelo botão do celular. As cartas lidas não se perdem —
+       ficam guardadas e reaparecem na próxima abertura do scanner. */
+    if (document.querySelector('.revisao-carta')) { stopScannerSession(); return true; }
+    // Ajustes e busca manual: o passo de volta é a câmera.
+    voltarParaCamera();
+    return true;
+  }
+
   const modal = document.getElementById('modal');
   if (modal && !modal.classList.contains('hidden')) { closeModal(); return true; }
   if (ui.tab === 'pokedex' && ui.selectedPokemon) { ui.selectedPokemon = null; render(); return true; }
