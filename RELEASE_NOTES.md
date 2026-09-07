@@ -1,9 +1,9 @@
-# POKECARD Brasil 5.42.0 — Coleção mais protegida e app mais leve
+# POKECARD Brasil 5.42.0 — Coleção mais protegida e app mais enxuto
 
 - Se o aparelho recusar salvar a coleção (armazenamento cheio, por exemplo), o app agora avisa na hora, mostra uma faixa fixa no painel e grava um backup de emergência na pasta Download — antes a falha era silenciosa.
 - Uma falha de gravação durante a abertura não zera mais a coleção que já foi carregada.
 - O app pede ao sistema para tratar o armazenamento local como persistente.
-- APK cerca de 3 MB menor: os dados de catálogo, Pokédex e formas regionais deixam de ser empacotados duas vezes.
+- Catálogo, Pokédex e formas regionais deixam de ir no pacote em dobro: ~3 MB de dados duplicados a menos dentro do app (o download fica cerca de 0,3 MB menor).
 - Removido código sem uso (consulta antiga de preço por busca externa, modo de scanner "uma foto por vez") e arquivos de apoio obsoletos.
 - Catálogo, coleção, scanner ao vivo, Pokédex, decks, assinatura, Firebase, temas e imagens preservados.
 
