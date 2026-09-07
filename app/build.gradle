@@ -9,12 +9,22 @@ android {
         buildConfig true
     }
 
+    androidResources {
+        // catalog.json, pokedex.json e collection-seed.json são cópias byte a byte
+        // do payload dos data/*-data.js que o index.html carrega por <script>. No
+        // aparelho o loadJson() sempre devolve a variável global e nunca lê o .json
+        // (fetch de file:// é recusado), então esses arquivos só pesam ~3 MB no
+        // APK/AAB. Ficam no repositório para os scripts Node de CI; addAll soma
+        // aos padrões já ignorados por padrão, sem substituí-los.
+        ignoreAssetsPatterns.addAll(['catalog.json', 'pokedex.json', 'collection-seed.json'])
+    }
+
     defaultConfig {
         applicationId 'br.com.fichariopokemon.pokedex'
         minSdk 26
         targetSdk 36
-        versionCode 138
-        versionName '5.41.1'
+        versionCode 139
+        versionName '5.42.0'
     }
 
     signingConfigs {

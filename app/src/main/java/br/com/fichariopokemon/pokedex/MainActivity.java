@@ -9,7 +9,6 @@ import android.content.Context;
 import android.content.IntentFilter;
 import android.graphics.Color;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.ColorMatrix;
 import android.graphics.ColorMatrixColorFilter;
@@ -21,8 +20,6 @@ import android.os.Environment;
 import android.provider.Settings;
 import android.provider.MediaStore;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.JavascriptInterface;
@@ -35,7 +32,6 @@ import android.widget.FrameLayout;
 import android.widget.Toast;
 
 import androidx.core.content.FileProvider;
-import androidx.exifinterface.media.ExifInterface;
 
 import com.google.firebase.analytics.FirebaseAnalytics;
 import com.google.mlkit.vision.common.InputImage;
@@ -54,8 +50,6 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.net.URLEncoder;
-import java.net.URLDecoder;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
@@ -63,8 +57,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import android.Manifest;
 import android.content.pm.PackageManager;
-import android.view.Gravity;
-import android.widget.Button;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import android.util.Size;
@@ -90,12 +82,10 @@ public final class MainActivity extends Activity {
     private static final int CREATE_BACKUP = 1001;
     private static final int OPEN_BACKUP = 1002;
     private static final int PICK_CARD_IMAGE = 1003;
-    private static final int SCAN_CARD_IMAGE = 1004;
     private static final int CREATE_CSV_EXPORT = 1005;
     private static final String UPDATE_API_URL = "https://api.github.com/repos/fernandossb/POKECARD/releases/latest";
     private static final String APK_MIME = "application/vnd.android.package-archive";
 
-    private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService backgroundExecutor = Executors.newSingleThreadExecutor();
     private long updateDownloadId = -1L;
     private File pendingInstallFile;
@@ -106,8 +96,6 @@ public final class MainActivity extends Activity {
     private String pendingCsvExportName;
     private ValueCallback<Uri[]> pendingImageChooser;
     private Uri pendingCameraImageUri;
-    private Uri pendingScannerImageUri;
-    private String pendingScannerFinish = "comum";
     private double topInsetCss;
     private double bottomInsetCss;
     private FirebaseAnalytics firebaseAnalytics;
@@ -134,7 +122,7 @@ public final class MainActivity extends Activity {
         rootView = new FrameLayout(this);
         webView = new WebView(this);
         webView.setBackgroundColor(Color.rgb(255, 248, 220));
-        configureWebView(webView, false);
+        configureWebView(webView);
         webView.setWebViewClient(new WebViewClient());
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
@@ -161,7 +149,7 @@ public final class MainActivity extends Activity {
     }
 
     @SuppressLint("SetJavaScriptEnabled")
-    private void configureWebView(WebView target, boolean marketProbe) {
+    private void configureWebView(WebView target) {
         WebSettings settings = target.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -171,10 +159,7 @@ public final class MainActivity extends Activity {
         settings.setAllowUniversalAccessFromFileURLs(true);
         settings.setDefaultTextEncodingName("utf-8");
         settings.setMediaPlaybackRequiresUserGesture(true);
-        settings.setCacheMode(marketProbe ? WebSettings.LOAD_NO_CACHE : WebSettings.LOAD_CACHE_ELSE_NETWORK);
-        if (marketProbe) {
-            settings.setUserAgentString("Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36");
-        }
+        settings.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
     }
 
     private double systemBarHeightCss(String resourceName) {
@@ -263,72 +248,6 @@ public final class MainActivity extends Activity {
         return data.getData() == null ? null : new Uri[]{data.getData()};
     }
 
-    private void launchScannerCamera(String finish) {
-        try {
-            pendingScannerFinish = finish == null || finish.isEmpty() ? "comum" : finish;
-            Intent cameraIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-            File cameraFile = File.createTempFile("card-scan-", ".jpg", getExternalCacheDir() != null ? getExternalCacheDir() : getCacheDir());
-            pendingScannerImageUri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", cameraFile);
-            cameraIntent.putExtra(MediaStore.EXTRA_OUTPUT, pendingScannerImageUri);
-            cameraIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
-            if (cameraIntent.resolveActivity(getPackageManager()) == null) throw new IllegalStateException("Câmera indisponível");
-            startActivityForResult(cameraIntent, SCAN_CARD_IMAGE);
-        } catch (Exception error) {
-            pendingScannerImageUri = null;
-            runJavascript("window.receiveScannerError&&window.receiveScannerError(" + JSONObject.quote(error.getMessage() == null ? "Não foi possível abrir a câmera." : error.getMessage()) + ");");
-        }
-    }
-
-    private void recognizeScannerImage(final Uri uri, final String finish) {
-        try {
-            InputImage fullImage = InputImage.fromFilePath(this, uri);
-            InputStream bitmapInput = getContentResolver().openInputStream(uri);
-            Bitmap decoded = bitmapInput == null ? null : BitmapFactory.decodeStream(bitmapInput);
-            if (bitmapInput != null) bitmapInput.close();
-            final Bitmap original = orientScannerBitmap(uri, decoded);
-            Bitmap bottom = original == null ? null : enhancedScannerCrop(original, 0f, 0.62f, 1f, 0.38f);
-            Bitmap bottomLeft = original == null ? null : enhancedScannerCrop(original, 0f, 0.58f, 0.62f, 0.42f);
-            TextRecognizer recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
-            recognizer.process(fullImage).addOnSuccessListener(fullResult -> {
-                final String fullText = fullResult == null ? "" : fullResult.getText();
-                if (bottom == null) {
-                    deliverScannerText(fullText, finish);
-                    recognizer.close();
-                    return;
-                }
-                recognizer.process(InputImage.fromBitmap(bottom, 0)).addOnSuccessListener(bottomResult -> {
-                    final String bottomText = bottomResult == null ? "" : bottomResult.getText();
-                    if (bottomLeft == null) {
-                        deliverScannerText(fullText + "\n[NUMERO AMPLIADO]\n" + bottomText, finish);
-                        recognizer.close();
-                        bottom.recycle();
-                        if (original != null) original.recycle();
-                        return;
-                    }
-                    recognizer.process(InputImage.fromBitmap(bottomLeft, 0)).addOnSuccessListener(leftResult -> {
-                        String leftText = leftResult == null ? "" : leftResult.getText();
-                        deliverScannerText(fullText + "\n[FAIXA INFERIOR AMPLIADA]\n" + bottomText + "\n[CANTO INFERIOR AMPLIADO]\n" + leftText, finish);
-                        recognizer.close();
-                        bottom.recycle();
-                        bottomLeft.recycle();
-                        if (original != null) original.recycle();
-                    }).addOnFailureListener(error -> {
-                        deliverScannerText(fullText + "\n[NUMERO AMPLIADO]\n" + bottomText, finish);
-                        recognizer.close();
-                    });
-                }).addOnFailureListener(error -> {
-                    deliverScannerText(fullText, finish);
-                    recognizer.close();
-                });
-            }).addOnFailureListener(error -> {
-                runJavascript("window.receiveScannerError&&window.receiveScannerError(" + JSONObject.quote(error.getMessage() == null ? "Não foi possível ler a carta." : error.getMessage()) + ");");
-                recognizer.close();
-            });
-        } catch (Exception error) {
-            runJavascript("window.receiveScannerError&&window.receiveScannerError(" + JSONObject.quote(error.getMessage() == null ? "Não foi possível processar a foto." : error.getMessage()) + ");");
-        }
-    }
-
     private Bitmap enhancedScannerCrop(Bitmap source, float leftRatio, float topRatio, float widthRatio, float heightRatio) {
         int left = Math.max(0, Math.min(source.getWidth() - 1, Math.round(source.getWidth() * leftRatio)));
         int top = Math.max(0, Math.min(source.getHeight() - 1, Math.round(source.getHeight() * topRatio)));
@@ -375,31 +294,6 @@ public final class MainActivity extends Activity {
         return enhanced;
     }
 
-    private Bitmap orientScannerBitmap(Uri uri, Bitmap source) {
-        if (source == null) return null;
-        InputStream exifInput = null;
-        try {
-            exifInput = getContentResolver().openInputStream(uri);
-            if (exifInput == null) return source;
-            ExifInterface exif = new ExifInterface(exifInput);
-            int orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
-            float rotation = 0f;
-            if (orientation == ExifInterface.ORIENTATION_ROTATE_90) rotation = 90f;
-            else if (orientation == ExifInterface.ORIENTATION_ROTATE_180) rotation = 180f;
-            else if (orientation == ExifInterface.ORIENTATION_ROTATE_270) rotation = 270f;
-            if (rotation == 0f) return source;
-            Matrix matrix = new Matrix();
-            matrix.postRotate(rotation);
-            Bitmap rotated = Bitmap.createBitmap(source, 0, 0, source.getWidth(), source.getHeight(), matrix, true);
-            if (rotated != source) source.recycle();
-            return rotated;
-        } catch (Exception ignored) {
-            return source;
-        } finally {
-            if (exifInput != null) try { exifInput.close(); } catch (Exception ignored) {}
-        }
-    }
-
     private void deliverScannerText(String text, String finish) {
         runJavascript("window.receiveScannerText&&window.receiveScannerText(" + JSONObject.quote(text == null ? "" : text) + "," + JSONObject.quote(finish) + ");");
     }
@@ -414,15 +308,6 @@ public final class MainActivity extends Activity {
                 pendingImageChooser = null;
             }
             pendingCameraImageUri = null;
-            return;
-        }
-
-        if (requestCode == SCAN_CARD_IMAGE) {
-            Uri scanUri = pendingScannerImageUri;
-            String finish = pendingScannerFinish;
-            pendingScannerImageUri = null;
-            if (resultCode == RESULT_OK && scanUri != null) recognizeScannerImage(scanUri, finish);
-            else runJavascript("window.receiveScannerCancelled&&window.receiveScannerCancelled();");
             return;
         }
 
@@ -657,180 +542,6 @@ public final class MainActivity extends Activity {
         }
     }
 
-
-    private String fetchPublicText(String urlValue) throws Exception {
-        HttpURLConnection connection = null;
-        try {
-            connection = (HttpURLConnection) new URL(urlValue).openConnection();
-            connection.setConnectTimeout(18000);
-            connection.setReadTimeout(25000);
-            connection.setInstanceFollowRedirects(true);
-            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 Chrome/126 Safari/537.36");
-            connection.setRequestProperty("Accept-Language", "pt-BR,pt;q=0.9,en;q=0.7");
-            int status = connection.getResponseCode();
-            if (status < 200 || status >= 400) throw new IllegalStateException("HTTP " + status);
-            return readText(connection);
-        } finally {
-            if (connection != null) connection.disconnect();
-        }
-    }
-
-    private String htmlToPlainText(String html) {
-        if (html == null) return "";
-        String value = html
-                .replaceAll("(?is)<script[^>]*>.*?</script>", " ")
-                .replaceAll("(?is)<style[^>]*>.*?</style>", " ")
-                .replaceAll("(?i)<br\\s*/?>", "\n")
-                .replaceAll("(?i)</(div|p|li|h1|h2|h3|h4|section|tr)>", "\n")
-                .replaceAll("(?is)<[^>]+>", " ");
-        value = value.replace("&nbsp;", " ").replace("&amp;", "&")
-                .replace("&quot;", "\"").replace("&#39;", "'")
-                .replace("&lt;", "<").replace("&gt;", ">");
-        return value.replaceAll("[\\t\\x0B\\f\\r ]+", " ")
-                .replaceAll(" *\\n *", "\n")
-                .replaceAll("\\n{3,}", "\n\n").trim();
-    }
-
-    private String normalizeSearchText(String value) {
-        if (value == null) return "";
-        String normalized = java.text.Normalizer.normalize(value, java.text.Normalizer.Form.NFD)
-                .replaceAll("\\p{M}+", "")
-                .toLowerCase(Locale.US)
-                .replaceAll("[^a-z0-9]+", " ")
-                .trim();
-        return normalized;
-    }
-
-    private String collectorCore(String number) {
-        if (number == null) return "";
-        String left = number.split("/")[0].replaceAll("[^A-Za-z0-9]", "");
-        return left.replaceFirst("^0+(?!$)", "");
-    }
-
-    private String decodeSearchUrl(String value) {
-        if (value == null) return "";
-        String decoded = value.replace("&amp;", "&").replace("\\/", "/");
-        try { decoded = URLDecoder.decode(decoded, "UTF-8"); } catch (Exception ignored) {}
-        java.util.regex.Matcher redirect = java.util.regex.Pattern.compile("[?&](?:url|u|r)=([^&]+)").matcher(decoded);
-        if (redirect.find()) {
-            try { decoded = URLDecoder.decode(redirect.group(1), "UTF-8"); } catch (Exception ignored) {}
-        }
-        return decoded;
-    }
-
-    private java.util.List<String> mypCandidateUrls(String html) {
-        java.util.LinkedHashSet<String> urls = new java.util.LinkedHashSet<String>();
-        if (html == null) return new java.util.ArrayList<String>();
-        java.util.regex.Matcher direct = java.util.regex.Pattern.compile(
-                "https?://(?:www\\.)?mypcards\\.com/pokemon/(?:preco|produto)/\\d+/[a-z0-9-]+",
-                java.util.regex.Pattern.CASE_INSENSITIVE).matcher(html.replace("\\/", "/"));
-        while (direct.find()) urls.add(direct.group());
-        java.util.regex.Matcher href = java.util.regex.Pattern.compile("href=[\\\"']([^\\\"']+)[\\\"']", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(html);
-        while (href.find()) {
-            String decoded = decodeSearchUrl(href.group(1));
-            java.util.regex.Matcher nested = java.util.regex.Pattern.compile(
-                    "https?://(?:www\\.)?mypcards\\.com/pokemon/(?:preco|produto)/\\d+/[a-z0-9-]+",
-                    java.util.regex.Pattern.CASE_INSENSITIVE).matcher(decoded);
-            if (nested.find()) urls.add(nested.group());
-        }
-        return new java.util.ArrayList<String>(urls);
-    }
-
-    private Double parseBrlAfterLabel(String text, String label) {
-        if (text == null) return null;
-        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(
-                java.util.regex.Pattern.quote(label) + "[\\s\\S]{0,100}?R\\$\\s*([0-9.]+(?:,[0-9]{1,2})?)",
-                java.util.regex.Pattern.CASE_INSENSITIVE);
-        java.util.regex.Matcher matcher = pattern.matcher(text);
-        if (!matcher.find()) return null;
-        try { return Double.parseDouble(matcher.group(1).replace(".", "").replace(',', '.')); }
-        catch (Exception ignored) { return null; }
-    }
-
-    private JSONObject queryMypCardsPrice(String cardName, String cardNumber, String setName, String setId) throws Exception {
-        String numberCore = collectorCore(cardNumber);
-        String[] queries = new String[] {
-                "site:mypcards.com/pokemon/preco \"" + cardName + "\" \"" + cardNumber + "\" \"" + setName + "\"",
-                "site:mypcards.com/pokemon/preco \"" + cardName + "\" \"" + numberCore + "\" \"" + setId + "\"",
-                "site:mypcards.com/pokemon/produto \"" + cardName + "\" \"" + cardNumber + "\" \"" + setName + "\""
-        };
-        java.util.LinkedHashSet<String> candidates = new java.util.LinkedHashSet<String>();
-        StringBuilder diagnostics = new StringBuilder();
-        for (String query : queries) {
-            try {
-                String searchUrl = "https://www.bing.com/search?q=" + URLEncoder.encode(query, "UTF-8");
-                candidates.addAll(mypCandidateUrls(fetchPublicText(searchUrl)));
-            } catch (Exception error) {
-                diagnostics.append("Busca: ").append(error.getMessage()).append("; ");
-            }
-        }
-        String normalizedName = normalizeSearchText(cardName);
-        String normalizedSet = normalizeSearchText(setName);
-        for (String originalUrl : candidates) {
-            String historyUrl = originalUrl.replace("/produto/", "/preco/");
-            try {
-                String html = fetchPublicText(historyUrl);
-                String text = htmlToPlainText(html);
-                String normalized = normalizeSearchText(text);
-                boolean nameOk = normalizedName.length() == 0 || normalized.contains(normalizedName);
-                boolean numberOk = numberCore.length() == 0 || normalized.contains(" " + numberCore + " ")
-                        || normalized.contains(numberCore + " ") || normalized.contains(" " + numberCore);
-                boolean setOk = normalizedSet.length() == 0 || normalized.contains(normalizedSet)
-                        || (setId != null && setId.length() > 0 && normalized.contains(normalizeSearchText(setId)));
-                if (!nameOk || !numberOk) continue;
-                Double median = parseBrlAfterLabel(text, "Mediana MYP");
-                if (median != null && median > 0) {
-                    JSONObject result = new JSONObject();
-                    result.put("brl", median);
-                    result.put("metric", "median");
-                    result.put("url", historyUrl);
-                    result.put("matchedCode", cardNumber);
-                    result.put("diagnostic", setOk ? "Correspondência exata no MYP Cards." : "Nome e número conferidos; coleção aproximada.");
-                    return result;
-                }
-                String productUrl = originalUrl.replace("/preco/", "/produto/");
-                String productText = htmlToPlainText(fetchPublicText(productUrl));
-                java.util.regex.Matcher money = java.util.regex.Pattern.compile("R\\$\\s*([0-9.]+(?:,[0-9]{1,2})?)").matcher(productText);
-                double lowest = Double.MAX_VALUE;
-                int count = 0;
-                while (money.find() && count < 40) {
-                    try {
-                        double value = Double.parseDouble(money.group(1).replace(".", "").replace(',', '.'));
-                        if (value > 0 && value < lowest) lowest = value;
-                    } catch (Exception ignored) {}
-                    count++;
-                }
-                if (lowest < Double.MAX_VALUE) {
-                    JSONObject result = new JSONObject();
-                    result.put("brl", lowest);
-                    result.put("metric", "lowest");
-                    result.put("url", productUrl);
-                    result.put("matchedCode", cardNumber);
-                    result.put("diagnostic", "Mediana indisponível; usada a menor oferta visível no MYP Cards.");
-                    return result;
-                }
-            } catch (Exception error) {
-                diagnostics.append(error.getMessage()).append("; ");
-            }
-        }
-        throw new IllegalStateException("Carta não localizada no MYP Cards. " + diagnostics.toString());
-    }
-
-    private void requestMypCardsNative(final String requestId, final String cardName, final String cardNumber, final String setName, final String setId) {
-        backgroundExecutor.execute(new Runnable() {
-            @Override public void run() {
-                try {
-                    JSONObject result = queryMypCardsPrice(cardName, cardNumber, setName, setId);
-                    final String payload = result.toString();
-                    runJavascript("window.receiveMypCardsPrice&&window.receiveMypCardsPrice(" + JSONObject.quote(requestId) + ",true," + JSONObject.quote(payload) + ",null);");
-                } catch (Exception error) {
-                    String message = error.getMessage() == null ? "Falha ao consultar o MYP Cards." : error.getMessage();
-                    runJavascript("window.receiveMypCardsPrice&&window.receiveMypCardsPrice(" + JSONObject.quote(requestId) + ",false,null," + JSONObject.quote(message) + ");");
-                }
-            }
-        });
-    }
-
     public final class AppBridge {
         @JavascriptInterface
         public double getTopInsetCss() {
@@ -840,18 +551,6 @@ public final class MainActivity extends Activity {
         @JavascriptInterface
         public double getBottomInsetCss() {
             return bottomInsetCss;
-        }
-
-        @JavascriptInterface
-        public void requestMypCards(final String requestId, final String cardName, final String cardNumber, final String setName, final String setId) {
-            requestMypCardsNative(requestId, cardName, cardNumber, setName, setId);
-        }
-
-        @JavascriptInterface
-        public void startCardScanner(final String finish) {
-            runOnUiThread(new Runnable() {
-                @Override public void run() { launchScannerCamera(finish); }
-            });
         }
 
         @JavascriptInterface
@@ -1016,13 +715,12 @@ public final class MainActivity extends Activity {
     }
 
     /* =====================================================================
-       Scanner contínuo — câmera ao vivo dentro do aplicativo.
+       Scanner — câmera ao vivo dentro do aplicativo (modo único).
 
-       O modo "uma por vez" continua usando o aplicativo de câmera do celular.
-       Aqui a imagem aparece dentro do app e cada quadro é lido pelo mesmo
-       reconhecedor de texto, sem precisar tirar foto. Uma carta reconhecida
-       não é reenviada enquanto a anterior não for concluída ou até passar o
-       tempo de espera, para não cadastrar a mesma carta várias vezes.
+       A imagem aparece dentro do app e cada quadro é lido pelo reconhecedor de
+       texto, sem precisar tirar foto. Uma carta reconhecida não é reenviada
+       enquanto a anterior não for concluída ou até passar o tempo de espera,
+       para não cadastrar a mesma carta várias vezes.
        ===================================================================== */
 
     private static final int LIVE_CAMERA_PERMISSION = 2001;

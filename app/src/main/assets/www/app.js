@@ -96,6 +96,10 @@ let scrollIdleTimer = null;
 // Performance v2.1: gravação agrupada e caches derivados.
 let stateSaveTimer = null;
 let stateSaveDirty = false;
+// Fica true quando o localStorage recusou a última gravação da coleção
+// (armazenamento cheio, aba privada, etc.). Liga o aviso de topo até uma
+// gravação voltar a dar certo.
+let stateSaveFailed = false;
 let stateRevision = 0;
 let collectionSummaryCache = { revision: -1, value: null };
 let pokemonStatsCache = { revision: -1, value: null };
@@ -1838,6 +1842,9 @@ function rebuildCatalogIndexes() {
 async function init() {
   const labInitStart = performance.now();
   try {
+    // Pede ao sistema para tratar o armazenamento local como persistente, para
+    // o WebView não descartar a coleção quando o aparelho fica sem espaço.
+    try { navigator.storage?.persist?.().catch(() => {}); } catch (_) {}
     [catalog, pokedex, seed] = await Promise.all([
       loadCatalogData(),
       loadJson('data/pokedex.json'),
@@ -2022,13 +2029,21 @@ function loadState() {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
     const migrated = migrateState(saved);
     if (migrated) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+      // Regravar a versão migrada é higiene, não obrigação. Se o armazenamento
+      // recusar, seguimos com o que já está em memória — descartar a coleção
+      // carregada por causa de uma falha de escrita seria o pior desfecho.
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+      } catch (erro) {
+        console.error('POKECARD: não foi possível regravar o estado —', erro && erro.name);
+        stateSaveFailed = true;
+      }
       return migrated;
     }
   } catch (_) {}
   // Instalações novas começam vazias. Dados pessoais nunca são distribuídos no APK.
   const initial = { version: 2, entries: {}, decks: [], importedAt: null };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(initial)); } catch (_) {}
   return initial;
 }
 
@@ -2038,6 +2053,44 @@ function saveStateNow() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     stateSaveDirty = false;
+    if (stateSaveFailed) {
+      // A gravação voltou a funcionar: tira o aviso da tela.
+      stateSaveFailed = false;
+      try { renderKeepingScroll(); } catch (_) {}
+    }
+  } catch (erro) {
+    // localStorage cheio ou bloqueado (armazenamento do aparelho sob pressão,
+    // navegação privada...). Para um app cujo lema é "coleção protegida", a
+    // gravação falhar em silêncio é o pior caso — então avisa na tela e força
+    // um backup agora, por um caminho que não depende do localStorage.
+    console.error('POKECARD: não foi possível salvar a coleção —', erro && erro.name, erro && erro.message);
+    stateSaveDirty = true;
+    if (!stateSaveFailed) {
+      stateSaveFailed = true;
+      salvarBackupDeEmergencia();
+      // Aviso imediato mesmo fora da tela inicial; a faixa fixa fica no painel.
+      try { notify('O aparelho recusou salvar a coleção. Fizemos um backup de emergência na pasta Download.'); } catch (_) {}
+      try { renderKeepingScroll(); } catch (_) {}
+    }
+  }
+}
+
+/* Backup disparado fora do ciclo normal, quando o localStorage recusa a
+   gravação. O arquivo vai para a pasta Download pública pela ponte do Android,
+   que não depende do armazenamento que acabou de falhar. */
+function salvarBackupDeEmergencia() {
+  try {
+    if (!window.Android?.salvarBackupAutomatico) return;
+    const payload = JSON.stringify({
+      format: 'fichario-pokemon-br-plus-backup',
+      backupVersion: 2,
+      exportedAt: new Date().toISOString(),
+      automatico: true,
+      emergencia: true,
+      state,
+      ligaSetCache,
+    });
+    window.Android.salvarBackupAutomatico(payload, 'pokecard-backup-emergencia.json');
   } catch (_) {}
 }
 
@@ -2792,6 +2845,7 @@ function renderDashboard() {
         <div><span>${dashboardGreeting()}</span><h2>POKECARD Brasil</h2></div>
         <button class="vision-profile-button" onclick="openBackupPanel()" aria-label="Abrir perfil e backup">PB</button>
       </div>
+      ${avisoDeGravacao()}
       ${avisoDeBackup()}
 
       <section class="portfolio-card">
@@ -6047,12 +6101,6 @@ window.receiveScannerError = function receiveScannerError(message) {
   showScannerMessage(message || 'Não foi possível ler a carta.', true);
 };
 
-window.receiveScannerCancelled = function receiveScannerCancelled() {
-  if (!scannerSession.active) return;
-  if (scannerSession.live) return avisarNaCamera('Captura cancelada.');
-  showScannerMessage('A captura foi cancelada.', true);
-};
-
 /* Confirmar a leitura NÃO grava na coleção: só põe a carta na lista de
    espera. A gravação acontece uma vez só, em `adicionarCartasDaSessao`. */
 function confirmScannedCard(cardId) {
@@ -8527,6 +8575,18 @@ window.receberBackupAutomatico = function (resultado, arquivo) {
   }
   console.warn('POKECARD: backup automático falhou —', resultado);
 };
+
+/* Faixa de aviso quando o aparelho recusou salvar a coleção. Fica visível até
+   uma gravação voltar a dar certo. É mais grave que o aviso de backup: aqui os
+   toques mais recentes do usuário podem não ter sido guardados. */
+function avisoDeGravacao() {
+  if (!stateSaveFailed) return '';
+  return `<button type="button" class="aviso-backup aviso-gravacao" onclick="openBackupPanel()">
+    <span aria-hidden="true">⚠</span>
+    <span><strong>O aparelho recusou salvar sua coleção.</strong><small>O armazenamento pode estar cheio. Salvamos um backup de emergência na pasta Download — toque para exportar outro e libere espaço no aparelho.</small></span>
+    <span aria-hidden="true">›</span>
+  </button>`;
+}
 
 /* Faixa de aviso quando a cópia está velha demais — ou quando nunca houve
    uma. Some sozinha assim que o backup acontece. */

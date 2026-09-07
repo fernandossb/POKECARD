@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const catalogPath = path.join(root, 'app/src/main/assets/www/data/catalog.json');
+const catalogDataPath = path.join(root, 'app/src/main/assets/www/data/catalog-data.js');
 const pokedexPath = path.join(root, 'app/src/main/assets/www/data/pokedex.json');
 
 const normalize = value => String(value ?? '')
@@ -34,5 +35,9 @@ for (const card of catalog.cards || []) {
   indexed++;
 }
 
-fs.writeFileSync(catalogPath, JSON.stringify(catalog));
+// O app carrega catalog-data.js (window.__CATALOG__), não o .json. Gravar só um
+// dos dois deixaria o aparelho com o catálogo antigo — sempre escreve os dois.
+const serialized = JSON.stringify(catalog);
+fs.writeFileSync(catalogPath, serialized);
+fs.writeFileSync(catalogDataPath, `window.__CATALOG__=${serialized};`);
 console.log(`Catálogo otimizado: ${indexed} cartas indexadas; ${catalog.cards?.length || 0} cartas no total.`);

@@ -4692,6 +4692,13 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 .aviso-backup strong{display:block;font-size:var(--fs-corpo,15px);}
 .aviso-backup small{display:block;opacity:.8;font-size:var(--fs-menor,12px);line-height:1.35;}
 .aviso-backup>span:first-child{font-size:var(--fs-titulo,20px);color:var(--aviso,#c98a12);}
+/* Falha de gravação é mais grave que backup velho: usa o vermelho de erro. */
+.aviso-gravacao{
+  border-color:var(--erro,#e8544a);
+  background:color-mix(in srgb, var(--erro,#e8544a) 16%, transparent);
+}
+.aviso-gravacao>span:first-child{color:var(--erro,#e8544a);}
+.aviso-gravacao small{opacity:.92;}
 /* ---------- v5.36 — grafico de valorizacao ---------- */
 .valor-card{
   margin-top:var(--esp-4,16px);padding:var(--esp-3,12px);
