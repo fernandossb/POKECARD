@@ -22,6 +22,16 @@
   const resolving = new Map();
   const localImageState = new Map();
   const localImageChecks = new Map();
+  // Conjunto de IDs que têm foto local. Enquanto for null, ainda não carregou e
+  // consultamos o IndexedDB carta por carta (comportamento antigo). Depois de
+  // carregado, cartas fora do conjunto pulam o IndexedDB por completo — o que
+  // elimina dezenas de transações na primeira tela após abrir o app.
+  let localImageIdSet = null;
+  try {
+    window.FicharioLocalImages?.keys?.().then(list => {
+      localImageIdSet = new Set((list || []).map(String));
+    }).catch(() => { localImageIdSet = new Set(); });
+  } catch (_) { localImageIdSet = new Set(); }
   let activeCardId = '';
   let cache = {};
   let diagnostics = {};
@@ -433,6 +443,11 @@
     if (!id) return null;
     if (!force && localImageState.has(id)) return localImageState.get(id);
     if (!force && localImageChecks.has(id)) return localImageChecks.get(id);
+    // Já sabemos quais cartas têm foto local: as demais nem tocam no IndexedDB.
+    if (!force && localImageIdSet && !localImageIdSet.has(id)) {
+      localImageState.set(id, null);
+      return null;
+    }
 
     const check = (async () => {
       try {
@@ -456,6 +471,7 @@
     if (!id) return false;
     const dataUrl = knownDataUrl || await readLocalImage(id, true);
     localImageState.set(id, dataUrl || null);
+    if (dataUrl && localImageIdSet) localImageIdSet.add(id);
     if (!dataUrl) return false;
 
     attempts.delete(id);
@@ -470,6 +486,7 @@
     const id = String(cardId || '');
     localImageState.delete(id);
     localImageChecks.delete(id);
+    localImageIdSet?.delete(id);
   }
 
   function enforceLocalPriority(cardId) {
@@ -510,10 +527,13 @@
   async function providerCandidates(card, force) {
     const list = [];
 
-    try {
-      const localImage = await window.FicharioLocalImages?.get?.(card?.id);
-      if (localImage?.dataUrl) list.push({ url: localImage.dataUrl, source: 'imagem-local-usuario' });
-    } catch (_) {}
+    const cardId = String(card?.id || '');
+    if (force || !localImageIdSet || localImageIdSet.has(cardId)) {
+      try {
+        const localImage = await window.FicharioLocalImages?.get?.(cardId);
+        if (localImage?.dataUrl) list.push({ url: localImage.dataUrl, source: 'imagem-local-usuario' });
+      } catch (_) {}
+    }
 
     const userPhoto = String(card?.userPhotoUri || card?.photoUri || card?.photo || '').trim();
     if (userPhoto) list.push({ url: userPhoto, source: 'foto-usuario' });
@@ -691,6 +711,15 @@
   window.FicharioImageFallback = {
     useLocalImage,
     forgetLocalImage,
+    // A URL de arte que já funcionou para esta carta numa sessão anterior.
+    // A grade usa isto como `src` inicial em vez da URL crua do catálogo, para
+    // não refazer a cascata (com requisições que falham) a cada abertura.
+    cachedUrl(cardId) {
+      const entry = cache[String(cardId || '')];
+      if (!entry?.url) return '';
+      if (Date.now() - Number(entry.savedAt || 0) >= CACHE_TTL) return '';
+      return entry.url;
+    },
     retry(cardId) {
       const id = String(cardId || '');
       attempts.delete(id);

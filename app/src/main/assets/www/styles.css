@@ -2663,6 +2663,9 @@ body::before { display: block !important; }
   font-weight: 400; font-size: 12px; color: var(--vision-muted);
   background: var(--vision-primary-soft); padding: 2px 8px; border-radius: 999px;
 }
+.registration-group-nota {
+  margin: 0 0 10px; font-size: 12px; line-height: 1.4; color: var(--vision-muted);
+}
 .registration-field.span-2 { grid-column: 1 / -1; }
 .registration-field.hidden, #regVarianteBloco.hidden { display: none !important; }
 

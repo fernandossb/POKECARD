@@ -61,6 +61,18 @@
     });
   }
 
+  // Só as chaves (IDs de carta que têm foto local). Uma transação leve, para o
+  // sistema de fallback não precisar consultar o IndexedDB carta por carta na
+  // primeira renderização.
+  async function keys() {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).getAllKeys();
+      req.onsuccess = () => resolve((Array.isArray(req.result) ? req.result : []).map(String));
+      req.onerror = () => reject(req.error);
+    });
+  }
+
   function ensureInputs() {
     if (document.getElementById('local-card-image-gallery')) return;
     const gallery = document.createElement('input');
@@ -236,6 +248,7 @@
 
   window.FicharioLocalImages = {
     get,
+    keys,
     open: openPicker,
     choose,
     removeImage,

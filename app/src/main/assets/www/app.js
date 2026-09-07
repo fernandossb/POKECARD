@@ -89,8 +89,8 @@ const scannerVariantAvailability = new Map();
 let cardResultCache = { key: '', revision: -1, value: null };
 let imagePreloadQueue = [];
 let imagePreloadActive = 0;
-const IMAGE_PRELOAD_MAX = 1;
-const IMAGE_PRELOAD_AHEAD = 4;
+const IMAGE_PRELOAD_MAX = 3;
+const IMAGE_PRELOAD_AHEAD = 6;
 let scrollIdleTimer = null;
 
 // Performance v2.1: gravação agrupada e caches derivados.
@@ -437,6 +437,100 @@ function resetConditionMultipliers() {
 }
 const PRICE_PRINT_VARIATIONS = ['unlimited', 'firstEdition'];
 const PRICE_STAMPS = ['unstamped', 'stamped'];
+
+/* ---------- Taxonomia completa de variação (cadastro manual da carta) ----------
+   Fonte: schema do TCGdex cards-database (VariantType, VariantStamps, foil,
+   subtype) + Bulbapedia. Nenhuma dessas variações tem preço de fonte — todas
+   entram como "identidade exata, sem preço automático". O scanner NÃO usa
+   nada disto: lá só existe Comum / Holográfica / Reverse Holo.
+
+   Cada lista é [valor, rótulo]. O valor 'outro' abre um campo livre com
+   autocomplete da lista completa do TCGdex. */
+const EDITION_OPTIONS = [
+  ['unlimited', 'Tiragem ilimitada'],
+  ['shadowless', 'Shadowless (sem sombra)'],
+  ['1st-print', '1ª tiragem'],
+  ['other-edition', 'Outra edição'],
+];
+const STAMP_OPTIONS = [
+  ['unstamped', 'Sem carimbo'],
+  ['1st-edition', '1ª Edição'],
+  ['pre-release', 'Pré-lançamento'],
+  ['set-logo', 'Logo da coleção'],
+  ['staff', 'Staff'],
+  ['judge', 'Juiz'],
+  ['poke-ball-league', 'Liga — Poké Bola'],
+  ['ultra-ball-league', 'Liga — Ultra Bola'],
+  ['master-ball-league', 'Liga — Master Ball'],
+  ['player-rewards-program', 'Recompensa do jogador / Prize Pack'],
+  ['city-championships', 'Campeonato de cidade'],
+  ['state-championships', 'Campeonato estadual'],
+  ['regional-championships', 'Campeonato regional'],
+  ['national-championships', 'Campeonato nacional'],
+  ['international-championships', 'Campeonato internacional'],
+  ['worlds', 'Mundial (Worlds)'],
+  ['champion', 'Campeão'],
+  ['winner', 'Vencedor'],
+  ['finalist', 'Finalista'],
+  ['semi-finalist', 'Semifinalista'],
+  ['top-eight', 'Top 8'],
+  ['top-sixteen', 'Top 16'],
+  ['top-thirty-two', 'Top 32'],
+  ['pokemon-center', 'Pokémon Center'],
+  ['professor-program', 'Professor Program'],
+  ['25th-celebration', '25º aniversário'],
+  ['30th-pokeday', '30º aniversário (Pokémon Day)'],
+  ['countdown-calendar', 'Calendário de contagem regressiva'],
+  ['trick-or-trade', 'Trick or Trade (Halloween)'],
+  ['gamestop', 'GameStop / EB Games'],
+  ['mcdonalds', "McDonald's"],
+  ['pikachu', 'Carimbo Pikachu'],
+  ['w-promo', 'Promo (W)'],
+  ['other-stamp', 'Outro carimbo — digite ao lado'],
+];
+const SPECIAL_FOIL_OPTIONS = [
+  ['', 'Nenhum — acabamento comum da lista acima'],
+  ['pokeball-holofoil', 'Padrão Poké Bola'],
+  ['masterball-holofoil', 'Padrão Master Ball'],
+  ['greatball-holofoil', 'Padrão Great Ball'],
+  ['ultraball-holofoil', 'Padrão Ultra Ball'],
+  ['cosmos-holofoil', 'Cosmos Holo'],
+  ['cracked-ice-holofoil', 'Cracked Ice / vidro trincado'],
+  ['tinsel-holofoil', 'Tinsel Holo'],
+  ['mirror-holofoil', 'Mirror Holo'],
+  ['galaxy-holofoil', 'Galaxy Holo'],
+  ['gold-holofoil', 'Dourada (Gold)'],
+  ['rainbow-holofoil', 'Arco-íris (Rainbow)'],
+  ['other-foil', 'Outro padrão de foil…'],
+];
+const ART_OPTIONS = [
+  ['standard', 'Arte padrão'],
+  ['alt-art', 'Arte alternativa'],
+  ['full-art', 'Full Art / sem texto'],
+  ['trainer-gallery', 'Trainer Gallery / Galeria'],
+  ['jumbo', 'Jumbo (tamanho grande)'],
+  ['error', 'Erro de impressão'],
+  ['other-art', 'Outra variação de arte'],
+];
+// Lista completa do TCGdex para o autocomplete do campo "Outro carimbo…".
+const ALL_TCGDEX_STAMPS = [
+  '1st-edition', 'w-promo', 'pre-release', 'pokemon-center', 'set-logo', 'staff', 'judge', 'champion',
+  'winner', 'finalist', 'quarter-finalist', 'semi-finalist', 'top-eight', 'top-sixteen', 'top-thirty-two',
+  'pikachu-tail', 'wotc', '1st-movie', '1st-movie-inverted', 'pokemon-4-ever', 'pokemon-center-ny',
+  '25th-celebration', '30th-pokeday', 'professor-program', 'player-rewards-program',
+  'state-championships', 'national-championships', 'regional-championships', 'international-championships',
+  'international-championship-europe', 'international-championship-latin-america', 'international-championship-north-america',
+  'city-championships', 'gym-challenge', 'stadium-challenge', 'poke-ball-league', 'master-ball-league', 'ultra-ball-league',
+  'worlds-2004', 'worlds-2005', 'worlds-2007', 'worlds-2008', 'worlds-2009', 'worlds-2010',
+  'worlds-2022', 'worlds-2023', 'worlds-2024', 'worlds-2025', 'asia-2023-24', 'asia-promo',
+  '10th-anniversary', 'destiny-deoxys', 'pokemon-day', 'origins', 'origins-2008', 'platinum',
+  'countdown-calendar', 'trick-or-trade', 'horizons', 'gamestop', 'eb-games', 'mcdonalds', 'snowflake',
+  'illustration-contest-2022', 'illustration-contest-2024', 'nintendo-world', 'comic-con', 'gen-con',
+  'wizard-world-philadelphia', 'wizard-world-chicago', 'pokemon-rocks-america', 'games-expo', 'kraze-club',
+  'pokemon-together', 'rain-city', 'tournament-collection', 'fossil-museum', 'thank-you', 'jr-stamp-rally',
+  'grey-star', 'pop-tournament', 'ace-trainer', 'pikachu', 'bulbasaur', 'squirtle', 'charmander', 'pokeball',
+  'player-rewards', 'chicago-2009', 'poketour-99', 'distributor-meeting', 'scrye', 'inquest-gamer',
+];
 const SOURCE_VARIANT_META_KEYS = new Set(['updated', 'unit']);
 const SOURCE_PRICE_FIELDS = ['marketPrice', 'midPrice', 'lowPrice', 'highPrice', 'directLowPrice'];
 
@@ -608,14 +702,17 @@ function localCardVariationProfile(card) {
   if (remote.reverse === true) finishes.push('reverse');
   saved.forEach(item => finishes.push(item.finish));
   const pricingDetails = pricingVariantDetailsForCard(card);
+  // Edição, carimbo e arte são listas fixas e completas (cadastro manual): as
+  // fontes de preço não conhecem essas variações, então oferecemos todas e
+  // acrescentamos qualquer valor já salvo que não esteja na lista.
   return {
     loading: false,
     source: Object.keys(remote).length ? 'Catálogo TCGdex + Price Database' : 'Price Database',
     finishes: uniqueFinishValues(finishes, finishes.length ? [] : ['normal']),
     languages: uniqueValues(saved.map(item => item.language), PRICE_LANGUAGES),
-    editions: uniqueValues(saved.map(item => item.edition), remote.firstEdition === true ? ['unlimited', 'firstEdition'] : ['unlimited']),
-    distributions: uniqueValues(saved.map(item => item.distribution), remote.wPromo === true ? ['unstamped', 'stamped'] : ['unstamped']),
-    artVariants: ['standard'],
+    editions: uniqueValues(EDITION_OPTIONS.map(o => o[0]).filter(v => v !== 'other'), saved.map(item => item.edition)),
+    distributions: uniqueValues(STAMP_OPTIONS.map(o => o[0]).filter(v => v !== 'other'), saved.map(item => item.distribution)),
+    artVariants: uniqueValues(ART_OPTIONS.map(o => o[0]).filter(v => v !== 'other'), saved.map(item => item.artVariant)),
     pricingVariantDetails: pricingDetails,
     pricingVariants: pricingDetails.map(item => item.value),
   };
@@ -631,9 +728,11 @@ function cardVariationProfile(card) {
     ...loaded,
     finishes: loaded.finishes?.length ? uniqueFinishValues(loaded.finishes) : local.finishes,
     languages: loaded.languages?.length ? uniqueValues(loaded.languages) : local.languages,
-    editions: loaded.editions?.length ? uniqueValues(loaded.editions) : local.editions,
-    distributions: loaded.distributions?.length ? uniqueValues(loaded.distributions) : local.distributions,
-    artVariants: ['standard'],
+    // Edição/carimbo/arte continuam sendo a lista fixa completa — a fonte
+    // remota não acrescenta nada aqui, só reduziria as opções.
+    editions: local.editions,
+    distributions: local.distributions,
+    artVariants: local.artVariants,
     pricingVariantDetails: pricingDetails,
     pricingVariants: pricingDetails.map(item => item.value),
   };
@@ -658,10 +757,33 @@ const VARIANT_FRIENDLY_LABELS = {
   'pokeball-holofoil': 'Padrão Poké Bola',
   'masterball-holofoil': 'Padrão Master Ball',
 };
+// Puxa os rótulos das listas do cadastro manual, sem repetir texto.
+for (const [valor, rotulo] of [...EDITION_OPTIONS, ...STAMP_OPTIONS, ...SPECIAL_FOIL_OPTIONS, ...ART_OPTIONS]) {
+  if (valor && rotulo && !VARIANT_FRIENDLY_LABELS[valor]) VARIANT_FRIENDLY_LABELS[valor] = rotulo;
+}
+
+function humanizarCarimbo(value) {
+  return String(value || '')
+    .replace(/[-_]+/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase())
+    .trim();
+}
 
 function friendlyVariantLabel(value) {
   const exact = exactSourceEnum(value);
-  return VARIANT_FRIENDLY_LABELS[exact] || exact;
+  if (VARIANT_FRIENDLY_LABELS[exact]) return VARIANT_FRIENDLY_LABELS[exact];
+  // Carimbo raro digitado à mão (ex.: "jason-klaczynski"): mostra legível.
+  return exact ? humanizarCarimbo(exact) : exact;
+}
+
+/* Rótulo legível de uma variante salva: acabamento + edição + carimbo + arte,
+   tudo em português, sem "reverse-holofoil" ou "1st-edition" crus na tela. */
+function rotuloDaVariante(variant) {
+  const partes = [friendlyVariantLabel(variant?.pricingVariant || finishKind(variant?.finish))];
+  if (variant?.edition && variant.edition !== 'unlimited') partes.push(friendlyVariantLabel(variant.edition));
+  if (variant?.distribution && variant.distribution !== 'unstamped') partes.push(friendlyVariantLabel(variant.distribution));
+  if (variant?.artVariant && variant.artVariant !== 'standard') partes.push(friendlyVariantLabel(variant.artVariant));
+  return partes.filter(Boolean).join(' · ');
 }
 
 // Cada acabamento tem sua própria cara, como as etiquetas da carta física.
@@ -678,10 +800,87 @@ const VARIANT_ESTILO = {
   'firstEdition': { classe: 'v-primeira', icone: '❶' },
   'pokeball-holofoil': { classe: 'v-pokebola', icone: '◉' },
   'masterball-holofoil': { classe: 'v-masterball', icone: '◍' },
+  'greatball-holofoil': { classe: 'v-pokebola', icone: '◉' },
+  'ultraball-holofoil': { classe: 'v-pokebola', icone: '◉' },
+  'cosmos-holofoil': { classe: 'v-holo', icone: '✦' },
+  'cracked-ice-holofoil': { classe: 'v-holo', icone: '✦' },
+  'tinsel-holofoil': { classe: 'v-holo', icone: '✦' },
+  'mirror-holofoil': { classe: 'v-reverse', icone: '◧' },
+  'galaxy-holofoil': { classe: 'v-holo', icone: '✦' },
+  'gold-holofoil': { classe: 'v-primeira', icone: '❶' },
+  'rainbow-holofoil': { classe: 'v-holo', icone: '✦' },
 };
 
 function variantEstilo(value) {
   return VARIANT_ESTILO[exactSourceEnum(value)] || { classe: 'v-outra', icone: '◈' };
+}
+
+const STAMP_VALUES = new Set(STAMP_OPTIONS.map(o => o[0]));
+const SPECIAL_FOIL_VALUES = new Set(SPECIAL_FOIL_OPTIONS.map(o => o[0]).filter(Boolean));
+
+// Carimbo que o usuário digitou à mão (não está na lista curada) → vai no campo
+// "Carimbo (outro)".
+function carimboForaDaLista(value) {
+  const v = exactSourceEnum(value);
+  return Boolean(v) && v !== 'unstamped' && !STAMP_VALUES.has(v);
+}
+
+function slugDeVariacao(value) {
+  return exactSourceEnum(value).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+// Lê um select curado (edição/carimbo/arte): o campo de texto "outro" (quando
+// existe) tem prioridade; senão, o valor do select.
+function resolverCampoCurado(selectId, padrao, otherInputId = '') {
+  if (otherInputId) {
+    const digitado = slugDeVariacao(document.getElementById(otherInputId)?.value || '');
+    if (digitado) return digitado;
+  }
+  const escolhido = exactSourceEnum(document.getElementById(selectId)?.value);
+  if (!escolhido) return padrao;
+  // Marcador "other-*" com campo de texto vazio: não dá para saber qual é,
+  // volta ao padrão. Sem campo de texto (edição/arte), guarda o marcador.
+  if (/^other-/.test(escolhido) && otherInputId) return padrao;
+  return escolhido;
+}
+
+// Qual opção do select "Acabamento especial" corresponde à variante do rascunho.
+function acabamentoEspecialAtual(draft) {
+  const enumero = exactSourceEnum(draft?.pricingVariant);
+  if (SPECIAL_FOIL_VALUES.has(enumero)) return enumero;
+  if (enumero && /-holofoil$/.test(enumero) && !['reverse-holofoil', 'unlimited-holofoil', '1st-edition-holofoil'].includes(enumero)) return 'other-foil';
+  return '';
+}
+
+/* Selecionou um padrão de foil especial (Poké Bola, Cosmos, Gold…): ele vira a
+   variante exata da carta, com o acabamento-base que faz sentido. Nenhum tem
+   preço de fonte — o app já trata como "sem preço automático". */
+function aplicarAcabamentoEspecial(cardId, value) {
+  const pricing = document.getElementById('regPricingVariant');
+  const finish = document.getElementById('regFinish');
+  if (!pricing || !finish) return;
+  let enumero = exactSourceEnum(value);
+  if (enumero === 'other-foil') {
+    enumero = exactSourceEnum(document.getElementById('regSpecialFoilOther')?.value)
+      .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  }
+  if (!enumero || enumero === '') {
+    // Voltou para "Nenhum": deixa a variante seguir os botões de acabamento.
+    const marker = document.getElementById('regManualVariationOverride');
+    if (marker) marker.value = '0';
+    sincronizarVarianteExata(cardMap.get(cardId));
+    handleRegistrationVariantChange(cardId);
+    return;
+  }
+  if (![...pricing.options].some(o => o.value === enumero)) pricing.add(new Option(friendlyVariantLabel(enumero), enumero));
+  pricing.value = enumero;
+  const base = /reverse|pokeball|masterball|greatball|ultraball|mirror/i.test(enumero) ? 'reverse'
+    : /gold|cosmos|tinsel|galaxy|rainbow|cracked|holo/i.test(enumero) ? 'holo' : 'normal';
+  if (![...finish.options].some(o => o.value === base)) finish.add(new Option(base, base));
+  finish.value = base;
+  const marker = document.getElementById('regManualVariationOverride');
+  if (marker) marker.value = '1';
+  handleRegistrationVariantChange(cardId, 'variante');
 }
 
 /* ---------- Uma versão = uma carta física ----------
@@ -927,6 +1126,20 @@ function optionListForCard(card, field, selected, preserveSelected = true, langu
       return option(value, `${value}${source}${availability}`, selected);
     }).join('');
   }
+  // Edição / carimbo / arte: lista curada, na ordem definida. Um valor salvo
+  // fora da lista (carimbo raro digitado à mão) deixa o select em "Outro…" — o
+  // valor de verdade fica no campo de texto ao lado.
+  const CURADAS = {
+    editions: [EDITION_OPTIONS, 'other-edition'],
+    distributions: [STAMP_OPTIONS, 'other-stamp'],
+    artVariants: [ART_OPTIONS, 'other-art'],
+  };
+  if (CURADAS[field]) {
+    const [curada, marcadorOutro] = CURADAS[field];
+    const conhecido = curada.some(o => o[0] === selected);
+    const selecionado = conhecido ? selected : marcadorOutro;
+    return curada.map(([valor, rotulo]) => option(valor, rotulo, selecionado)).join('');
+  }
   values = uniqueValues(profile[field] || [], preserveSelected && selected ? [selected] : []);
   return values.map(value => option(value, priceDimensionLabel(field, value), selected)).join('');
 }
@@ -1156,8 +1369,9 @@ function centralPriceCompatibility(cardId, value = {}) {
   const multiplier = conditionMultiplier(identity.condition);
   const conditionEstimated = multiplier !== 1;
   // Carimbo não é precificado por nenhuma fonte: o valor do banco é sempre o da
-  // versão sem carimbo. Isso não pode entrar sozinho no total da coleção.
-  const stamped = identity.distribution === 'stamped';
+  // versão sem carimbo. Qualquer carimbo (1ª edição, staff, liga, campeonato…)
+  // não pode entrar sozinho no total da coleção.
+  const stamped = Boolean(identity.distribution) && identity.distribution !== 'unstamped';
 
   const reasons = [];
   if (conditionEstimated) {
@@ -2347,9 +2561,9 @@ function saveCardVariant(cardId, variantId) {
   const quantity = Math.max(0, Math.trunc(Number(document.getElementById('regQuantity')?.value) || 0));
   const nextPricingVariant = exactSourceEnum(document.getElementById('regPricingVariant')?.value) || 'normal';
   const nextFinish = document.getElementById('regFinish')?.value || 'normal';
-  const nextEdition = document.getElementById('regEdition')?.value || 'unlimited';
-  const nextDistribution = document.getElementById('regDistribution')?.value || 'unstamped';
-  const nextArtVariant = document.getElementById('regArtVariant')?.value || 'standard';
+  const nextEdition = resolverCampoCurado('regEdition', 'unlimited');
+  const nextDistribution = resolverCampoCurado('regDistribution', 'unstamped', 'regDistributionOther');
+  const nextArtVariant = resolverCampoCurado('regArtVariant', 'standard');
   const nextRegion = document.getElementById('regRegion')?.value || 'Brasil';
   const nextGradingCompany = document.getElementById('regGradingCompany')?.value || 'Não graduada';
   const keepAutomatic = previous && exactSourceEnum(previous.pricingVariant) === nextPricingVariant
@@ -3241,6 +3455,31 @@ function variantDisplayImage(card, variant) {
   return upgradeCardImageUrl(variant?.imageUrl || card?.imageUrl || '');
 }
 
+/* Rebaixa high.webp → low.webp em URLs do TCGdex (o inverso de
+   upgradeCardImageUrl). A grade não precisa de resolução cheia. */
+function rebaixarParaMiniatura(value) {
+  const source = String(value || '').trim();
+  if (!source || !/assets\.tcgdex\.net/i.test(source)) return source;
+  return source
+    .replace(/\/high\.webp(\?.*)?$/i, '/low.webp$1')
+    .replace(/\/high\.png(\?.*)?$/i, '/low.png$1');
+}
+
+/* Arte para a GRADE (miniaturas de ~80 px). Diferente do detalhe:
+   1. usa a URL que já funcionou numa sessão anterior — evita refazer a cascata
+      de fallback (com requisições que dão 404) toda vez que o app abre;
+   2. sempre em low.webp: baixar arte em resolução cheia para uma miniatura é o
+      que faz a lista demorar a "encontrar" as imagens. */
+function cardGridImage(card, variant) {
+  const salva = String(variant?.imageUrl || '').trim();
+  if (salva) return rebaixarParaMiniatura(salva);
+  try {
+    const cache = window.FicharioImageFallback?.cachedUrl?.(card?.id);
+    if (cache) return rebaixarParaMiniatura(cache);
+  } catch (_) {}
+  return rebaixarParaMiniatura(String(card?.imageUrl || card?.image || '').trim()) || null;
+}
+
 function tcgDexBasesForLanguage(language) {
   const key = marketLanguageKey(language);
   return ({
@@ -3321,6 +3560,13 @@ function handleRegistrationVariantChange(cardId, origem = '') {
 function sincronizarVarianteExata(card) {
   const campo = document.getElementById('regPricingVariant');
   if (!campo) return;
+  // Acabamento especial escolhido à mão (Poké Bola, Cosmos, Gold…): a variante
+  // exata é essa e ponto — não deixamos a dedução automática trocá-la ao mexer
+  // em carimbo, edição ou idioma.
+  if (document.getElementById('regManualVariationOverride')?.value === '1') {
+    atualizarResumoVariante(card);
+    return;
+  }
   const escolhido = derivePricingVariant(card, {
     finish: document.getElementById('regFinish')?.value,
     edition: document.getElementById('regEdition')?.value,
@@ -4506,7 +4752,7 @@ function sobrasParaTrocar() {
 
 function renderLinhaDeSobra(item) {
   const { card, variant } = item;
-  const arte = variantDisplayImage(card, variant);
+  const arte = cardGridImage(card, variant);
   const estilo = variantEstilo(variant.pricingVariant);
   return `<article class="card-row vision-card-tile sobra-linha" data-card-id="${esc(card.id)}" onclick="openCard('${esc(card.id)}','${esc(variant.id || '')}')">
     <div class="card-art">${arte
@@ -5497,33 +5743,6 @@ function loadScannerVariantAvailability(card) {
   return loadCardVariantAvailability(card);
 }
 
-function scannerFinishOptionsHtml(card) {
-  const availability = cardVariationProfile(card);
-  let available = CARD_FINISH_DEFINITIONS.filter(([, value]) => availability.finishes.some(item => finishKind(item) === finishKind(value)));
-  if (!available.length) available = [CARD_FINISH_DEFINITIONS[0]];
-  if (!available.some(([, value]) => finishKind(value) === finishKind(scannerSession.finish))) scannerSession.finish = available[0][1];
-  const buttons = available.map(([, value, label, description]) => scannerFinishOption(value, label, description)).join('');
-  const status = availability.loading || availability.marketLoading ? '<small class="scanner-variation-loading">Consultando as versões específicas desta carta…</small>'
-    : availability.unavailable ? '<small class="scanner-variation-loading">Fonte remota indisponível; exibindo somente o que já está confirmado no catálogo local.</small>'
-      : `<small class="scanner-variation-loading">${available.length} acabamento(s) confirmado(s) para esta carta.</small>`;
-  return `${buttons}${status}`;
-}
-
-function scannerContextualIdentityHtml(card) {
-  const availability = cardVariationProfile(card);
-  const fields = [];
-  const exactVariants = pricingVariantDetailsForCard(card, scannerSession.language);
-  if (exactVariants.length && !exactVariants.some(item => item.value === scannerSession.pricingVariant)) {
-    scannerSession.pricingVariant = exactVariants[0].value;
-  }
-  if (exactVariants.length) {
-    fields.push(`<label>Versão da carta<select class="field" onchange="selectScannerPricingVariant(this.value)">${exactVariants.map(item => option(item.value,friendlyVariantLabel(item.value),scannerSession.pricingVariant)).join('')}</select><small>${exactVariants.filter(item => item.priced).length} de ${exactVariants.length} com preço disponível.</small></label>`);
-  }
-  if (availability.editions.length > 1 || availability.editions[0] !== 'unlimited') fields.push(`<label>Edição<select class="field" onchange="scannerSession.edition=this.value;scannerSession.manualVariationOverride=false">${uniqueValues(availability.editions, [scannerSession.edition]).map(value => option(value,value,scannerSession.edition)).join('')}</select></label>`);
-  if (availability.distributions.length > 1 || availability.distributions[0] !== 'unstamped') fields.push(`<label>Distribuição<select class="field" onchange="scannerSession.distribution=this.value;scannerSession.manualVariationOverride=false">${uniqueValues(availability.distributions, [scannerSession.distribution]).map(value => option(value,value,scannerSession.distribution)).join('')}</select></label>`);
-  return fields.join('');
-}
-
 function selectScannerPricingVariant(value) {
   scannerSession.pricingVariant = exactSourceEnum(value) || 'normal';
   scannerSession.manualVariationOverride = false;
@@ -5578,7 +5797,7 @@ function telaCameraAoVivo() {
   const total = totalLeituras();
   const tiras = pendentes.slice(0, 12).map(linha => {
     const card = cardMap.get(linha.cardId);
-    const arte = card?.imageUrl ? upgradeCardImageUrl(card.imageUrl) : '';
+    const arte = card ? cardGridImage(card, null) : '';
     return `<div class="leitura-tira">
       ${arte ? `<img src="${esc(arte)}" alt="${esc(card.name)}" loading="lazy">` : `<span class="leitura-tira-vazia">TCG</span>`}
       ${linha.quantity > 1 ? `<b class="leitura-tira-qtd">${linha.quantity}x</b>` : ''}
@@ -6525,7 +6744,7 @@ function renderCardRow(card) {
   const quantity = quantityFor(card.id);
   const cardVariants = variantsFor(card.id);
   const displayVariant = cardVariants.find(item => item.imageUrl) || cardVariants[0];
-  const displayImage = variantDisplayImage(card, displayVariant);
+  const displayImage = cardGridImage(card, displayVariant);
   const priceBadge = priceBadgeForCard(card.id);
   // A etiqueta única de acabamento saiu: as etiquetas de versão embaixo da
   // arte dizem a mesma coisa e ainda mostram o que falta.
@@ -6779,7 +6998,7 @@ function openCard(cardId, variantId = undefined) {
         <div><strong>Na coleção</strong><span>Somente as versões cadastradas para esta carta.</span></div>
         <button class="mini-btn" onclick="openCard('${esc(card.id)}', null)">Adicionar</button>
       </div>
-      ${variants.length ? `<div class="owned-variant-list">${variants.map(item => `<button class="owned-variant-row ${item.id === existingId ? 'active' : ''}" data-owned-finish="${esc(item.finish)}" data-owned-pricing-variant="${esc(item.pricingVariant || '')}" onclick="openCard('${esc(card.id)}','${esc(item.id)}')"><span><strong>${esc(item.pricingVariant || finishPriceLabel(finishKind(item.finish)))}</strong><small>${esc(languageCode(item.language))} · ${esc(item.condition || 'Near Mint')}</small><small class="owned-variant-warning" hidden></small></span><b>${money(effectiveVariantPrice(card.id,item)?.brl)}</b><em>x${Number(item.quantity)||0}</em></button>`).join('')}</div>` : '<div class="notice compact">Nenhuma versão cadastrada. Toque em Adicionar para começar.</div>'}
+      ${variants.length ? `<div class="owned-variant-list">${variants.map(item => `<button class="owned-variant-row ${item.id === existingId ? 'active' : ''}" data-owned-finish="${esc(item.finish)}" data-owned-pricing-variant="${esc(item.pricingVariant || '')}" onclick="openCard('${esc(card.id)}','${esc(item.id)}')"><span><strong>${esc(rotuloDaVariante(item))}</strong><small>${esc(languageCode(item.language))} · ${esc(item.condition || 'Near Mint')}</small><small class="owned-variant-warning" hidden></small></span><b>${money(effectiveVariantPrice(card.id,item)?.brl)}</b><em>x${Number(item.quantity)||0}</em></button>`).join('')}</div>` : '<div class="notice compact">Nenhuma versão cadastrada. Toque em Adicionar para começar.</div>'}
     </section>
 
     <!-- Tocar numa versão já cadastrada abre o editor dela direto: era um
@@ -6807,15 +7026,20 @@ function openCard(cardId, variantId = undefined) {
       </div>
 
       <details class="registration-group">
-        <summary>Mostrar detalhes da impressão <span id="regVarianteResumo" class="registration-group-hint">${esc(friendlyVariantLabel(draft.pricingVariant))}</span></summary>
+        <summary>Impressão, carimbo e acabamento especial <span id="regVarianteResumo" class="registration-group-hint">${esc(friendlyVariantLabel(draft.pricingVariant))}</span></summary>
+        <p class="registration-group-nota">Estas versões não têm preço de fonte — entram na coleção com valor manual. O scanner não pergunta nada disto.</p>
         <div class="registration-grid two-columns">
-        ${registrationField('Edição', `<select id="regEdition" class="field" onchange="handleRegistrationVariantChange('${esc(card.id)}')">${optionListForCard(card,'editions',draft.edition,Boolean(selected?.manualVariationOverride))}</select>`)}
-        ${registrationField('Carimbo', `<select id="regDistribution" class="field" onchange="handleRegistrationVariantChange('${esc(card.id)}')">${optionListForCard(card,'distributions',draft.distribution,Boolean(selected?.manualVariationOverride))}</select>`)}
-        <input type="hidden" id="regArtVariant" value="standard">
+        ${registrationField('Carimbo', `<select id="regDistribution" class="field" onchange="handleRegistrationVariantChange('${esc(card.id)}')">${optionListForCard(card,'distributions',draft.distribution)}</select>`)}
+        ${registrationField('Carimbo (outro)', `<input id="regDistributionOther" class="field" list="tcgdexStampsList" autocomplete="off" placeholder="digite se não estiver na lista" value="${esc(carimboForaDaLista(draft.distribution) ? draft.distribution : '')}" onchange="handleRegistrationVariantChange('${esc(card.id)}')">`)}
+        ${registrationField('Edição', `<select id="regEdition" class="field" onchange="handleRegistrationVariantChange('${esc(card.id)}')">${optionListForCard(card,'editions',draft.edition)}</select>`)}
+        ${registrationField('Acabamento especial', `<select id="regSpecialFoil" class="field" onchange="aplicarAcabamentoEspecial('${esc(card.id)}',this.value)">${SPECIAL_FOIL_OPTIONS.map(([v,l]) => option(v,l,acabamentoEspecialAtual(draft))).join('')}</select>`)}
+        ${registrationField('Acabamento especial (outro)', `<input id="regSpecialFoilOther" class="field" autocomplete="off" placeholder="ex.: love-ball, dusk-ball" value="${esc(acabamentoEspecialAtual(draft) === 'other-foil' ? String(draft.pricingVariant || '') : '')}" onchange="aplicarAcabamentoEspecial('${esc(card.id)}','other-foil')">`)}
+        ${registrationField('Arte', `<select id="regArtVariant" class="field" onchange="handleRegistrationVariantChange('${esc(card.id)}')">${optionListForCard(card,'artVariants',draft.artVariant)}</select>`)}
         ${registrationField('Região', `<select id="regRegion" class="field" onchange="handleRegistrationVariantChange('${esc(card.id)}')">${['Brasil','Estados Unidos','Europa','Japão','Coreia','China','Outra região'].map(value => option(value,value,draft.region)).join('')}</select>`)}
         ${registrationField('Guardada em', `<select id="regStorage" class="field">${['fichario','caixa','deck','troca','venda'].map(value => option(value,value,draft.storageLocation)).join('')}</select>`)}
         </div>
       </details>
+      <datalist id="tcgdexStampsList">${ALL_TCGDEX_STAMPS.map(s => `<option value="${esc(s)}">${esc(humanizarCarimbo(s))}</option>`).join('')}</datalist>
 
       <details class="registration-group">
         <summary>Carta graduada e observações <span class="registration-group-hint">${esc(draft.gradingCompany && draft.gradingCompany !== 'Não graduada' ? draft.gradingCompany : 'opcional')}</span></summary>
@@ -6837,17 +7061,6 @@ function openCard(cardId, variantId = undefined) {
             ? `Esta carta não representa um Pokémon — ela é ${esc(categoriaDaCarta(card).rotulo)}. Não precisa vincular; só use a busca se quiser ligá-la a um Pokémon mesmo assim.`
             : 'A carta não foi reconhecida automaticamente. Digite o nome ou número e toque no resultado.')}</small><small id="regPokemonError" class="field-validation-error hidden">Esta escolha é obrigatória para cadastrar a carta.</small>`, 'span-2')}
       </div>
-
-      <details class="manual-variation-override">
-        <summary>Selecionar nomenclatura do TCGdex</summary>
-        <p>Os valores abaixo são os mesmos usados pelo TCGdex e pelo Price Database.</p>
-        <div class="registration-grid two-columns">
-          ${registrationField('Acabamento manual', `<select class="field" onchange="applyManualCardVariation('regFinish',this.value,'${esc(card.id)}')"><option value="">Selecione…</option>${PRICE_FINISHES.map(value => option(value,finishPriceLabel(value),'')).join('')}</select>`)}
-          ${registrationField('Edição manual', `<select class="field" onchange="applyManualCardVariation('regEdition',this.value,'${esc(card.id)}')"><option value="">Selecione…</option>${PRICE_PRINT_VARIATIONS.map(value => option(value,value,'')).join('')}</select>`)}
-          ${registrationField('Distribuição manual', `<select class="field" onchange="applyManualCardVariation('regDistribution',this.value,'${esc(card.id)}')"><option value="">Selecione…</option>${PRICE_STAMPS.map(value => option(value,value,'')).join('')}</select>`)}
-
-        </div>
-      </details>
 
       <div class="toggle-grid">
         ${registrationToggle('regWishlist','Wishlist',draft.isWishlist)}
@@ -6872,18 +7085,6 @@ function openCard(cardId, variantId = undefined) {
   refreshCardSpecificVariationFields(card);
   loadCardVariantAvailability(card);
   ensureCardPriceLoaded(card.id, draft);
-}
-
-function applyManualCardVariation(targetId, value, cardId) {
-  if (!value) return;
-  const target = document.getElementById(targetId);
-  if (!target) return;
-  if (![...target.options].some(item => item.value === value)) target.add(new Option(targetId === 'regFinish' ? finishPriceLabel(finishKind(value)) : value, value));
-  target.value = value;
-  target.dataset.manualOverride = '1';
-  const marker = document.getElementById('regManualVariationOverride');
-  if (marker) marker.value = '1';
-  handleRegistrationVariantChange(cardId);
 }
 
 function changeRegistrationQuantity(delta) {

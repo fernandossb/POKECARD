@@ -1,3 +1,12 @@
+# POKECARD Brasil 5.43.0 — Todas as variações e arte mais rápida
+
+- Cadastro manual da carta agora cobre qualquer variação: carimbo (1ª Edição, Staff, Juiz, Liga Poké/Ultra/Master Bola, Regional/Nacional/Internacional, Mundial, Vencedor, Campeão, Pokémon Center, Professor, aniversários…), acabamento especial (Poké Bola, Master Ball, Great/Ultra Ball, Cosmos, Cracked Ice, Tinsel, Mirror, Gold, Rainbow) e arte (alt art, full art, Trainer Gallery, jumbo, erro de impressão). Vocabulário do TCGdex.
+- O campo "Carimbo (outro)" tem autocomplete com mais de 90 carimbos de evento e assinatura — dá para registrar qualquer um.
+- O scanner continua igual: só Comum, Holográfica e Reverse Holo. As variações raras ficam no cadastro da carta, sem atrasar a leitura em lote.
+- Variações sem preço de fonte (carimbo, Poké Bola, etc.) entram na coleção com valor manual e não contam no total automático.
+- A grade de cartas usa a arte já resolvida na sessão anterior e em miniatura — as imagens param de "sumir e reaparecer" a cada abertura.
+- Menos consultas ao armazenamento na primeira tela: abre mais rápido.
+
 # POKECARD Brasil 5.42.0 — Coleção mais protegida e app mais enxuto
 
 - Se o aparelho recusar salvar a coleção (armazenamento cheio, por exemplo), o app agora avisa na hora, mostra uma faixa fixa no painel e grava um backup de emergência na pasta Download — antes a falha era silenciosa.
