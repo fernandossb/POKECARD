@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.45.0 — Época coerente no deck temático
+
+- Deck temático agora só usa cartas de 2016 em diante, e a carta mais nova e a mais velha do baralho não ficam a mais de 3 anos de distância — a janela escolhida é a que cobre mais estágios da linha evolutiva com Treinadores e Energia suficientes, não simplesmente a mais recente.
+- A explicação do deck ("Como jogar") agora mostra o intervalo de anos das cartas usadas.
+- Corrige reconhecimento de tipo de Energia pelo nome: cartas como "Energia Lightning Básica" (nome em inglês) não apareciam mais em "Energia por tipo" — agora usam o mesmo reconhecimento do montador de deck.
+
 # POKECARD Brasil 5.44.0 — Deck temático e Pokédex de decks
 
 - Nova opção "Criar deck temático" na aba Decks: escolha qualquer um dos 1.025 Pokémon e o app monta um baralho de 60 cartas com ele e toda a linha evolutiva como atacantes principais, completado com Pokémon do mesmo tipo, Treinadores e Energia.

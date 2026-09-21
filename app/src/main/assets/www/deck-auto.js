@@ -1,5 +1,10 @@
 (function () {
-  const RULES_VERSION = '2026.07.29';
+  const RULES_VERSION = '2026.09.21';
+  // Regra de época dos decks temáticos: nada anterior a 2016, e a carta mais
+  // nova e a mais velha do baralho não podem ficar a mais de 3 anos de
+  // distância — evita misturar impressão vintage com impressão recente.
+  const THEME_MIN_YEAR = 2016;
+  const THEME_MAX_SPAN = 3;
   const OBJECTIVES = {
     competitive: 'Mais competitivo possível',
     consistent: 'Alta consistência',
@@ -67,6 +72,40 @@
       for (const child of desc.get(current) || []) queue.push(child);
     }
     return family.sort((a, b) => a - b);
+  }
+  function cardYearFn() {
+    const setsById = new Map((catalog.sets || []).map(set => [set.id, set]));
+    return card => setReleaseYear(setsById.get(card?.setId) || {});
+  }
+  // Qual janela de até THEME_MAX_SPAN anos cobre mais estágios da linha
+  // evolutiva com pelo menos uma carta disponível (já filtrada por
+  // THEME_MIN_YEAR). Famílias com muitos tipos diferentes (Eevee) costumam
+  // empatar em cobertura em QUALQUER janela — nesse caso o desempate vai para
+  // a janela com mais cartas no total (Treinador + Energia incluídos), não
+  // simplesmente a mais recente: uma janela recente e "cheia" de Pokémon mas
+  // pobre em Energia real do mesmo período derrubava o deck inteiro por falta
+  // de Energia, mesmo cobrindo a linha evolutiva completa.
+  function bestFamilyYearWindow(familyIds, pokemonPool, wholePool, cardYear) {
+    const yearsBySpecies = new Map();
+    for (const id of familyIds) {
+      const years = pokemonPool.filter(card => pokemonIdsForCard(card).includes(id)).map(cardYear);
+      if (years.length) yearsBySpecies.set(id, years);
+    }
+    const allYears = [...new Set([...yearsBySpecies.values()].flat())];
+    if (!allYears.length) return null;
+    let best = null;
+    for (const start of allYears) {
+      const end = start + THEME_MAX_SPAN;
+      let covered = 0;
+      for (const years of yearsBySpecies.values()) if (years.some(y => y >= start && y <= end)) covered++;
+      const total = wholePool.filter(card => { const y = cardYear(card); return y >= start && y <= end; }).length;
+      if (!best || covered > best.covered
+        || (covered === best.covered && total > best.total)
+        || (covered === best.covered && total === best.total && start > best.start)) {
+        best = { start, end, covered, total };
+      }
+    }
+    return best;
   }
   // O elemento do Pokémon escolhido (não da família inteira — Eevee é Normal
   // mesmo tendo Eeveelutions de vários tipos), na mesma escala de energia usada
@@ -411,13 +450,25 @@
     const mainPokemon = pokemonMap.get(Number(pokemonId));
     if (!mainPokemon) return null;
     const allowMissing = config.source !== 'owned';
-    const pool = candidatePool(config.source, config.format);
+    const cardYear = cardYearFn();
+    const familyIds = evolutionFamilyIds(pokemonId);
+
+    // Piso de 2016 primeiro; a janela de THEME_MAX_SPAN anos vem depois,
+    // escolhida para cobrir o máximo possível da linha evolutiva dentro do
+    // que sobrou. As duas regras valem para o baralho inteiro — Pokémon,
+    // Treinador e Energia — não só para os atacantes principais.
+    const flooredPool = candidatePool(config.source, config.format).filter(card => cardYear(card) >= THEME_MIN_YEAR);
+    const flooredPokemon = flooredPool.filter(card => deckCardClass(card) === 'pokemon');
+    const yearWindow = bestFamilyYearWindow(familyIds, flooredPokemon, flooredPool, cardYear);
+    const pool = yearWindow
+      ? flooredPool.filter(card => { const y = cardYear(card); return y >= yearWindow.start && y <= yearWindow.end; })
+      : flooredPool;
+
     const groups = {pokemon:[], trainer:[], energy:[]};
     pool.forEach(card => groups[deckCardClass(card)].push(card));
     const chosenKind = pokemonKindForId(pokemonId);
     const scored = new Map(pool.map(card => [card.id, roleScore(card,'collection') + Math.min(4, owned(card))]));
 
-    const familyIds = evolutionFamilyIds(pokemonId);
     const familyCards = familyIds.map(id => bestCardForSpecies(groups.pokemon,id,scored)).filter(Boolean);
     if (!familyCards.length) return null;
 
@@ -450,6 +501,8 @@
 
     const ownedCount = Object.entries(target).reduce((n,[id,q])=>n+Math.min(Number(q),owned(cardMap.get(id))),0);
     const familyNames = familyCards.map(card => pokemonMap.get(pokemonIdsForCard(card)[0])?.name).filter(Boolean);
+    const usedYears = Object.keys(target).map(id => cardYear(cardMap.get(id))).filter(Number.isFinite);
+    const yearRange = usedYears.length ? (Math.min(...usedYears) === Math.max(...usedYears) ? `${Math.min(...usedYears)}` : `${Math.min(...usedYears)}–${Math.max(...usedYears)}`) : '';
     const deck = {
       id:`deck-${Date.now()}`, name:`${mainPokemon.name} · Temático`,
       cards:target, format:config.format, generationMode:config.source, objective:'collection', planejando:allowMissing,
@@ -462,7 +515,7 @@
     deck.score = report.score;
     deck.confidence = report.confidence;
     deck.status = report.valid ? 'valid' : 'invalid';
-    deck.explanation = `Deck temático de ${mainPokemon.name}: ${familyNames.join(' + ')} como atacantes principais, reforçado por Pokémon de Energia ${ENERGY_LABEL[chosenKind] || chosenKind}.`;
+    deck.explanation = `Deck temático de ${mainPokemon.name}: ${familyNames.join(' + ')} como atacantes principais, reforçado por Pokémon de Energia ${ENERGY_LABEL[chosenKind] || chosenKind}.${yearRange ? ` Cartas de ${yearRange}, dentro de uma janela de até ${THEME_MAX_SPAN} anos.` : ''}`;
     return deck;
   }
   function openAutoBuilder() {

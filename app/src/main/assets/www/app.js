@@ -7776,12 +7776,28 @@ function energiasDoDeck(deck) {
 }
 
 /** O tipo de uma carta de Energia, pelo nome — "Energia de Fogo" → Fogo. */
+// Os mesmos padrões (inglês, apelido do nome em PT, sinônimo raro) que
+// deck-auto.js já usa em `energyKinds()` para montar deck — aqui só devolvem
+// o rótulo em vez da chave interna, pra "Energia Lightning Básica" e
+// "Energia de Grama" caírem no mesmo balde que "Energia Elétrica"/"de Planta".
+const ENERGIA_POR_NOME = [
+  [/grass|grama|planta|herbal|aromatica/, 'Planta'],
+  [/fire|fogo|ardente|ignicao/, 'Fogo'],
+  [/water|agua|aqua|borrifada/, 'Água'],
+  [/lightning|raios|eletric|voltaica/, 'Elétrico'],
+  [/psychic|psiquic|misterio|horripilante/, 'Psíquico'],
+  [/fighting|luta|petrea|rochosa/, 'Lutador'],
+  [/darkness|escuridao|noturna|sombrio/, 'Sombrio'],
+  [/metal|revestida|magnetica/, 'Metálico'],
+  [/fairy|fada|encantada/, 'Fada'],
+  [/dragao|dragon/, 'Dragão'],
+  [/incolor|colorless|gemea|turbo dupla|tripla/, 'Incolor'],
+];
 function tipoDaEnergia(card) {
   const tipos = deckCardTypes(card);
   if (tipos.length) return FAMILIA_DE_ENERGIA[tipos[0]] || tipos[0];
   const nome = normalize(card?.name || '');
-  const conhecidos = [['fogo','Fogo'],['agua','Água'],['planta','Planta'],['grama','Planta'],['eletrico','Elétrico'],['psiquico','Psíquico'],['lutador','Lutador'],['sombrio','Sombrio'],['metalico','Metálico'],['fada','Fada'],['dragao','Dragão'],['incolor','Incolor']];
-  for (const [chave, tipo] of conhecidos) if (nome.includes(chave)) return tipo;
+  for (const [padrao, tipo] of ENERGIA_POR_NOME) if (padrao.test(nome)) return tipo;
   return '';
 }
 
