@@ -319,6 +319,8 @@ const ui = {
   dexLimit: 180,
   dexFormas: true,   // formas (Alola, Mega, Gigantamax…) com quadradinho próprio
   selectedPokemon: null,
+  decksView: 'mine',  // mine | dex — alterna entre "Meus decks" e a Pokédex de decks temáticos
+  deckDexQuery: '',
 };
 
 const esc = value => String(value ?? '')
@@ -7732,6 +7734,21 @@ function conflitosEntreDecks(deck) {
 /* 4. ENERGIA POR TIPO
    O resumo dizia quantas Energias havia, nunca QUAIS. Um deck com oito de
    Fogo e Pokémon de Água passa em tudo e não funciona na mesa. */
+/* O TCG não tem Energia básica própria para Venenoso, Inseto, Terrestre,
+   Pedra, Normal ou Voador — essas famílias atacam com a Energia de um tipo
+   "irmão" (Venenoso e Inseto usam Planta; Terrestre e Pedra usam Lutador;
+   Normal e Voador usam Incolor). Sem agrupar os dois lados por essa família,
+   um Pokémon Venenoso nunca "encontra" a Energia de Planta que já o alimenta
+   de verdade — a comparação fica sempre em tipos diferentes. */
+const FAMILIA_DE_ENERGIA = {
+  Planta:'Planta', Venenoso:'Planta', Inseto:'Planta',
+  Fogo:'Fogo', Água:'Água', Gelo:'Água',
+  Elétrico:'Elétrico', Psíquico:'Psíquico', Fantasma:'Psíquico',
+  Lutador:'Lutador', Terrestre:'Lutador', Pedra:'Lutador',
+  Sombrio:'Sombrio', Metálico:'Metálico', Fada:'Fada',
+  Normal:'Incolor', Voador:'Incolor', Dragão:'Dragão',
+};
+
 function energiasDoDeck(deck) {
   const porTipo = new Map();
   let basicasSemTipo = 0;
@@ -7748,7 +7765,10 @@ function energiasDoDeck(deck) {
     const card = cardMap.get(cardId);
     const qtd = Math.max(0, Number(qtdRaw) || 0);
     if (!card || !qtd || deckCardClass(card) !== 'pokemon') continue;
-    for (const tipo of deckCardTypes(card)) tiposDosPokemon.set(tipo, (tiposDosPokemon.get(tipo) || 0) + qtd);
+    for (const tipoBruto of deckCardTypes(card)) {
+      const tipo = FAMILIA_DE_ENERGIA[tipoBruto] || tipoBruto;
+      tiposDosPokemon.set(tipo, (tiposDosPokemon.get(tipo) || 0) + qtd);
+    }
   }
   const semEnergia = [...tiposDosPokemon.keys()].filter(tipo => !porTipo.has(tipo));
   const semPokemon = [...porTipo.keys()].filter(tipo => !tiposDosPokemon.has(tipo));
@@ -7758,10 +7778,10 @@ function energiasDoDeck(deck) {
 /** O tipo de uma carta de Energia, pelo nome — "Energia de Fogo" → Fogo. */
 function tipoDaEnergia(card) {
   const tipos = deckCardTypes(card);
-  if (tipos.length) return tipos[0];
+  if (tipos.length) return FAMILIA_DE_ENERGIA[tipos[0]] || tipos[0];
   const nome = normalize(card?.name || '');
-  const conhecidos = ['fogo','agua','planta','eletrico','psiquico','lutador','sombrio','metalico','fada','dragao','incolor'];
-  for (const tipo of conhecidos) if (nome.includes(tipo)) return tipo.charAt(0).toUpperCase() + tipo.slice(1);
+  const conhecidos = [['fogo','Fogo'],['agua','Água'],['planta','Planta'],['grama','Planta'],['eletrico','Elétrico'],['psiquico','Psíquico'],['lutador','Lutador'],['sombrio','Sombrio'],['metalico','Metálico'],['fada','Fada'],['dragao','Dragão'],['incolor','Incolor']];
+  for (const [chave, tipo] of conhecidos) if (nome.includes(chave)) return tipo;
   return '';
 }
 

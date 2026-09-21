@@ -4908,3 +4908,29 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
   font-weight:var(--peso-forte,700);font-variant-numeric:tabular-nums;
 }
 .sobra-linha{cursor:pointer;}
+
+/* ---------- v5.44 — deck temático e Pokédex de decks ---------- */
+.decks-view-toggle{
+  display:grid;grid-template-columns:1fr 1fr;gap:var(--esp-2,8px);
+  margin:var(--esp-3,12px) 0;
+}
+.decks-view-toggle button{
+  min-height:var(--toque-min,44px);padding:0 var(--esp-3,12px);
+  border-radius:var(--raio-md,10px);
+  border:1px solid var(--borda-suave,rgba(255,255,255,.18));
+  background:none;color:inherit;cursor:pointer;
+  font-size:var(--fs-sm,13px);font-weight:var(--peso-forte,700);
+}
+.decks-view-toggle button.ativo{
+  border-color:var(--acento,#7fd1ff);
+  background:color-mix(in srgb, var(--acento,#7fd1ff) 16%, transparent);
+}
+.theme-deck-hero{
+  background:linear-gradient(135deg,#0d6e4f,#0d2521 58%,#3ddc97);
+  box-shadow:0 10px 24px rgba(13,37,33,.28);
+}
+.pokemon-owned-count.progresso{
+  background:var(--aviso,#c98a12);
+  font-size:10px;min-width:auto;padding:0 6px;
+}
+.theme-picker-grid{max-height:60vh;overflow:auto;}

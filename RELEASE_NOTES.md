@@ -1,3 +1,10 @@
+# POKECARD Brasil 5.44.0 — Deck temático e Pokédex de decks
+
+- Nova opção "Criar deck temático" na aba Decks: escolha qualquer um dos 1.025 Pokémon e o app monta um baralho de 60 cartas com ele e toda a linha evolutiva como atacantes principais, completado com Pokémon do mesmo tipo, Treinadores e Energia.
+- Nova visão "Pokédex de decks" dentro da aba Decks: uma grade nos moldes da Pokédex, um quadradinho por Pokémon, para acompanhar para quais deles você já tem um deck temático — completo ou ainda em andamento.
+- O status de cada deck temático é recalculado a partir da coleção atual: o quadradinho vira completo assim que a última carta que faltava é cadastrada.
+- Montador automático geral preservado, com o mesmo motor de regras agora compartilhado entre as duas formas de montar deck.
+
 # POKECARD Brasil 5.43.0 — Todas as variações e arte mais rápida
 
 - Cadastro manual da carta agora cobre qualquer variação: carimbo (1ª Edição, Staff, Juiz, Liga Poké/Ultra/Master Bola, Regional/Nacional/Internacional, Mundial, Vencedor, Campeão, Pokémon Center, Professor, aniversários…), acabamento especial (Poké Bola, Master Ball, Great/Ultra Ball, Cosmos, Cracked Ice, Tinsel, Mirror, Gold, Rainbow) e arte (alt art, full art, Trainer Gallery, jumbo, erro de impressão). Vocabulário do TCGdex.
