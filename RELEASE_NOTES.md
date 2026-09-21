@@ -1,3 +1,11 @@
+# POKECARD Brasil 5.48.0 — Pokébola de verdade, carta em tamanho real e correções
+
+- O botão do scanner agora usa uma pokébola de verdade em vez do ícone genérico.
+- O cadastro de carta mostra só uma miniatura da arte, com um botão de olho 👁 ao lado: tocando nele, a carta abre em um modal separado no tamanho real de uma carta TCG (63 × 88 mm). Ganha espaço no formulário e ainda dá para ver a arte grande quando precisar.
+- Corrigido: no filtro "Trocar/Vender" da Coleção, as cartas apareciam distorcidas e "fugindo" do quadro — a linha dessa lista usava uma estrutura HTML antiga, incompatível com a grade atual.
+- Menu "Mais opções" perdeu os atalhos duplicados: Decks (já é aba fixa), Pokédex (já tem atalho no Início) e Backup (já é o botão "PB" do cabeçalho) saíram por já estarem sempre a um toque de distância por outro caminho.
+- Continuação da repaginada visual: cartões de Explorar, chips de filtro ativos, decks válidos e modais em geral ganham o mesmo arredondamento e brilho do tema que a tela de Início já tinha.
+
 # POKECARD Brasil 5.47.0 — Mais contraste e cor por tema
 
 - Aumentado o contraste entre fundo e cartões em todos os 18 temas por tipo — cada camada de cartão agora se destaca visivelmente do fundo, não só uma leve variação de tom.

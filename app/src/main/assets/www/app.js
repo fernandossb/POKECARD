@@ -2692,7 +2692,7 @@ function renderTabs() {
     </button>
   `).join('') + `
     <button class="tab scanner-tab" onclick="openScannerSetup()" aria-label="Escanear carta">
-      <span class="tab-icon">${tabIcon('cards')}</span><span class="tab-label">Scanner</span>
+      <img class="tab-icon scanner-pokebola" src="pokebola-scanner.webp" alt="">
     </button>` + primary.slice(2).map(([value, label, icon]) => `
     <button class="tab ${ui.tab === value ? 'active' : ''}" onclick="setTab('${value}')" aria-label="${label}">
       <span class="tab-icon">${tabIcon(icon)}</span><span class="tab-label">${label}</span>
@@ -2702,18 +2702,18 @@ function renderTabs() {
     </button>`;
 }
 
+/* Só entra aqui o que NÃO tem outro caminho permanente: Decks (aba fixa),
+   Pokédex (atalho no card do Início) e Backup (botão "PB" do cabeçalho, em
+   toda tela) saíram por já estarem sempre a um toque de distância. */
 function openMoreNavigation() {
   showModal(`<button class="modal-close" onclick="closeModal()" aria-label="Fechar">×</button>
     <h2>Mais opções</h2><p class="screen-subtitle">Acesse todas as áreas do seu fichário.</p>
     <div class="quick-action-list">
-      <button onclick="closeModal();setTab('pokedex')"><span class="quick-action-icon">${tabIcon('pokedex')}</span><span><strong>Pokédex</strong><small>Acompanhe os Pokémon encontrados</small></span></button>
-      <button onclick="closeModal();setTab('decks')"><span class="quick-action-icon">${tabIcon('decks')}</span><span><strong>Decks</strong><small>Monte e organize seus decks</small></span></button>
       <button onclick="closeModal();setTab('wishlist')"><span class="quick-action-icon">${tabIcon('wishlist')}</span><span><strong>Wishlist</strong><small>Cartas que você procura</small></span></button>
       <button onclick="closeModal();setTab('repeated')"><span class="quick-action-icon">${tabIcon('repeated')}</span><span><strong>Repetidas</strong><small>Estoque para troca ou venda</small></span></button>
       <button onclick="closeModal();setTab('produtos')"><span class="quick-action-icon">${tabIcon('collections')}</span><span><strong>Produtos prontos</strong><small>Baralhos de batalha, kits e caixas</small></span></button>
       <button onclick="closeModal();abrirTrofeus()"><span class="quick-action-icon">🏆</span><span><strong>Troféus</strong><small>${(() => { const r = typeof resumoTrofeus === 'function' ? resumoTrofeus() : null; return r ? `${r.conquistadas} de ${r.total} medalhas conquistadas` : 'Medalhas por coleção, tipo e região'; })()}</small></span></button>
       <button onclick="closeModal();abrirTemaPokemon()"><span class="quick-action-icon">${tabIcon('pokedex')}</span><span><strong>Tema do aplicativo</strong><small>${esc(window.__TEMA_ATUAL__?.nome || 'Gengar')} · deixe o app com a cara do seu favorito</small></span></button>
-      <button onclick="closeModal();openBackupPanel()"><span class="quick-action-icon">${tabIcon('collections')}</span><span><strong>Backup e ajustes</strong><small>Proteja e configure seus dados</small></span></button>
     </div>`);
 }
 
@@ -3542,7 +3542,7 @@ async function refreshRegistrationVariantImage(cardId) {
   const sourceField = document.getElementById('regVariantImageSource');
   const sourceLabel = document.getElementById('regVariantImageLabel');
   if (!frame || !image?.url) return;
-  frame.innerHTML = `<img class="registration-card-image" src="${esc(upgradeCardImageUrl(image.url))}" alt="Arte de ${esc(card?.name || '')}"><span class="variant-image-badge">${esc(finishPriceLabel(finishKind(variant.finish)))}</span>`;
+  frame.innerHTML = `<img class="registration-card-image" src="${esc(upgradeCardImageUrl(image.url))}" alt="Arte de ${esc(card?.name || '')}"><span class="variant-image-badge">${esc(finishPriceLabel(finishKind(variant.finish)))}</span><button type="button" class="card-image-eye" onclick="abrirCartaTamanhoReal(this)" aria-label="Ver carta em tamanho real">👁</button>`;
   if (urlField) urlField.value = image.url;
   if (sourceField) sourceField.value = image.source || '';
   if (sourceLabel) sourceLabel.textContent = `Imagem: ${image.source || 'catálogo público'}${image.fallback ? ' (imagem-base)' : ''}`;
@@ -4752,26 +4752,27 @@ function sobrasParaTrocar() {
     || a.card.name.localeCompare(b.card.name, 'pt-BR'));
 }
 
+/* Mesma estrutura de renderCardRow (.vision-card-art + .card-main) — antes
+   esta linha usava classes antigas (.card-art/.card-info) que não existem
+   mais na grade de cartas atual, e a arte crescia sem moldura nem recorte
+   dentro da grade: "fugia do quadro" e distorcia o card ao lado. */
 function renderLinhaDeSobra(item) {
   const { card, variant } = item;
   const arte = cardGridImage(card, variant);
   const estilo = variantEstilo(variant.pricingVariant);
-  return `<article class="card-row vision-card-tile sobra-linha" data-card-id="${esc(card.id)}" onclick="openCard('${esc(card.id)}','${esc(variant.id || '')}')">
-    <div class="card-art">${arte
-      ? `<img src="${esc(arte)}" alt="${esc(card.name)}" loading="lazy">`
-      : '<span class="card-placeholder">TCG</span>'}</div>
-    <div class="card-info">
-      <strong class="card-name">${esc(card.name)}</strong>
-      <span class="card-meta">${esc(card.number)} · ${esc(card.setName)}</span>
-      <span class="sobra-versao ${estilo.classe}">
-        <span class="variante-icone" aria-hidden="true">${estilo.icone}</span>
-        ${esc(friendlyVariantLabel(variant.pricingVariant))} · ${esc(languageCode(variant.language))} · ${esc(variant.condition || 'Near Mint')}
-      </span>
-      <span class="sobra-conta">
-        <b>${item.sobra}× para trocar</b>
-        <small>de ${item.tenho} · 1 fica na coleção</small>
-        ${item.valor === null ? '<small>sem preço</small>' : `<em>${esc(money(item.valor))}</em>`}
-      </span>
+  const tipo = tipoPrincipalDaCarta(card);
+  return `<article class="card-row vision-card-tile sobra-linha" data-card-id="${esc(card.id)}"${tipo ? ` data-tipo="${esc(tipo)}"` : ''} onclick="openCard('${esc(card.id)}','${esc(variant.id || '')}')">
+    <div class="vision-card-art">
+      ${arte ? `<img class="card-thumb" src="${esc(arte)}" loading="lazy" decoding="async" fetchpriority="low" alt="${esc(card.name)}" onerror="this.outerHTML='<div class=&quot;card-placeholder&quot;>TCG</div>'">` : '<div class="card-placeholder">TCG</div>'}
+      <span class="tile-quantity-badge" title="${item.sobra} para trocar/vender, de ${item.tenho} · 1 fica na coleção">${item.sobra}×</span>
+    </div>
+    <div class="card-main">
+      <div class="card-name">${esc(card.name)}</div>
+      <div class="card-meta">${esc(card.number)} · ${esc(card.setName)}</div>
+      <div class="tile-price-row">
+        <span class="sobra-versao ${estilo.classe}"><span class="variante-icone" aria-hidden="true">${estilo.icone}</span>${esc(friendlyVariantLabel(variant.pricingVariant))}</span>
+        ${item.valor === null ? '<small>sem preço</small>' : `<small>${esc(money(item.valor))}</small>`}
+      </div>
     </div>
   </article>`;
 }
@@ -6978,6 +6979,7 @@ function openCard(cardId, variantId = undefined) {
       <div class="registration-image-frame" data-fichario-card-image="${esc(card.id)}" data-registration-variant-image>
         ${draftImage ? `<img class="registration-card-image" src="${esc(draftImage)}" alt="Arte de ${esc(card.name)}">` : '<div class="registration-placeholder">TCG</div>'}
         <span class="variant-image-badge">${esc(finishPriceLabel(finishKind(draft.finish)))}</span>
+        ${draftImage ? `<button type="button" class="card-image-eye" onclick="abrirCartaTamanhoReal(this)" aria-label="Ver carta em tamanho real">👁</button>` : ''}
       </div>
       <small id="regVariantImageLabel" class="variant-image-source">Imagem: ${esc(draftImageSource)}</small>
       <input type="hidden" id="regVariantImageUrl" value="${esc(draft.imageUrl || '')}">
@@ -7087,6 +7089,22 @@ function openCard(cardId, variantId = undefined) {
   refreshCardSpecificVariationFields(card);
   loadCardVariantAvailability(card);
   ensureCardPriceLoaded(card.id, draft);
+}
+
+/* O olho do cadastro. Lê a imagem que está na tela NA HORA do toque — não uma
+   URL guardada na abertura do modal — porque trocar acabamento/idioma troca
+   o innerHTML do quadro (refreshRegistrationVariantImage) sem recarregar o
+   cadastro inteiro. Uma URL fixa mostraria a arte errada depois da troca. */
+function abrirCartaTamanhoReal(botao) {
+  const frame = botao.closest('.registration-image-frame');
+  const img = frame?.querySelector('img.registration-card-image');
+  if (!img || !img.src) return;
+  const nome = (img.alt || 'Carta').replace(/^Arte de /, '');
+  showModal(`<button class="modal-close" onclick="closeModal()">×</button>
+    <h2>${esc(nome)}</h2>
+    <p class="screen-subtitle">Tamanho real de uma carta TCG (63 × 88 mm). Pode variar um pouco conforme a calibração da tela do aparelho.</p>
+    <div class="carta-tamanho-real-wrap"><img class="carta-tamanho-real" src="${esc(img.src)}" alt="${esc(nome)}"></div>`,
+    'carta-tamanho-real-sheet');
 }
 
 function changeRegistrationQuantity(delta) {

@@ -2865,20 +2865,28 @@ body::before, body::after, .gengar-atmosphere { display: none !important; }
   font-size: 12px !important; font-weight: 700 !important;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
 }
-/* Botão de escanear: círculo em destaque, centralizado e acima da barra */
+/* Botão de escanear: círculo em destaque, centralizado e acima da barra —
+   a pokébola de verdade preenche o círculo (fundo branco, não a cor do
+   tema: o vermelho/branco dela já é a identidade do botão, tingir por trás
+   só brigava com a foto). */
 .tab.scanner-tab {
   position: absolute !important; left: 50% !important; top: -22px !important;
   transform: translateX(-50%) !important;
   flex: none !important; width: 56px !important; height: 56px !important;
   border-radius: 50% !important;
-  background: var(--vision-primary) !important;
+  background: #fff !important;
   color: var(--vision-bg) !important;
   border: 4px solid var(--vision-bg) !important;
   box-shadow: 0 4px 14px rgba(0, 0, 0, .4) !important;
   justify-content: center;
+  padding: 0 !important;
+  overflow: hidden;
 }
 .tab.scanner-tab .tab-label { display: none !important; }
-.tab.scanner-tab .tab-icon { width: 25px !important; height: 25px !important; }
+.tab.scanner-tab .tab-icon.scanner-pokebola {
+  width: 100% !important; height: 100% !important;
+  margin: 0 !important; object-fit: cover;
+}
 .tab.scanner-tab:active { transform: translateX(-50%) scale(.94) !important; }
 
 /* ---- Abas internas ---- */
@@ -4894,19 +4902,6 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
   background:rgba(255,255,255,.08);
   font-size:var(--fs-menor,12px);
 }
-.sobra-conta{
-  display:flex;align-items:baseline;gap:var(--esp-2,8px);
-  flex-wrap:wrap;margin-top:var(--esp-1,4px);
-}
-.sobra-conta b{
-  font-size:var(--fs-corpo,15px);color:var(--aviso,#c98a12);
-  font-variant-numeric:tabular-nums;
-}
-.sobra-conta small{opacity:.65;font-size:var(--fs-menor,12px);}
-.sobra-conta em{
-  font-style:normal;color:var(--ok,#3ddc97);
-  font-weight:var(--peso-forte,700);font-variant-numeric:tabular-nums;
-}
 .sobra-linha{cursor:pointer;}
 
 /* ---------- v5.44 — deck temático e Pokédex de decks ---------- */
@@ -5036,3 +5031,66 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 .investimento-card, .valor-card, .top-sets, .price-update-card{
   border-radius: 22px !important;
 }
+
+/* ---------- v5.48 — botão do scanner, olho do cadastro, ajustes de layout ---------- */
+
+/* Miniatura no cadastro em vez de carta gigante ocupando a tela toda: a arte
+   grande agora só aparece quando o usuário pede, tocando no olho. */
+.card-detail-sheet .registration-header{
+  flex-direction: row !important;
+  align-items: flex-start !important;
+  gap: 14px !important;
+}
+.card-detail-sheet .registration-image-frame{
+  width: 84px !important; margin: 0 !important; flex: none;
+  border-radius: 12px !important; box-shadow: 0 6px 16px rgba(0,0,0,.3);
+  position: relative;
+}
+.card-detail-sheet .registration-card-image{ border-radius: 12px !important; }
+.card-detail-sheet .registration-header > div:last-child{ flex: 1 1 auto; min-width: 0; }
+.card-detail-sheet .variant-image-badge{ font-size: 9px !important; padding: 2px 5px !important; }
+@media (min-width: 760px){
+  .card-detail-sheet .registration-image-frame{ width: 96px !important; }
+  .card-detail-sheet .registration-header{ display: flex !important; grid-template-columns: none !important; }
+}
+.card-image-eye{
+  position: absolute; right: -6px; bottom: -6px;
+  width: 30px; height: 30px; min-height: 0;
+  display: grid; place-items: center;
+  border-radius: 50%; border: 2px solid var(--vision-bg, #0d2521);
+  background: var(--vision-primary, #25d0b3); color: var(--vision-bg, #0d2521);
+  font-size: 14px; line-height: 1;
+  box-shadow: 0 3px 8px rgba(0,0,0,.35);
+}
+.card-image-eye:active{ transform: scale(.92); }
+
+/* Modal de tamanho real: a carta nas proporções físicas de verdade
+   (63 × 88 mm), usando unidade mm do CSS — o navegador converte pela
+   densidade de tela que o aparelho relata. min() evita estourar a largura
+   em aparelhos muito estreitos, mantendo a proporção pelo aspect-ratio. */
+.carta-tamanho-real-wrap{ display: flex; justify-content: center; margin: 22px 0 8px; }
+.carta-tamanho-real{
+  width: min(63mm, 90vw);
+  aspect-ratio: 63 / 88;
+  object-fit: cover;
+  border-radius: 3.5mm;
+  box-shadow: 0 16px 34px rgba(0,0,0,.5);
+}
+
+/* ---------- v5.48 (cont.) — o mesmo visual nas outras telas ----------
+   Em vez de redesenhar tela por tela, o passo 1 do resto do app entra pelas
+   classes compartilhadas: Explorar, Coleção, Pokédex e Decks usam .set-card,
+   .chip e .deck-cartao em várias telas, então arredondar e dar brilho aqui
+   já cobre todas elas de uma vez, com o mesmo --vision-primary-glow que já
+   muda de cor com o tema. */
+.set-card{
+  border-radius: 20px !important;
+  box-shadow: 0 10px 24px -10px var(--vision-primary-glow, rgba(37,208,179,.4)) !important;
+}
+.chip.active{
+  box-shadow: 0 0 0 1px var(--vision-primary, #25d0b3) inset, 0 4px 14px var(--vision-primary-glow, rgba(37,208,179,.35)) !important;
+}
+.deck-cartao.valido{
+  box-shadow: 0 10px 24px -10px var(--vision-primary-glow, rgba(37,208,179,.4));
+}
+.modal-sheet{ border-radius: 22px 26px 0 0 !important; }
