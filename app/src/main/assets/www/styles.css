@@ -4936,17 +4936,23 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 .theme-picker-grid{max-height:60vh;overflow:auto;}
 
 /* ---------- v5.46 — Dashboard mais divertido ----------
-   Passo 1 de uma repaginada visual: tudo aqui usa as variáveis --vision-* que
-   theme-pokemon.js já recalcula para o Pokémon favorito escolhido, então o
-   brilho e os selos abaixo mudam de cor sozinhos — nada fica preso ao roxo
-   do Gengar. */
+   Passo 1 de uma repaginada visual: tudo aqui usa as variáveis --vision-*
+   que theme-pokemon.js recalcula para o Pokémon favorito escolhido — brilho
+   e selos mudam de cor sozinhos, nada fica preso a uma paleta fixa.
+
+   Nunca usar color-mix() aqui: WebView antigo não entende a função e o
+   elemento fica sem cor nenhuma. theme-pokemon.js já expõe as variantes em
+   rgba prontas (--vision-primary-glow, --vision-flair-1/2-glow) e duas cores
+   companheiras vívidas (--vision-flair-1/2), giradas a partir do mesmo matiz
+   de destaque — um Charizard sai vermelho + laranja + amarelo, não só tons
+   de um laranja só. */
 
 /* Cartão do portfólio ganha cara de carta holo: mais redondo, sombra colorida
    e um brilho diagonal bem sutil, do jeito que uma carta brilhante reflete
    luz quando vira na mão. */
 .portfolio-card{
   border-radius: 26px !important;
-  box-shadow: 0 18px 36px -14px color-mix(in srgb, var(--vision-primary, #25d0b3) 55%, transparent);
+  box-shadow: 0 18px 36px -14px var(--vision-primary-glow, rgba(37,208,179,.55));
   position: relative;
   overflow: hidden;
 }
@@ -4954,7 +4960,7 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
   content: '';
   position: absolute; inset: -60% -20%;
   background: linear-gradient(115deg, transparent 35%,
-    color-mix(in srgb, var(--vision-primary, #25d0b3) 20%, transparent) 48%, transparent 62%);
+    var(--vision-primary-glow, rgba(37,208,179,.3)) 48%, transparent 62%);
   pointer-events: none;
   animation: pokecard-holo-sweep 6s ease-in-out infinite;
 }
@@ -4968,7 +4974,8 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 .portfolio-value strong{ font-size: 32px !important; }
 
 /* As três estatísticas da coleção viram selos redondos coloridos — medalha,
-   não célula de planilha — com uma leve resposta ao toque. */
+   não célula de planilha — cada uma com uma cor companheira diferente do
+   mesmo tema, e uma leve resposta ao toque. */
 .collection-summary-grid button{
   border-radius: 22px !important;
   transition: transform .15s ease;
@@ -4980,22 +4987,35 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
   width: 46px !important; height: 46px !important;
   padding: 11px; box-sizing: border-box;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--vision-primary, #25d0b3) 20%, transparent);
+  background: var(--vision-primary-glow, rgba(37,208,179,.2));
 }
 .collection-summary-grid button:nth-child(2) span{
-  background: color-mix(in srgb, #9b7cff 20%, transparent);
+  background: var(--vision-flair-1-glow, rgba(155,124,255,.24));
+  color: var(--vision-flair-1, #9b7cff) !important;
 }
+.collection-summary-grid button:nth-child(2) strong{ color: var(--vision-flair-1, #9b7cff) !important; }
 .collection-summary-grid button:nth-child(3) span{
-  background: color-mix(in srgb, var(--vision-accent, #ffb548) 22%, transparent);
+  background: var(--vision-flair-2-glow, rgba(255,181,72,.26));
+  color: var(--vision-flair-2, #ffb548) !important;
 }
+.collection-summary-grid button:nth-child(3) strong{ color: var(--vision-flair-2, #ffb548) !important; }
 
-/* Anel da Pokédex mais grosso e com um brilho que acompanha o tema. */
+/* Anel da Pokédex mais grosso, com um brilho que acompanha o tema e respira
+   devagar — o único elemento com uma animação contínua na tela, pra dar vida
+   sem virar bagunça visual. */
 .pokedex-progress-card{ border-radius: 24px !important; }
 .pokedex-ring{
   width: 80px !important; height: 80px !important;
-  filter: drop-shadow(0 0 9px color-mix(in srgb, var(--vision-primary, #25d0b3) 60%, transparent));
+  animation: pokedex-ring-respira 3.2s ease-in-out infinite;
 }
 .pokedex-ring::before{ width: 60px !important; height: 60px !important; }
+@keyframes pokedex-ring-respira{
+  0%, 100% { filter: drop-shadow(0 0 7px var(--vision-primary-glow, rgba(37,208,179,.5))); }
+  50% { filter: drop-shadow(0 0 13px var(--vision-primary-glow, rgba(37,208,179,.5))); }
+}
+@media (prefers-reduced-motion: reduce){
+  .pokedex-ring{ animation: none; filter: drop-shadow(0 0 9px var(--vision-primary-glow, rgba(37,208,179,.5))); }
+}
 
 /* Pódio de verdade nas coleções mais completas: ouro, prata e bronze em vez
    do mesmo círculo pra todo mundo. */

@@ -95,13 +95,18 @@
      claridade entre 35% e 60% não dá contraste bom nem com letra clara nem
      com escura — testando, o texto caía para 3,9:1 ali. Pulando essa faixa,
      o pior caso das 18 cores × 6 níveis fica em 5,1:1. */
+  // O passo (delta de luminosidade entre fundo e cada camada de cartão) subiu
+  // em relação ao original: com 5-6 pontos só, cartão e fundo ficavam quase
+  // iguais e a tela virava uma mancha só de cor. tomLegivel() recalcula o
+  // contraste do texto sozinho a partir do tom final, então aumentar o passo
+  // não quebra legibilidade — só separa mais fundo de cartão.
   var NIVEIS = [
-    { nome: 'Bem escuro', fundo: 6,  passo: 5,  sat: 44 },
-    { nome: 'Escuro',     fundo: 12, passo: 6,  sat: 40 },
-    { nome: 'Médio',      fundo: 19, passo: 6,  sat: 36 },
-    { nome: 'Suave',      fundo: 66, passo: -5, sat: 32 },
-    { nome: 'Claro',      fundo: 82, passo: -4, sat: 28 },
-    { nome: 'Bem claro',  fundo: 95, passo: -4, sat: 24 }
+    { nome: 'Bem escuro', fundo: 5,  passo: 8,  sat: 46 },
+    { nome: 'Escuro',     fundo: 10, passo: 10, sat: 42 },
+    { nome: 'Médio',      fundo: 16, passo: 10, sat: 38 },
+    { nome: 'Suave',      fundo: 68, passo: -8, sat: 34 },
+    { nome: 'Claro',      fundo: 84, passo: -6, sat: 30 },
+    { nome: 'Bem claro',  fundo: 96, passo: -5, sat: 25 }
   ];
   var NIVEL_PADRAO = 2; // parecido com o que o app já mostrava
 
@@ -140,6 +145,16 @@
       return ('0' + Math.max(0, Math.min(255, n)).toString(16)).slice(-2);
     };
     return '#' + par(r) + par(g) + par(b);
+  }
+
+  /* Cor "companheira": gira o matiz de destaque para um lado vívido e
+     saturado, sem tocar no fundo/cartões (que continuam na rampa monocromática
+     — é o que garante legibilidade). Um Charizard vermelho-alaranjado-amarelo
+     de verdade vem de girar o mesmo matiz de base pra dois lados, não de uma
+     cor fixa: funciona para os 18 tipos sem precisar de tabela nova. */
+  function tomVivido(h, deslocamento) {
+    var hh = ((h + deslocamento) % 360 + 360) % 360;
+    return hslParaHex(hh, 82, 64);
   }
 
   function nivelSalvo() {
@@ -364,6 +379,20 @@
     root.style.setProperty('--vision-muted', p.mut);
     root.style.setProperty('--vision-primary', p.pri);
     root.style.setProperty('--vision-primary-soft', p.soft);
+    // Brilho em rgba pronto, não color-mix(): WebView antigo não entende
+    // color-mix() e o elemento ficaria sem cor nenhuma (mesmo motivo do
+    // --vision-surface-soft acima).
+    root.style.setProperty('--vision-primary-glow', hexParaRgba(p.pri, 0.55));
+    // Duas cores companheiras vívidas, giradas a partir do mesmo matiz — a
+    // variedade "vermelho, laranja, amarelo" do Charizard, não um roxo e um
+    // dourado soltos que não têm nada a ver com o tema escolhido.
+    var hueBase = hexParaHsl(p.pri).h;
+    var flair1 = tomVivido(hueBase, -30);
+    var flair2 = tomVivido(hueBase, 34);
+    root.style.setProperty('--vision-flair-1', flair1);
+    root.style.setProperty('--vision-flair-2', flair2);
+    root.style.setProperty('--vision-flair-1-glow', hexParaRgba(flair1, 0.28));
+    root.style.setProperty('--vision-flair-2-glow', hexParaRgba(flair2, 0.28));
     // O brilho do mascote acompanha a cor de destaque.
     root.style.setProperty('--theme-glow', p.pri);
 

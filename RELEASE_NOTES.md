@@ -1,3 +1,10 @@
+# POKECARD Brasil 5.47.0 — Mais contraste e cor por tema
+
+- Aumentado o contraste entre fundo e cartões em todos os 18 temas por tipo — cada camada de cartão agora se destaca visivelmente do fundo, não só uma leve variação de tom.
+- Cada tema ganha duas cores "companheiras" vívidas, giradas a partir da cor de destaque escolhida: um tema de Charizard, por exemplo, passa a combinar vermelho, laranja e amarelo em vez de só tons de um laranja só. As três estatísticas da coleção no Início usam essas cores.
+- O anel da Pokédex agora respira (brilho pulsando bem devagar) para dar mais vida à tela de Início.
+- Corrige uso de `color-mix()` no CSS novo do Início, que não funciona em WebView Android mais antigo — trocado por variáveis prontas em rgba, calculadas junto com o resto da paleta do tema.
+
 # POKECARD Brasil 5.46.0 — Início mais divertido (passo 1)
 
 - Primeiro passo de uma repaginada visual, começando pela tela de Início: cartão do Portfólio com cantos mais redondos, número maior e um brilho holográfico sutil que se move devagar, como o de uma carta especial.
