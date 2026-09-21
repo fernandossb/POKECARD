@@ -4820,8 +4820,10 @@ function renderCards() {
            repetia os filtros logo abaixo e a segunda repetia os botões
            Explorar e Coleção da barra de baixo. -->
 
+      ${ui.tab === 'wishlist' ? renderFaltamParaDecks() : ''}
       ${selectedSet ? `<div class="selected-set-banner"><span>${esc(selectedSet.name)}</span><button onclick="ui.cardSet='all';render()">Limpar</button></div>` : ''}
       <div class="toolbar collection-toolbar">
+        ${ui.tab === 'wishlist' ? '<h3 class="section-title">Marcadas manualmente</h3><p class="screen-subtitle">Cartas que você quer, mesmo sem estarem em nenhum deck ainda.</p>' : ''}
         <label class="vision-search"><span>${tabIcon('pokedex')}</span><input id="cardSearchInput" value="${esc(ui.cardQuery)}" placeholder="Buscar cartas..."
           oncompositionstart="this.dataset.composing='1'"
           oncompositionend="this.dataset.composing='';searchAndRender('cardQuery', this.value, 'cardSearchInput')"
@@ -4839,6 +4841,32 @@ function renderCards() {
       </div>
       <div id="cardSearchResults">${renderCardSearchResults()}</div>
     </section>`;
+}
+
+/* A Wishlist agora abre com o espelho dos decks: o que falta comprar somando
+   a demanda de todos eles, não uma lista marcada carta por carta. A marcação
+   manual ("Wishlist" no cadastro) continua funcionando embaixo, para cartas
+   que você quer sem estarem em deck nenhum ainda. */
+function renderFaltamParaDecks() {
+  const totalDecks = (state.decks || []).length;
+  if (!totalDecks) {
+    return `<section class="deck-shortage-panel investimento-card"><h3 class="section-title">Faltam para seus decks</h3>
+      <div class="empty"><strong>Nenhum deck criado</strong>Monte um deck na aba Decks para a Wishlist mostrar o que falta comprar.</div></section>`;
+  }
+  const lista = cardsFaltandoParaDecks();
+  if (!lista.length) {
+    return `<section class="deck-shortage-panel investimento-card"><h3 class="section-title">Faltam para seus decks</h3>
+      <div class="empty"><strong>Nada faltando</strong>Seus decks já têm todas as cartas que pedem.</div></section>`;
+  }
+  const valorTotal = lista.reduce((soma, item) => soma + (item.preco !== null ? item.preco * item.falta : 0), 0);
+  return `<section class="deck-shortage-panel investimento-card">
+    <h3 class="section-title">Faltam para seus decks</h3>
+    <p class="screen-subtitle">${lista.length} ${lista.length === 1 ? 'carta falta' : 'cartas faltam'} somando todos os seus decks${valorTotal > 0 ? ` · ${esc(money(valorTotal))}` : ''}.</p>
+    <ol class="deck-compras">${lista.map(item => `<li onclick="openCard('${esc(item.cardId)}')">
+      <span>${item.falta}× ${esc(item.card.name)}<small>${esc(item.card.setName)} ${esc(item.card.number)} · ${esc(item.decks.map(d => d.nome).join(', '))}</small></span>
+      <b>${item.preco === null ? '—' : esc(money(item.preco * item.falta))}</b>
+    </li>`).join('')}</ol>
+  </section>`;
 }
 
 function filterChips() {
@@ -7734,6 +7762,38 @@ function custoDoDeck(deck) {
   }
   comprar.sort((a, b) => (b.preco || 0) * b.falta - (a.preco || 0) * a.falta);
   return { valorTotal, semPreco, faltamCartas, custoDoQueFalta, comprar };
+}
+
+/* A Wishlist como espelho dos decks: soma quanto CADA carta é pedida em TODOS
+   os decks (real ou planejamento — os dois representam demanda de verdade,
+   só o planejamento é que pode dividir a mesma carta com outro deck) e
+   desconta o que você já tem. Diferente de somar o "falta" de cada deck
+   separado: dois decks pedindo 2 cópias cada da mesma carta, com 3 na
+   coleção, faltam 1 no total — não 0, que é o que sairia somando as contas
+   de cada deck isoladas (2-3=0 duas vezes). */
+function cardsFaltandoParaDecks() {
+  const demanda = new Map();
+  for (const deck of state.decks || []) {
+    for (const [cardId, qtdRaw] of Object.entries(deck.cards || {})) {
+      const qtd = Math.max(0, Number(qtdRaw) || 0);
+      if (!qtd) continue;
+      if (!demanda.has(cardId)) demanda.set(cardId, { total: 0, decks: [] });
+      const item = demanda.get(cardId);
+      item.total += qtd;
+      item.decks.push({ id: deck.id, nome: deck.name, qtd });
+    }
+  }
+  const faltando = [];
+  for (const [cardId, info] of demanda) {
+    const card = cardMap.get(cardId);
+    if (!card) continue;
+    const tenho = quantityFor(cardId);
+    const falta = Math.max(0, info.total - tenho);
+    if (falta <= 0) continue;
+    const preco = precoDeUmaCarta(cardId);
+    faltando.push({ cardId, card, falta, total: info.total, tenho, decks: info.decks, preco });
+  }
+  return faltando.sort((a, b) => (b.preco || 0) * b.falta - (a.preco || 0) * a.falta || a.card.name.localeCompare(b.card.name, 'pt-BR'));
 }
 
 /* 3. A MESMA CARTA FÍSICA EM DOIS DECKS

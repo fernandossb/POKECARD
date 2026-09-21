@@ -1,3 +1,8 @@
+# POKECARD Brasil 5.50.0 — Wishlist é o espelho dos seus decks
+
+- A aba Wishlist agora abre com "Faltam para seus decks": soma quanto cada carta é pedida em todos os seus decks (reais e em planejamento) e desconta o que você já tem, mostrando exatamente o que falta comprar — com preço, coleção/número e quais decks pedem cada carta. Quando duas decks pedem a mesma carta, a conta soma a demanda certo (2+2 com 2 na coleção falta 2, não 0 e 0 separados).
+- A marcação manual de "Wishlist" no cadastro continua funcionando, agora como uma segunda lista "Marcadas manualmente" logo abaixo — para cartas que você quer mesmo sem elas estarem em nenhum deck ainda.
+
 # POKECARD Brasil 5.49.0 — Uma carta não entra em dois decks
 
 - Agora não dá mais para colocar a mesma cópia física de uma carta em dois decks reais ao mesmo tempo: o "+" no editor e o buscador de cartas descontam o que já está reservado em outros decks, não só o total que você possui. Antes só havia um aviso depois de já ter feito isso; agora a ação é bloqueada na hora, com um aviso explicando o motivo.
