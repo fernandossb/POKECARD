@@ -34,6 +34,82 @@
     }
     return chain;
   }
+  let descendantsCache = null;
+  function descendantsMap() {
+    if (descendantsCache) return descendantsCache;
+    descendantsCache = new Map();
+    const evolvesFrom = window.__POKEMON_EVOLVES_FROM__ || {};
+    for (const childKey of Object.keys(evolvesFrom)) {
+      const parentId = Number(evolvesFrom[childKey]);
+      if (!descendantsCache.has(parentId)) descendantsCache.set(parentId, []);
+      descendantsCache.get(parentId).push(Number(childKey));
+    }
+    return descendantsCache;
+  }
+  // A linha evolutiva INTEIRA de um Pokémon — subindo até a base e descendo por
+  // todos os ramos — não importa qual estágio foi escolhido. Bulbasaur, Ivysaur
+  // ou Venusaur levam sempre aos três; Eevee leva a todas as Eeveelutions.
+  function evolutionFamilyIds(speciesId) {
+    let root = Number(speciesId) || 0;
+    if (!root) return [];
+    const evolvesFrom = window.__POKEMON_EVOLVES_FROM__ || {};
+    const seenUp = new Set();
+    while (evolvesFrom[root] && !seenUp.has(root)) { seenUp.add(root); root = Number(evolvesFrom[root]); }
+    const desc = descendantsMap();
+    const family = [];
+    const seen = new Set();
+    const queue = [root];
+    while (queue.length) {
+      const current = queue.shift();
+      if (seen.has(current)) continue;
+      seen.add(current);
+      family.push(current);
+      for (const child of desc.get(current) || []) queue.push(child);
+    }
+    return family.sort((a, b) => a - b);
+  }
+  // O elemento do Pokémon escolhido (não da família inteira — Eevee é Normal
+  // mesmo tendo Eeveelutions de vários tipos), na mesma escala de energia usada
+  // pelo resto do montador.
+  function pokemonKindForId(speciesId) {
+    const kinds = [...new Set((pokemonMap.get(Number(speciesId))?.types || [])
+      .map(type => TYPE_TO_ENERGY[normalize(type)]).filter(Boolean))];
+    const colored = kinds.filter(kind => kind !== 'colorless' && kind !== 'dragon');
+    return colored[0] || kinds[0] || 'colorless';
+  }
+  function matchesKind(card, chosenKind) {
+    const kinds = pokemonEnergyKinds(card);
+    const coloredKinds = kinds.filter(kind => kind !== 'colorless' && kind !== 'dragon');
+    const isPureColorless = kinds.length === 1 && kinds[0] === 'colorless';
+    return coloredKinds.includes(chosenKind) || isPureColorless;
+  }
+  function compatibleEnergyPool(energyGroup, chosenKind) {
+    return energyGroup.filter(card => {
+      const kinds = energyKinds(card);
+      return kinds.includes(chosenKind) || kinds.includes('any') || (chosenKind === 'colorless' && kinds.includes('colorless'));
+    }).sort((a,b) => Number(isBasicEnergy(b,chosenKind))-Number(isBasicEnergy(a,chosenKind)) || owned(b)-owned(a) || a.name.localeCompare(b.name,'pt-BR'));
+  }
+  // Treinadores e Energia até completar as metas — o mesmo reparo final tanto
+  // para o montador geral quanto para o deck temático: nunca sobra espaço vazio
+  // nem entra Pokémon evoluído isolado.
+  function fillTrainersAndEnergy(target, trainerPool, energyPool, chosenKind, goals, allowMissing) {
+    [trainerPool, energyPool].forEach((group, offset) => {
+      const gi = offset + 1;
+      let count = 0;
+      for (const card of group) {
+        if (count >= goals[gi]) break;
+        let wanted = Math.min(4, goals[gi]-count);
+        if (deckCardClass(card) === 'energy' && isBasicEnergy(card,chosenKind)) wanted = goals[gi]-count;
+        else if (deckCardClass(card) === 'energy') wanted = Math.min(2, goals[gi]-count);
+        else if (deckCardClass(card) === 'trainer' && role(card) === 'suporte') wanted = Math.min(2, goals[gi]-count);
+        count += addTo(target,card,wanted,allowMissing);
+      }
+    });
+    for (const card of [...trainerPool,...energyPool]) {
+      if (Object.values(target).reduce((a,b)=>a+Number(b),0) >= 60) break;
+      addTo(target,card,4,allowMissing);
+    }
+  }
   function looksLikeUnlinkedPokemon(card) {
     return deckCardClass(card) === 'trainer'
       && !pokemonIdsForCard(card).length
@@ -190,9 +266,16 @@
     }
     if (base.split.energy < 8) errors.push(`O plano energético precisa de pelo menos 8 Energias reais; foram encontradas ${base.split.energy}.`);
     if (deck.energyPlan?.kind) {
+      // A linha evolutiva de um deck temático entra garantida pelo tema, não
+      // por bater com a Energia escolhida — Eevee é Incolor, mas Vaporeon,
+      // Jolteon e as outras Eeveelutions não são, e isso não é defeito do
+      // deck. Sem esta exceção, todo deck temático de família ramificada
+      // nasceria "inválido" reclamando dos próprios atacantes principais.
+      const familyIds = new Set(deck.themeFamilyIds || []);
       const wrongPokemon = cardsUsed.filter(([id]) => {
         const card = cardMap.get(id);
         if (!card || deckCardClass(card) !== 'pokemon') return false;
+        if (pokemonIdsForCard(card).some(pid => familyIds.has(pid))) return false;
         const kinds = pokemonEnergyKinds(card);
         const coloredKinds = kinds.filter(kind => kind !== 'colorless' && kind !== 'dragon');
         const isPureColorless = kinds.length === 1 && kinds[0] === 'colorless';
@@ -272,12 +355,8 @@
       ? requestedKind
       : (favoriteKinds[0] || rankedKinds[variant % Math.max(1, Math.min(3, rankedKinds.length))] || 'colorless');
     const pokemonPool = groups.pokemon.filter(card => {
-      const kinds = pokemonEnergyKinds(card);
-      const coloredKinds = kinds.filter(kind => kind !== 'colorless' && kind !== 'dragon');
-      const isPureColorless = kinds.length === 1 && kinds[0] === 'colorless';
-      const favoriteCompatible = preferred && normalize(card.name).includes(preferred)
-        && (coloredKinds.includes(chosenKind) || isPureColorless);
-      return coloredKinds.includes(chosenKind) || isPureColorless || favoriteCompatible;
+      const favoriteCompatible = preferred && normalize(card.name).includes(preferred) && matchesKind(card, chosenKind);
+      return matchesKind(card, chosenKind) || favoriteCompatible;
     });
     const scored = new Map(pool.map(card => [card.id,
       roleScore(card,config.objective)
@@ -287,10 +366,7 @@
     ]));
     pokemonPool.sort((a,b) => (scored.get(b.id)-scored.get(a.id)) || a.name.localeCompare(b.name,'pt-BR'));
     groups.trainer.sort((a,b) => (scored.get(b.id)-scored.get(a.id)) || a.name.localeCompare(b.name,'pt-BR'));
-    const compatibleEnergy = groups.energy.filter(card => {
-      const kinds = energyKinds(card);
-      return kinds.includes(chosenKind) || kinds.includes('any') || (chosenKind === 'colorless' && kinds.includes('colorless'));
-    }).sort((a,b) => Number(isBasicEnergy(b,chosenKind))-Number(isBasicEnergy(a,chosenKind)) || owned(b)-owned(a) || a.name.localeCompare(b.name,'pt-BR'));
+    const compatibleEnergy = compatibleEnergyPool(groups.energy, chosenKind);
     const target = {};
     const goals = config.objective === 'fast' ? [18,31,11] : config.objective === 'control' ? [14,35,11] : config.objective === 'beginner' ? [18,28,14] : [16,32,12];
     let pokemonAdded = 0;
@@ -303,28 +379,11 @@
       pokemonAdded = deckBreakdown({cards:target}).pokemon;
       if (result.added && !mainAttacker && /atacante/.test(role(card))) mainAttacker = card;
     }
-    [groups.trainer,compatibleEnergy].forEach((group,offset) => {
-      const gi = offset + 1;
-      let count = 0;
-      for (const card of group) {
-        if (count >= goals[gi]) break;
-        let wanted = Math.min(4, goals[gi]-count);
-        if (deckCardClass(card) === 'energy' && isBasicEnergy(card,chosenKind)) wanted = goals[gi]-count;
-        else if (deckCardClass(card) === 'energy') wanted = Math.min(2, goals[gi]-count);
-        else if (deckCardClass(card) === 'trainer' && role(card) === 'suporte') wanted = Math.min(2, goals[gi]-count);
-        count += addTo(target,card,wanted,allowMissing);
-      }
-    });
-    // O reparo final nunca adiciona Pokémon evoluídos isolados. Se faltar
-    // espaço, completa apenas com Treinadores funcionais ou Energia compatível.
-    for (const card of [...groups.trainer,...compatibleEnergy]) {
-      if (Object.values(target).reduce((a,b)=>a+Number(b),0) >= 60) break;
-      addTo(target,card,4,allowMissing);
-    }
+    fillTrainersAndEnergy(target, groups.trainer, compatibleEnergy, chosenKind, goals, allowMissing);
     const ownedCount = Object.entries(target).reduce((n,[id,q])=>n+Math.min(Number(q),owned(cardMap.get(id))),0);
     const deck = {
       id:`candidate-${Date.now()}-${variant}`, name:`${config.favorite || 'Estratégia'} · ${OBJECTIVES[config.objective] || 'Competitivo'} ${variant+1}`,
-      cards:target, format:config.format, generationMode:config.source, objective:config.objective,
+      cards:target, format:config.format, generationMode:config.source, objective:config.objective, planejando:allowMissing,
       preferredType:config.type || ENERGY_LABEL[chosenKind] || '', energyPlan:{kind:chosenKind,label:ENERGY_LABEL[chosenKind] || chosenKind},
       rulesVersion:RULES_VERSION, createdAt:new Date().toISOString(),
       ownedCards:ownedCount, missingCards:60-ownedCount, generated:true, status:'draft'
@@ -342,6 +401,68 @@
     const mainPokemon = mainAttacker || Object.keys(target).map(id=>cardMap.get(id)).find(card=>card && deckCardClass(card)==='pokemon');
     deck.name = `${mainPokemon?.name || config.favorite || ENERGY_LABEL[chosenKind] || 'Estratégia'} · ${OBJECTIVES[config.objective] || 'Competitivo'}`;
     deck.explanation = `O núcleo usa Pokémon compatíveis com Energia ${ENERGY_LABEL[chosenKind] || chosenKind}. Prepare ${mainPokemon?.name || 'o atacante principal'}, preserve busca e compra, e mantenha Energia suficiente para o atacante seguinte. Cartas do Pokémon TCG Pocket e recursos sem alvo no deck foram descartados.`;
+    return deck;
+  }
+  // Deck temático: o Pokémon escolhido e TODA a linha evolutiva dele entram
+  // garantidos como atacantes principais; o resto do baralho é preenchido com
+  // Pokémon do mesmo elemento, Treinadores e Energia — igual ao montador geral,
+  // mas sem depender de pontuação para a linha evolutiva aparecer.
+  function buildThematicDeck(pokemonId, config) {
+    const mainPokemon = pokemonMap.get(Number(pokemonId));
+    if (!mainPokemon) return null;
+    const allowMissing = config.source !== 'owned';
+    const pool = candidatePool(config.source, config.format);
+    const groups = {pokemon:[], trainer:[], energy:[]};
+    pool.forEach(card => groups[deckCardClass(card)].push(card));
+    const chosenKind = pokemonKindForId(pokemonId);
+    const scored = new Map(pool.map(card => [card.id, roleScore(card,'collection') + Math.min(4, owned(card))]));
+
+    const familyIds = evolutionFamilyIds(pokemonId);
+    const familyCards = familyIds.map(id => bestCardForSpecies(groups.pokemon,id,scored)).filter(Boolean);
+    if (!familyCards.length) return null;
+
+    const target = {};
+    // Famílias grandes (Eevee e suas Eeveelutions) não podem valer 3-4 cópias
+    // cada uma, ou sobra baralho só de atacante principal e falta Treinador e
+    // Energia. Quanto mais estágios, menos cópias por estágio.
+    const copiesPerStage = familyCards.length <= 1 ? 4 : familyCards.length === 2 ? 3 : familyCards.length <= 4 ? 2 : 1;
+    for (const card of familyCards) addTo(target, card, copiesPerStage, allowMissing);
+
+    const familySpeciesIds = new Set(familyIds);
+    const supportPool = groups.pokemon.filter(card => {
+      if (pokemonIdsForCard(card).some(id => familySpeciesIds.has(id))) return false;
+      return matchesKind(card, chosenKind);
+    }).sort((a,b) => (scored.get(b.id)-scored.get(a.id)) || owned(b)-owned(a) || a.name.localeCompare(b.name,'pt-BR'));
+
+    const goals = [16, 32, 12];
+    let pokemonAdded = deckBreakdown({cards:target}).pokemon;
+    for (const card of supportPool) {
+      if (pokemonAdded >= goals[0]) break;
+      const chain = evolutionChainIds(pokemonIdsForCard(card)[0]);
+      const wanted = chain.length > 1 ? 3 : 4;
+      addPokemonWithEvolutionLine(target,card,supportPool,scored,wanted,allowMissing,goals[0]-pokemonAdded);
+      pokemonAdded = deckBreakdown({cards:target}).pokemon;
+    }
+
+    groups.trainer.sort((a,b) => (scored.get(b.id)-scored.get(a.id)) || a.name.localeCompare(b.name,'pt-BR'));
+    const compatibleEnergy = compatibleEnergyPool(groups.energy, chosenKind);
+    fillTrainersAndEnergy(target, groups.trainer, compatibleEnergy, chosenKind, goals, allowMissing);
+
+    const ownedCount = Object.entries(target).reduce((n,[id,q])=>n+Math.min(Number(q),owned(cardMap.get(id))),0);
+    const familyNames = familyCards.map(card => pokemonMap.get(pokemonIdsForCard(card)[0])?.name).filter(Boolean);
+    const deck = {
+      id:`deck-${Date.now()}`, name:`${mainPokemon.name} · Temático`,
+      cards:target, format:config.format, generationMode:config.source, objective:'collection', planejando:allowMissing,
+      themePokemonId:Number(pokemonId), themeFamilyIds:familyIds,
+      preferredType:ENERGY_LABEL[chosenKind] || '', energyPlan:{kind:chosenKind,label:ENERGY_LABEL[chosenKind] || chosenKind},
+      rulesVersion:RULES_VERSION, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString(),
+      ownedCards:ownedCount, missingCards:60-ownedCount, generated:true, status:'draft'
+    };
+    const report = validate(deck);
+    deck.score = report.score;
+    deck.confidence = report.confidence;
+    deck.status = report.valid ? 'valid' : 'invalid';
+    deck.explanation = `Deck temático de ${mainPokemon.name}: ${familyNames.join(' + ')} como atacantes principais, reforçado por Pokémon de Energia ${ENERGY_LABEL[chosenKind] || chosenKind}.`;
     return deck;
   }
   function openAutoBuilder() {
@@ -411,6 +532,125 @@
       <div class="hand-grid">${hand.map(cid=>{const c=cardMap.get(cid);return `<button onclick="openCard('${esc(cid)}')">${c?.imageUrl?`<img src="${esc(c.imageUrl)}" alt="">`:''}<span>${esc(c?.name||cid)}</span></button>`}).join('')}</div>
       <button class="primary-btn" onclick="closeModal();testDeckHand('${esc(id)}')">Embaralhar novamente</button>`);
   }
+
+  /* ---------- Pokédex de decks temáticos ----------
+     Um deck temático guarda `themePokemonId`: o número da Pokédex que ele
+     representa. O status de cada um dos 1.025 é recalculado a partir da
+     coleção ATUAL (não do que foi salvo na criação), para o quadradinho virar
+     "completo" assim que a última carta que faltava for cadastrada. */
+  // Ao contrário do `owned(cardMap.get(id))` usado logo após montar um deck
+  // (mesma chamada síncrona, catálogo garantidamente presente), este lê
+  // `deck.cards` salvo de sessões anteriores: se o catálogo foi atualizado e a
+  // impressão saiu, o id fica órfão. Sem a guarda, `owned(undefined)` derruba
+  // a tela inteira de Decks.
+  function ownedById(cardId) {
+    const card = cardMap.get(cardId);
+    return card ? owned(card) : 0;
+  }
+  let themeStatusCache = { revision: -1, value: null };
+  function themeStatusMap() {
+    if (themeStatusCache.revision === stateRevision && themeStatusCache.value) return themeStatusCache.value;
+    const byPokemon = new Map();
+    for (const deck of safeDecks()) {
+      const pid = Number(deck.themePokemonId);
+      if (!pid) continue;
+      if (!byPokemon.has(pid)) byPokemon.set(pid, []);
+      byPokemon.get(pid).push(deck);
+    }
+    const result = new Map();
+    for (const [pid, decks] of byPokemon) {
+      let best = null, bestMissing = Infinity;
+      for (const deck of decks) {
+        let missing = Math.max(0, 60 - deckTotal(deck));
+        for (const [cardId, qty] of Object.entries(deck.cards || {})) missing += Math.max(0, Number(qty) - ownedById(cardId));
+        if (missing < bestMissing) { bestMissing = missing; best = deck; }
+      }
+      result.set(pid, { deck: best, missing: bestMissing, complete: bestMissing === 0 });
+    }
+    themeStatusCache = { revision: stateRevision, value: result };
+    return result;
+  }
+  function themeDeckPickerRows(query) {
+    const norm = normalize(query || '');
+    const items = pokedex.filter(item => !norm || normalize(`${item.name} ${item.id}`).includes(norm)).slice(0, 60);
+    return items.length
+      ? items.map(item => `<button class="pokemon-tile" onclick="closeModal();confirmThematicDeck(${item.id})">
+          <img src="${esc(item.sprite)}" loading="lazy" alt="${esc(item.name)}">
+          <span class="pokemon-number">Nº ${String(item.id).padStart(4,'0')}</span>
+          <span class="pokemon-name">${esc(item.name)}</span>
+        </button>`).join('')
+      : '<div class="empty">Nenhum Pokémon encontrado.</div>';
+  }
+  function renderThemeDeckPickerResults(query) {
+    const el = document.getElementById('themeDeckPickerResults');
+    if (el) el.innerHTML = themeDeckPickerRows(query);
+  }
+  function openThematicDeckBuilder(presetId) {
+    if (presetId) { confirmThematicDeck(presetId); return; }
+    showModal(`<button class="modal-close" onclick="closeModal()">×</button>
+      <h2>Criar deck temático</h2>
+      <p class="screen-subtitle">Escolha um Pokémon: ele e toda a linha evolutiva dele entram como atacantes principais, e o resto do baralho é preenchido com Pokémon do mesmo tipo.</p>
+      <input id="themeDeckSearch" class="field search" placeholder="Buscar Pokémon por nome ou número" oninput="renderThemeDeckPickerResults(this.value)">
+      <div id="themeDeckPickerResults" class="pokemon-grid theme-picker-grid">${themeDeckPickerRows('')}</div>`);
+  }
+  function confirmThematicDeck(pokemonId) {
+    const mon = pokemonMap.get(Number(pokemonId));
+    if (!mon) return;
+    const familyNames = evolutionFamilyIds(pokemonId).map(id => pokemonMap.get(id)?.name).filter(Boolean);
+    const kind = pokemonKindForId(pokemonId);
+    const existing = themeStatusMap().get(Number(pokemonId));
+    showModal(`<button class="modal-close" onclick="closeModal()">×</button>
+      <h2>Deck temático · ${esc(mon.name)}</h2>
+      <p class="screen-subtitle">Atacantes principais: ${esc(familyNames.join(' + ') || mon.name)}. Reforço de Pokémon do tipo ${esc(ENERGY_LABEL[kind] || kind)}, Treinadores e Energia.</p>
+      ${existing ? `<div class="deck-data-warning">Você já tem um deck temático de ${esc(mon.name)} (${60-existing.missing}/60 cartas). Gerar de novo cria outro deck, sem apagar o atual.</div>` : ''}
+      <button class="primary-btn" onclick="generateThematicDeck(${pokemonId})">Gerar deck temático</button>`);
+  }
+  function generateThematicDeck(pokemonId) {
+    const deck = buildThematicDeck(pokemonId, { format:'casual', source:'catalog' });
+    if (!deck) { notify('Não encontrei cartas dessa linha evolutiva no catálogo.'); return; }
+    safeDecks().push(deck);
+    selectedDeckId = deck.id;
+    ui.decksView = 'dex';
+    closeModal(); saveState(); render(); window.scrollTo(0,0);
+    notify(deck.status === 'valid' ? 'Deck temático criado com 60 cartas!' : `Deck temático criado com ${deckTotal(deck)} cartas. Confira os avisos.`);
+  }
+  function renderThemeTile(item, status) {
+    const complete = Boolean(status?.complete);
+    const started = Boolean(status);
+    const badge = complete ? '<span class="pokemon-owned-count">✓</span>'
+      : started ? `<span class="pokemon-owned-count progresso">${60-status.missing}/60</span>` : '';
+    const action = status?.deck ? `selectedDeckId='${esc(status.deck.id)}';render()` : `openThematicDeckBuilder(${item.id})`;
+    return `<button class="pokemon-tile${complete ? '' : ' missing'}" onclick="${action}">
+      ${badge}
+      <img src="${esc(item.sprite)}" loading="lazy" alt="${esc(item.name)}">
+      <span class="pokemon-number">Nº ${String(item.id).padStart(4,'0')}</span>
+      <span class="pokemon-name">${esc(item.name)}</span>
+    </button>`;
+  }
+  function renderThemeGridResults() {
+    const statusMap = themeStatusMap();
+    const query = normalize(ui.deckDexQuery || '');
+    const items = pokedex.filter(item => !query || normalize(`${item.name} ${item.id}`).includes(query));
+    const grouped = new Map();
+    for (const item of items) { if (!grouped.has(item.region)) grouped.set(item.region, []); grouped.get(item.region).push(item); }
+    return items.length
+      ? REGION_ORDER.filter(region=>grouped.has(region)).map(region => `<section class="region-section">
+          <div class="region-heading"><h3>${esc(region)}</h3><span>${grouped.get(region).filter(item=>statusMap.get(item.id)?.complete).length} completos · ${grouped.get(region).length} exibidos</span></div>
+          <div class="pokemon-grid">${grouped.get(region).map(item => renderThemeTile(item, statusMap.get(item.id))).join('')}</div>
+        </section>`).join('')
+      : '<div class="empty"><strong>Nenhum Pokémon encontrado</strong>Altere a busca para continuar.</div>';
+  }
+  function renderThemeGrid() {
+    const statusMap = themeStatusMap();
+    const completos = pokedex.filter(item => statusMap.get(item.id)?.complete).length;
+    const emAndamento = pokedex.filter(item => statusMap.get(item.id) && !statusMap.get(item.id).complete).length;
+    return `<p class="screen-subtitle">${completos} de ${pokedex.length} decks temáticos completos${emAndamento ? ` · ${emAndamento} em andamento` : ''}. Toque em um Pokémon sem deck para começar o dele.</p>
+      <div class="toolbar">
+        <input id="themeDexSearchInput" class="field search" value="${esc(ui.deckDexQuery)}" placeholder="Buscar Pokémon por nome ou número"
+          oninput="ui.deckDexQuery=this.value;document.getElementById('themeDexResults').innerHTML=renderThemeGridResults()">
+      </div>
+      <div id="themeDexResults">${renderThemeGridResults()}</div>`;
+  }
   const oldEditor=renderDeckEditor;
   const oldDeleteDeck=deleteDeck;
   deleteDeck=function(id){
@@ -420,14 +660,16 @@
   renderDeckEditor=function(deck){
     const html=oldEditor(deck);
     const r=validate(deck);
-    return html.replace('<div class="deck-actions">', `<div class="deck-analysis-strip"><span>Formato: ${esc(deck.format||'Livre / Casual')}</span><span>Confiança: ${r.confidence.label}</span><span>Faltam: ${Math.max(0,deck.missingCards||0)}</span></div><div class="deck-actions"><button class="secondary-btn" onclick="testDeckHand('${esc(deck.id)}')">Testar mão</button>`)
+    const temaSpan = deck.themePokemonId ? `<span>Temático: ${esc(pokemonMap.get(deck.themePokemonId)?.name || '')}</span>` : '';
+    return html.replace('<div class="deck-actions">', `<div class="deck-analysis-strip">${temaSpan}<span>Formato: ${esc(deck.format||'Livre / Casual')}</span><span>Confiança: ${r.confidence.label}</span><span>Faltam: ${Math.max(0,deck.missingCards||0)}</span></div><div class="deck-actions"><button class="secondary-btn" onclick="testDeckHand('${esc(deck.id)}')">Testar mão</button>`)
       .replace('</section>', `<section class="deck-explanation"><h3>Como jogar</h3><p>${esc(deck.explanation||'Prepare um atacante, use busca e compra para manter o fluxo e preserve recursos para o próximo ataque.')}</p><small>${esc(r.confidence.reason)}</small></section></section>`);
   };
   renderDecks=function(){
     const decks=safeDecks(), selected=decks.find(d=>d.id===selectedDeckId);
     if(selected)return renderDeckEditor(selected);
-    return `<section class="screen"><h2 class="screen-title">Decks</h2><p class="screen-subtitle">Monte, valide, teste e exporte decks de 60 cartas usando sua coleção real.</p>
+    const mineView = `<p class="screen-subtitle">Monte, valide, teste e exporte decks de 60 cartas usando sua coleção real.</p>
       <button class="auto-deck-hero" onclick="openAutoBuilder()"><span>✨</span><div><strong>Montar deck automaticamente</strong><small>Escolha formato, objetivo e fonte das cartas</small></div></button>
+      <button class="auto-deck-hero theme-deck-hero" onclick="openThematicDeckBuilder()"><span>🎯</span><div><strong>Criar deck temático</strong><small>Escolha um Pokémon: ele e a linha evolutiva viram os atacantes</small></div></button>
       ${lastCandidates.length?`<h3 class="section-title">Melhores sugestões</h3><div class="candidate-list">${lastCandidates.map(candidateCard).join('')}</div>`:''}
       <div class="deck-row"><input id="deckName" class="field" placeholder="Nome do novo deck"><button class="primary-btn" onclick="addDeck()">Criar vazio</button></div>
       <h3 class="section-title">Decks salvos</h3><div class="deck-lista">${decks.length
@@ -436,13 +678,25 @@
         ?decks.map(deck=>typeof cartaoDeDeck==='function'
           ?cartaoDeDeck(deck)
           :`<button class="panel deck-panel" onclick="selectedDeckId='${esc(deck.id)}';render()"><div class="set-title-row"><span class="set-name">${esc(deck.name)}</span></div></button>`).join('')
-        :'<div class="empty"><strong>Nenhum deck criado</strong>Use o montador automático ou crie um deck vazio.</div>'}</div></section>`;
+        :'<div class="empty"><strong>Nenhum deck criado</strong>Use o montador automático ou crie um deck vazio.</div>'}</div>`;
+    return `<section class="screen"><h2 class="screen-title">Decks</h2>
+      <div class="decks-view-toggle">
+        <button class="${ui.decksView==='dex'?'':'ativo'}" onclick="ui.decksView='mine';render()">Meus decks</button>
+        <button class="${ui.decksView==='dex'?'ativo':''}" onclick="ui.decksView='dex';render()">Pokédex de decks</button>
+      </div>
+      ${ui.decksView==='dex' ? renderThemeGrid() : mineView}
+    </section>`;
   };
   window.openAutoBuilder=openAutoBuilder;
   window.runAutoBuilder=runAutoBuilder;
   window.saveCandidate=saveCandidate;
   window.previewCandidate=previewCandidate;
   window.testDeckHand=testDeckHand;
+  window.openThematicDeckBuilder=openThematicDeckBuilder;
+  window.renderThemeDeckPickerResults=renderThemeDeckPickerResults;
+  window.renderThemeGridResults=renderThemeGridResults;
+  window.confirmThematicDeck=confirmThematicDeck;
+  window.generateThematicDeck=generateThematicDeck;
   window.deckBuilderDiagnostics=()=>lastCandidates.map(deck=>({
     name:deck.name,
     energyPlan:deck.energyPlan,
