@@ -7673,8 +7673,22 @@ function deckStrengthScore(card, preferredType = '') {
    catálogo inteiro entra e o que falta vira lista de compras. */
 function deckPlanejando(deck) { return Boolean(deck?.planejando); }
 
+/* Quanto desta carta já está reservado em OUTROS decks reais (fora de
+   planejamento) — é o que impede a mesma cópia física de entrar em dois
+   baralhos ao mesmo tempo. Decks em planejamento nem contam aqui nem são
+   afetados por aqui: eles são lista de desejo, não reserva física. */
+function copiasReservadasEmOutrosDecks(deck, cardId) {
+  let reservado = 0;
+  for (const outro of state.decks || []) {
+    if (outro.id === deck?.id || deckPlanejando(outro)) continue;
+    reservado += Math.max(0, Number(outro.cards?.[cardId]) || 0);
+  }
+  return reservado;
+}
+
 function copiasDisponiveis(deck, cardId) {
-  return deckPlanejando(deck) ? Infinity : quantityFor(cardId);
+  if (deckPlanejando(deck)) return Infinity;
+  return Math.max(0, quantityFor(cardId) - copiasReservadasEmOutrosDecks(deck, cardId));
 }
 
 function alternarPlanejamento(deckId) {
@@ -8328,7 +8342,12 @@ function addCardToDeck(deckId, cardId) {
   const card = cardMap.get(cardId);
   if (!deck || !card) return;
   const current = Math.max(0, Number(deck.cards?.[cardId]) || 0);
-  if (current >= copiasDisponiveis(deck, cardId)) return notify(`Você já usou todas as suas cópias de ${card.name}.`);
+  if (current >= copiasDisponiveis(deck, cardId)) {
+    const reservado = deckPlanejando(deck) ? 0 : copiasReservadasEmOutrosDecks(deck, cardId);
+    return notify(reservado > 0
+      ? `${card.name}: as cópias que você tem já estão em outro deck. Uma carta física não entra em dois baralhos ao mesmo tempo.`
+      : `Você já usou todas as suas cópias de ${card.name}.`);
+  }
   if (deckTotal(deck) >= 60) return notify('O deck já tem 60 cartas.');
   deck.cards = deck.cards || {};
   deck.cards[cardId] = current + 1;
@@ -8390,7 +8409,12 @@ function changeDeckCard(deckId, cardId, delta) {
   const roomMax = current + Math.max(0, 60-deckTotal(deck));
   const next = Math.max(0, Math.min(max, roomMax, current + Number(delta || 0)));
   if (next) deck.cards[cardId] = next; else delete deck.cards[cardId];
-  if (delta > 0 && next === current) notify(deckTotal(deck)>=60 ? 'O deck já tem 60 cartas.' : 'Limite de cópias atingido.');
+  if (delta > 0 && next === current) {
+    const reservado = deckPlanejando(deck) ? 0 : copiasReservadasEmOutrosDecks(deck, cardId);
+    notify(deckTotal(deck)>=60 ? 'O deck já tem 60 cartas.'
+      : reservado > 0 ? 'As cópias que você tem já estão em outro deck.'
+      : 'Limite de cópias atingido.');
+  }
   saveState(); render();
 }
 

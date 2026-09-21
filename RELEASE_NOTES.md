@@ -1,3 +1,8 @@
+# POKECARD Brasil 5.49.0 — Uma carta não entra em dois decks
+
+- Agora não dá mais para colocar a mesma cópia física de uma carta em dois decks reais ao mesmo tempo: o "+" no editor e o buscador de cartas descontam o que já está reservado em outros decks, não só o total que você possui. Antes só havia um aviso depois de já ter feito isso; agora a ação é bloqueada na hora, com um aviso explicando o motivo.
+- Decks em modo planejamento continuam de fora dessa regra — são lista de desejo, não reserva física, então podem repetir carta com outros decks (inclusive planejamento) normalmente.
+
 # POKECARD Brasil 5.48.1 — Ajuste no olho do cadastro
 
 - O olho do cadastro de carta virou um botão isolado no canto superior direito (par do × no canto esquerdo), sem miniatura nenhuma ocupando espaço — o nome, número e selos da carta agora ocupam a largura toda no topo da tela.
