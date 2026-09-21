@@ -5034,33 +5034,47 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 
 /* ---------- v5.48 — botão do scanner, olho do cadastro, ajustes de layout ---------- */
 
-/* Miniatura no cadastro em vez de carta gigante ocupando a tela toda: a arte
-   grande agora só aparece quando o usuário pede, tocando no olho. */
-.card-detail-sheet .registration-header{
-  flex-direction: row !important;
-  align-items: flex-start !important;
-  gap: 14px !important;
+/* Sem miniatura nenhuma no cadastro: só um botão de olho fixo no canto
+   superior direito, emparelhado com o × (canto superior esquerdo). O texto
+   (nome, kicker, selos) sobe e ocupa a largura toda no lugar da coluna da
+   imagem. A arte grande só existe dentro do modal que o olho abre.
+
+   .registration-image-frame continua no DOM (position:fixed tira ela do
+   fluxo do flex sem precisar de display:none — que esconderia o botão do
+   olho junto, por ser filho dela) e continua guardando a <img> escondida:
+   é nela que abrirCartaTamanhoReal() e refreshRegistrationVariantImage()
+   procuram a arte atual, então ela não pode sumir do DOM. */
+.card-detail-sheet .registration-header{ display: block !important; }
+.card-detail-sheet .registration-header > div:first-child{
+  position: absolute !important; width: 0 !important; height: 0 !important;
+  overflow: visible !important; margin: 0 !important;
 }
+.card-detail-sheet .registration-header > div:last-child{ width: 100%; }
 .card-detail-sheet .registration-image-frame{
-  width: 84px !important; margin: 0 !important; flex: none;
-  border-radius: 12px !important; box-shadow: 0 6px 16px rgba(0,0,0,.3);
-  position: relative;
+  position: fixed !important;
+  top: calc(12px + env(safe-area-inset-top)) !important;
+  right: max(14px, calc((100vw - 750px)/2)) !important;
+  left: auto !important; bottom: auto !important;
+  width: 39px !important; height: 39px !important;
+  margin: 0 !important; box-shadow: none !important; border: 0 !important;
+  background: transparent !important;
+  z-index: 11;
 }
-.card-detail-sheet .registration-card-image{ border-radius: 12px !important; }
-.card-detail-sheet .registration-header > div:last-child{ flex: 1 1 auto; min-width: 0; }
-.card-detail-sheet .variant-image-badge{ font-size: 9px !important; padding: 2px 5px !important; }
-@media (min-width: 760px){
-  .card-detail-sheet .registration-image-frame{ width: 96px !important; }
-  .card-detail-sheet .registration-header{ display: flex !important; grid-template-columns: none !important; }
+.card-detail-sheet .registration-image-frame .registration-card-image,
+.card-detail-sheet .registration-image-frame .registration-placeholder,
+.card-detail-sheet .registration-image-frame .variant-image-badge{
+  display: none !important;
 }
+.card-detail-sheet .variant-image-source{ display: none !important; }
+.card-detail-sheet .registration-header h2{ margin-top: 8px !important; }
 .card-image-eye{
-  position: absolute; right: -6px; bottom: -6px;
-  width: 30px; height: 30px; min-height: 0;
+  position: static !important;
+  width: 39px !important; height: 39px !important;
   display: grid; place-items: center;
-  border-radius: 50%; border: 2px solid var(--vision-bg, #0d2521);
-  background: var(--vision-primary, #25d0b3); color: var(--vision-bg, #0d2521);
-  font-size: 14px; line-height: 1;
-  box-shadow: 0 3px 8px rgba(0,0,0,.35);
+  border-radius: 50%; border: 0 !important;
+  background: #fff !important; color: var(--navy, #0b2d5c) !important;
+  font-size: 17px; line-height: 1;
+  box-shadow: 0 4px 12px rgba(0,0,0,.28);
 }
 .card-image-eye:active{ transform: scale(.92); }
 

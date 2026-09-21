@@ -1,3 +1,7 @@
+# POKECARD Brasil 5.48.1 — Ajuste no olho do cadastro
+
+- O olho do cadastro de carta virou um botão isolado no canto superior direito (par do × no canto esquerdo), sem miniatura nenhuma ocupando espaço — o nome, número e selos da carta agora ocupam a largura toda no topo da tela.
+
 # POKECARD Brasil 5.48.0 — Pokébola de verdade, carta em tamanho real e correções
 
 - O botão do scanner agora usa uma pokébola de verdade em vez do ícone genérico.
