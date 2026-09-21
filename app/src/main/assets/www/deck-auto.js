@@ -51,27 +51,38 @@
     }
     return descendantsCache;
   }
-  // A linha evolutiva INTEIRA de um Pokémon — subindo até a base e descendo por
-  // todos os ramos — não importa qual estágio foi escolhido. Bulbasaur, Ivysaur
-  // ou Venusaur levam sempre aos três; Eevee leva a todas as Eeveelutions.
+  // A linha evolutiva de um Pokémon para fins de deck temático: sobe até a
+  // base do ESCOLHIDO (sempre um caminho só — cada Pokémon evolui de no
+  // máximo um outro, evolutionChainIds já faz essa parte) e desce a partir do
+  // PRÓPRIO escolhido enquanto cada estágio tiver exatamente uma evolução
+  // seguinte, parando assim que encontrar uma bifurcação ou o fim da linha.
+  //
+  // Bulbasaur, Ivysaur ou Venusaur levam sempre aos três: a linha nunca
+  // bifurca, então qualquer um dos três monta o mesmo deck e marca os três
+  // como completos na Pokédex de decks — um só baralho já cobre a família
+  // inteira, não faz sentido montar três quase iguais.
+  //
+  // Eevee bifurca em 8 no primeiro passo: escolher Eevee dá só [Eevee] (não
+  // existe UMA evolução "certa" a estender). Escolher uma Eeveelution
+  // específica sobe até Eevee (chain de subida, sempre único) e desce dali —
+  // zero filhos, então para em [Eevee, aquela evolução], nunca nas outras
+  // sete. Cada evolução dela vira um deck — e uma entrada na Pokédex de
+  // decks — à parte, do jeito que foi pedido.
   function evolutionFamilyIds(speciesId) {
-    let root = Number(speciesId) || 0;
-    if (!root) return [];
-    const evolvesFrom = window.__POKEMON_EVOLVES_FROM__ || {};
-    const seenUp = new Set();
-    while (evolvesFrom[root] && !seenUp.has(root)) { seenUp.add(root); root = Number(evolvesFrom[root]); }
+    const id = Number(speciesId) || 0;
+    if (!id) return [];
+    const linha = evolutionChainIds(id); // [base, ..., id] — sempre um caminho só
     const desc = descendantsMap();
-    const family = [];
-    const seen = new Set();
-    const queue = [root];
-    while (queue.length) {
-      const current = queue.shift();
-      if (seen.has(current)) continue;
-      seen.add(current);
-      family.push(current);
-      for (const child of desc.get(current) || []) queue.push(child);
+    const seen = new Set(linha);
+    let atual = id;
+    while (true) {
+      const filhos = desc.get(atual) || [];
+      if (filhos.length !== 1 || seen.has(filhos[0])) break;
+      atual = filhos[0];
+      linha.push(atual);
+      seen.add(atual);
     }
-    return family.sort((a, b) => a - b);
+    return linha.sort((a, b) => a - b);
   }
   function cardYearFn() {
     const setsById = new Map((catalog.sets || []).map(set => [set.id, set]));
@@ -587,10 +598,14 @@
   }
 
   /* ---------- Pokédex de decks temáticos ----------
-     Um deck temático guarda `themePokemonId`: o número da Pokédex que ele
-     representa. O status de cada um dos 1.025 é recalculado a partir da
-     coleção ATUAL (não do que foi salvo na criação), para o quadradinho virar
-     "completo" assim que a última carta que faltava for cadastrada. */
+     Um deck temático guarda `themeFamilyIds`: todos os números da Pokédex que
+     a linha evolutiva dele cobre (não só o Pokémon que foi clicado pra criar
+     o deck) — um deck de Venusaur também marca Bulbasaur e Ivysaur, já que os
+     três entram como atacantes no mesmo baralho e não faz sentido pedir três
+     decks quase idênticos. O status de cada um dos 1.025 é recalculado a
+     partir da coleção ATUAL (não do que foi salvo na criação), para o
+     quadradinho virar "completo" assim que a última carta que faltava for
+     cadastrada. */
   // Ao contrário do `owned(cardMap.get(id))` usado logo após montar um deck
   // (mesma chamada síncrona, catálogo garantidamente presente), este lê
   // `deck.cards` salvo de sessões anteriores: se o catálogo foi atualizado e a
@@ -605,10 +620,18 @@
     if (themeStatusCache.revision === stateRevision && themeStatusCache.value) return themeStatusCache.value;
     const byPokemon = new Map();
     for (const deck of safeDecks()) {
-      const pid = Number(deck.themePokemonId);
-      if (!pid) continue;
-      if (!byPokemon.has(pid)) byPokemon.set(pid, []);
-      byPokemon.get(pid).push(deck);
+      // Decks salvos antes desta versão só tinham themePokemonId — sem
+      // themeFamilyIds, o deck continua marcando ao menos o Pokémon que foi
+      // escolhido na hora, em vez de sumir da Pokédex de decks.
+      const ids = Array.isArray(deck.themeFamilyIds) && deck.themeFamilyIds.length
+        ? deck.themeFamilyIds
+        : (deck.themePokemonId ? [deck.themePokemonId] : []);
+      for (const raw of ids) {
+        const pid = Number(raw);
+        if (!pid) continue;
+        if (!byPokemon.has(pid)) byPokemon.set(pid, []);
+        byPokemon.get(pid).push(deck);
+      }
     }
     const result = new Map();
     for (const [pid, decks] of byPokemon) {
@@ -655,7 +678,7 @@
     showModal(`<button class="modal-close" onclick="closeModal()">×</button>
       <h2>Deck temático · ${esc(mon.name)}</h2>
       <p class="screen-subtitle">Atacantes principais: ${esc(familyNames.join(' + ') || mon.name)}. Reforço de Pokémon do tipo ${esc(ENERGY_LABEL[kind] || kind)}, Treinadores e Energia.</p>
-      ${existing ? `<div class="deck-data-warning">Você já tem um deck temático de ${esc(mon.name)} (${60-existing.missing}/60 cartas). Gerar de novo cria outro deck, sem apagar o atual.</div>` : ''}
+      ${existing ? `<div class="deck-data-warning">Sua linha evolutiva já tem um deck temático — ${esc(existing.deck?.name || '')} (${60-existing.missing}/60 cartas) — que também cobre ${esc(mon.name)}. Gerar de novo cria outro deck, sem apagar o atual.</div>` : ''}
       <button class="primary-btn" onclick="generateThematicDeck(${pokemonId})">Gerar deck temático</button>`);
   }
   function generateThematicDeck(pokemonId) {

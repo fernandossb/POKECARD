@@ -1,3 +1,8 @@
+# POKECARD Brasil 5.51.0 — Um deck por linha evolutiva, não por Pokémon
+
+- Deck temático agora é por LINHA evolutiva, não por Pokémon: montar o deck do Venusaur também marca Bulbasaur e Ivysaur como completos na Pokédex de decks — os três já eram atacantes do mesmo baralho, não fazia sentido pedir três decks quase iguais.
+- Exceção automática para famílias que se ramificam (Eevee é a mais conhecida, mas vale para qualquer uma): cada evolução vira um deck focado nela (Eevee + aquela evolução) e uma entrada própria na Pokédex de decks, já que são Pokémon diferentes de verdade. Escolher a Eevee sozinha, sem indicar uma evolução, monta um deck só dela.
+
 # POKECARD Brasil 5.50.0 — Wishlist é o espelho dos seus decks
 
 - A aba Wishlist agora abre com "Faltam para seus decks": soma quanto cada carta é pedida em todos os seus decks (reais e em planejamento) e desconta o que você já tem, mostrando exatamente o que falta comprar — com preço, coleção/número e quais decks pedem cada carta. Quando duas decks pedem a mesma carta, a conta soma a demanda certo (2+2 com 2 na coleção falta 2, não 0 e 0 separados).
