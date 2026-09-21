@@ -1,3 +1,11 @@
+# POKECARD Brasil 5.46.0 — Início mais divertido (passo 1)
+
+- Primeiro passo de uma repaginada visual, começando pela tela de Início: cartão do Portfólio com cantos mais redondos, número maior e um brilho holográfico sutil que se move devagar, como o de uma carta especial.
+- As três estatísticas da coleção (Cartas, Versões, Especiais) ganham selos redondos coloridos no lugar do ícone chapado.
+- O anel da Pokédex fica mais grosso e com um brilho na cor do tema escolhido.
+- "Coleções mais completas" ganha pódio de verdade: 1º lugar em ouro, 2º em prata, 3º em bronze.
+- Tudo usa as mesmas variáveis de cor que já mudam com o Pokémon favorito escolhido — o brilho e os selos acompanham o tema, não ficam presos a uma cor fixa.
+
 # POKECARD Brasil 5.45.0 — Época coerente no deck temático
 
 - Deck temático agora só usa cartas de 2016 em diante, e a carta mais nova e a mais velha do baralho não ficam a mais de 3 anos de distância — a janela escolhida é a que cobre mais estágios da linha evolutiva com Treinadores e Energia suficientes, não simplesmente a mais recente.

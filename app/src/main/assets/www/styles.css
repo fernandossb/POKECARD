@@ -4934,3 +4934,85 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
   font-size:10px;min-width:auto;padding:0 6px;
 }
 .theme-picker-grid{max-height:60vh;overflow:auto;}
+
+/* ---------- v5.46 — Dashboard mais divertido ----------
+   Passo 1 de uma repaginada visual: tudo aqui usa as variáveis --vision-* que
+   theme-pokemon.js já recalcula para o Pokémon favorito escolhido, então o
+   brilho e os selos abaixo mudam de cor sozinhos — nada fica preso ao roxo
+   do Gengar. */
+
+/* Cartão do portfólio ganha cara de carta holo: mais redondo, sombra colorida
+   e um brilho diagonal bem sutil, do jeito que uma carta brilhante reflete
+   luz quando vira na mão. */
+.portfolio-card{
+  border-radius: 26px !important;
+  box-shadow: 0 18px 36px -14px color-mix(in srgb, var(--vision-primary, #25d0b3) 55%, transparent);
+  position: relative;
+  overflow: hidden;
+}
+.portfolio-card::before{
+  content: '';
+  position: absolute; inset: -60% -20%;
+  background: linear-gradient(115deg, transparent 35%,
+    color-mix(in srgb, var(--vision-primary, #25d0b3) 20%, transparent) 48%, transparent 62%);
+  pointer-events: none;
+  animation: pokecard-holo-sweep 6s ease-in-out infinite;
+}
+@keyframes pokecard-holo-sweep{
+  0%, 100% { transform: translateX(-16%); }
+  50% { transform: translateX(16%); }
+}
+@media (prefers-reduced-motion: reduce){
+  .portfolio-card::before{ animation: none; }
+}
+.portfolio-value strong{ font-size: 32px !important; }
+
+/* As três estatísticas da coleção viram selos redondos coloridos — medalha,
+   não célula de planilha — com uma leve resposta ao toque. */
+.collection-summary-grid button{
+  border-radius: 22px !important;
+  transition: transform .15s ease;
+}
+.collection-summary-grid button:active{ transform: scale(.95); }
+.collection-summary-grid span{
+  display: flex !important;
+  align-items: center; justify-content: center;
+  width: 46px !important; height: 46px !important;
+  padding: 11px; box-sizing: border-box;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--vision-primary, #25d0b3) 20%, transparent);
+}
+.collection-summary-grid button:nth-child(2) span{
+  background: color-mix(in srgb, #9b7cff 20%, transparent);
+}
+.collection-summary-grid button:nth-child(3) span{
+  background: color-mix(in srgb, var(--vision-accent, #ffb548) 22%, transparent);
+}
+
+/* Anel da Pokédex mais grosso e com um brilho que acompanha o tema. */
+.pokedex-progress-card{ border-radius: 24px !important; }
+.pokedex-ring{
+  width: 80px !important; height: 80px !important;
+  filter: drop-shadow(0 0 9px color-mix(in srgb, var(--vision-primary, #25d0b3) 60%, transparent));
+}
+.pokedex-ring::before{ width: 60px !important; height: 60px !important; }
+
+/* Pódio de verdade nas coleções mais completas: ouro, prata e bronze em vez
+   do mesmo círculo pra todo mundo. */
+.top-set:nth-child(1) .top-set-pos{
+  background: linear-gradient(135deg,#ffe29a,#c98a12);
+  color: #3a2600; box-shadow: 0 4px 10px rgba(201,138,18,.35);
+}
+.top-set:nth-child(2) .top-set-pos{
+  background: linear-gradient(135deg,#eef2f6,#9aa7b4);
+  color: #23303c; box-shadow: 0 4px 10px rgba(120,130,140,.3);
+}
+.top-set:nth-child(3) .top-set-pos{
+  background: linear-gradient(135deg,#e8b088,#9a5a2d);
+  color: #3a2000; box-shadow: 0 4px 10px rgba(154,90,45,.3);
+}
+
+/* Os demais cartões do Início acompanham o mesmo arredondamento mais macio. */
+.investimento-card, .valor-card, .top-sets, .price-update-card{
+  border-radius: 22px !important;
+}
