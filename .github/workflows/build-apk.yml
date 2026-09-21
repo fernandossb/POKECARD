@@ -24,6 +24,12 @@ jobs:
 
       - name: Configurar Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # O pacote legado "tools" saiu do repositório da Google; o build não
+          # usa nada dele (Gradle + cmdline-tools + platform-tools bastam). Sem
+          # este ajuste, a action pede "tools platform-tools" (padrão dela) e
+          # falha com "Failed to find package 'tools'".
+          packages: platform-tools
 
       - name: Instalar SDK 36
         shell: bash
