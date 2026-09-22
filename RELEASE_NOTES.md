@@ -1,3 +1,10 @@
+# POKECARD Brasil 5.54.0 — Capas vazias e páginas de fichário
+
+- A carta que você ainda não tem virou uma capa vazia do fichário: arte em cinza, bem apagada, atrás de um plástico com reflexo e contorno tracejado. Antes o cartão inteiro só ficava meio transparente.
+- Quando a carta entra na coleção, ela "ganha cor" com uma animação curta: sai do cinza, dá um pulinho e brilha na cor do tema. Se você cadastrou pelo painel da carta, a animação espera o painel fechar para você ver.
+- Novo modo de exibição "Páginas de fichário": a Coleção vira páginas de 3×3 bolsos, como um fichário de verdade, com os furos da argola, o número de cada página e quantos bolsos já estão preenchidos ("6/9", ou "✓ completa" em dourado). Os bolsos das cartas que faltam mostram o número da carta. Fica mais legal com uma coleção escolhida e o filtro "Tudo".
+- A etiqueta "Quero" subiu para o canto de cima da carta. Embaixo ela ficava escondida atrás das etiquetas de versão (N, F, RF).
+
 # POKECARD Brasil 5.53.0 — Coleção mais limpa e barra de baixo sem ícones repetidos
 
 - Coleção: a busca divide a linha com um botão "Filtros". Ordenação, coleção e artista ficam numa gaveta que mostra na hora quantas cartas vão aparecer. Os filtros rápidos (Tudo, Tenho, Faltantes…) viram uma fileira que rola para o lado, e o que está ligado aparece como etiqueta com × para desligar num toque. As cartas começam na metade de cima da tela, e não mais embaixo de dois terços de botões.

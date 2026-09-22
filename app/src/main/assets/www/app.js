@@ -304,10 +304,11 @@ function invalidateDerivedState() {
   cardResultCache.value = null;
 }
 
-/* Lista, grade de 2 ou grade de 3 colunas. É gosto de quem usa, não estado
-   da tela: fica guardado no aparelho e volta igual na próxima abertura. */
+/* Lista, grade de 2, grade de 3 ou páginas de fichário. É gosto de quem usa,
+   não estado da tela: fica guardado no aparelho e volta igual na próxima
+   abertura. */
 const CARD_LAYOUT_KEY = 'pokecard-layout-cartas';
-const CARD_LAYOUTS = ['lista', 'grade-2', 'grade-3'];
+const CARD_LAYOUTS = ['lista', 'grade-2', 'grade-3', 'fichario'];
 
 function lerLayoutDeCartas() {
   try {
@@ -2497,8 +2498,9 @@ function updateCardRowInPlace(cardId) {
   const filter = currentCardFilter();
   // Nestes filtros a mudança de quantidade pode incluir/remover o item da lista.
   // 'trade' também: vender uma cópia precisa tirar a linha da lista na hora.
-  // Ordenado por quantidade ou por data de adição, a carta muda de lugar.
-  if (['owned', 'missing', 'repeated', 'trade'].includes(filter) || ui.cardSort === 'quantity' || ui.cardSort === 'recent') {
+  // Ordenado por quantidade ou por data de adição, a carta muda de lugar. No
+  // fichário, o cabeçalho da página ("5/9") também precisa refazer a conta.
+  if (['owned', 'missing', 'repeated', 'trade'].includes(filter) || ui.cardSort === 'quantity' || ui.cardSort === 'recent' || ui.cardLayout === 'fichario') {
     refreshSearchResults('cardQuery', true);
     return true;
   }
@@ -2510,6 +2512,7 @@ function updateCardRowInPlace(cardId) {
   const replacement = holder.firstElementChild;
   if (!replacement) return false;
   current.replaceWith(replacement);
+  tocarAnimacoesDeCarta();
   return true;
 }
 
@@ -2530,6 +2533,7 @@ function setQuantity(cardId, nextQuantity) {
     return;
   }
   let difference = target - current;
+  if (!current && target > 0) marcarAnimacaoDeCarta(cardId);
   if (difference > 0) {
     const variant = primaryVariant(cardId, true);
     variant.quantity += difference;
@@ -2601,6 +2605,7 @@ function variantNeedsExactPricing(variant) {
 function saveCardVariant(cardId, variantId) {
   const card = cardMap.get(cardId);
   if (!card) return;
+  const tinhaAntes = quantityFor(cardId) > 0;
   const entry = state.entries[cardId] || { quantity: 0, priceBrl: null, wishlist: false, variants: [] };
   state.entries[cardId] = entry;
   const automaticPokemonIds = Array.isArray(card.pokemonIds) ? card.pokemonIds.map(Number).filter(id => pokemonMap.has(id)) : [];
@@ -2698,6 +2703,7 @@ function saveCardVariant(cardId, variantId) {
   else entry.variants.push(draft);
   entry.wishlist = entry.variants.some(item => item.isWishlist);
   syncEntry(cardId);
+  if (!tinhaAntes && quantityFor(cardId) > 0) marcarAnimacaoDeCarta(cardId);
   saveState();
   conferirColecaoCompleta();
   if (scannerDraftFinish && scannerSession.active) {
@@ -2813,6 +2819,7 @@ function render() {
   else if (ui.tab === 'decks') content.innerHTML = renderDecks();
   else if (ui.tab === 'produtos') content.innerHTML = renderProdutos();
   else { content.innerHTML = renderCards(); mostrarChipAtivo(content); }
+  requestAnimationFrame(tocarAnimacoesDeCarta);
   labRecord('render_completo', performance.now() - labStart, { tab: ui.tab, htmlLength: content.innerHTML.length });
 }
 
@@ -4776,8 +4783,9 @@ function filteredCardsForUi() {
     cardResultCache = { key, revision: stateRevision, value: result };
   }
 
-  const visible = result.slice(0, ui.cardLimit);
-  scheduleVisibleImagePreload(result.slice(ui.cardLimit, ui.cardLimit + IMAGE_PRELOAD_AHEAD));
+  const limite = limiteDeCartasVisiveis();
+  const visible = result.slice(0, limite);
+  scheduleVisibleImagePreload(result.slice(limite, limite + IMAGE_PRELOAD_AHEAD));
   labRecord('filtro_cartas', performance.now() - labStart, { results: result.length, visible: visible.length, queryLength: normalize(ui.cardQuery).length });
   return { result, visible, forcedFilter, filter };
 }
@@ -4886,10 +4894,17 @@ function renderCardSearchResults() {
   return `
     <div class="card-results-bar">
       <p class="card-results-count">${result.length.toLocaleString('pt-BR')} ${result.length === 1 ? 'carta encontrada' : 'cartas encontradas'}</p>
-      ${seletorDeLayout()}
+      ${seletorDeLayout(true)}
     </div>
-    <div class="${classeDeLayout()}">${visible.length ? visible.map(renderCardRow).join('') : emptyCards()}</div>
-    ${visible.length < result.length ? `<button class="load-more" onclick="ui.cardLimit+=60;refreshSearchResults('cardQuery', true)">Mostrar mais ${Math.min(60, result.length-visible.length)}</button>` : ''}`;
+    <div class="${classeDeLayout(true)}">${!visible.length ? emptyCards()
+      : ui.cardLayout === 'fichario' ? renderPaginasDeFichario(visible, result.length)
+      : visible.map(renderCardRow).join('')}</div>
+    ${visible.length < result.length ? `<button class="load-more" onclick="ui.cardLimit+=60;refreshSearchResults('cardQuery', true)">${ui.cardLayout === 'fichario'
+      ? (() => {
+          const paginas = Math.ceil((Math.min(result.length, Math.ceil((ui.cardLimit + 60) / 9) * 9) - visible.length) / 9);
+          return `Mostrar mais ${paginas} ${paginas === 1 ? 'página' : 'páginas'}`;
+        })()
+      : `Mostrar mais ${Math.min(60, result.length-visible.length)}`}</button>` : ''}`;
 }
 
 function renderCards() {
@@ -5157,26 +5172,70 @@ const ICONES_DE_LAYOUT = {
   lista: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="4" height="5" rx="1"/><path d="M10 6.5h11"/><rect x="3" y="15" width="4" height="5" rx="1"/><path d="M10 17.5h11"/></svg>',
   'grade-2': '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7.5" height="17" rx="1.6"/><rect x="13" y="3.5" width="7.5" height="17" rx="1.6"/></svg>',
   'grade-3': '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="4.5" width="5.2" height="15" rx="1.2"/><rect x="9.4" y="4.5" width="5.2" height="15" rx="1.2"/><rect x="16.3" y="4.5" width="5.2" height="15" rx="1.2"/></svg>',
+  // Uma página de fichário: 3×3 bolsos.
+  fichario: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="2.5" width="17" height="19" rx="2"/><path d="M9.2 2.5v19M14.8 2.5v19M3.5 8.8h17M3.5 15.2h17"/></svg>',
 };
-const ROTULOS_DE_LAYOUT = { lista: 'Lista', 'grade-2': 'Grade de 2 colunas', 'grade-3': 'Grade de 3 colunas' };
+const ROTULOS_DE_LAYOUT = { lista: 'Lista', 'grade-2': 'Grade de 2 colunas', 'grade-3': 'Grade de 3 colunas', fichario: 'Páginas de fichário (3×3)' };
 
-function seletorDeLayout() {
-  return `<div class="layout-cartas" role="group" aria-label="Exibição das cartas">${CARD_LAYOUTS.map(valor => `
-    <button type="button" data-layout="${valor}" class="${ui.cardLayout === valor ? 'ativo' : ''}" aria-pressed="${ui.cardLayout === valor}"
+/* As páginas de fichário só fazem sentido na lista principal de cartas. Em
+   Trocar/Vender (uma linha por versão) e na tela do Pokémon (blocos por
+   forma), quem escolheu fichário vê a grade de 3, que é o mais parecido. */
+function layoutEfetivo(permiteFichario) {
+  return ui.cardLayout === 'fichario' && !permiteFichario ? 'grade-3' : ui.cardLayout;
+}
+
+function seletorDeLayout(permiteFichario = false) {
+  const atual = layoutEfetivo(permiteFichario);
+  const opcoes = permiteFichario ? CARD_LAYOUTS : CARD_LAYOUTS.filter(valor => valor !== 'fichario');
+  return `<div class="layout-cartas" role="group" aria-label="Exibição das cartas">${opcoes.map(valor => `
+    <button type="button" data-layout="${valor}" class="${atual === valor ? 'ativo' : ''}" aria-pressed="${atual === valor}"
       aria-label="${ROTULOS_DE_LAYOUT[valor]}" title="${ROTULOS_DE_LAYOUT[valor]}" onclick="definirLayoutDeCartas('${valor}')">${ICONES_DE_LAYOUT[valor]}</button>`).join('')}
   </div>`;
 }
 
-function classeDeLayout() {
-  return `card-list layout-${ui.cardLayout}`;
+function classeDeLayout(permiteFichario = false) {
+  return `card-list layout-${layoutEfetivo(permiteFichario)}`;
+}
+
+// No fichário, a lista anda de página em página: sempre múltiplos de 9.
+function limiteDeCartasVisiveis() {
+  return ui.cardLayout === 'fichario' ? Math.ceil(ui.cardLimit / 9) * 9 : ui.cardLimit;
+}
+
+/* Páginas de 9 bolsos, como um fichário de verdade. Cada página diz quantos
+   bolsos já estão preenchidos; a última, se sobrar espaço, completa com
+   bolsos vazios. */
+function renderPaginasDeFichario(visiveis, total) {
+  const paginas = [];
+  for (let inicio = 0; inicio < visiveis.length; inicio += 9) {
+    const cartas = visiveis.slice(inicio, inicio + 9);
+    const preenchidos = cartas.filter(card => quantityFor(card.id) > 0).length;
+    const ultimaDaLista = inicio + 9 >= total;
+    const vazios = ultimaDaLista ? 9 - cartas.length : 0;
+    paginas.push(`<section class="pagina-fichario${preenchidos === cartas.length ? ' completa' : ''}">
+      <header>
+        <strong>Página ${inicio / 9 + 1}</strong>
+        <small>${inicio + 1}–${inicio + cartas.length} de ${total.toLocaleString('pt-BR')}</small>
+        <span class="pagina-preenchida">${preenchidos === cartas.length ? '✓ completa' : `${preenchidos}/${cartas.length}`}</span>
+      </header>
+      <div class="bolsos">${cartas.map(renderCardRow).join('')}${'<div class="bolso-vazio" aria-hidden="true"></div>'.repeat(vazios)}</div>
+    </section>`);
+  }
+  return paginas.join('');
 }
 
 function definirLayoutDeCartas(valor) {
   if (!CARD_LAYOUTS.includes(valor)) return;
+  const anterior = ui.cardLayout;
   ui.cardLayout = valor;
   try { localStorage.setItem(CARD_LAYOUT_KEY, valor); } catch (_) {}
-  // Só troca a classe e o botão aceso: a lista é a mesma, e redesenhar tudo
-  // jogaria fora as imagens que já carregaram.
+  // Entrar ou sair do fichário muda o desenho (páginas de 9): redesenha.
+  if ((valor === 'fichario' || anterior === 'fichario') && document.getElementById('cardSearchResults')) {
+    refreshSearchResults('cardQuery', true);
+    return;
+  }
+  // Nos outros casos só troca a classe e o botão aceso: a lista é a mesma, e
+  // redesenhar tudo jogaria fora as imagens que já carregaram.
   document.querySelectorAll('.card-list').forEach(lista => {
     for (const item of CARD_LAYOUTS) lista.classList.remove(`layout-${item}`);
     lista.classList.add(`layout-${valor}`);
@@ -5238,7 +5297,7 @@ function ultimasAdicionadasPanel() {
         || variantes.find(item => Number(item.quantity) > 0) || variantes[0];
       const arte = cardGridImage(card, exibida);
       const tipo = tipoPrincipalDaCarta(card);
-      return `<button type="button" class="recente-item"${tipo ? ` data-tipo="${esc(tipo)}"` : ''} onclick="openCard('${esc(card.id)}')">
+      return `<button type="button" class="recente-item${classeDeAnimacao(card.id)}"${tipo ? ` data-tipo="${esc(tipo)}"` : ''} onclick="openCard('${esc(card.id)}')">
         <span class="recente-arte">${arte
           ? `<img src="${esc(arte)}" loading="lazy" decoding="async" alt="${esc(card.name)}" onerror="this.outerHTML='<span class=&quot;card-placeholder&quot;>TCG</span>'">`
           : '<span class="card-placeholder">TCG</span>'}</span>
@@ -6917,6 +6976,7 @@ function adicionarCartasDaSessao() {
     const card = cardMap.get(linha.cardId);
     const quantidade = Math.max(0, Number(linha.quantity) || 0);
     if (!card || !quantidade) continue;
+    if (!(quantityFor(linha.cardId) > 0)) marcarAnimacaoDeCarta(linha.cardId);
 
     const entry = state.entries[linha.cardId] || { quantity: 0, priceBrl: null, wishlist: false, variants: [] };
     state.entries[linha.cardId] = entry;
@@ -7148,6 +7208,33 @@ function seloDeRaridade(card) {
   return '';
 }
 
+/* ---------- A carta "ganha cor" quando entra na coleção ----------
+
+   A capa vazia do fichário vira carta de verdade com uma animação curta.
+   A marca espera o painel fechar: salvar pelo cadastro redesenha a lista
+   POR TRÁS do painel, e a animação rodaria sem ninguém ver. */
+const animacoesDeCarta = new Map();   // cardId → 'cor'
+
+function marcarAnimacaoDeCarta(cardId, tipo = 'cor') {
+  animacoesDeCarta.set(cardId, tipo);
+}
+
+function classeDeAnimacao(cardId) {
+  return animacoesDeCarta.get(cardId) === 'cor' ? ' ganhou-cor' : '';
+}
+
+function tocarAnimacoesDeCarta() {
+  if (!animacoesDeCarta.size) return;
+  const modal = document.getElementById('modal');
+  if (modal && !modal.classList.contains('hidden')) return;
+  const alvos = [...document.querySelectorAll('.ganhou-cor')];
+  // Reinicia: se a lista foi desenhada com o painel aberto, a animação já
+  // rodou escondida.
+  for (const el of alvos) { el.classList.remove('ganhou-cor'); void el.offsetWidth; el.classList.add('ganhou-cor'); }
+  animacoesDeCarta.clear();
+  setTimeout(() => alvos.forEach(el => el.classList.remove('ganhou-cor')), 1600);
+}
+
 function renderCardRow(card) {
   const entry = entryFor(card.id);
   const quantity = quantityFor(card.id);
@@ -7164,9 +7251,10 @@ function renderCardRow(card) {
   const selo = seloDeRaridade(card);
   // Uma única análise serve para as etiquetas e para o estado dourado.
   const variantes = analiseDeVariantes(card);
-  return `<article class="card-row vision-card-tile ${quantity > 0 ? '' : 'missing'}${variantes.completa ? ' completa' : ''}" data-card-id="${esc(card.id)}"${tipo ? ` data-tipo="${esc(tipo)}"` : ''}${selo ? ` data-raridade="${esc(selo)}"` : ''} onclick="openCard('${esc(card.id)}')">
+  return `<article class="card-row vision-card-tile ${quantity > 0 ? '' : 'missing'}${variantes.completa ? ' completa' : ''}${classeDeAnimacao(card.id)}" data-card-id="${esc(card.id)}"${tipo ? ` data-tipo="${esc(tipo)}"` : ''}${selo ? ` data-raridade="${esc(selo)}"` : ''} onclick="openCard('${esc(card.id)}')">
     <div class="vision-card-art${brilho ? ` brilho-${brilho}` : ''}">
       ${displayImage ? `<img class="card-thumb" src="${esc(displayImage)}" loading="lazy" decoding="async" fetchpriority="low" onerror="this.outerHTML='<div class=&quot;card-placeholder&quot;>TCG</div>'">` : '<div class="card-placeholder">TCG</div>'}
+      ${quantity > 0 ? '' : `<span class="numero-no-bolso" aria-hidden="true">${esc(card.localId || card.number)}</span>`}
       ${quantity > 1 ? `<span class="tile-quantity-badge">x${quantity}</span>` : ''}
       ${entry.wishlist ? '<span class="tile-wishlist-badge">Quero</span>' : ''}
       ${variantes.completa ? '<span class="marca-completa" title="Você tem todas as versões desta carta">★</span>' : ''}
@@ -9152,6 +9240,7 @@ function refreshSearchResults(field, keepScroll = false) {
   requestAnimationFrame(() => {
     target.innerHTML = html;
     if (keepScroll) window.scrollTo(0, y);
+    tocarAnimacoesDeCarta();
     labRecord('atualizar_busca', performance.now() - labStart, { field, htmlLength: html.length });
   });
 }
@@ -9192,6 +9281,8 @@ function closeModal() {
   const sheet = document.getElementById('modal-content');
   sheet.innerHTML = '';
   sheet.className = 'modal-sheet';
+  // Carta que entrou na coleção com o painel aberto: agora dá para ver.
+  requestAnimationFrame(tocarAnimacoesDeCarta);
 }
 
 function openBackupPanel() {
