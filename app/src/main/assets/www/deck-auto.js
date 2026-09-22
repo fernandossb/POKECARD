@@ -22,11 +22,16 @@
     return state.decks;
   }
 
-  function owned(card) { return Math.max(0, Number(quantityFor(card.id)) || 0); }
+  // Energia básica conta como à vontade (posseParaDeck, no app.js): monta
+  // deck mesmo sem nenhuma Energia cadastrada e nunca aparece como faltando.
+  function owned(card) {
+    if (ehEnergiaBasica(card)) return 60;
+    return Math.max(0, Number(quantityFor(card.id)) || 0);
+  }
+  // Básico do jeito do TCG (ehPokemonBasico, no app.js): Pokémon V e
+  // Radiante são Básicos, e Pikachu não evolui de Pichu.
   function basic(card) {
-    if (deckCardClass(card) !== 'pokemon') return false;
-    const ids = pokemonIdsForCard(card);
-    return ids.length > 0 && ids.every(id => !Number(window.__POKEMON_EVOLVES_FROM__?.[id] || 0));
+    return ehPokemonBasico(card);
   }
   function evolutionChainIds(speciesId) {
     const chain = [];
@@ -133,23 +138,69 @@
     const isPureColorless = kinds.length === 1 && kinds[0] === 'colorless';
     return coloredKinds.includes(chosenKind) || isPureColorless;
   }
-  function compatibleEnergyPool(energyGroup, chosenKind) {
-    return energyGroup.filter(card => {
+  /* A Energia básica do tipo entra UMA vez, na impressão comum
+     (energiaBasicaCanonica) e buscada no catálogo inteiro — não no recorte do
+     deck. Antes vinha do recorte: no deck temático, a regra de época tirava
+     a coleção de energias comuns e sobrava só a dourada (Hyper Rare), que
+     entrava 12 vezes. Energias especiais vêm do recorte, como qualquer carta. */
+  function compatibleEnergyPool(energyGroup, chosenKind, basicKinds = [chosenKind]) {
+    const basicas = basicKinds.map(kind => energiaBasicaCanonica(kind)).filter(Boolean);
+    const especiais = energyGroup.filter(card => {
+      if (ehEnergiaBasica(card)) return false;
       const kinds = energyKinds(card);
       return kinds.includes(chosenKind) || kinds.includes('any') || (chosenKind === 'colorless' && kinds.includes('colorless'));
-    }).sort((a,b) => Number(isBasicEnergy(b,chosenKind))-Number(isBasicEnergy(a,chosenKind)) || owned(b)-owned(a) || a.name.localeCompare(b.name,'pt-BR'));
+    }).sort((a,b) => owned(b)-owned(a) || a.name.localeCompare(b.name,'pt-BR'));
+    return [...basicas, ...especiais];
+  }
+  /* Qual Energia básica levar. Quem decide é o custo impresso nos ataques de
+     quem vai atacar, não o tipo da espécie: Garchomp é Lutador no videogame,
+     mas as cartas dele pedem Água e Metal; Dragão nem tem Energia básica
+     (Dragonite ex pede Água e Elétrica). Até três tipos — Eevee ex pede Fogo,
+     Água e Elétrica num ataque só —, e cor que aparece pouco (menos de um
+     terço da principal) fica de fora. Sem custo no catálogo vale o tipo; e
+     atacante de custo só Incolor, que aceita qualquer Energia, leva a do tipo
+     que você mais coleciona. */
+  const KIND_OF_COST_LETTER = { G:'grass', R:'fire', W:'water', L:'lightning', P:'psychic', F:'fighting', D:'darkness', M:'metal', Y:'fairy' };
+  function basicEnergyPlan(chosenKind, attackers) {
+    const weight = new Map();
+    for (const card of attackers) {
+      const cost = String(card?.energyCost || '');
+      [...cost].forEach((letter, i) => {
+        const kind = KIND_OF_COST_LETTER[letter];
+        if (kind) weight.set(kind, (weight.get(kind) || 0) + cost.length - i);
+      });
+    }
+    const ranked = [...weight].sort((a,b) => b[1]-a[1]);
+    const byCost = ranked.filter(([, w]) => w * 3 >= ranked[0][1]).map(([kind]) => kind).slice(0, 3);
+    const hasOwnBasic = Boolean(energiaBasicaCanonica(chosenKind));
+    if (byCost.length) {
+      const same = byCost.length === 1 && byCost[0] === chosenKind;
+      return { kinds:byCost, reason: same ? '' : 'o custo dos ataques' };
+    }
+    if (hasOwnBasic) return { kinds:[chosenKind], reason:'' };
+    const favorite = availableDeckTypes().map(([type]) => TYPE_TO_ENERGY[normalize(type)])
+      .find(kind => kind && energiaBasicaCanonica(kind));
+    return { kinds:[favorite || 'fire'], reason:'ataque Incolor aceita qualquer Energia' };
+  }
+  // "Dragão (Energia de Água e Elétrica: o custo dos ataques)".
+  function energyPlanLabel(chosenKind, plan) {
+    const label = ENERGY_LABEL[chosenKind] || chosenKind;
+    if (!plan?.reason) return label;
+    return `${label} (Energia de ${plan.kinds.map(kind => ENERGY_LABEL[kind] || kind).join(' e ')}: ${plan.reason})`;
   }
   // Treinadores e Energia até completar as metas — o mesmo reparo final tanto
   // para o montador geral quanto para o deck temático: nunca sobra espaço vazio
   // nem entra Pokémon evoluído isolado.
   function fillTrainersAndEnergy(target, trainerPool, energyPool, chosenKind, goals, allowMissing) {
+    // Com duas Energias básicas (Água e Elétrica), a meta se divide entre elas.
+    let basicsLeft = energyPool.filter(ehEnergiaBasica).length;
     [trainerPool, energyPool].forEach((group, offset) => {
       const gi = offset + 1;
       let count = 0;
       for (const card of group) {
         if (count >= goals[gi]) break;
         let wanted = Math.min(4, goals[gi]-count);
-        if (deckCardClass(card) === 'energy' && isBasicEnergy(card,chosenKind)) wanted = goals[gi]-count;
+        if (deckCardClass(card) === 'energy' && ehEnergiaBasica(card)) wanted = Math.ceil((goals[gi]-count) / Math.max(1, basicsLeft--));
         else if (deckCardClass(card) === 'energy') wanted = Math.min(2, goals[gi]-count);
         else if (deckCardClass(card) === 'trainer' && role(card) === 'suporte') wanted = Math.min(2, goals[gi]-count);
         count += addTo(target,card,wanted,allowMissing);
@@ -198,22 +249,21 @@
     if (/incolor|colorless|gemea|turbo dupla|tripla/.test(n)) result.push('colorless');
     return result.length ? [...new Set(result)] : ['special'];
   }
-  function isBasicEnergy(card, kind = '') {
-    if (deckCardClass(card) !== 'energy') return false;
-    const n = normalize(card.name || '');
-    const basicName = /basica|basic/.test(n)
-      || /^energia de (agua|fogo|grama|planta|luta|metal|fada|raios|escuridao)$/.test(n)
-      || /^energia psiquica$/.test(n);
-    return basicName && (!kind || energyKinds(card).includes(kind));
-  }
   function isPocketCard(card) {
     return /^(?:[ab]\d|p-a)/i.test(String(card?.setId || ''));
   }
   function allowedInFormat(card, format) {
     if (!card || isPocketCard(card)) return false;
     if (format === 'casual') return true;
+    // Energia básica vale em qualquer formato, de qualquer coleção.
+    if (ehEnergiaBasica(card)) return true;
     const setId = String(card.setId || '').toLowerCase();
-    if (format === 'standard') return /^(?:sv|me)/.test(setId);
+    if (format === 'standard') {
+      // Pela marca que vale no Padrão (cartaNoPadrao, no app.js): "coleção de
+      // Escarlate e Violeta" deixava entrar as de marca G, que já rodaram.
+      const legal = cartaNoPadrao(card);
+      return legal === null ? /^(?:sv|me)/.test(setId) : legal;
+    }
     if (format === 'glc' && /\bex\b|vmax|vstar|\bgx\b|\bv\b/.test(normalize(card.name || ''))) return false;
     return true;
   }
@@ -297,21 +347,44 @@
     if (!cardsUsed.some(([id]) => { const c = cardMap.get(id); return c && deckCardClass(c) === 'pokemon' && basic(c); })) {
       errors.push('O deck precisa de pelo menos um Pokémon Básico confirmado.');
     }
-    const speciesInDeck = new Set(cardsUsed.flatMap(([id]) => {
-      const card = cardMap.get(id);
-      return card && deckCardClass(card) === 'pokemon' ? pokemonIdsForCard(card) : [];
-    }));
-    for (const speciesId of speciesInDeck) {
-      const parentId = Number(window.__POKEMON_EVOLVES_FROM__?.[speciesId] || 0);
-      if (parentId && !speciesInDeck.has(parentId)) {
-        errors.push(`${pokemonMap.get(speciesId)?.name || 'Evolução'} está sem ${pokemonMap.get(parentId)?.name || 'a etapa anterior'} no deck.`);
+    /* Evolução sem a etapa anterior, carta por carta. Só conta como etapa
+       anterior a versão comum (Raichu não evolui de Pikachu V). Com Doce Raro
+       no deck, o Estágio 2 pode vir direto do Básico: Pidgeot ex sem
+       Pidgeotto é lista de campeonato, não erro. */
+    const cartasDoDeck = cardsUsed.map(([id]) => cardMap.get(id)).filter(Boolean);
+    const especiesAptas = new Set(cartasDoDeck.filter(podeSerEtapaAnterior).flatMap(card => pokemonIdsForCard(card)));
+    const temDoceRaro = cartasDoDeck.some(ehDoceRaro);
+    for (const card of cartasDoDeck) {
+      if (deckCardClass(card) !== 'pokemon') continue;
+      const anterior = etapaAnteriorDaCarta(card);
+      const especie = pokemonIdsForCard(card)[0];
+      const nomeDaEspecie = pokemonMap.get(especie)?.name || card.name;
+      if (anterior === -1) {
+        if (!cartasDoDeck.some(base => ehBaseDeMesmoNome(base, card))) {
+          const nomeCurto = normalize(card.name);
+          const falta = /\b(vmax|vstar)\b/.test(nomeCurto) ? `${nomeDaEspecie} V`
+            : /^(m|mega) /.test(nomeCurto) ? `${nomeDaEspecie} EX` : nomeDaEspecie;
+          errors.push(`${card.name} está sem ${falta} no deck.`);
+        }
+        continue;
       }
+      if (anterior <= 0 || especiesAptas.has(anterior)) continue;
+      const basicoDaLinha = especieAnteriorNoTcg(anterior);
+      if (temDoceRaro && basicoDaLinha && especiesAptas.has(basicoDaLinha)) continue;
+      errors.push(`${nomeDaEspecie} está sem ${pokemonMap.get(anterior)?.name || 'a etapa anterior'} no deck.`);
     }
-    const ace = cardsUsed.reduce((n,[id,q]) => n + (/ace spec/.test(normalize(cardMap.get(id)?.name || '')) ? Number(q) : 0), 0);
-    if (ace > 1) errors.push('Só é permitida uma carta ACE SPEC no deck.');
-    const radiant = cardsUsed.reduce((n,[id,q]) => n + (/radiante|radiant/.test(normalize(cardMap.get(id)?.name || '')) ? Number(q) : 0), 0);
-    if (radiant > 1) errors.push('Só é permitido um Pokémon Radiante no deck.');
-    if ((deck.format || 'standard') !== 'casual' && cardsUsed.some(([id]) => !cardMap.get(id)?.regulationMark)) {
+    // ACE SPEC pela raridade ("ACE SPEC Rare"): o nome dessas cartas não diz
+    // que elas são, e a regra por nome nunca disparava.
+    const ace = cardsUsed.reduce((n,[id,q]) => n + (ehAceSpec(cardMap.get(id)) ? Number(q) : 0), 0);
+    if (ace > 1) errors.push(`Só é permitida uma carta ACE SPEC no deck; este tem ${ace}.`);
+    const radiant = cardsUsed.reduce((n,[id,q]) => n + (ehRadiante(cardMap.get(id)) ? Number(q) : 0), 0);
+    if (radiant > 1) errors.push(`Só é permitido um Pokémon Radiante no deck; este tem ${radiant}.`);
+    // Energia básica não tem marca e vale sempre; e com a lista de coleções
+    // legais baixada, a legalidade já é conferida por coleção, não por marca.
+    const listaDoFormato = typeof regrasDeDeck !== 'undefined' ? regrasDeDeck?.padrao : null;
+    const temListaDoFormato = Array.isArray(listaDoFormato) && listaDoFormato.length > 0;
+    if ((deck.format || 'standard') !== 'casual' && !temListaDoFormato
+      && cardsUsed.some(([id]) => { const c = cardMap.get(id); return c && !ehEnergiaBasica(c) && !c.regulationMark; })) {
       warnings.push('Legalidade de algumas impressões não pôde ser confirmada: falta marca de regulamentação no catálogo.');
     }
     if (base.split.energy < 8) errors.push(`O plano energético precisa de pelo menos 8 Energias reais; foram encontradas ${base.split.energy}.`);
@@ -347,10 +420,17 @@
   const deckValidationOriginal = deckValidation;
   deckValidation = validate;
 
+  function quantasNoAlvo(target, teste) {
+    return Object.entries(target).reduce((n, [id, q]) => n + (teste(cardMap.get(id)) ? Number(q) || 0 : 0), 0);
+  }
   function addTo(target, card, wanted, allowMissing) {
     const current = Number(target[card.id] || 0);
+    // Uma ACE SPEC e um Radiante por deck, somando todas as cartas deles.
+    if (ehAceSpec(card)) { if (quantasNoAlvo(target, ehAceSpec) >= 1) return 0; wanted = Math.min(wanted, 1); }
+    if (ehRadiante(card)) { if (quantasNoAlvo(target, ehRadiante) >= 1) return 0; wanted = Math.min(wanted, 1); }
     const same = deckNameQuantity({cards:target}, card, card.id);
-    const maxName = deckCardClass(card) === 'energy' ? 60 : Math.max(0, 4 - same);
+    // Só a Energia básica passa das 4 cópias; a especial segue o limite.
+    const maxName = ehEnergiaBasica(card) ? 60 : Math.max(0, 4 - same);
     const maxOwned = allowMissing ? deckCardLimit(card) : owned(card);
     const room = 60 - Object.values(target).reduce((a,b)=>a+Number(b||0),0);
     const add = Math.max(0, Math.min(wanted, maxName, maxOwned - current, room));
@@ -368,15 +448,43 @@
     }
     return [...representatives.values()];
   }
-  function bestCardForSpecies(pool, speciesId, scored) {
-    return pool.filter(card => pokemonIdsForCard(card).includes(Number(speciesId)))
+  // `etapa`: a carta vai servir de etapa anterior de outra — aí só a versão
+  // comum serve (Vaporeon não evolui de Eevee VMAX). VMAX, VSTAR e afins
+  // nunca entram por aqui: precisam da carta de mesmo nome junto.
+  function bestCardForSpecies(pool, speciesId, scored, etapa = false) {
+    return pool.filter(card => pokemonIdsForCard(card).includes(Number(speciesId))
+        && etapaAnteriorDaCarta(card) >= 0 && (!etapa || podeSerEtapaAnterior(card)))
       .sort((a,b) => (scored.get(b.id)-scored.get(a.id)) || owned(b)-owned(a))[0] || null;
+  }
+  // A linha do TCG: sobe pela espécie só enquanto a carta precisa de etapa
+  // anterior (Pokémon V e Radiante entram sozinhos; Pikachu não pede Pichu).
+  function tcgLineIds(card) {
+    const speciesId = pokemonIdsForCard(card)[0];
+    if (!speciesId) return [];
+    const line = [speciesId];
+    let current = etapaAnteriorDaCarta(card);
+    while (current > 0 && !line.includes(current)) {
+      line.unshift(current);
+      current = especieAnteriorNoTcg(current);
+    }
+    return line;
   }
   function addPokemonWithEvolutionLine(target, attacker, pool, scored, wanted, allowMissing, room) {
     const speciesId = pokemonIdsForCard(attacker)[0];
-    const chain = evolutionChainIds(speciesId);
-    if (!chain.length) return {added:0, complete:false};
-    const lineCards = chain.map(id => id === speciesId ? attacker : bestCardForSpecies(pool,id,scored));
+    const stage = etapaAnteriorDaCarta(attacker);
+    let lineCards;
+    if (stage === -2) return {added:0, complete:false};
+    if (stage === -1) {
+      // VMAX e VSTAR vêm do V de mesmo nome; Mega EX, do EX.
+      const base = pool.filter(card => ehBaseDeMesmoNome(card, attacker))
+        .sort((a,b) => (scored.get(b.id)-scored.get(a.id)) || owned(b)-owned(a))[0];
+      if (!base) return {added:0, complete:false};
+      lineCards = [base, attacker];
+    } else {
+      const chain = tcgLineIds(attacker);
+      if (!chain.length) return {added:0, complete:false};
+      lineCards = chain.map(id => id === speciesId ? attacker : bestCardForSpecies(pool,id,scored,true));
+    }
     if (lineCards.some(card => !card)) return {added:0, complete:false};
     const copies = Math.max(1, Math.min(wanted, Math.floor(room / lineCards.length)));
     if (!copies) return {added:0, complete:false};
@@ -416,19 +524,21 @@
     ]));
     pokemonPool.sort((a,b) => (scored.get(b.id)-scored.get(a.id)) || a.name.localeCompare(b.name,'pt-BR'));
     groups.trainer.sort((a,b) => (scored.get(b.id)-scored.get(a.id)) || a.name.localeCompare(b.name,'pt-BR'));
-    const compatibleEnergy = compatibleEnergyPool(groups.energy, chosenKind);
     const target = {};
     const goals = config.objective === 'fast' ? [18,31,11] : config.objective === 'control' ? [14,35,11] : config.objective === 'beginner' ? [18,28,14] : [16,32,12];
     let pokemonAdded = 0;
     let mainAttacker = null;
     for (const card of pokemonPool) {
       if (pokemonAdded >= goals[0]) break;
-      const chain = evolutionChainIds(pokemonIdsForCard(card)[0]);
+      const chain = tcgLineIds(card);
       const wanted = chain.length > 1 ? 3 : 4;
       const result = addPokemonWithEvolutionLine(target,card,pokemonPool,scored,wanted,allowMissing,goals[0]-pokemonAdded);
       pokemonAdded = deckBreakdown({cards:target}).pokemon;
       if (result.added && !mainAttacker && /atacante/.test(role(card))) mainAttacker = card;
     }
+    const attackers = Object.keys(target).map(id => cardMap.get(id)).filter(card => card && deckCardClass(card) === 'pokemon');
+    const basicPlan = basicEnergyPlan(chosenKind, attackers);
+    const compatibleEnergy = compatibleEnergyPool(groups.energy, chosenKind, basicPlan.kinds);
     fillTrainersAndEnergy(target, groups.trainer, compatibleEnergy, chosenKind, goals, allowMissing);
     const ownedCount = Object.entries(target).reduce((n,[id,q])=>n+Math.min(Number(q),owned(cardMap.get(id))),0);
     const deck = {
@@ -445,7 +555,7 @@
     deck.status = report.valid ? 'valid' : 'invalid';
     deck.strengths = [
       report.simulation.basicRate >= 75 ? 'Boa chance estimada de abrir com Pokémon Básico.' : 'Plano adaptável com as cartas disponíveis.',
-      `Plano de Energia ${ENERGY_LABEL[chosenKind] || chosenKind}, com ${report.split.energy} Energias reais para os atacantes selecionados.`
+      `Plano de Energia ${energyPlanLabel(chosenKind, basicPlan)}, com ${report.split.energy} Energias reais para os atacantes selecionados.`
     ];
     deck.weaknesses = report.warnings.length ? report.warnings.slice(0,3) : ['Matchups ainda sem dados confiáveis.'];
     const mainPokemon = mainAttacker || Object.keys(target).map(id=>cardMap.get(id)).find(card=>card && deckCardClass(card)==='pokemon');
@@ -480,7 +590,10 @@
     const chosenKind = pokemonKindForId(pokemonId);
     const scored = new Map(pool.map(card => [card.id, roleScore(card,'collection') + Math.min(4, owned(card))]));
 
-    const familyCards = familyIds.map(id => bestCardForSpecies(groups.pokemon,id,scored)).filter(Boolean);
+    // Quem tem evolução dentro da família precisa ser a versão comum, senão
+    // o próximo estágio não tem de onde evoluir.
+    const hasChildInFamily = id => familyIds.some(other => especieAnteriorNoTcg(other) === id);
+    const familyCards = familyIds.map(id => bestCardForSpecies(groups.pokemon,id,scored,hasChildInFamily(id))).filter(Boolean);
     if (!familyCards.length) return null;
 
     const target = {};
@@ -490,24 +603,30 @@
     const copiesPerStage = familyCards.length <= 1 ? 4 : familyCards.length === 2 ? 3 : familyCards.length <= 4 ? 2 : 1;
     for (const card of familyCards) addTo(target, card, copiesPerStage, allowMissing);
 
+    // A família é quem ataca: o custo dela decide a Energia do deck.
+    const basicPlan = basicEnergyPlan(chosenKind, familyCards);
     const familySpeciesIds = new Set(familyIds);
+    // Apoio do mesmo tipo E que ataque com essa Energia: Arbok ex é Venenoso
+    // (família da Planta) no videogame, mas ataca com Escuridão.
     const supportPool = groups.pokemon.filter(card => {
       if (pokemonIdsForCard(card).some(id => familySpeciesIds.has(id))) return false;
-      return matchesKind(card, chosenKind);
+      const cost = String(card.energyCost || '');
+      return matchesKind(card, chosenKind)
+        && [...cost].every(letter => letter === 'C' || basicPlan.kinds.includes(KIND_OF_COST_LETTER[letter]));
     }).sort((a,b) => (scored.get(b.id)-scored.get(a.id)) || owned(b)-owned(a) || a.name.localeCompare(b.name,'pt-BR'));
 
     const goals = [16, 32, 12];
     let pokemonAdded = deckBreakdown({cards:target}).pokemon;
     for (const card of supportPool) {
       if (pokemonAdded >= goals[0]) break;
-      const chain = evolutionChainIds(pokemonIdsForCard(card)[0]);
+      const chain = tcgLineIds(card);
       const wanted = chain.length > 1 ? 3 : 4;
       addPokemonWithEvolutionLine(target,card,supportPool,scored,wanted,allowMissing,goals[0]-pokemonAdded);
       pokemonAdded = deckBreakdown({cards:target}).pokemon;
     }
 
     groups.trainer.sort((a,b) => (scored.get(b.id)-scored.get(a.id)) || a.name.localeCompare(b.name,'pt-BR'));
-    const compatibleEnergy = compatibleEnergyPool(groups.energy, chosenKind);
+    const compatibleEnergy = compatibleEnergyPool(groups.energy, chosenKind, basicPlan.kinds);
     fillTrainersAndEnergy(target, groups.trainer, compatibleEnergy, chosenKind, goals, allowMissing);
 
     const ownedCount = Object.entries(target).reduce((n,[id,q])=>n+Math.min(Number(q),owned(cardMap.get(id))),0);
@@ -526,7 +645,7 @@
     deck.score = report.score;
     deck.confidence = report.confidence;
     deck.status = report.valid ? 'valid' : 'invalid';
-    deck.explanation = `Deck temático de ${mainPokemon.name}: ${familyNames.join(' + ')} como atacantes principais, reforçado por Pokémon de Energia ${ENERGY_LABEL[chosenKind] || chosenKind}.${yearRange ? ` Cartas de ${yearRange}, dentro de uma janela de até ${THEME_MAX_SPAN} anos.` : ''}`;
+    deck.explanation = `Deck temático de ${mainPokemon.name}: ${familyNames.join(' + ')} como atacantes principais, reforçado por Pokémon de Energia ${energyPlanLabel(chosenKind, basicPlan)}.${yearRange ? ` Cartas de ${yearRange}, dentro de uma janela de até ${THEME_MAX_SPAN} anos.` : ''}`;
     return deck;
   }
   function openAutoBuilder() {
@@ -573,7 +692,7 @@
   function candidateCard(deck,index) {
     const r=validate(deck), s=r.simulation;
     return `<article class="auto-candidate"><div class="candidate-head"><div><span class="candidate-rank">Opção ${index+1}</span><h3>${esc(deck.name)}</h3></div><b>${r.score}/100</b></div>
-      <div class="candidate-stats"><span>${r.split.pokemon} Pokémon</span><span>${r.split.trainer} Treinadores</span><span>${r.split.energy} Energias</span><span>${deck.ownedCards}/60 possuídas</span></div>
+      <div class="candidate-stats"><span>${r.split.pokemon} Pokémon</span><span>${r.split.trainerTotal ?? r.split.trainer} Treinadores</span><span>${r.split.energy} Energias</span><span>${deck.ownedCards}/60 possuídas</span></div>
       <p>${esc(deck.explanation)}</p><small>Consistência estimada: ${s.searchRate}% · Mulligan: ${s.mulliganRate}% · Confiança ${r.confidence.label}</small>
       <div class="candidate-actions"><button class="secondary-btn" onclick="previewCandidate(${index})">Ver análise</button><button class="primary-btn" onclick="saveCandidate(${index})">Salvar este deck</button></div></article>`;
   }
@@ -733,11 +852,19 @@
     if (!confirm('Excluir este deck? Esta ação não altera sua coleção de cartas.')) return;
     oldDeleteDeck(id);
   };
+  // O que falta calculado agora, com a coleção de agora — `deck.missingCards`
+  // é o número do dia em que o deck foi gerado e contava Energia básica.
+  function faltamNoDeck(deck) {
+    return Object.entries(deck.cards || {}).reduce((n, [id, q]) => {
+      const card = cardMap.get(id);
+      return card ? n + Math.max(0, Number(q) - owned(card)) : n;
+    }, 0);
+  }
   renderDeckEditor=function(deck){
     const html=oldEditor(deck);
     const r=validate(deck);
     const temaSpan = deck.themePokemonId ? `<span>Temático: ${esc(pokemonMap.get(deck.themePokemonId)?.name || '')}</span>` : '';
-    return html.replace('<div class="deck-actions">', `<div class="deck-analysis-strip">${temaSpan}<span>Formato: ${esc(deck.format||'Livre / Casual')}</span><span>Confiança: ${r.confidence.label}</span><span>Faltam: ${Math.max(0,deck.missingCards||0)}</span></div><div class="deck-actions"><button class="secondary-btn" onclick="testDeckHand('${esc(deck.id)}')">Testar mão</button>`)
+    return html.replace('<div class="deck-actions">', `<div class="deck-analysis-strip">${temaSpan}<span>Formato: ${esc(deck.format||'Livre / Casual')}</span><span>Confiança: ${r.confidence.label}</span><span>Faltam: ${faltamNoDeck(deck)}</span></div><div class="deck-actions"><button class="secondary-btn" onclick="testDeckHand('${esc(deck.id)}')">Testar mão</button>`)
       .replace('</section>', `<section class="deck-explanation"><h3>Como jogar</h3><p>${esc(deck.explanation||'Prepare um atacante, use busca e compra para manter o fluxo e preserve recursos para o próximo ataque.')}</p><small>${esc(r.confidence.reason)}</small></section></section>`);
   };
   renderDecks=function(){

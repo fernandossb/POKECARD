@@ -1968,19 +1968,40 @@ async function loadCatalogData() {
   for (const item of bundled.sets || []) {
     if (!knownIds.has(String(item.id))) mergedSets.push(enrichSet(item));
   }
-  // Atualizações feitas antes do filtro por artista não guardaram quem
-  // desenhou cada carta; o catálogo embutido guarda. Completa só o que falta.
-  // As cartas vêm do IndexedDB como cópias novas, então dá para mexer nelas.
-  const artistaEmbutido = new Map();
+  // Atualizações feitas pelo app antes destes campos existirem não guardaram
+  // o artista, a marca de regulamentação, o tipo de Energia (básica ou
+  // especial), o custo dos ataques nem o nome em inglês; o catálogo embutido
+  // guarda. Completa só o que falta — as cartas vêm do IndexedDB como cópias
+  // novas, então dá para mexer nelas.
+  const CAMPOS_EMBUTIDOS = ['illustrator', 'regulationMark', 'energyType', 'energyCost', 'nameEn'];
+  const embutidas = new Map();
   for (const card of bundled.cards || []) {
-    if (card?.illustrator) artistaEmbutido.set(card.id, card.illustrator);
+    if (card?.id && CAMPOS_EMBUTIDOS.some(campo => card[campo])) embutidas.set(card.id, card);
   }
-  if (artistaEmbutido.size) {
+  if (embutidas.size) {
     for (const card of updated.cards) {
-      if (!card.illustrator && artistaEmbutido.has(card.id)) card.illustrator = artistaEmbutido.get(card.id);
+      const fonte = embutidas.get(card.id);
+      if (!fonte) continue;
+      for (const campo of CAMPOS_EMBUTIDOS) if (!card[campo] && fonte[campo]) card[campo] = fonte[campo];
     }
   }
-  return { ...updated, sets: mergedSets };
+  // A sigla PTCGL da coleção também: a listagem online não traz e apagava a
+  // do catálogo embutido.
+  for (const set of mergedSets) {
+    if (!set.tcgOnline) {
+      const sigla = bundledSets.get(String(set.id))?.tcgOnline;
+      if (sigla) set.tcgOnline = sigla;
+    }
+  }
+  // Marcas que valem no Padrão: fica a informação mais nova — a do catálogo
+  // embutido depois de uma atualização do app, ou a da última busca feita
+  // pelo celular, que já acompanha a rotação sem precisar de versão nova.
+  const marcas = [
+    { marcas: updated.standardMarks, em: updated.standardMarksAt || '' },
+    { marcas: bundled.standardMarks, em: bundled.enrichedAt || '' },
+  ].filter(item => Array.isArray(item.marcas) && item.marcas.length)
+    .sort((a, b) => String(b.em).localeCompare(String(a.em)))[0];
+  return { ...updated, sets: mergedSets, standardMarks: marcas?.marcas || [], standardMarksAt: marcas?.em || '' };
 }
 
 /* Descobre de qual Pokémon é a carta pelo nome dela.
@@ -2085,6 +2106,11 @@ function rebuildPerformanceIndexes() {
 function rebuildCatalogIndexes() {
   cards = Array.isArray(catalog?.cards) ? catalog.cards : [];
   catalog.sets = Array.isArray(catalog?.sets) ? catalog.sets : [];
+  // Índices do "Colar lista" (sigla → coleções, nome → cartas) são refeitos
+  // na próxima importação, já com o catálogo novo.
+  setsPorSiglaCache = null;
+  indicePorNomeCache = null;
+  reimpressoesNoPadraoCache = null;
   pokemonMap = new Map(pokedex.map(item => [item.id, item]));
   pokemonNameIndex = pokedex
     .map(item => ({ id: item.id, normalized: normalize(item.name) }))
@@ -3778,7 +3804,7 @@ function showQuoteImageInRegistration(cardId, identity) {
 function normalizeRemoteSet(detail, fallback) {
   const counts = remoteSetCounts(detail?.cardCount ? detail : fallback);
   const cardsInSet = Array.isArray(detail?.cards) ? detail.cards : [];
-  return {
+  const set = {
     id: String(detail?.id || fallback?.id || ''),
     name: String(detail?.name || fallback?.name || detail?.id || fallback?.id || 'Coleção'),
     officialCardCount: counts.official || cardsInSet.length,
@@ -3787,8 +3813,12 @@ function normalizeRemoteSet(detail, fallback) {
     symbolUrl: detail?.symbol || fallback?.symbol || null,
     releaseDate: detail?.releaseDate || null,
     seriesName: detail?.serie?.name || detail?.serie?.id || null,
-    tcgOnline: detail?.tcgOnline || fallback?.tcgOnline || null,
   };
+  // Sem sigla na resposta, o campo nem existe: um `null` aqui apagava, na
+  // mescla, a sigla que o catálogo embutido já tinha.
+  const sigla = detail?.tcgOnline || detail?.abbreviation?.official || fallback?.tcgOnline;
+  if (sigla) set.tcgOnline = String(sigla).toUpperCase();
+  return set;
 }
 
 function normalizeRemoteCard(remote, set) {
@@ -3893,6 +3923,7 @@ const ENERGIA_ROTULOS = { Normal: 'Energia básica', Special: 'Energia especial'
 async function fetchCategoriasGraphQL(totalEstimado) {
   const porPagina = 2500;
   const mapa = new Map();
+  const marcasDoPadraoBaixadas = new Set();
   for (let pagina = 1; pagina <= 40; pagina += 1) {
     setCatalogUpdateProgress(`Classificando cartas (Item, Apoiador, Energia...): página ${pagina}`,
       mapa.size, Math.max(totalEstimado, mapa.size + 1), true);
@@ -3901,7 +3932,9 @@ async function fetchCategoriasGraphQL(totalEstimado) {
       // vale no formato Padrão. Sem ela, o aviso de rotação não tem como
       // existir — e o catálogo embutido não traz esse campo.
       // `illustrator` é quem desenhou a carta: alimenta o filtro por artista.
-      query: `{ cards(filters: {}, pagination: {page: ${pagina}, itemsPerPage: ${porPagina}}) { id category trainerType energyType rarity regulationMark illustrator } }`,
+      // `attacks { cost }` vira `energyCost`: a Energia que os ataques pedem.
+      // `legal { standard }` diz quais marcas valem no Padrão (a rotação).
+      query: `{ cards(filters: {}, pagination: {page: ${pagina}, itemsPerPage: ${porPagina}}) { id category trainerType energyType rarity regulationMark illustrator attacks { cost } legal { standard } } }`,
     });
     let lote;
     try {
@@ -3914,10 +3947,15 @@ async function fetchCategoriasGraphQL(totalEstimado) {
     } catch (_) { break; }
     if (!Array.isArray(lote) || !lote.length) break;
     for (const item of lote) {
-      if (item?.id) mapa.set(item.id, { category: item.category || '', trainerType: item.trainerType || '', energyType: item.energyType || '', rarity: item.rarity || '', regulationMark: item.regulationMark || '', illustrator: String(item.illustrator || '').trim() });
+      if (item?.id) mapa.set(item.id, { category: item.category || '', trainerType: item.trainerType || '', energyType: item.energyType || '', rarity: item.rarity || '', regulationMark: item.regulationMark || '', illustrator: String(item.illustrator || '').trim(), energyCost: item.category === 'Pokemon' ? custoDeEnergiaDosAtaques(item.attacks) : '' });
+      // Só Pokémon: a fonte trata a Energia Reversa dourada (marca G) como
+      // básica, e Energia básica vale sempre — ela sozinha traria o G de volta.
+      const marca = String(item?.regulationMark || '').trim().toUpperCase();
+      if (item?.category === 'Pokemon' && item?.legal?.standard === true && marca) marcasDoPadraoBaixadas.add(marca);
     }
     if (lote.length < porPagina) break;
   }
+  mapa.marcasDoPadrao = [...marcasDoPadraoBaixadas].sort();
   return mapa;
 }
 
@@ -4010,9 +4048,13 @@ async function startCatalogUpdate() {
     for (const [id, set] of ptResult.sets) localSets.set(id, { ...(localSets.get(id) || {}), ...set });
     for (const [id, card] of ptResult.cards) {
       const existing = localCards.get(id) || {};
+      // O nome em inglês chegou na passada anterior e o português ia apagá-lo;
+      // é com ele que "Colar lista" reconhece listas do PTCGL e do Limitless.
+      const nomeEn = existing.catalogLocale === 'en' ? existing.name : existing.nameEn;
       localCards.set(id, {
         ...existing,
         ...card,
+        nameEn: nomeEn && normalize(nomeEn) !== normalize(card.name) ? nomeEn : (existing.nameEn || null),
         imageUrl: card.imageUrl || existing.imageUrl || null,
         illustrator: card.illustrator || existing.illustrator || null,
         variants: card.variants || existing.variants || null,
@@ -4055,15 +4097,20 @@ async function startCatalogUpdate() {
       // "None" é como a fonte diz "esta carta não tem raridade" — não é uma
       // raridade chamada None, e guardá-la assim confundiria a tela.
       const raridade = dados.rarity && dados.rarity !== 'None' ? dados.rarity : (card.rarity || null);
-      localCards.set(id, { ...card, category: dados.category, trainerType: dados.trainerType, energyType: dados.energyType, rarity: raridade, regulationMark: dados.regulationMark || card.regulationMark || '', illustrator: dados.illustrator || card.illustrator || null });
+      localCards.set(id, { ...card, category: dados.category, trainerType: dados.trainerType, energyType: dados.energyType, rarity: raridade, regulationMark: dados.regulationMark || card.regulationMark || '', illustrator: dados.illustrator || card.illustrator || null, energyCost: dados.energyCost || card.energyCost || null });
       classificadas += 1;
     }
 
+    // A rotação vem junto: as marcas que valem hoje no Padrão. Se a busca
+    // falhou, ficam as que o catálogo já tinha.
+    const marcasNovas = categorias.marcasDoPadrao || [];
     const updatedCatalog = {
       version: new Date().toISOString(),
       source: 'TCGdex completo JA + EN + PT-BR + catálogo local',
       sets: [...localSets.values()],
       cards: [...localCards.values()],
+      standardMarks: marcasNovas.length ? marcasNovas : (catalog.standardMarks || []),
+      standardMarksAt: marcasNovas.length ? new Date().toISOString() : (catalog.standardMarksAt || catalog.enrichedAt || ''),
     };
     setCatalogUpdateProgress('Salvando catálogo ampliado para uso offline...', 1, 1, true);
     await saveUpdatedCatalog(updatedCatalog);
@@ -7675,7 +7722,7 @@ function openCard(cardId, variantId = undefined) {
       <div>
         <span class="registration-kicker">${esc(card.setName)} · ${esc(card.number)}</span>
         <h2>${esc(card.name)}</h2>
-        <p class="card-meta">${esc(card.number)} · ${esc(card.setName)}${card.rarity ? ` · ${esc(card.rarity)}` : ''}</p>
+        <p class="card-meta">${esc(card.number)} · ${esc(card.setName)}${card.rarity ? ` · ${esc(card.rarity)}` : ''}${card.regulationMark ? ` · Marca ${esc(card.regulationMark)}` : ''}</p>
         ${card.illustrator && cardArtistKey.get(card.id) ? `<button type="button" class="card-artista-link" onclick="filtrarPorArtista('${esc(cardArtistKey.get(card.id))}')" title="Ver todas as cartas deste artista">Ilustração: <b>${esc(card.illustrator)}</b> <span aria-hidden="true">›</span></button>` : ''}
         <div class="badges">
           <span class="badge ${quantity ? 'owned' : ''}">${quantity ? `Total no fichário: ${quantity}` : 'Ainda não cadastrada'}</span>
@@ -8265,6 +8312,126 @@ function deckCardClass(card) {
   return 'trainer';
 }
 
+/* ---------- Energia básica, ACE SPEC e Radiante ----------
+
+   Energia básica é a única carta sem limite de cópias, legal em qualquer
+   formato, e que todo jogador tem aos montes — ninguém cadastra a pilha de
+   Energia de Fogo, e para jogar nenhuma impressão é melhor que outra. A
+   fonte diz qual é especial (energyType "Special"), mas marca algumas
+   especiais como "Normal" — Energia Reversa, Energia de Prisma, Energia da
+   Equipe Rocket —, então além do dado o nome precisa ser de Energia básica. */
+function ehEnergiaBasica(card) {
+  if (!card || deckCardClass(card) !== 'energy') return false;
+  if (String(card.energyType || '').toLowerCase() === 'special') return false;
+  return [normalize(card.name), normalize(card.nameEn)].some(nome => /\b(basica|basic)\b/.test(nome)
+    || /^energia (de )?(agua|fogo|grama|planta|luta|metal|fada|raios|escuridao|eletrica|psiquica)( basica)?$/.test(nome)
+    || /^(grass|fire|water|lightning|psychic|fighting|darkness|metal|fairy) energy$/.test(nome));
+}
+
+// O tipo da Energia básica na escala do montador de decks (grass, fire...).
+const TIPO_DE_ENERGIA_DO_MONTADOR = {
+  Planta: 'grass', Fogo: 'fire', 'Água': 'water', 'Elétrico': 'lightning', 'Psíquico': 'psychic',
+  Lutador: 'fighting', Sombrio: 'darkness', 'Metálico': 'metal', Fada: 'fairy',
+};
+function tipoDaEnergiaBasica(card) {
+  return TIPO_DE_ENERGIA_DO_MONTADOR[tipoDaEnergia(card)] || '';
+}
+
+/* A impressão que representa "Energia de Fogo" num deck: a comum — das
+   coleções de energia (sve, mee) quando existe — e nunca a dourada ou a
+   secreta, que custam caro e ninguém usa para jogar. Aceita o tipo do
+   montador ('fire') ou o do app ('Fogo'). */
+function energiaBasicaCanonica(tipo) {
+  const alvo = TIPO_DE_ENERGIA_DO_MONTADOR[tipo] || tipo;
+  if (!alvo) return null;
+  const peso = card => {
+    const raridade = normalize(card.rarity || '');
+    const comum = !raridade || /^(common|comum|none)$/.test(raridade);
+    return (comum ? 0 : 10) + (/^(sve|mee)$/.test(String(card.setId)) ? 0 : 1);
+  };
+  return cards.filter(card => ehEnergiaBasica(card) && tipoDaEnergiaBasica(card) === alvo)
+    .sort((a, b) => peso(a) - peso(b) || quantityFor(b.id) - quantityFor(a.id)
+      || String(b.setId).localeCompare(String(a.setId)))[0] || null;
+}
+
+/* ACE SPEC e Radiante: no máximo uma carta de cada no deck. O nome das cartas
+   ACE SPEC não diz que elas são ("Bomba Deluxe", "Árvore Grandiosa"); quem diz
+   é a raridade, "ACE SPEC Rare". Procurar só pelo nome deixava passar deck
+   com quatro. */
+function ehAceSpec(card) {
+  return /ace spec/i.test(String(card?.rarity || '')) || /\bace spec\b/.test(normalize(card?.name));
+}
+function ehRadiante(card) {
+  return /radiant/i.test(String(card?.rarity || '')) || /\b(radiante|radiant)\b/.test(normalize(card?.name));
+}
+
+/* ---------- Básico ou evolução, do jeito do jogo de cartas ----------
+
+   O catálogo não traz o estágio impresso na carta. A espécie acerta quase
+   sempre (Charmeleon evolui de Charmander), mas o TCG tem exceções que o
+   videogame não tem, e cada uma virava erro falso no deck:
+   - Pokémon V, Radiante, TAG TEAM e os EX da era XY/BW são Básicos: Lumineon V
+     não pede Finneon;
+   - VMAX, VSTAR, BREAK, Mega EX e Nível X evoluem da carta de MESMO nome
+     (Charizard VSTAR vem do Charizard V), não da espécie anterior;
+   - os filhotes que vieram depois (Pichu, Munchlax, Happiny...) não são etapa
+     anterior de nada: Pikachu e Snorlax são Básicos. */
+const FILHOTES_SEM_EVOLUCAO_NO_TCG = new Set([172, 173, 174, 236, 238, 239, 240, 298, 360, 406, 433, 438, 439, 440, 446, 458]);
+
+function especieAnteriorNoTcg(especie) {
+  const anterior = Number(window.__POKEMON_EVOLVES_FROM__?.[especie] || 0);
+  return anterior && !FILHOTES_SEM_EVOLUCAO_NO_TCG.has(anterior) ? anterior : 0;
+}
+
+/** Espécie da etapa anterior; 0 = Básico; -1 = evolui da carta de mesmo
+    nome; -2 = V-UNIÃO (entra em jogo por regra própria). */
+function etapaAnteriorDaCarta(card) {
+  const nome = normalize(card?.name);
+  if (/\bv (union|uniao)\b/.test(nome)) return -2;
+  if (/\b(vmax|vstar|break|lv x|nv x)\b/.test(nome)) return -1;
+  if (/^(bw|xy|g1|dc1)/i.test(String(card?.setId || '')) && /\bex\b/.test(nome)) return /^(m|mega) /.test(nome) ? -1 : 0;
+  if (/ v$/.test(nome) || /\b(radiante|radiant|shining|brilhante|lua sangrenta|bloodmoon)\b/.test(nome)
+    || String(card?.name || '').includes('&')) return 0;
+  return especieAnteriorNoTcg(pokemonIdsForCard(card)[0]);
+}
+
+function ehPokemonBasico(card) {
+  return Boolean(card) && deckCardClass(card) === 'pokemon' && pokemonIdsForCard(card).length > 0
+    && etapaAnteriorDaCarta(card) === 0;
+}
+
+/* Pode servir de etapa anterior? Só a versão comum: Raichu evolui de
+   "Pikachu", e "Pikachu V" ou "Pikachu ex" são outros nomes. */
+function podeSerEtapaAnterior(card) {
+  if (!card || deckCardClass(card) !== 'pokemon' || String(card.name || '').includes('&')) return false;
+  return !/(^| )(v|vmax|vstar|v union|v uniao|break|lv x|nv x|gx|ex|radiante|radiant|prisma|shining|brilhante)( |$)/.test(normalize(card.name));
+}
+
+/** Para VMAX, VSTAR, Mega EX, BREAK e Nível X: `base` é a carta de onde `card` evolui? */
+function ehBaseDeMesmoNome(base, card) {
+  if (!base || !card || base.id === card.id || deckCardClass(base) !== 'pokemon') return false;
+  const especie = pokemonIdsForCard(card)[0];
+  if (!especie || !pokemonIdsForCard(base).includes(especie)) return false;
+  const nome = normalize(card.name);
+  const nomeBase = normalize(base.name);
+  if (/\b(vmax|vstar)\b/.test(nome)) return / v$/.test(nomeBase);
+  if (/^(m|mega) /.test(nome)) return /\bex\b/.test(nomeBase) && !/^(m|mega) /.test(nomeBase);
+  return podeSerEtapaAnterior(base);
+}
+
+function ehDoceRaro(card) {
+  return Boolean(card) && (deckNameKey(card) === 'rare candy' || normalize(card.name) === 'doce raro');
+}
+
+/* Quanto desta carta você tem PARA MONTAR DECK. Energia básica conta como à
+   vontade: exigir o cadastro fazia todo deck "faltar" 12 cartas que qualquer
+   jogador tem na gaveta — e a Wishlist mandava comprá-las. */
+function posseParaDeck(cardId) {
+  const card = cardMap.get(cardId);
+  if (card && ehEnergiaBasica(card)) return Infinity;
+  return quantityFor(cardId);
+}
+
 function deckCardTypes(card) {
   const types = new Set();
   for (const pokemonId of pokemonIdsForCard(card)) {
@@ -8274,12 +8441,16 @@ function deckCardTypes(card) {
   return [...types];
 }
 
+/* O limite de 4 é pelo NOME da carta — e "Ordem da Chefia" e "Boss's Orders"
+   são o mesmo nome. Com o nome em inglês no catálogo, as impressões em
+   português e as que só existem em inglês somam juntas. */
 function deckNameKey(card) {
-  return normalize(card?.name || '');
+  return normalize(card?.nameEn || card?.name || '');
 }
 
+// Só a Energia BÁSICA é ilimitada; Energia especial segue as 4 cópias.
 function deckCardLimit(card) {
-  return deckCardClass(card) === 'energy' ? 60 : 4;
+  return ehEnergiaBasica(card) ? 60 : 4;
 }
 
 function deckTotal(deck) {
@@ -8376,6 +8547,8 @@ function copiasReservadasEmOutrosDecks(deck, cardId) {
 
 function copiasDisponiveis(deck, cardId) {
   if (deckPlanejando(deck)) return Infinity;
+  // Energia básica não se reserva: tem à vontade para todos os decks.
+  if (posseParaDeck(cardId) === Infinity) return Infinity;
   return Math.max(0, quantityFor(cardId) - copiasReservadasEmOutrosDecks(deck, cardId));
 }
 
@@ -8410,6 +8583,9 @@ function custoDoDeck(deck) {
     const card = cardMap.get(cardId);
     const qtd = Math.max(0, Number(qtdRaw) || 0);
     if (!card || !qtd) continue;
+    // Energia básica é "qualquer impressão": não entra no valor nem na
+    // lista de compras (a impressão escolhida podia ser a dourada).
+    if (ehEnergiaBasica(card)) continue;
     const preco = precoDeUmaCarta(cardId);
     if (preco === null) semPreco += qtd; else valorTotal += preco * qtd;
     const tenho = quantityFor(cardId);
@@ -8446,7 +8622,7 @@ function cardsFaltandoParaDecks() {
   const faltando = [];
   for (const [cardId, info] of demanda) {
     const card = cardMap.get(cardId);
-    if (!card) continue;
+    if (!card || ehEnergiaBasica(card)) continue;
     const tenho = quantityFor(cardId);
     const falta = Math.max(0, info.total - tenho);
     if (falta <= 0) continue;
@@ -8468,7 +8644,7 @@ function conflitosEntreDecks(deck) {
     const qtd = Math.max(0, Number(qtdRaw) || 0);
     if (!qtd) continue;
     const card = cardMap.get(cardId);
-    if (!card) continue;
+    if (!card || ehEnergiaBasica(card)) continue;
     let emOutros = 0;
     const nomes = [];
     for (const outro of outros) {
@@ -8504,27 +8680,69 @@ const FAMILIA_DE_ENERGIA = {
 function energiasDoDeck(deck) {
   const porTipo = new Map();
   let basicasSemTipo = 0;
+  // Energia a Jato, Energia Presente...: especiais cujo nome não diz o tipo.
+  let especiaisSemTipo = 0;
   for (const [cardId, qtdRaw] of Object.entries(deck?.cards || {})) {
     const card = cardMap.get(cardId);
     const qtd = Math.max(0, Number(qtdRaw) || 0);
     if (!card || !qtd || deckCardClass(card) !== 'energy') continue;
     const tipo = tipoDaEnergia(card);
     if (tipo) porTipo.set(tipo, (porTipo.get(tipo) || 0) + qtd);
-    else basicasSemTipo += qtd;
+    else if (ehEnergiaBasica(card)) basicasSemTipo += qtd;
+    else especiaisSemTipo += qtd;
   }
   const tiposDosPokemon = new Map();
+  let aceitamQualquer = 0;
   for (const [cardId, qtdRaw] of Object.entries(deck?.cards || {})) {
     const card = cardMap.get(cardId);
     const qtd = Math.max(0, Number(qtdRaw) || 0);
     if (!card || !qtd || deckCardClass(card) !== 'pokemon') continue;
-    for (const tipoBruto of deckCardTypes(card)) {
-      const tipo = FAMILIA_DE_ENERGIA[tipoBruto] || tipoBruto;
-      tiposDosPokemon.set(tipo, (tiposDosPokemon.get(tipo) || 0) + qtd);
+    const tipos = tiposQueOPokemonPede(card);
+    if (!tipos.length) aceitamQualquer += qtd;
+    for (const tipo of tipos) tiposDosPokemon.set(tipo, (tiposDosPokemon.get(tipo) || 0) + qtd);
+  }
+  // Um Manaphy ou um Rotom V de apoio não pedem Energia do tipo deles: falta
+  // Energia para um tipo quando ele tem pelo menos 3 Pokémon no deck.
+  const semEnergia = [...tiposDosPokemon.entries()]
+    .filter(([tipo, qtd]) => qtd >= 3 && !porTipo.has(tipo)).map(([tipo]) => tipo);
+  // Energia Incolor paga a parte Incolor de qualquer ataque, e atacante de
+  // custo Incolor usa qualquer Energia: nesses casos nada está "sobrando".
+  const semPokemon = aceitamQualquer >= 3 ? []
+    : [...porTipo.keys()].filter(tipo => tipo !== 'Incolor' && !tiposDosPokemon.has(tipo));
+  return { porTipo, basicasSemTipo, especiaisSemTipo, tiposDosPokemon, semEnergia, semPokemon };
+}
+
+/* A Energia que o Pokémon pede. Com o custo dos ataques no catálogo, vale o
+   custo: Dragonite ex pede Água e Elétrica, não "Dragão" — Energia de Dragão
+   nem existe —, e Larvitar, que só pede Incolor ("C"), aceita qualquer uma.
+   Sem o custo, vale o tipo da espécie. Incolor fica de fora: qualquer
+   Energia paga. */
+const TIPO_DA_LETRA_DE_ENERGIA = {
+  G: 'Planta', R: 'Fogo', W: 'Água', L: 'Elétrico', P: 'Psíquico',
+  F: 'Lutador', D: 'Sombrio', M: 'Metálico', Y: 'Fada',
+};
+const LETRA_DO_CUSTO = {
+  Grass: 'G', Fire: 'R', Water: 'W', Lightning: 'L', Psychic: 'P',
+  Fighting: 'F', Darkness: 'D', Metal: 'M', Fairy: 'Y',
+};
+// Mesma regra de scripts/enriquecer-catalogo.mjs: "WL", da cor mais pedida
+// para a menos, ou "C" quando os ataques só pedem Incolor.
+function custoDeEnergiaDosAtaques(ataques) {
+  const conta = new Map();
+  for (const ataque of ataques || []) {
+    for (const tipo of ataque?.cost || []) {
+      const letra = LETRA_DO_CUSTO[tipo];
+      if (letra) conta.set(letra, (conta.get(letra) || 0) + 1);
     }
   }
-  const semEnergia = [...tiposDosPokemon.keys()].filter(tipo => !porTipo.has(tipo));
-  const semPokemon = [...porTipo.keys()].filter(tipo => !tiposDosPokemon.has(tipo));
-  return { porTipo, basicasSemTipo, tiposDosPokemon, semEnergia, semPokemon };
+  return [...conta].sort((a, b) => b[1] - a[1]).map(([letra]) => letra).join('') || 'C';
+}
+function tiposQueOPokemonPede(card) {
+  if (card?.energyCost) {
+    return [...new Set([...String(card.energyCost)].map(letra => TIPO_DA_LETRA_DE_ENERGIA[letra]).filter(Boolean))];
+  }
+  return [...new Set(deckCardTypes(card).map(tipo => FAMILIA_DE_ENERGIA[tipo] || tipo))]
+    .filter(tipo => tipo !== 'Incolor' && tipo !== 'Dragão');
 }
 
 /** O tipo de uma carta de Energia, pelo nome — "Energia de Fogo" → Fogo. */
@@ -8620,9 +8838,50 @@ function colecaoNoFormato(setId, formato = 'padrao') {
   return lista.includes(String(setId || '').toLowerCase());
 }
 
+/* ---------- Rotação carta a carta ----------
+
+   A lista baixada é por COLEÇÃO e inclui coleções inteiras que já rodaram
+   só porque um Treinador delas foi reimpresso: com ela, Charizard Radiante e
+   Lumineon V apareciam como legais. A regra do Padrão é pela marca impressa
+   em cada carta (em 2026: H, I e J), e o catálogo enriquecido guarda quais
+   marcas valem (standardMarks). */
+function marcasDoPadrao() {
+  return Array.isArray(catalog?.standardMarks) ? catalog.standardMarks : [];
+}
+
+// Nomes de Treinador e Energia especial com alguma impressão no formato.
+let reimpressoesNoPadraoCache = null;
+
+/** A carta vale no Padrão? true, false, ou null quando não dá para saber. */
+function cartaNoPadrao(card) {
+  if (!card) return null;
+  // Energia básica vale em qualquer formato, de qualquer coleção.
+  if (ehEnergiaBasica(card)) return true;
+  const marcas = marcasDoPadrao();
+  if (!marcas.length) return null;
+  const marca = String(card.regulationMark || '').trim().toUpperCase();
+  if (marca && marcas.includes(marca)) return true;
+  /* Regra da reimpressão: Treinador e Energia especial valem em qualquer
+     impressão quando o mesmo nome tem uma impressão no formato — o Doce Raro
+     de Escarlate e Violeta (marca G) vale porque ele foi reimpresso com
+     marca I. Pokémon não: o mesmo nome pode ter outros ataques. */
+  if (deckCardClass(card) === 'pokemon') return false;
+  if (!reimpressoesNoPadraoCache) {
+    reimpressoesNoPadraoCache = new Set();
+    for (const outra of cards) {
+      const marcaDaOutra = String(outra.regulationMark || '').trim().toUpperCase();
+      if (marcaDaOutra && marcas.includes(marcaDaOutra) && deckCardClass(outra) !== 'pokemon') {
+        reimpressoesNoPadraoCache.add(deckNameKey(outra));
+      }
+    }
+  }
+  return reimpressoesNoPadraoCache.has(deckNameKey(card));
+}
+
 function legalidadeDoDeck(deck, formato = 'padrao') {
+  const porMarca = formato === 'padrao' && marcasDoPadrao().length > 0;
   const lista = regrasDeDeck?.[formato];
-  if (!Array.isArray(lista) || !lista.length) return null;
+  if (!porMarca && (!Array.isArray(lista) || !lista.length)) return null;
   const fora = [];
   let dentro = 0;
   let desconhecidas = 0;
@@ -8630,12 +8889,21 @@ function legalidadeDoDeck(deck, formato = 'padrao') {
     const card = cardMap.get(cardId);
     const qtd = Math.max(0, Number(qtdRaw) || 0);
     if (!card || !qtd) continue;
-    const legal = colecaoNoFormato(card.setId, formato);
+    // Energia básica vale em qualquer formato, seja de que coleção for — uma
+    // Energia de Fogo de 2016 não "sai" na rotação.
+    if (ehEnergiaBasica(card)) { dentro += qtd; continue; }
+    const legal = porMarca ? cartaNoPadrao(card) : colecaoNoFormato(card.setId, formato);
     if (legal === null) { desconhecidas += qtd; continue; }
     if (legal) dentro += qtd;
-    else fora.push({ cardId, nome: card.name, onde: card.setName, qtd });
+    else {
+      const marca = String(card.regulationMark || '').trim().toUpperCase();
+      fora.push({ cardId, nome: card.name, onde: `${card.setName} ${card.number || ''}${marca ? ` · marca ${marca}` : ''}`.trim(), qtd });
+    }
   }
-  return { dentro, fora, desconhecidas, aviso: regrasDeDeck?.aviso || '' };
+  const aviso = porMarca
+    ? `Pela marca impressa em cada carta: no Padrão valem ${marcasDoPadrao().join(', ')}. Treinador e Energia especial também valem na impressão antiga quando foram reimpressos. Confirme no site oficial antes de um campeonato.`
+    : regrasDeDeck?.aviso || '';
+  return { dentro, fora, desconhecidas, aviso, porMarca };
 }
 
 /* 7. AVISO DE ROTAÇÃO
@@ -8650,7 +8918,8 @@ function marcasDoDeck(deck) {
   for (const [cardId, qtdRaw] of Object.entries(deck?.cards || {})) {
     const card = cardMap.get(cardId);
     const qtd = Math.max(0, Number(qtdRaw) || 0);
-    if (!card || !qtd) continue;
+    // Energia básica não tem marca e não rotaciona.
+    if (!card || !qtd || ehEnergiaBasica(card)) continue;
     const marca = String(card.regulationMark || '').trim().toUpperCase();
     if (marca) porMarca.set(marca, (porMarca.get(marca) || 0) + qtd);
     else semMarca += qtd;
@@ -8685,13 +8954,16 @@ function deckValidation(deck) {
     const card = cardMap.get(cardId);
     const qty = Math.max(0, Number(qtyRaw) || 0);
     if (!card || !qty) continue;
-    /* No planejamento, faltar carta não é erro — é justamente o ponto. */
-    if (qty > quantityFor(cardId)) {
+    /* No planejamento, faltar carta não é erro — é justamente o ponto.
+       Energia básica nunca falta (posseParaDeck). */
+    if (qty > posseParaDeck(cardId)) {
       const mensagem = `${card.name}: o deck usa ${qty}, mas você possui ${quantityFor(cardId)}.`;
       if (deckPlanejando(deck)) warnings.push(`${mensagem} Falta comprar ${qty - quantityFor(cardId)}.`);
       else errors.push(mensagem);
     }
-    if (deckCardClass(card) !== 'energy') {
+    // O limite de 4 vale para tudo menos Energia BÁSICA — Energia especial
+    // também tem 4 cópias no máximo.
+    if (!ehEnergiaBasica(card)) {
       const key = deckNameKey(card);
       byName.set(key, { name: card.name, qty: (byName.get(key)?.qty || 0) + qty });
     }
@@ -8719,10 +8991,11 @@ function deckValidation(deck) {
 function addDeckCardQuantity(target, cardId, wanted) {
   const card = cardMap.get(cardId);
   if (!card) return 0;
-  const available = quantityFor(cardId);
+  const available = posseParaDeck(cardId);
   const current = Math.max(0, Number(target[cardId]) || 0);
-  const sameNameElsewhere = deckCardClass(card) === 'energy' ? 0 : deckNameQuantity({ cards: target }, card, cardId);
-  const nameLimit = deckCardClass(card) === 'energy' ? 60 : Math.max(0, 4 - sameNameElsewhere);
+  const basica = ehEnergiaBasica(card);
+  const sameNameElsewhere = basica ? 0 : deckNameQuantity({ cards: target }, card, cardId);
+  const nameLimit = basica ? 60 : Math.max(0, 4 - sameNameElsewhere);
   const allowed = Math.min(available, deckCardLimit(card), nameLimit);
   const room = Math.max(0, 60 - Object.values(target).reduce((a,b)=>a+Math.max(0,Number(b)||0),0));
   const add = Math.max(0, Math.min(Number(wanted) || 0, allowed - current, room));
@@ -8774,6 +9047,9 @@ function renderDeckCardRow(deck, cardId, qty) {
   const card = cardMap.get(cardId);
   if (!card) return '';
   const owned = quantityFor(cardId);
+  const origem = ehEnergiaBasica(card)
+    ? 'Energia básica · qualquer impressão'
+    : `${card.number} · ${card.setName} · você tem ${owned}`;
   return `<div class="deck-card-row">
     <div class="deck-card-art">
       ${card.imageUrl
@@ -8781,7 +9057,7 @@ function renderDeckCardRow(deck, cardId, qty) {
         : ''}
       <div class="deck-card-placeholder" style="${card.imageUrl ? 'display:none' : 'display:flex'}">Buscando arte…</div>
     </div>
-    <div class="deck-card-info"><strong>${esc(card.name)}</strong><span>${esc(card.number)} · ${esc(card.setName)} · você tem ${owned}</span></div>
+    <div class="deck-card-info"><strong>${esc(card.name)}</strong><span>${esc(origem)}</span></div>
     <div class="deck-qty"><button onclick="changeDeckCard('${esc(deck.id)}','${esc(cardId)}',-1)">−</button><b>${qty}</b><button onclick="changeDeckCard('${esc(deck.id)}','${esc(cardId)}',1)">+</button></div>
   </div>`;
 }
@@ -8790,12 +9066,13 @@ function renderDeckCardRow(deck, cardId, qty) {
    só ocupa espaço e ensina a pessoa a rolar sem ler. */
 function painelEnergiaDoDeck(deck) {
   const energia = energiasDoDeck(deck);
-  if (!energia.porTipo.size && !energia.basicasSemTipo) return '';
+  if (!energia.porTipo.size && !energia.basicasSemTipo && !energia.especiaisSemTipo) return '';
   const linhas = [...energia.porTipo.entries()].sort((a, b) => b[1] - a[1]);
   return `<section class="deck-painel">
     <strong>Energia por tipo</strong>
     <div class="deck-energias">
       ${linhas.map(([tipo, qtd]) => `<span class="${energia.semPokemon.includes(tipo) ? 'sobrando' : ''}"><b>${qtd}</b> ${esc(tipo)}</span>`).join('')}
+      ${energia.especiaisSemTipo ? `<span><b>${energia.especiaisSemTipo}</b> especiais</span>` : ''}
       ${energia.basicasSemTipo ? `<span class="indefinida"><b>${energia.basicasSemTipo}</b> sem tipo identificado</span>` : ''}
     </div>
     ${energia.semEnergia.length ? `<small class="deck-alerta">Pokémon de ${esc(energia.semEnergia.join(', '))} sem Energia correspondente.</small>` : ''}
@@ -8824,8 +9101,8 @@ function painelRotacao(deck) {
   if (!deckTotal(deck)) return '';
   const legal = legalidadeDoDeck(deck, 'padrao');
 
-  /* Com a lista baixada, a resposta é por COLEÇÃO — que é como a rotação
-     realmente funciona. As letras de regulamentação viram só o detalhe. */
+  /* Carta a carta, pela marca de regulamentação que vale no Padrão (ou, num
+     catálogo antigo sem essa informação, pela lista de coleções baixada). */
   if (legal) {
     const fora = legal.fora.reduce((soma, item) => soma + item.qtd, 0);
     return `<section class="deck-painel">
@@ -8839,7 +9116,7 @@ function painelRotacao(deck) {
         <ol>${legal.fora.map(item => `<li onclick="openCard('${esc(item.cardId)}')">
           <span>${item.qtd}× ${esc(item.nome)}<small>${esc(item.onde)}</small></span></li>`).join('')}</ol></details>` : ''}
       <small class="deck-nota">${esc(legal.aviso || 'Legalidade estimada por fonte da comunidade.')}
-        ${regrasDeDeck?.geradoEm ? `Lista de ${esc(mesAnoDoLancamento?.(regrasDeDeck.geradoEm) || String(regrasDeDeck.geradoEm).slice(0, 10))}.` : ''}</small>
+        ${!legal.porMarca && regrasDeDeck?.geradoEm ? `Lista de ${esc(mesAnoDoLancamento?.(regrasDeDeck.geradoEm) || String(regrasDeDeck.geradoEm).slice(0, 10))}.` : ''}</small>
     </section>`;
   }
 
@@ -8917,7 +9194,7 @@ function renderDeckEditor(deck) {
   const messages = [...report.errors.map(x=>`<li class="deck-error">${esc(x)}</li>`), ...report.warnings.map(x=>`<li class="deck-warning">${esc(x)}</li>`)].join('');
   return `<section class="screen">
     <button class="back-btn" onclick="selectedDeckId=null;render()">← Voltar aos decks</button>
-    <div class="deck-editor-head"><div><h2 class="screen-title">${esc(deck.name)}</h2><p class="screen-subtitle">Edite usando somente as cartas que você possui.</p></div><button class="danger-btn compact-btn" onclick="deleteDeck('${esc(deck.id)}')">Excluir</button></div>
+    <div class="deck-editor-head"><div><h2 class="screen-title">${esc(deck.name)}</h2><p class="screen-subtitle">${deckPlanejando(deck) ? 'Em planejamento: vale carta que você ainda não tem — ela vira lista de compras.' : 'Edite usando somente as cartas que você possui.'}</p></div><button class="danger-btn compact-btn" onclick="deleteDeck('${esc(deck.id)}')">Excluir</button></div>
     <div class="deck-summary ${report.valid?'valid':'invalid'}"><strong>${report.total}/60 cartas · força ${report.score}/100</strong><span>${report.split.pokemon} Pokémon · ${report.split.trainerTotal} Treinadores · ${report.split.energy} Energias</span><small>${report.valid?'Deck validado para batalha.':'Ainda existem ajustes necessários.'}</small></div>
     ${messages ? `<ul class="deck-validation">${messages}</ul>` : ''}
     ${painelEnergiaDoDeck(deck)}
@@ -9016,10 +9293,9 @@ function deckImprovementReport(deck) {
   let basics = 0;
   for (const [cardId, qty] of Object.entries(deck?.cards || {})) {
     const card = cardMap.get(cardId);
-    if (!card || deckCardGroup(card) !== 'pokemon') continue;
-    const speciesId = pokemonIdsForCard(card)[0];
-    const evolvesFrom = window.__POKEMON_EVOLVES_FROM__?.[speciesId];
-    if (!evolvesFrom) basics += Math.max(0, Number(qty) || 0);
+    // Pokémon V e Radiante são Básicos; Pikachu não depende de Pichu.
+    if (!card || deckCardGroup(card) !== 'pokemon' || !ehPokemonBasico(card)) continue;
+    basics += Math.max(0, Number(qty) || 0);
   }
   if (!basics) {
     suggestions.push({ level: 'critical', text: 'Nenhum Pokémon Básico identificado: o deck não consegue começar a partida.' });
@@ -9123,8 +9399,10 @@ function changeDeckCard(deckId, cardId, delta) {
   if (!deck || !card) return;
   deck.cards = deck.cards || {};
   const current = Math.max(0, Number(deck.cards[cardId]) || 0);
-  const sameNameElsewhere = deckCardClass(card) === 'energy' ? 0 : deckNameQuantity(deck, card, cardId);
-  const nameLimit = deckCardClass(card) === 'energy' ? 60 : Math.max(0, 4-sameNameElsewhere);
+  // Só a Energia básica passa das 4 cópias; a especial segue o limite.
+  const basica = ehEnergiaBasica(card);
+  const sameNameElsewhere = basica ? 0 : deckNameQuantity(deck, card, cardId);
+  const nameLimit = basica ? 60 : Math.max(0, 4-sameNameElsewhere);
   const max = Math.min(copiasDisponiveis(deck, cardId), deckCardLimit(card), nameLimit);
   const roomMax = current + Math.max(0, 60-deckTotal(deck));
   const next = Math.max(0, Math.min(max, roomMax, current + Number(delta || 0)));
@@ -9164,33 +9442,115 @@ function openDeckCardPicker(deckId) {
 
 
 /* 5. COLAR UMA LISTA PRONTA
-   Exportar já existia; colar, não. Quem joga copia lista da internet o tempo
-   todo. Cada linha vira "quantas" + "nome" (+ coleção e número, quando vêm).
-   O casamento é por nome; havendo coleção e número, eles decidem entre as
-   várias impressões da mesma carta. */
+   Quem joga copia lista do Pokémon TCG Live e do Limitless o tempo todo — e
+   elas chegam em INGLÊS, identificando cada impressão pela sigla da coleção
+   e o número ("4 Boss's Orders PAL 172"). A versão antiga procurava pelo
+   nome em português e não reconhecia as siglas: quase nenhum Treinador
+   entrava. Agora a ordem é:
+     1. Energia básica → a impressão comum do tipo (qualquer uma serve);
+     2. sigla + número → a impressão exata, em qualquer idioma;
+     3. nome em português ou inglês, com número e sigla para desempatar. */
+
+/* Siglas do PTCGL das coleções recentes. O catálogo enriquecido traz a de
+   todas (campo tcgOnline); estas garantem as mais usadas mesmo antes disso. */
+const SIGLAS_PTCGL_EMBUTIDAS = {
+  sv01: 'SVI', sv02: 'PAL', sv03: 'OBF', 'sv03.5': 'MEW', sv04: 'PAR', 'sv04.5': 'PAF', sv05: 'TEF',
+  sv06: 'TWM', 'sv06.5': 'SFA', sv07: 'SCR', sv08: 'SSP', 'sv08.5': 'PRE', sv09: 'JTG', sv10: 'DRI',
+  'sv10.5b': 'BLK', 'sv10.5w': 'WHT', svp: 'SVP', sve: 'SVE', me01: 'MEG', me02: 'PFL', 'me02.5': 'ASC',
+  mee: 'MEE', mep: 'MEP', swsh11: 'LOR', swsh12: 'SIT', 'swsh12.5': 'CRZ', swshp: 'PR-SW',
+  // As Galerias de Treinador são coleções à parte no catálogo, mas nas listas
+  // vêm com a sigla da coleção principal e o número "TG05".
+  'swsh9.5tg': 'BRS', 'swsh10.5tg': 'ASR', 'swsh11.5tg': 'LOR', 'swsh12.5tg': 'SIT',
+};
+// Promos aparecem com duas grafias: "SVP 27" (Limitless) e "PR-SV 27" (PTCGL).
+const SIGLAS_ALTERNATIVAS = { svp: ['PR-SV'], swshp: ['SWSHP'], smp: ['SMP'], mep: ['PR-ME'] };
+let setsPorSiglaCache = null;
+let indicePorNomeCache = null;
+
+function setsDaSigla(sigla) {
+  if (!setsPorSiglaCache) {
+    setsPorSiglaCache = new Map();
+    for (const set of catalog.sets || []) {
+      const codigos = [set.tcgOnline || SIGLAS_PTCGL_EMBUTIDAS[set.id], ...(SIGLAS_ALTERNATIVAS[set.id] || [])];
+      for (const bruto of codigos) {
+        const codigo = String(bruto || '').trim().toUpperCase();
+        if (!codigo) continue;
+        if (!setsPorSiglaCache.has(codigo)) setsPorSiglaCache.set(codigo, []);
+        setsPorSiglaCache.get(codigo).push(set.id);
+      }
+    }
+  }
+  return setsPorSiglaCache.get(String(sigla || '').trim().toUpperCase()) || [];
+}
+
+// Nome normalizado (português e, quando existe, inglês) → cartas.
+function indicePorNome() {
+  if (indicePorNomeCache) return indicePorNomeCache;
+  indicePorNomeCache = new Map();
+  const guardar = (chave, card) => {
+    if (!chave) return;
+    if (!indicePorNomeCache.has(chave)) indicePorNomeCache.set(chave, []);
+    indicePorNomeCache.get(chave).push(card);
+  };
+  for (const card of cards) {
+    guardar(normalize(card.name), card);
+    if (card.nameEn) guardar(normalize(card.nameEn), card);
+  }
+  return indicePorNomeCache;
+}
+
+// "007" e "7" são o mesmo número; "TG05" e "TG5" também.
+function numeroDaImpressao(valor) {
+  return String(valor || '').trim().toUpperCase().replace(/^([A-Z]*)0+(?=\d)/, '$1');
+}
+
+/* Linha de Energia básica, em qualquer das grafias comuns: "Basic {R}
+   Energy" (PTCGL), "Basic Fire Energy", "Fire Energy", "Energia de Fogo",
+   "Energia de Fogo Básica". Devolve o tipo na escala do montador. */
+const SIMBOLO_DE_ENERGIA = { G: 'grass', R: 'fire', W: 'water', L: 'lightning', P: 'psychic', F: 'fighting', D: 'darkness', M: 'metal', Y: 'fairy' };
+const ENERGIA_BASICA_EM_PORTUGUES = {
+  agua: 'water', fogo: 'fire', grama: 'grass', planta: 'grass', luta: 'fighting', metal: 'metal',
+  fada: 'fairy', raios: 'lightning', escuridao: 'darkness', eletrica: 'lightning', psiquica: 'psychic',
+};
+function energiaBasicaDaLinha(nome) {
+  const bruto = String(nome || '');
+  const simbolo = bruto.match(/\{([GRWLPFDMY])\}/i);
+  if (simbolo && /energ/i.test(bruto)) return SIMBOLO_DE_ENERGIA[simbolo[1].toUpperCase()] || '';
+  const n = normalize(bruto);
+  const ingles = n.match(/^(?:basic )?(grass|fire|water|lightning|psychic|fighting|darkness|metal|fairy) energy$/);
+  if (ingles) return ingles[1];
+  const pt = n.match(/^energia (?:basica )?(?:de )?(agua|fogo|grama|planta|luta|metal|fada|raios|escuridao|eletrica|psiquica)(?: basica)?$/);
+  return pt ? ENERGIA_BASICA_EM_PORTUGUES[pt[1]] : '';
+}
+
 function abrirImportarLista(deckId) {
   showModal(`
     <button class="modal-close" onclick="closeModal()">×</button>
     <h2>Colar lista de deck</h2>
-    <p class="screen-subtitle">Uma carta por linha. Aceita os formatos mais comuns:<br>
-      <code>4 Charizard ex</code> · <code>4x Charizard ex</code> · <code>4 Charizard ex OBF 125</code></p>
-    <textarea id="listaColada" class="field notes-field" rows="10" placeholder="4 Charizard ex OBF 125&#10;3 Ordens do Chefe&#10;10 Energia de Fogo"></textarea>
+    <p class="screen-subtitle">Cole a lista exportada do Pokémon TCG Live ou do Limitless, em inglês ou português. Com a sigla da coleção e o número, cada carta entra na impressão exata:<br>
+      <code>4 Boss's Orders PAL 172</code> · <code>3 Charizard ex OBF 125</code> · <code>8 Basic {R} Energy SVE 2</code><br>
+      Também vale só o nome: <code>4 Doce Raro</code> · <code>4x Rare Candy</code></p>
+    <textarea id="listaColada" class="field notes-field" rows="10" placeholder="Pokémon: 12&#10;3 Charmander PAF 7&#10;3 Charizard ex OBF 125&#10;&#10;Trainer: 36&#10;4 Rare Candy SVI 191&#10;4 Boss's Orders PAL 172&#10;&#10;Energy: 12&#10;12 Basic {R} Energy SVE 2"></textarea>
     <div class="modal-actions">
       <button class="primary-btn" onclick="importarListaDeDeck('${esc(deckId)}')">Conferir e adicionar</button>
     </div>`);
   setTimeout(() => document.getElementById('listaColada')?.focus(), 120);
 }
 
-/** Lê uma linha de decklist: quantidade, nome e, se houver, coleção/número. */
+/** Lê uma linha de decklist: quantidade, nome e, se houver, sigla e número. */
 function lerLinhaDeLista(linha) {
-  const limpa = String(linha || '').trim();
-  if (!limpa || /^(pok[eé]mon|treinador|trainer|energia|energy|total)\b\s*[:\-]?\s*\d*$/i.test(limpa)) return null;
+  // "* 4 Nome" (formato antigo do PTCGO) e "- 4 Nome" também valem.
+  const limpa = String(linha || '').trim().replace(/^[*•-]\s*/, '');
+  // Cabeçalhos ("Pokémon: 12", "Trainer: 36", "Total Cards: 60") não começam
+  // com número e ficam de fora aqui.
   const casa = limpa.match(/^(\d{1,2})\s*[xX]?\s+(.+)$/);
   if (!casa) return null;
   const quantidade = Math.max(1, Math.min(60, Number(casa[1])));
-  let resto = casa[2].replace(/\s*[—–-]\s*/g, ' ').trim();
-  // Cauda "SIGLA 123" ou "SIGLA 123/456" costuma ser a impressão.
-  const cauda = resto.match(/\s+([A-Za-z0-9.]{2,6})\s+(\d{1,3})(?:\/\d{1,3})?$/);
+  // Só travessão com espaço dos dois lados é separador: "Ho-Oh" e "PR-SW"
+  // continuam inteiros.
+  let resto = casa[2].replace(/\s+[—–-]\s+/g, ' ').trim();
+  // Cauda "SIGLA 123", "SIGLA TG05" ou "SIGLA 123/456": a impressão.
+  const cauda = resto.match(/\s+([A-Za-z][A-Za-z0-9-]{1,6})\s+([A-Za-z]{0,4}\d{1,4}[a-z]?)(?:\/\d{1,4})?$/);
   let sigla = '';
   let numero = '';
   if (cauda) { sigla = cauda[1]; numero = cauda[2]; resto = resto.slice(0, cauda.index).trim(); }
@@ -9198,22 +9558,58 @@ function lerLinhaDeLista(linha) {
 }
 
 function acharCartaDaLista(item) {
+  // 1. Energia básica: qualquer impressão serve; fica a comum.
+  const tipoBasico = energiaBasicaDaLinha(item.nome);
+  if (tipoBasico) {
+    const basica = energiaBasicaCanonica(tipoBasico);
+    if (basica) return basica;
+  }
+
+  // 2. Sigla + número: a impressão exata, sem depender do idioma do nome.
+  const numero = numeroDaImpressao(item.numero);
   const alvo = normalize(item.nome);
+  if (item.sigla && numero) {
+    const daSigla = setsDaSigla(item.sigla).flatMap(setId => cardsBySet.get(setId) || []);
+    let naImpressao = daSigla.filter(card => numeroDaImpressao(card.localId) === numero);
+    // "PR-SW 61" é a carta "SWSH061": sem letra na lista, vale só o número.
+    if (!naImpressao.length && /^\d+$/.test(numero)) {
+      naImpressao = daSigla.filter(card => numeroDaImpressao(card.localId).replace(/^[A-Z]+/, '') === numero);
+    }
+    if (naImpressao.length === 1) return naImpressao[0];
+    if (naImpressao.length > 1) {
+      return naImpressao.find(card => normalize(card.name) === alvo || normalize(card.nameEn) === alvo) || naImpressao[0];
+    }
+  }
+
+  // 3. Nome em português ou inglês; número e sigla desempatam.
   if (!alvo) return null;
-  let candidatas = cards.filter(card => normalize(card.name) === alvo);
-  if (!candidatas.length) candidatas = cards.filter(card => normalize(card.name).startsWith(alvo));
+  const indice = indicePorNome();
+  let candidatas = indice.get(alvo) || [];
+  // "Boss's Orders (Ghetsis)": o apelido entre parênteses não faz parte do nome.
+  const semApelido = normalize(String(item.nome).replace(/\([^)]*\)/g, ' '));
+  if (!candidatas.length && semApelido && semApelido !== alvo) candidatas = indice.get(semApelido) || [];
+  if (!candidatas.length) {
+    for (const [chave, lista] of indice) if (chave.startsWith(alvo)) candidatas = candidatas.concat(lista);
+  }
   if (!candidatas.length) return null;
-  if (item.numero) {
-    const porNumero = candidatas.filter(card => String(Number(String(card.localId || '').match(/\d+/)?.[0] ?? -1)) === String(Number(item.numero)));
+  if (numero) {
+    const porNumero = candidatas.filter(card => numeroDaImpressao(card.localId) === numero);
     if (porNumero.length) candidatas = porNumero;
   }
   if (item.sigla) {
+    const setIds = new Set(setsDaSigla(item.sigla));
     const sigla = normalize(item.sigla);
-    const porSigla = candidatas.filter(card => normalize(card.setId).includes(sigla) || normalize(card.setName).startsWith(sigla));
+    const porSigla = candidatas.filter(card => setIds.has(card.setId) || normalize(card.setId).includes(sigla) || normalize(card.setName).startsWith(sigla));
     if (porSigla.length) candidatas = porSigla;
   }
-  // Empate: fica a que você tem mais cópias — é a que você usaria de verdade.
-  return candidatas.sort((a, b) => quantityFor(b.id) - quantityFor(a.id))[0];
+  /* Empate: a que você tem mais cópias — é a que você usaria de verdade. Sem
+     nenhuma, a versão comum da coleção mais nova: "4 Rare Candy" quer o Doce
+     Raro que está no formato, não o de 2014 nem o dourado. */
+  const lancamento = new Map((catalog.sets || []).map(set => [set.id, String(set.releaseDate || '')]));
+  const cara = card => /secret|hyper|illustration|ultra|shiny|full art|rainbow|gold/i.test(String(card.rarity || '')) ? 1 : 0;
+  return candidatas.slice().sort((a, b) => quantityFor(b.id) - quantityFor(a.id)
+    || cara(a) - cara(b)
+    || (lancamento.get(b.setId) || '').localeCompare(lancamento.get(a.setId) || ''))[0];
 }
 
 function importarListaDeDeck(deckId) {
@@ -9225,21 +9621,37 @@ function importarListaDeDeck(deckId) {
 
   deck.cards = deck.cards || {};
   const naoAchadas = [];
+  const cortadas = [];
   let adicionadas = 0;
+  let pedidas = 0;
   for (const item of linhas) {
+    pedidas += item.quantidade;
     const card = acharCartaDaLista(item);
-    if (!card) { naoAchadas.push(`${item.quantidade}× ${item.nome}`); continue; }
+    if (!card) { naoAchadas.push(`${item.quantidade}× ${item.nome}${item.sigla ? ` ${item.sigla} ${item.numero}` : ''}`); continue; }
     const antes = Math.max(0, Number(deck.cards[card.id]) || 0);
     // Lista colada quase sempre traz carta que a pessoa ainda não tem.
     if (!deckPlanejando(deck)) deck.planejando = true;
-    const limite = deckCardClass(card) === 'energy' ? 60 : 4;
+    // 4 cópias por NOME, somando impressões — só a Energia básica é livre.
+    const limite = ehEnergiaBasica(card) ? 60 : Math.max(0, 4 - deckNameQuantity(deck, card, card.id));
     const espaco = Math.max(0, 60 - deckTotal(deck));
-    const somar = Math.min(item.quantidade, limite - antes, espaco);
+    const somar = Math.max(0, Math.min(item.quantidade, limite - antes, espaco));
     if (somar > 0) { deck.cards[card.id] = antes + somar; adicionadas += somar; }
+    if (somar < item.quantidade) cortadas.push(`${item.quantidade - somar}× ${card.name}`);
   }
-  saveState(); closeModal(); render();
-  const aviso = naoAchadas.length ? ` ${naoAchadas.length} não encontrada(s): ${naoAchadas.slice(0, 3).join('; ')}${naoAchadas.length > 3 ? '…' : ''}` : '';
-  notify(`${adicionadas} carta(s) adicionadas.${aviso}`);
+  saveState(); render();
+  // Resultado num painel, não num aviso que some: quem colou 60 linhas
+  // precisa ver exatamente quais não entraram para corrigir.
+  showModal(`
+    <button class="modal-close" onclick="closeModal()">×</button>
+    <h2>Lista importada</h2>
+    <p class="screen-subtitle">${adicionadas} de ${pedidas} cartas entraram no deck.${deckPlanejando(deck) ? ' O deck ficou em planejamento: o que você ainda não tem vira lista de compras.' : ''}</p>
+    ${naoAchadas.length ? `<section class="deck-painel"><strong>Não reconhecidas (${naoAchadas.length})</strong>
+      <ul class="lista-simples">${naoAchadas.map(linha => `<li>${esc(linha)}</li>`).join('')}</ul>
+      <small class="deck-nota">Confira a grafia, ou use a sigla e o número da carta (ex.: PAL 172). Coleções que o catálogo ainda não tem não são reconhecidas.</small></section>` : ''}
+    ${cortadas.length ? `<section class="deck-painel"><strong>Acima do limite (${cortadas.length})</strong>
+      <ul class="lista-simples">${cortadas.map(linha => `<li>${esc(linha)}</li>`).join('')}</ul>
+      <small class="deck-nota">Máximo de 4 cópias por nome e 60 cartas no deck.</small></section>` : ''}
+    <div class="modal-actions"><button class="primary-btn" onclick="closeModal()">Ver o deck</button></div>`);
 }
 
 /* 6. FOLHA DE INSCRIÇÃO PARA TORNEIO
