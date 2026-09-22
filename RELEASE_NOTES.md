@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.53.0 — Coleção mais limpa e barra de baixo sem ícones repetidos
+
+- Coleção: a busca divide a linha com um botão "Filtros". Ordenação, coleção e artista ficam numa gaveta que mostra na hora quantas cartas vão aparecer. Os filtros rápidos (Tudo, Tenho, Faltantes…) viram uma fileira que rola para o lado, e o que está ligado aparece como etiqueta com × para desligar num toque. As cartas começam na metade de cima da tela, e não mais embaixo de dois terços de botões.
+- Barra de baixo: o "Mais" ganhou o ícone de três pontos (antes era igual ao de Decks) e o "Explorar" ganhou uma bússola (antes era uma pokébola ao lado da Pokébola do scanner).
+- As cartas não mostram mais a bolinha "x1": a quantidade só aparece a partir de x2.
+
 # POKECARD Brasil 5.52.0 — Últimas adicionadas, filtro por artista e lista/2/3 colunas
 
 - Tela inicial ganhou a faixa "Adicionadas recentemente": as últimas cartas que entraram na coleção, rolando para o lado, com "hoje", "ontem", "há 3 dias"... Tocar abre a carta; "Ver todas" abre a Coleção já ordenada.

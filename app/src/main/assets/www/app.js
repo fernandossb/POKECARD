@@ -30,7 +30,7 @@ const CENTRAL_PRICE_DB_KEY = 'current';
 const CENTRAL_PRICE_SYNC_TTL = 6 * 60 * 60 * 1000;
 const TAB_ITEMS = [
   ['dashboard', 'Início', 'home'],
-  ['sets', 'Explorar', 'pokedex'],
+  ['sets', 'Explorar', 'explorar'],
   ['cards', 'Coleção', 'collections'],
   ['pokedex', 'Pokédex', 'pokedex'],
   ['decks', 'Decks', 'decks'],
@@ -2746,7 +2746,11 @@ function tabIcon(name) {
     pokedex: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><circle cx="12" cy="12" r="3"/></svg>',
     decks: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4" width="12" height="16" rx="2"/><path d="M3 7v11a2 2 0 0 0 2 2M9 1h8a2 2 0 0 1 2 2v14"/></svg>',
     wishlist: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21S3 16 3 9.5A4.5 4.5 0 0 1 11 6.7 4.5 4.5 0 0 1 21 9.5C21 16 12 21 12 21z"/></svg>',
-    repeated: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h11v11H7z"/><path d="M4 4h11v3M4 4v11h3"/><path d="M11 12h3M12.5 10.5v3"/></svg>'
+    repeated: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h11v11H7z"/><path d="M4 4h11v3M4 4v11h3"/><path d="M11 12h3M12.5 10.5v3"/></svg>',
+    // Bússola: o Explorar usava a pokébola, bem ao lado da Pokébola do scanner.
+    explorar: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m15.4 8.6-2 4.8-4.8 2 2-4.8z"/></svg>',
+    // Três pontos: o Mais usava o mesmo desenho do Decks.
+    mais: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="19" cy="12" r="1.4" fill="currentColor"/></svg>'
   };
   return icons[name] || icons.cards;
 }
@@ -2766,7 +2770,7 @@ function renderTabs() {
       <span class="tab-icon">${tabIcon(icon)}</span><span class="tab-label">${label}</span>
     </button>`).join('') + `
     <button class="tab ${['pokedex','wishlist','repeated','produtos'].includes(ui.tab) ? 'active' : ''}" onclick="openMoreNavigation()" aria-label="Mais opções">
-      <span class="tab-icon">${tabIcon('decks')}</span><span class="tab-label">Mais</span>
+      <span class="tab-icon">${tabIcon('mais')}</span><span class="tab-label">Mais</span>
     </button>`;
 }
 
@@ -2808,7 +2812,7 @@ function render() {
   else if (ui.tab === 'pokedex') content.innerHTML = renderPokedex();
   else if (ui.tab === 'decks') content.innerHTML = renderDecks();
   else if (ui.tab === 'produtos') content.innerHTML = renderProdutos();
-  else content.innerHTML = renderCards();
+  else { content.innerHTML = renderCards(); mostrarChipAtivo(content); }
   labRecord('render_completo', performance.now() - labStart, { tab: ui.tab, htmlLength: content.innerHTML.length });
 }
 
@@ -4892,36 +4896,154 @@ function renderCards() {
   const forcedFilter = ui.tab === 'wishlist' ? 'wishlist' : ui.tab === 'repeated' ? 'repeated' : null;
   const filter = forcedFilter || ui.cardFilter;
   const title = ui.tab === 'wishlist' ? 'Quero' : ui.tab === 'repeated' ? 'Duplicadas' : 'Minha Coleção';
-  const selectedSet = ui.cardSet === 'all' ? null : catalog.sets.find(set => set.id === ui.cardSet);
+  /* Antes: busca, três seletores e sete botões de filtro em grade ocupavam
+     dois terços da tela antes da primeira carta. Agora a busca divide a linha
+     com o botão Filtros (ordenação, coleção e artista ficam numa gaveta), os
+     filtros rápidos viram uma fileira que rola para o lado, e o que está
+     ligado aparece como etiqueta com × para desligar num toque. */
   return `
     <section class="screen vision-collection-screen">
       <div class="collection-head"><h2>${esc(title)}</h2></div>
-      <!-- As fileiras "Tenho/Quero/Minhas" e "Sets/Cartas" saíram: a primeira
-           repetia os filtros logo abaixo e a segunda repetia os botões
-           Explorar e Coleção da barra de baixo. -->
 
       ${ui.tab === 'wishlist' ? renderFaltamParaDecks() : ''}
-      ${selectedSet ? `<div class="selected-set-banner"><span>${esc(selectedSet.name)}</span><button onclick="ui.cardSet='all';render()">Limpar</button></div>` : ''}
       <div class="toolbar collection-toolbar">
         ${ui.tab === 'wishlist' ? '<h3 class="section-title">Marcadas manualmente</h3><p class="screen-subtitle">Cartas que você quer, mesmo sem estarem em nenhum deck ainda.</p>' : ''}
-        <label class="vision-search"><span>${tabIcon('pokedex')}</span><input id="cardSearchInput" value="${esc(ui.cardQuery)}" placeholder="Buscar cartas..."
-          oncompositionstart="this.dataset.composing='1'"
-          oncompositionend="this.dataset.composing='';searchAndRender('cardQuery', this.value, 'cardSearchInput')"
-          oninput="searchAndRender('cardQuery', this.value, 'cardSearchInput')"></label>
-        <div class="filter-grid">
-          <select class="field" onchange="ui.cardSort=this.value;ui.cardLimit=40;cardResultCache.key='';refreshSearchResults('cardQuery', true)">
-            ${option('number','Número',ui.cardSort)}${option('name','Nome',ui.cardSort)}${option('recent','Adição: recente → antiga',ui.cardSort)}${option('quantity','Quantidade',ui.cardSort)}${option('price-desc','Preço: maior → menor',ui.cardSort)}${option('set','Coleção',ui.cardSort)}
-          </select>
-          <select class="field" onchange="ui.cardSet=this.value;ui.cardLimit=40;cardResultCache.key='';renderKeepingScroll()">
-            <option value="all">Todas as coleções</option>
-            ${catalog.sets.map(set => option(set.id, set.name, ui.cardSet)).join('')}
-          </select>
-          ${seletorDeArtista()}
+        <div class="colecao-busca-linha">
+          <label class="vision-search"><span>${tabIcon('pokedex')}</span><input id="cardSearchInput" value="${esc(ui.cardQuery)}" placeholder="Buscar cartas..."
+            oncompositionstart="this.dataset.composing='1'"
+            oncompositionend="this.dataset.composing='';searchAndRender('cardQuery', this.value, 'cardSearchInput')"
+            oninput="searchAndRender('cardQuery', this.value, 'cardSearchInput')"></label>
+          ${botaoDeFiltros()}
         </div>
-        ${!forcedFilter ? `<div class="chips collection-filter-chips">${filterChips()}</div>` : ''}
+        ${!forcedFilter ? `<div class="chips chips-rolagem" role="group" aria-label="Mostrar">${filterChips()}</div>` : ''}
+        ${etiquetasDeFiltrosAtivos()}
       </div>
       <div id="cardSearchResults">${renderCardSearchResults()}</div>
     </section>`;
+}
+
+/* ---------- Gaveta de filtros da Coleção ---------- */
+const ROTULOS_DE_ORDEM = {
+  number: 'Número',
+  name: 'Nome',
+  recent: 'Adição: recente → antiga',
+  quantity: 'Quantidade',
+  'price-desc': 'Preço: maior → menor',
+  set: 'Coleção',
+};
+
+// A ordenação conta junto: fora do padrão (Número), a lista também está
+// "diferente do normal" e o número no botão avisa isso.
+function quantosFiltrosNaGaveta() {
+  return (ui.cardSort !== 'number' ? 1 : 0) + (ui.cardSet !== 'all' ? 1 : 0) + (ui.cardArtist !== 'all' ? 1 : 0);
+}
+
+function botaoDeFiltros() {
+  const ligados = quantosFiltrosNaGaveta();
+  return `<button type="button" class="botao-filtros${ligados ? ' ativo' : ''}" onclick="abrirGavetaDeFiltros()"
+      aria-label="Ordenar e filtrar${ligados ? ` (${ligados} ${ligados === 1 ? 'ativo' : 'ativos'})` : ''}">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M7 12h10M10 17h4"/></svg>
+    <span>Filtros</span>${ligados ? `<b>${ligados}</b>` : ''}
+  </button>`;
+}
+
+function etiquetasDeFiltrosAtivos() {
+  const etiquetas = [];
+  if (ui.cardSort !== 'number') {
+    // "Adição: recente → antiga" já diz que é ordem; "Nome" sozinho não diz.
+    const ordem = ROTULOS_DE_ORDEM[ui.cardSort] || ui.cardSort;
+    etiquetas.push(['ordem', ordem.includes(':') ? ordem : `Ordem: ${ordem}`]);
+  }
+  if (ui.cardSet !== 'all') {
+    const set = catalog.sets.find(item => item.id === ui.cardSet);
+    etiquetas.push(['colecao', set?.name || ui.cardSet]);
+  }
+  if (ui.cardArtist !== 'all') etiquetas.push(['artista', `Artista: ${artistIndex.get(ui.cardArtist)?.nome || ui.cardArtist}`]);
+  if (!etiquetas.length) return '';
+  return `<div class="filtros-ativos">${etiquetas.map(([tipo, rotulo]) => `
+    <button type="button" class="filtro-ativo" onclick="limparFiltro('${tipo}')" aria-label="Tirar ${esc(rotulo)}">
+      <span>${esc(rotulo)}</span><b aria-hidden="true">×</b>
+    </button>`).join('')}
+    ${etiquetas.length > 1 ? `<button type="button" class="filtro-limpar-tudo" onclick="limparFiltro('tudo')">Limpar tudo</button>` : ''}
+  </div>`;
+}
+
+function limparFiltro(tipo) {
+  if (tipo === 'ordem' || tipo === 'tudo') ui.cardSort = 'number';
+  if (tipo === 'colecao' || tipo === 'tudo') ui.cardSet = 'all';
+  if (tipo === 'artista' || tipo === 'tudo') ui.cardArtist = 'all';
+  ui.cardLimit = 40;
+  cardResultCache.key = '';
+  renderKeepingScroll();
+}
+
+function contarResultadosDaColecao() {
+  if (currentCardFilter() === 'trade') {
+    const versoes = sobrasParaTrocar().length;
+    return `${versoes.toLocaleString('pt-BR')} ${versoes === 1 ? 'versão' : 'versões'}`;
+  }
+  const total = filteredCardsForUi().result.length;
+  return `${total.toLocaleString('pt-BR')} ${total === 1 ? 'carta' : 'cartas'}`;
+}
+
+function conteudoDaGavetaDeFiltros() {
+  return `
+    <button class="modal-close" onclick="closeModal()" aria-label="Fechar">×</button>
+    <h2>Ordenar e filtrar</h2>
+    <section class="gaveta-secao">
+      <h3>Ordenar por</h3>
+      <div class="gaveta-opcoes">${Object.entries(ROTULOS_DE_ORDEM).map(([valor, rotulo]) => `
+        <button type="button" class="gaveta-opcao${ui.cardSort === valor ? ' ativo' : ''}" aria-pressed="${ui.cardSort === valor}"
+          onclick="mudarNaGaveta('cardSort','${valor}')">${esc(rotulo)}</button>`).join('')}
+      </div>
+    </section>
+    <section class="gaveta-secao">
+      <h3>Coleção</h3>
+      <select class="field" aria-label="Coleção" onchange="mudarNaGaveta('cardSet', this.value)">
+        <option value="all">Todas as coleções</option>
+        ${catalog.sets.map(set => option(set.id, set.name, ui.cardSet)).join('')}
+      </select>
+    </section>
+    ${artistIndex.size ? `<section class="gaveta-secao">
+      <h3>Artista</h3>
+      ${seletorDeArtista()}
+    </section>` : ''}
+    <div class="gaveta-rodape">
+      <button type="button" class="secondary-btn" onclick="limparFiltro('tudo');atualizarGavetaDeFiltros()" ${quantosFiltrosNaGaveta() ? '' : 'disabled'}>Limpar</button>
+      <button type="button" class="primary-btn" onclick="closeModal()">Ver ${contarResultadosDaColecao()}</button>
+    </div>`;
+}
+
+function abrirGavetaDeFiltros() {
+  showModal(conteudoDaGavetaDeFiltros(), 'gaveta-filtros');
+}
+
+// Redesenha a gaveta aberta sem pular para o topo dela.
+function atualizarGavetaDeFiltros() {
+  const sheet = document.getElementById('modal-content');
+  if (!sheet || !sheet.classList.contains('gaveta-filtros')) return;
+  const y = sheet.scrollTop;
+  sheet.innerHTML = conteudoDaGavetaDeFiltros();
+  sheet.scrollTop = y;
+}
+
+/* Cada escolha vale na hora: a lista por trás da gaveta já muda, e o botão
+   de baixo diz quantas cartas vão aparecer antes de fechar. */
+function mudarNaGaveta(campo, valor) {
+  ui[campo] = valor;
+  ui.cardLimit = 40;
+  cardResultCache.key = '';
+  render();
+  atualizarGavetaDeFiltros();
+}
+
+// O filtro ligado pode estar no fim da fileira, fora da tela: traz para perto.
+function mostrarChipAtivo(raiz) {
+  const fileira = raiz?.querySelector('.chips-rolagem');
+  const ativo = fileira?.querySelector('.chip.active');
+  if (!fileira || !ativo) return;
+  const alvo = ativo.offsetLeft - (fileira.clientWidth - ativo.offsetWidth) / 2;
+  fileira.scrollLeft = Math.max(0, alvo);
 }
 
 /* A Wishlist agora abre com o espelho dos decks: o que falta comprar somando
@@ -5009,7 +5131,7 @@ function seletorDeArtista() {
   if (!artistIndex.size) return '';
   const artistas = artistasDoEscopo();
   return `<select class="field seletor-artista${ui.cardArtist !== 'all' ? ' ativo' : ''}" aria-label="Filtrar por artista"
-      onchange="ui.cardArtist=this.value;ui.cardLimit=40;cardResultCache.key='';this.classList.toggle('ativo', this.value!=='all');refreshSearchResults('cardQuery', true)">
+      onchange="mudarNaGaveta('cardArtist', this.value)">
     <option value="all">Todos os artistas (${artistas.length})</option>
     ${artistas.map(item => option(item.chave, `${item.nome} · ${item.total}`, ui.cardArtist)).join('')}
   </select>`;
@@ -7045,7 +7167,7 @@ function renderCardRow(card) {
   return `<article class="card-row vision-card-tile ${quantity > 0 ? '' : 'missing'}${variantes.completa ? ' completa' : ''}" data-card-id="${esc(card.id)}"${tipo ? ` data-tipo="${esc(tipo)}"` : ''}${selo ? ` data-raridade="${esc(selo)}"` : ''} onclick="openCard('${esc(card.id)}')">
     <div class="vision-card-art${brilho ? ` brilho-${brilho}` : ''}">
       ${displayImage ? `<img class="card-thumb" src="${esc(displayImage)}" loading="lazy" decoding="async" fetchpriority="low" onerror="this.outerHTML='<div class=&quot;card-placeholder&quot;>TCG</div>'">` : '<div class="card-placeholder">TCG</div>'}
-      ${quantity ? `<span class="tile-quantity-badge">x${quantity}</span>` : ''}
+      ${quantity > 1 ? `<span class="tile-quantity-badge">x${quantity}</span>` : ''}
       ${entry.wishlist ? '<span class="tile-wishlist-badge">Quero</span>' : ''}
       ${variantes.completa ? '<span class="marca-completa" title="Você tem todas as versões desta carta">★</span>' : ''}
       ${etiquetasDeVariante(variantes)}

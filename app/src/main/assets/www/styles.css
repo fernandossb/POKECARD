@@ -5268,3 +5268,104 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 }
 .card-artista-link span{ color: var(--vision-primary) !important; font-size: 16px; line-height: 1; }
 .card-artista-link:active{ transform: scale(.97); }
+
+/* ---------- v5.53 — Coleção: busca + Filtros numa linha, gaveta de filtros ---------- */
+
+.colecao-busca-linha{
+  display: grid; grid-template-columns: minmax(0,1fr) auto;
+  gap: 8px; align-items: stretch;
+}
+.colecao-busca-linha .vision-search{ min-height: 50px !important; }
+.botao-filtros{
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 0 14px; min-height: 50px;
+  border: 1px solid var(--v5-borda, var(--vision-line)); border-radius: 16px;
+  background: var(--vision-surface-2); color: var(--vision-text) !important;
+  font-size: 14px; font-weight: 700;
+}
+.botao-filtros svg{
+  width: 19px; height: 19px; fill: none; stroke: currentColor;
+  stroke-width: 2; stroke-linecap: round;
+}
+.botao-filtros b{
+  min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px;
+  display: inline-grid; place-items: center;
+  background: var(--vision-primary); color: var(--vision-bg, #10141a) !important;
+  -webkit-text-fill-color: var(--vision-bg, #10141a) !important;
+  font-size: 12px; line-height: 1;
+}
+.botao-filtros.ativo{
+  border-color: var(--vision-primary);
+  box-shadow: 0 0 0 1px var(--vision-primary) inset;
+}
+.botao-filtros:active{ transform: scale(.97); }
+
+/* Filtros rápidos numa fileira só, que rola para o lado. */
+.chips.chips-rolagem{
+  display: flex !important; flex-wrap: nowrap !important; gap: 8px !important;
+  overflow-x: auto; overscroll-behavior-x: contain;
+  margin: 10px -13px 0 !important; padding: 2px 13px 4px !important;
+  scroll-padding-inline: 13px;
+  scrollbar-width: none;
+}
+.chips.chips-rolagem::-webkit-scrollbar{ display: none; }
+.chips-rolagem .chip{
+  flex: 0 0 auto; white-space: nowrap;
+  min-height: 38px; padding: 0 15px !important;
+  border-radius: 999px !important;
+}
+
+/* O que está ligado na gaveta, à vista, com × para desligar. */
+.filtros-ativos{ display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.filtro-ativo{
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  min-height: 32px; padding: 0 6px 0 12px;
+  border: 1px solid var(--vision-primary); border-radius: 999px;
+  background: var(--vision-primary-soft, rgba(37,208,179,.14));
+  color: var(--vision-text) !important; font-size: 12px; font-weight: 600;
+}
+.filtro-ativo span{ white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.filtro-ativo b{
+  width: 22px; height: 22px; flex: 0 0 22px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: rgba(0,0,0,.25); color: var(--vision-text) !important;
+  font-size: 15px; line-height: 1;
+}
+.filtro-limpar-tudo{
+  min-height: 32px; padding: 0 8px; border: 0; background: transparent;
+  color: var(--vision-primary) !important; font-size: 12px; font-weight: 700;
+}
+
+/* Gaveta: ordenação em botões, coleção e artista embaixo, e o total de
+   cartas no botão de fechar. */
+.modal-sheet.gaveta-filtros{ max-height: 88dvh; padding-bottom: 0 !important; }
+.gaveta-filtros h2{ margin: 2px 44px 14px 0; font-size: 20px; }
+.gaveta-secao + .gaveta-secao{ margin-top: 18px; }
+.gaveta-filtros .gaveta-secao h3{
+  margin: 0 0 8px !important; font-size: 12px !important; font-weight: 700 !important;
+  letter-spacing: .06em; text-transform: uppercase;
+  color: var(--vision-muted) !important; -webkit-text-fill-color: var(--vision-muted) !important;
+}
+.gaveta-opcoes{ display: flex; flex-wrap: wrap; gap: 8px; }
+.gaveta-opcao{
+  min-height: 40px; padding: 0 14px;
+  border: 1px solid var(--v5-borda, var(--vision-line)); border-radius: 999px;
+  background: var(--vision-surface-2); color: var(--vision-text) !important;
+  font-size: 13px; font-weight: 600;
+}
+.gaveta-opcao.ativo{
+  border-color: var(--vision-primary);
+  background: var(--vision-primary-soft, rgba(37,208,179,.14));
+  color: var(--vision-primary) !important;
+  box-shadow: 0 0 0 1px var(--vision-primary) inset;
+}
+.gaveta-rodape{
+  position: sticky; bottom: 0; z-index: 2;
+  display: grid; grid-template-columns: auto 1fr; gap: 10px;
+  margin: 22px -17px 0; padding: 12px 17px calc(14px + env(safe-area-inset-bottom));
+  background: inherit;
+  border-top: 1px solid var(--v5-borda, var(--vision-line));
+}
+.gaveta-rodape button{ min-height: 50px; }
+.gaveta-rodape .secondary-btn{ padding: 0 18px; }
+.gaveta-rodape .secondary-btn:disabled{ opacity: .45; }
