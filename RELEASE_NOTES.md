@@ -1,3 +1,10 @@
+# POKECARD Brasil 5.55.0 — Início mais limpo e seletores com busca
+
+- Início: o painel "Preços da coleção" virou uma linha de estado, como "✓ Preços atualizados hoje às 08:20 · 18 de 18 cartas com preço", com atalho para revisar os preços pendentes. Os números técnicos do banco, a explicação da fonte e os percentuais por condição foram para "Sobre os preços".
+- Corrigido: o botão "Atualizar" do cartão Portfólio não fazia nada (chamava uma função inexistente). Agora atualiza os preços da coleção.
+- Filtros da Coleção: coleção e artista agora abrem uma lista com busca, em vez do seletor do Android com centenas de nomes. As coleções aparecem com logo, data e o quanto você já tem; os artistas com a quantidade de cartas. O botão Voltar do celular volta para a gaveta de filtros.
+- O aviso de backup virou uma faixa de uma linha, e o botão "PB" ganhou um ponto vermelho enquanto faltar backup.
+
 # POKECARD Brasil 5.54.0 — Capas vazias e páginas de fichário
 
 - A carta que você ainda não tem virou uma capa vazia do fichário: arte em cinza, bem apagada, atrás de um plástico com reflexo e contorno tracejado. Antes o cartão inteiro só ficava meio transparente.

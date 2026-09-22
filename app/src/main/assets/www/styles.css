@@ -5494,3 +5494,115 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 .tile-wishlist-badge{ top: 5px !important; bottom: auto !important; left: 5px !important; }
 .card-row.completa .tile-wishlist-badge{ left: 31px !important; }
 .card-list.layout-lista .tile-wishlist-badge{ top: 3px !important; left: 3px !important; }
+
+/* ---------- v5.55 — preços no Início, seletores com busca, aviso de backup ---------- */
+
+/* Preços: uma linha de estado em vez do painel técnico. */
+.precos-resumo{
+  margin-top: 16px; padding: 14px 16px;
+  border: 1px solid var(--v5-borda, var(--vision-line)); border-radius: 22px;
+  background: var(--vision-surface);
+}
+.precos-resumo-linha{ display: flex; align-items: center; gap: 12px; }
+.precos-resumo-linha strong{ display: block; font-size: 15px; color: var(--vision-text) !important; }
+.precos-resumo-linha small{ display: block; margin-top: 2px; font-size: 12px; opacity: .78; }
+.precos-selo{
+  flex: 0 0 34px; width: 34px; height: 34px; border-radius: 50%;
+  display: grid; place-items: center; font-weight: 800; font-size: 16px;
+  background: rgba(232,168,56,.18); color: #f0b54a !important;
+}
+.precos-selo.ok{ background: rgba(46,204,113,.16); color: #3ddc84 !important; }
+.precos-resumo .catalog-progress{ margin-top: 12px; }
+.precos-aviso{ display: block; margin-top: 10px; font-size: 12px; opacity: .8; }
+.precos-links{ display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 14px; margin-top: 8px; }
+.precos-links button{
+  min-height: 36px; padding: 0 2px; border: 0; background: transparent;
+  color: var(--vision-primary) !important; font-size: 13px; font-weight: 700;
+}
+.modal-sheet.sobre-precos h2{ margin-right: 44px; }
+.modal-sheet.sobre-precos .primary-btn{ width: 100%; margin: 14px 0 6px; }
+
+/* Botões da gaveta que abrem os seletores. */
+.gaveta-escolha{
+  width: 100%; min-height: 58px;
+  display: grid; grid-template-columns: 48px minmax(0,1fr) auto; align-items: center; gap: 12px;
+  padding: 7px 14px 7px 8px; text-align: left;
+  border: 1px solid var(--v5-borda, var(--vision-line)); border-radius: 16px;
+  background: var(--vision-surface-2); color: var(--vision-text) !important;
+}
+.gaveta-escolha.ativo{ border-color: var(--vision-primary); box-shadow: 0 0 0 1px var(--vision-primary) inset; }
+.gaveta-escolha > b{ font-size: 22px; line-height: 1; color: var(--vision-primary) !important; }
+
+/* Seletor: cabeçalho fixo (voltar + busca) e a lista rolando embaixo. */
+.seletor-cabecalho{
+  position: sticky; top: -18px; z-index: 3;
+  margin: -18px -17px 0; padding: 18px 17px 10px;
+  background: inherit;
+}
+.modal-sheet .seletor-cabecalho{ background: var(--vision-surface, #1b1024); }
+.seletor-topo{ display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.seletor-topo h2{ margin: 0 !important; font-size: 20px; }
+.gaveta-voltar{
+  width: 40px; height: 40px; flex: 0 0 40px; border-radius: 50%;
+  display: grid; place-items: center;
+  border: 1px solid var(--v5-borda, var(--vision-line));
+  background: var(--vision-surface-2); color: var(--vision-text) !important;
+  font-size: 24px; line-height: 1;
+}
+.seletor-busca{ min-height: 48px !important; }
+.seletor-lista{ display: grid; gap: 6px; padding: 4px 0 calc(22px + env(safe-area-inset-bottom)); }
+.seletor-linha{
+  width: 100%; min-height: 58px;
+  display: grid; grid-template-columns: 48px minmax(0,1fr) auto; align-items: center; gap: 12px;
+  padding: 6px 12px 6px 8px; text-align: left;
+  border: 1px solid transparent; border-radius: 14px;
+  background: var(--vision-surface-2); color: var(--vision-text) !important;
+}
+.seletor-linha.ativo{ border-color: var(--vision-primary); background: var(--vision-primary-soft, rgba(37,208,179,.14)); }
+.seletor-logo{
+  width: 48px; height: 34px; display: grid; place-items: center;
+  border-radius: 8px; background: rgba(255,255,255,.06); overflow: hidden;
+}
+.seletor-logo img{ width: 100%; height: 100%; object-fit: contain; padding: 3px; }
+.seletor-logo .set-logo-fallback{ font-size: 18px; opacity: .7; }
+.seletor-inicial{
+  width: 40px; height: 40px; margin-left: 4px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--vision-primary-soft, rgba(37,208,179,.16)); color: var(--vision-primary) !important;
+  font-weight: 800; font-size: 16px;
+}
+.seletor-texto{ min-width: 0; }
+.seletor-texto strong{
+  display: block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  color: var(--vision-text) !important;
+}
+.seletor-texto small{ display: block; margin-top: 2px; font-size: 12px; opacity: .75; }
+.seletor-barra{ display: block; height: 4px; margin-top: 5px; border-radius: 999px; background: rgba(255,255,255,.1); overflow: hidden; }
+.seletor-barra span{ display: block; height: 100%; border-radius: inherit; background: var(--vision-primary); }
+.seletor-marca{ color: var(--vision-primary) !important; font-size: 18px; }
+
+/* Aviso de backup: uma linha só, sem perder o tom de alerta. */
+.aviso-backup.compacto{
+  min-height: 44px; margin: 10px 0 !important; padding: 8px 14px !important;
+  border-radius: 14px !important;
+  background: rgba(201,138,18,.12) !important;
+}
+.aviso-backup.compacto > span:nth-child(2){ display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 1; }
+.aviso-backup.compacto strong{ font-size: 13px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aviso-backup.compacto small{ flex: 0 0 auto; font-size: 12px !important; font-weight: 700; color: #f0b54a !important; opacity: 1 !important; }
+.aviso-backup.compacto > span:first-child{ font-size: 16px !important; }
+
+/* Ponto vermelho no "PB" enquanto faltar backup. */
+.vision-profile-button{ position: relative; }
+.ponto-alerta{
+  position: absolute; top: -1px; right: -1px;
+  width: 13px; height: 13px; border-radius: 50%;
+  background: #ff4d4f; border: 2px solid var(--vision-bg, #10141a);
+  box-shadow: 0 0 0 0 rgba(255,77,79,.55);
+  animation: ponto-alerta-pulsa 2.4s ease-out infinite;
+}
+@keyframes ponto-alerta-pulsa{
+  0% { box-shadow: 0 0 0 0 rgba(255,77,79,.55); }
+  70%, 100% { box-shadow: 0 0 0 8px rgba(255,77,79,0); }
+}
+@media (prefers-reduced-motion: reduce){ .ponto-alerta{ animation: none; } }

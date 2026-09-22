@@ -446,6 +446,7 @@ function setConditionMultiplierPercent(condition, percent) {
   for (const cardId of Object.keys(state?.entries || {})) persistAutomaticPricesForCard(cardId, false);
   saveState();
   renderKeepingScroll();
+  atualizarSobreOsPrecos();
   notify(`${CONDITION_LABELS[key] || key}: ${Math.round(value * 100)}% do preço-base.`);
 }
 
@@ -455,6 +456,7 @@ function resetConditionMultipliers() {
   for (const cardId of Object.keys(state?.entries || {})) persistAutomaticPricesForCard(cardId, false);
   saveState();
   renderKeepingScroll();
+  atualizarSobreOsPrecos();
   notify('Percentuais de condição restaurados para o padrão de mercado.');
 }
 const PRICE_PRINT_VARIATIONS = ['unlimited', 'firstEdition'];
@@ -3007,22 +3009,63 @@ function latestPriceFetch() {
   return Number.isFinite(centralLatest) ? centralLatest : 0;
 }
 
+/* "hoje às 08:20", "ontem às 19:02", "em 12/09 às 10:00". */
+function quandoFoiAtualizado(ms) {
+  const data = new Date(ms);
+  if (!Number.isFinite(data.getTime())) return '';
+  const hora = data.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const dia = quandoFoiAdicionada(ms);
+  if (dia === 'hoje' || dia === 'ontem') return `${dia} às ${hora}`;
+  return `em ${data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} às ${hora}`;
+}
+
+/* O Início mostra só o que importa dos preços: se estão em dia e quantas
+   cartas têm valor. Números do banco (enums, lotes, pendências), a
+   explicação da fonte e os percentuais por condição foram para "Sobre os
+   preços" — era linguagem de programador na tela principal. */
 function pricingPanel() {
   const counts = pricedOwnedCount();
   const progress = priceUpdateTotal > 0 ? Math.max(0, Math.min(100, Math.round((priceUpdateCurrent / priceUpdateTotal) * 100))) : 0;
   const latest = latestPriceFetch();
-  return `<section class="price-update-card">
-    <div class="catalog-update-heading">
-      <div><strong>Preços da coleção</strong><span>${counts.priced} de ${counts.owned} cartas próprias com valor aceito${counts.pending ? ` · ${counts.pending} aguardando validação` : ''}${latest ? ` · última atualização ${esc(formatPriceDate(latest))}` : ''}</span></div>
-      <span class="online-badge">Price Database</span>
+  if (!counts.owned && !priceUpdating) return '';
+  return `<section class="precos-resumo">
+    <div class="precos-resumo-linha">
+      <span class="precos-selo${latest ? ' ok' : ''}" aria-hidden="true">${latest ? '✓' : '!'}</span>
+      <div>
+        <strong>${priceUpdating ? 'Atualizando os preços…' : latest ? `Preços atualizados ${esc(quandoFoiAtualizado(latest))}` : 'Preços ainda não sincronizados'}</strong>
+        <small>${counts.priced} de ${counts.owned} ${counts.owned === 1 ? 'carta' : 'cartas'} com preço${counts.pending ? ` · ${counts.pending} para revisar` : ''}</small>
+      </div>
     </div>
-    <p>Fonte automática exclusiva: Pokémon Price Database Brasil. O banco separa ID, idioma, edição, carimbo e acabamento. Quando não houver correspondência, o app não consulta marketplaces e mantém a variação sem preço automático.</p>
-    ${centralPriceStatusPanel()}
     ${priceUpdating ? `<div class="catalog-progress"><div class="progress"><span style="width:${progress}%"></span></div><small>${esc(priceUpdateMessage || 'Atualizando o banco de preços...')}</small></div>` : ''}
-    <button class="primary-btn" ${priceUpdating ? 'disabled' : ''} onclick="startOwnedPriceUpdate()">${priceUpdating ? 'Atualizando...' : 'Atualizar Price Database'}</button>
-    ${priceUpdateFailures ? `<div class="catalog-last-result">${priceUpdateFailures} variação(ões) continuam sem preço no banco.</div>` : ''}
-    ${conditionMultiplierEditor()}
+    ${priceUpdateFailures ? `<small class="precos-aviso">${priceUpdateFailures} ${priceUpdateFailures === 1 ? 'versão continua' : 'versões continuam'} sem preço no banco.</small>` : ''}
+    <div class="precos-links">
+      ${counts.pending ? `<button type="button" onclick="ui.cardFilter='price-review';setTab('cards')">Revisar ${counts.pending} ${counts.pending === 1 ? 'preço' : 'preços'} ›</button>` : ''}
+      <button type="button" onclick="abrirSobreOsPrecos()">Sobre os preços ›</button>
+    </div>
   </section>`;
+}
+
+function conteudoSobreOsPrecos() {
+  return `<button class="modal-close" onclick="closeModal()" aria-label="Fechar">×</button>
+    <h2>Sobre os preços</h2>
+    <p class="screen-subtitle">Fonte automática exclusiva: Pokémon Price Database Brasil. O banco separa ID, idioma, edição, carimbo e acabamento. Quando não houver correspondência, o app não consulta marketplaces e mantém a variação sem preço automático.</p>
+    ${centralPriceStatusPanel()}
+    <button class="primary-btn" ${priceUpdating ? 'disabled' : ''} onclick="startOwnedPriceUpdate()">${priceUpdating ? 'Atualizando...' : 'Atualizar Price Database'}</button>
+    ${conditionMultiplierEditor()}`;
+}
+
+function abrirSobreOsPrecos() {
+  showModal(conteudoSobreOsPrecos(), 'sobre-precos');
+}
+
+// Mudou um percentual com o painel aberto: redesenha sem fechar a lista.
+function atualizarSobreOsPrecos() {
+  const sheet = document.getElementById('modal-content');
+  if (!sheet || !sheet.classList.contains('sobre-precos')) return;
+  const y = sheet.scrollTop;
+  sheet.innerHTML = conteudoSobreOsPrecos();
+  sheet.querySelector('.condition-multiplier-box')?.setAttribute('open', '');
+  sheet.scrollTop = y;
 }
 
 function conditionMultiplierEditor() {
@@ -3138,13 +3181,15 @@ function renderDashboard() {
     <section class="screen vision-home-screen">
       <div class="vision-home-head">
         <div><span>${dashboardGreeting()}</span><h2>POKECARD Brasil</h2></div>
-        <button class="vision-profile-button" onclick="openBackupPanel()" aria-label="Abrir perfil e backup">PB</button>
+        <button class="vision-profile-button" onclick="openBackupPanel()" aria-label="Abrir perfil e backup${precisaDeBackup() ? ' (backup pendente)' : ''}">PB${precisaDeBackup() ? '<i class="ponto-alerta" aria-hidden="true"></i>' : ''}</button>
       </div>
       ${avisoDeGravacao()}
       ${avisoDeBackup()}
 
       <section class="portfolio-card">
-        <div class="portfolio-title"><span>${tabIcon('cards')}</span><strong>PORTFÓLIO</strong><button onclick="updateAllCollectionPrices()">Atualizar</button></div>
+        <!-- O botão chamava updateAllCollectionPrices(), que não existe em
+             lugar nenhum: tocar em "Atualizar" não fazia nada. -->
+        <div class="portfolio-title"><span>${tabIcon('cards')}</span><strong>PORTFÓLIO</strong><button onclick="startOwnedPriceUpdate()" ${priceUpdating ? 'disabled' : ''}>${priceUpdating ? 'Atualizando…' : 'Atualizar'}</button></div>
         <div class="portfolio-value">
           <small>${contarDuplicadas() ? 'Valor estimado de mercado' : 'Valor da coleção · sem duplicadas'}</small>
           <strong>${money(valorDaColecao(summary))}</strong>
@@ -5014,14 +5059,11 @@ function conteudoDaGavetaDeFiltros() {
     </section>
     <section class="gaveta-secao">
       <h3>Coleção</h3>
-      <select class="field" aria-label="Coleção" onchange="mudarNaGaveta('cardSet', this.value)">
-        <option value="all">Todas as coleções</option>
-        ${catalog.sets.map(set => option(set.id, set.name, ui.cardSet)).join('')}
-      </select>
+      ${botaoDeEscolhaDeColecao()}
     </section>
     ${artistIndex.size ? `<section class="gaveta-secao">
       <h3>Artista</h3>
-      ${seletorDeArtista()}
+      ${botaoDeEscolhaDeArtista()}
     </section>` : ''}
     <div class="gaveta-rodape">
       <button type="button" class="secondary-btn" onclick="limparFiltro('tudo');atualizarGavetaDeFiltros()" ${quantosFiltrosNaGaveta() ? '' : 'disabled'}>Limpar</button>
@@ -5140,16 +5182,108 @@ function artistasDoEscopo() {
   return lista.sort((a, b) => collator.compare(a.nome, b.nome));
 }
 
-function seletorDeArtista() {
-  // Catálogo sem o nome dos artistas (versão antiga do embutido): sem filtro
-  // vazio na tela.
-  if (!artistIndex.size) return '';
-  const artistas = artistasDoEscopo();
-  return `<select class="field seletor-artista${ui.cardArtist !== 'all' ? ' ativo' : ''}" aria-label="Filtrar por artista"
-      onchange="mudarNaGaveta('cardArtist', this.value)">
-    <option value="all">Todos os artistas (${artistas.length})</option>
-    ${artistas.map(item => option(item.chave, `${item.nome} · ${item.total}`, ui.cardArtist)).join('')}
-  </select>`;
+/* ---------- Seletores com busca: coleção e artista ----------
+
+   O seletor padrão do Android com centenas de nomes era uma rolagem sem fim.
+   Na gaveta, cada um vira uma lista com busca — coleções com logo, data e
+   progresso; artistas com a quantidade de cartas. Escolher volta para a
+   gaveta com o filtro já aplicado (mudarNaGaveta redesenha a gaveta). */
+let seletorBuscaTimer = null;
+
+function logoDaColecaoHtml(set) {
+  const imagens = set ? setImageCandidates(set) : [];
+  if (!imagens.length) return '<span class="set-logo-fallback">◓</span>';
+  return `<img src="${esc(imagens[0])}" loading="lazy" decoding="async" alt=""${imagens.length > 1 ? ` data-fallbacks="${esc(imagens.slice(1).join('|'))}"` : ''} onerror="loadNextSetImage(this)"><span class="set-logo-fallback" hidden>◓</span>`;
+}
+
+function botaoDeEscolhaDeColecao() {
+  const set = ui.cardSet === 'all' ? null : catalog.sets.find(item => item.id === ui.cardSet);
+  return `<button type="button" class="gaveta-escolha${set ? ' ativo' : ''}" onclick="abrirSeletorDaGaveta('colecao')">
+    <span class="seletor-logo">${set ? logoDaColecaoHtml(set) : '<span class="set-logo-fallback">◓</span>'}</span>
+    <span class="seletor-texto"><strong>${esc(set ? set.name : 'Todas as coleções')}</strong><small>${set ? esc(mesAnoDoLancamento(set) || setReleaseYear(set) || '') : `${catalog.sets.length.toLocaleString('pt-BR')} coleções`}</small></span>
+    <b aria-hidden="true">›</b>
+  </button>`;
+}
+
+function botaoDeEscolhaDeArtista() {
+  const info = ui.cardArtist === 'all' ? null : artistIndex.get(ui.cardArtist);
+  const quantos = artistasDoEscopo().length;
+  return `<button type="button" class="gaveta-escolha${info ? ' ativo' : ''}" onclick="abrirSeletorDaGaveta('artista')">
+    <span class="seletor-inicial" aria-hidden="true">${esc(info ? info.nome.charAt(0).toUpperCase() : '✎')}</span>
+    <span class="seletor-texto"><strong>${esc(info ? info.nome : 'Todos os artistas')}</strong><small>${quantos} ${quantos === 1 ? 'artista' : 'artistas'}${ui.cardSet !== 'all' ? ' nesta coleção' : ''}</small></span>
+    <b aria-hidden="true">›</b>
+  </button>`;
+}
+
+function abrirSeletorDaGaveta(tipo) {
+  const sheet = document.getElementById('modal-content');
+  if (!sheet) return;
+  sheet.innerHTML = `
+    <div class="seletor-cabecalho">
+      <div class="seletor-topo">
+        <button type="button" class="gaveta-voltar" onclick="atualizarGavetaDeFiltros()" aria-label="Voltar para os filtros">‹</button>
+        <h2>${tipo === 'colecao' ? 'Coleção' : 'Artista'}</h2>
+      </div>
+      <label class="vision-search seletor-busca"><span>${tabIcon('pokedex')}</span>
+        <input id="buscaDoSeletor" placeholder="${tipo === 'colecao' ? 'Buscar coleção ou ano...' : 'Buscar artista...'}" autocomplete="off"
+          oninput="filtrarSeletorDaGaveta('${tipo}', this.value)"></label>
+    </div>
+    <div id="listaDoSeletor" class="seletor-lista">${linhasDoSeletor(tipo, '')}</div>`;
+  sheet.scrollTop = 0;
+}
+
+function filtrarSeletorDaGaveta(tipo, valor) {
+  clearTimeout(seletorBuscaTimer);
+  seletorBuscaTimer = setTimeout(() => {
+    const lista = document.getElementById('listaDoSeletor');
+    if (lista) lista.innerHTML = linhasDoSeletor(tipo, valor);
+  }, 120);
+}
+
+function linhaDoSeletor({ ativo, onclick, icone, titulo, detalhe, progresso }) {
+  return `<button type="button" class="seletor-linha${ativo ? ' ativo' : ''}" onclick="${onclick}" aria-pressed="${ativo}">
+    ${icone}
+    <span class="seletor-texto"><strong>${esc(titulo)}</strong>${detalhe ? `<small>${esc(detalhe)}</small>` : ''}
+      ${progresso != null ? `<i class="seletor-barra"><span style="width:${progresso}%"></span></i>` : ''}</span>
+    ${ativo ? '<b class="seletor-marca" aria-hidden="true">✓</b>' : ''}
+  </button>`;
+}
+
+function linhasDoSeletor(tipo, busca) {
+  const termo = normalize(busca);
+  if (tipo === 'colecao') {
+    const sets = buildSetStats().slice().sort(compareSetsByTimeline)
+      .filter(set => !termo || normalize(`${set.name} ${set.id} ${setReleaseYear(set) || ''}`).includes(termo));
+    const todas = termo ? '' : linhaDoSeletor({
+      ativo: ui.cardSet === 'all', onclick: "mudarNaGaveta('cardSet','all')",
+      icone: '<span class="seletor-logo"><span class="set-logo-fallback">◓</span></span>',
+      titulo: 'Todas as coleções', detalhe: `${catalog.sets.length.toLocaleString('pt-BR')} coleções`,
+    });
+    const linhas = sets.map(set => {
+      const total = set.officialCardCount || set.totalCardCount || 0;
+      const quando = mesAnoDoLancamento(set) || setReleaseYear(set) || '';
+      return linhaDoSeletor({
+        ativo: ui.cardSet === set.id, onclick: `mudarNaGaveta('cardSet','${esc(set.id)}')`,
+        icone: `<span class="seletor-logo">${logoDaColecaoHtml(set)}</span>`,
+        titulo: set.name,
+        detalhe: [quando, total ? `${set.ownedUnique}/${total} cartas` : ''].filter(Boolean).join(' · '),
+        progresso: set.ownedUnique && total ? Math.min(100, Math.round((set.ownedUnique / total) * 100)) : null,
+      });
+    }).join('');
+    return todas + (linhas || '<div class="empty">Nenhuma coleção com esse nome.</div>');
+  }
+  const artistas = artistasDoEscopo().filter(item => !termo || normalize(item.nome).includes(termo));
+  const todos = termo ? '' : linhaDoSeletor({
+    ativo: ui.cardArtist === 'all', onclick: "mudarNaGaveta('cardArtist','all')",
+    icone: '<span class="seletor-inicial" aria-hidden="true">✎</span>',
+    titulo: 'Todos os artistas', detalhe: `${artistasDoEscopo().length} artistas${ui.cardSet !== 'all' ? ' nesta coleção' : ''}`,
+  });
+  const linhas = artistas.map(item => linhaDoSeletor({
+    ativo: ui.cardArtist === item.chave, onclick: `mudarNaGaveta('cardArtist','${esc(item.chave)}')`,
+    icone: `<span class="seletor-inicial" aria-hidden="true">${esc(item.nome.charAt(0).toUpperCase())}</span>`,
+    titulo: item.nome, detalhe: `${item.total} ${item.total === 1 ? 'carta' : 'cartas'}`,
+  })).join('');
+  return todos + (linhas || '<div class="empty">Nenhum artista com esse nome.</div>');
 }
 
 /* Tocar no nome do artista, no cadastro da carta, abre a Coleção com tudo o
@@ -9400,16 +9534,24 @@ function avisoDeGravacao() {
 
 /* Faixa de aviso quando a cópia está velha demais — ou quando nunca houve
    uma. Some sozinha assim que o backup acontece. */
-function avisoDeBackup() {
-  if (!collectionSummary().uniqueOwned) return '';
+function precisaDeBackup() {
+  if (!collectionSummary().uniqueOwned) return false;
   const dias = diasDesdeOBackup();
-  if (dias !== null && dias < BACKUP_AVISO_DIAS) return '';
-  const texto = dias === null
-    ? 'Sua coleção ainda não tem nenhuma cópia de segurança.'
-    : `Faz ${dias} dias desde a última cópia de segurança.`;
-  return `<button type="button" class="aviso-backup" onclick="openBackupPanel()">
+  return dias === null || dias >= BACKUP_AVISO_DIAS;
+}
+
+/* O aviso continua lá enquanto faltar backup, mas numa faixa de uma linha:
+   antes era um cartão grande no topo do Início toda vez que o app abria. O
+   ponto vermelho no botão "PB" (o do backup) reforça sem ocupar espaço. */
+function avisoDeBackup() {
+  if (!precisaDeBackup()) return '';
+  const dias = diasDesdeOBackup();
+  // Curto de propósito: precisa caber numa linha ao lado de "salvar agora".
+  const texto = dias === null ? 'Coleção sem backup' : `Backup há ${dias} dias`;
+  return `<button type="button" class="aviso-backup compacto" onclick="openBackupPanel()"
+      aria-label="${esc(texto)}. Sem backup, trocar de celular apaga tudo. Toque para salvar agora.">
     <span aria-hidden="true">⚠</span>
-    <span><strong>${esc(texto)}</strong><small>Toque para salvar agora. Sem backup, trocar de celular apaga tudo.</small></span>
+    <span><strong>${esc(texto)}</strong><small>salvar agora</small></span>
     <span aria-hidden="true">›</span>
   </button>`;
 }
@@ -9663,6 +9805,9 @@ window.handleAndroidBack = function() {
     voltarParaCamera();
     return true;
   }
+
+  // No seletor de coleção ou de artista, Voltar volta para a gaveta de filtros.
+  if (document.querySelector('#modal-content .seletor-topo')) { atualizarGavetaDeFiltros(); return true; }
 
   const modal = document.getElementById('modal');
   if (modal && !modal.classList.contains('hidden')) { closeModal(); return true; }
