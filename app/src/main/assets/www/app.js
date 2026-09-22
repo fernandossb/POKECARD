@@ -74,6 +74,9 @@ let centralPriceLastCheck = 0;
 let cardSearchIndex = new Map();
 let cardsBySet = new Map();
 let staticCardSortCache = new Map();
+// Filtro por artista: carta → chave do artista, e chave → nome exibido/total.
+let cardArtistKey = new Map();
+let artistIndex = new Map();
 let pokemonInferenceCache = new Map();
 let scannerSession = { active: false, pricingVariant: 'normal', finish: 'normal', language: 'pt-br', condition: 'Near Mint', edition: 'unlimited', distribution: 'unstamped', artVariant: 'standard', region: 'Brasil', gradingCompany: 'Não graduada', grade: '', tags: [], setId: 'all', count: 0, lastIds: [], live: false };
 let scannerDraftFinish = '';
@@ -301,12 +304,28 @@ function invalidateDerivedState() {
   cardResultCache.value = null;
 }
 
+/* Lista, grade de 2 ou grade de 3 colunas. É gosto de quem usa, não estado
+   da tela: fica guardado no aparelho e volta igual na próxima abertura. */
+const CARD_LAYOUT_KEY = 'pokecard-layout-cartas';
+const CARD_LAYOUTS = ['lista', 'grade-2', 'grade-3'];
+
+function lerLayoutDeCartas() {
+  try {
+    const salvo = localStorage.getItem(CARD_LAYOUT_KEY);
+    if (CARD_LAYOUTS.includes(salvo)) return salvo;
+  } catch (_) {}
+  // Sem escolha feita, segue o padrão de antes: 3 colunas, 2 em tela estreita.
+  return (window.innerWidth || 400) <= 370 ? 'grade-2' : 'grade-3';
+}
+
 const ui = {
   tab: 'dashboard',
   cardQuery: '',
   cardFilter: 'owned',
   cardSort: 'number',
   cardSet: 'all',
+  cardArtist: 'all',  // chave normalizada do artista (artistIndex) ou 'all'
+  cardLayout: lerLayoutDeCartas(),
   cardLimit: 40,
   setQuery: '',
   setStatus: 'all',   // all | comecei | completas | faltando | vazias
@@ -1946,6 +1965,18 @@ async function loadCatalogData() {
   for (const item of bundled.sets || []) {
     if (!knownIds.has(String(item.id))) mergedSets.push(enrichSet(item));
   }
+  // Atualizações feitas antes do filtro por artista não guardaram quem
+  // desenhou cada carta; o catálogo embutido guarda. Completa só o que falta.
+  // As cartas vêm do IndexedDB como cópias novas, então dá para mexer nelas.
+  const artistaEmbutido = new Map();
+  for (const card of bundled.cards || []) {
+    if (card?.illustrator) artistaEmbutido.set(card.id, card.illustrator);
+  }
+  if (artistaEmbutido.size) {
+    for (const card of updated.cards) {
+      if (!card.illustrator && artistaEmbutido.has(card.id)) card.illustrator = artistaEmbutido.get(card.id);
+    }
+  }
   return { ...updated, sets: mergedSets };
 }
 
@@ -2017,11 +2048,35 @@ function rebuildPerformanceIndexes() {
   cardSearchIndex = new Map();
   cardsBySet = new Map();
   staticCardSortCache = new Map();
+  cardArtistKey = new Map();
+  const grafias = new Map();
   for (const card of cards) {
     cardSearchIndex.set(card.id, normalize(`${card.name} ${card.number} ${card.localId} ${card.setName} ${card.rarity || ''} ${card.illustrator || ''}`));
     if (!cardsBySet.has(card.setId)) cardsBySet.set(card.setId, []);
     cardsBySet.get(card.setId).push(card);
+    // A fonte às vezes escreve o mesmo artista com maiúsculas ou acentos
+    // diferentes. A chave normalizada junta as grafias numa pessoa só.
+    const nome = String(card.illustrator || '').trim();
+    const chave = nome ? normalize(nome) : '';
+    if (!chave) continue;
+    cardArtistKey.set(card.id, chave);
+    if (!grafias.has(chave)) grafias.set(chave, new Map());
+    const contagem = grafias.get(chave);
+    contagem.set(nome, (contagem.get(nome) || 0) + 1);
   }
+  artistIndex = new Map();
+  for (const [chave, contagem] of grafias) {
+    let nome = '';
+    let maior = 0;
+    let total = 0;
+    for (const [grafia, vezes] of contagem) {
+      total += vezes;
+      if (vezes > maior) { maior = vezes; nome = grafia; }
+    }
+    artistIndex.set(chave, { nome, total });
+  }
+  // O artista escolhido pode não existir no catálogo novo: volta para todos.
+  if (ui.cardArtist !== 'all' && !artistIndex.has(ui.cardArtist)) ui.cardArtist = 'all';
 }
 
 function rebuildCatalogIndexes() {
@@ -2192,6 +2247,12 @@ function defaultVariant(quantity = 0, overrides = {}) {
     notes: String(overrides.notes || ''),
     manualVariationOverride: Boolean(overrides.manualVariationOverride),
     updatedAt: overrides.updatedAt || new Date().toISOString(),
+    // Quando uma cópia desta versão entrou na coleção pela última vez — é o
+    // que ordena "Adicionadas recentemente". Cadastros de antes deste campo
+    // herdam o updatedAt uma única vez (a melhor pista que existe); depois
+    // disso ele fica gravado e editar a carta não a faz "pular" para o topo.
+    addedAt: overrides.addedAt
+      || (Math.trunc(Number(quantity) || 0) > 0 && overrides.updatedAt ? overrides.updatedAt : null),
   };
 }
 
@@ -2436,7 +2497,8 @@ function updateCardRowInPlace(cardId) {
   const filter = currentCardFilter();
   // Nestes filtros a mudança de quantidade pode incluir/remover o item da lista.
   // 'trade' também: vender uma cópia precisa tirar a linha da lista na hora.
-  if (['owned', 'missing', 'repeated', 'trade'].includes(filter) || ui.cardSort === 'quantity') {
+  // Ordenado por quantidade ou por data de adição, a carta muda de lugar.
+  if (['owned', 'missing', 'repeated', 'trade'].includes(filter) || ui.cardSort === 'quantity' || ui.cardSort === 'recent') {
     refreshSearchResults('cardQuery', true);
     return true;
   }
@@ -2472,6 +2534,7 @@ function setQuantity(cardId, nextQuantity) {
     const variant = primaryVariant(cardId, true);
     variant.quantity += difference;
     variant.updatedAt = new Date().toISOString();
+    variant.addedAt = variant.updatedAt;
   } else if (difference < 0) {
     let remaining = Math.abs(difference);
     const variants = variantsFor(cardId);
@@ -2624,6 +2687,11 @@ function saveCardVariant(cardId, variantId) {
     manualVariationOverride: document.getElementById('regManualVariationOverride')?.value === '1',
     notes: document.getElementById('regNotes')?.value,
   });
+  // Só conta como "adicionada agora" quando entrou cópia nova. Corrigir o
+  // acabamento ou a condição de uma carta antiga mantém a data que ela tinha.
+  draft.addedAt = quantity > Math.max(0, Number(previous?.quantity) || 0)
+    ? draft.updatedAt
+    : (previous?.addedAt || null);
   // Se já há preço consultado para este acabamento, ele é gravado junto do cadastro.
   applyAutomaticPriceToVariant(cardId, draft);
   if (index >= 0) entry.variants[index] = draft;
@@ -3097,6 +3165,7 @@ function renderDashboard() {
         <button onclick="ui.cardFilter='owned';setTab('cards')"><span>${tabIcon('collections')}</span><strong>${ownedVariants}</strong><small>Versões</small></button>
         <button onclick="ui.cardFilter='owned';setTab('cards')"><span>${tabIcon('pokedex')}</span><strong>${specialCopies}</strong><small>Especiais</small></button>
       </div>
+      ${ultimasAdicionadasPanel()}
       ${graficoDeValor()}
       ${painelInvestimento()}
       ${topColecoesPanel()}
@@ -3737,7 +3806,8 @@ async function fetchCategoriasGraphQL(totalEstimado) {
       // `regulationMark` é a letra impressa na carta que decide se ela ainda
       // vale no formato Padrão. Sem ela, o aviso de rotação não tem como
       // existir — e o catálogo embutido não traz esse campo.
-      query: `{ cards(filters: {}, pagination: {page: ${pagina}, itemsPerPage: ${porPagina}}) { id category trainerType energyType rarity regulationMark } }`,
+      // `illustrator` é quem desenhou a carta: alimenta o filtro por artista.
+      query: `{ cards(filters: {}, pagination: {page: ${pagina}, itemsPerPage: ${porPagina}}) { id category trainerType energyType rarity regulationMark illustrator } }`,
     });
     let lote;
     try {
@@ -3750,7 +3820,7 @@ async function fetchCategoriasGraphQL(totalEstimado) {
     } catch (_) { break; }
     if (!Array.isArray(lote) || !lote.length) break;
     for (const item of lote) {
-      if (item?.id) mapa.set(item.id, { category: item.category || '', trainerType: item.trainerType || '', energyType: item.energyType || '', rarity: item.rarity || '', regulationMark: item.regulationMark || '' });
+      if (item?.id) mapa.set(item.id, { category: item.category || '', trainerType: item.trainerType || '', energyType: item.energyType || '', rarity: item.rarity || '', regulationMark: item.regulationMark || '', illustrator: String(item.illustrator || '').trim() });
     }
     if (lote.length < porPagina) break;
   }
@@ -3891,7 +3961,7 @@ async function startCatalogUpdate() {
       // "None" é como a fonte diz "esta carta não tem raridade" — não é uma
       // raridade chamada None, e guardá-la assim confundiria a tela.
       const raridade = dados.rarity && dados.rarity !== 'None' ? dados.rarity : (card.rarity || null);
-      localCards.set(id, { ...card, category: dados.category, trainerType: dados.trainerType, energyType: dados.energyType, rarity: raridade, regulationMark: dados.regulationMark || card.regulationMark || '' });
+      localCards.set(id, { ...card, category: dados.category, trainerType: dados.trainerType, energyType: dados.energyType, rarity: raridade, regulationMark: dados.regulationMark || card.regulationMark || '', illustrator: dados.illustrator || card.illustrator || null });
       classificadas += 1;
     }
 
@@ -4684,7 +4754,8 @@ function filteredCardsForUi() {
   const forcedFilter = ui.tab === 'wishlist' ? 'wishlist' : ui.tab === 'repeated' ? 'repeated' : null;
   const filter = forcedFilter || ui.cardFilter;
   const query = normalize(ui.cardQuery);
-  const key = `${ui.tab}|${ui.cardSet}|${filter}|${query || '-'}|${ui.cardSort}`;
+  const artista = ui.cardArtist;
+  const key = `${ui.tab}|${ui.cardSet}|${filter}|${query || '-'}|${ui.cardSort}|${artista}`;
 
   let result;
   if (cardResultCache.key === key && cardResultCache.revision === stateRevision && cardResultCache.value) {
@@ -4693,7 +4764,8 @@ function filteredCardsForUi() {
     result = cardsForCurrentFilter(filter);
     if (filter === 'missing') result = result.filter(card => quantityFor(card.id) <= 0);
     if (query) result = result.filter(card => (cardSearchIndex.get(card.id) || '').includes(query));
-    const cacheKey = `${ui.cardSet}|${filter}|${query || '-'}`;
+    if (artista !== 'all') result = result.filter(card => cardArtistKey.get(card.id) === artista);
+    const cacheKey = `${ui.cardSet}|${filter}|${query || '-'}|${artista}`;
     result = (!query && (filter === 'all' || filter === 'missing'))
       ? cachedStaticSort(result, ui.cardSort, cacheKey)
       : result.slice().sort(cardSorter(ui.cardSort));
@@ -4723,6 +4795,7 @@ function sobrasParaTrocar() {
     if (!card) continue;
     if (ui.cardSet !== 'all' && card.setId !== ui.cardSet) continue;
     if (consulta && !(cardSearchIndex.get(cardId) || '').includes(consulta)) continue;
+    if (ui.cardArtist !== 'all' && cardArtistKey.get(cardId) !== ui.cardArtist) continue;
 
     // Agrupa por versão idêntica, somando linhas separadas iguais.
     const grupos = new Map();
@@ -4769,6 +4842,7 @@ function renderLinhaDeSobra(item) {
     <div class="card-main">
       <div class="card-name">${esc(card.name)}</div>
       <div class="card-meta">${esc(card.number)} · ${esc(card.setName)}</div>
+      ${card.illustrator ? `<div class="card-artista">Arte: ${esc(card.illustrator)}</div>` : ''}
       <div class="tile-price-row">
         <span class="sobra-versao ${estilo.classe}"><span class="variante-icone" aria-hidden="true">${estilo.icone}</span>${esc(friendlyVariantLabel(variant.pricingVariant))}</span>
         ${item.valor === null ? '<small>sem preço</small>' : `<small>${esc(money(item.valor))}</small>`}
@@ -4789,8 +4863,11 @@ function renderResultadosDeTroca() {
       <div><small>Valem</small><strong>${esc(money(total))}</strong></div>
       <small class="sobra-aviso">Uma cópia de cada versão fica sempre na coleção. Estas são as que sobram.</small>
     </div>
-    <p class="card-results-count">${lista.length.toLocaleString('pt-BR')} ${lista.length === 1 ? 'versão com sobra' : 'versões com sobra'}</p>
-    <div class="card-list">${visiveis.length
+    <div class="card-results-bar">
+      <p class="card-results-count">${lista.length.toLocaleString('pt-BR')} ${lista.length === 1 ? 'versão com sobra' : 'versões com sobra'}</p>
+      ${seletorDeLayout()}
+    </div>
+    <div class="${classeDeLayout()}">${visiveis.length
       ? visiveis.map(renderLinhaDeSobra).join('')
       : '<div class="empty"><strong>Nada sobrando</strong>Quando você tiver duas ou mais cópias da mesma versão, o excedente aparece aqui.</div>'}</div>
     ${visiveis.length < lista.length ? `<button class="load-more" onclick="ui.cardLimit+=60;refreshSearchResults('cardQuery', true)">Mostrar mais ${Math.min(60, lista.length - visiveis.length)}</button>` : ''}`;
@@ -4803,8 +4880,11 @@ function renderCardSearchResults() {
   // Busca em segundo plano o que falta para as etiquetas e o dourado.
   adiantarLotesDaLista(visible);
   return `
-    <p class="card-results-count">${result.length.toLocaleString('pt-BR')} cartas encontradas</p>
-    <div class="card-list">${visible.length ? visible.map(renderCardRow).join('') : emptyCards()}</div>
+    <div class="card-results-bar">
+      <p class="card-results-count">${result.length.toLocaleString('pt-BR')} ${result.length === 1 ? 'carta encontrada' : 'cartas encontradas'}</p>
+      ${seletorDeLayout()}
+    </div>
+    <div class="${classeDeLayout()}">${visible.length ? visible.map(renderCardRow).join('') : emptyCards()}</div>
     ${visible.length < result.length ? `<button class="load-more" onclick="ui.cardLimit+=60;refreshSearchResults('cardQuery', true)">Mostrar mais ${Math.min(60, result.length-visible.length)}</button>` : ''}`;
 }
 
@@ -4830,12 +4910,13 @@ function renderCards() {
           oninput="searchAndRender('cardQuery', this.value, 'cardSearchInput')"></label>
         <div class="filter-grid">
           <select class="field" onchange="ui.cardSort=this.value;ui.cardLimit=40;cardResultCache.key='';refreshSearchResults('cardQuery', true)">
-            ${option('number','Número',ui.cardSort)}${option('name','Nome',ui.cardSort)}${option('quantity','Quantidade',ui.cardSort)}${option('price-desc','Preço: maior → menor',ui.cardSort)}${option('set','Coleção',ui.cardSort)}
+            ${option('number','Número',ui.cardSort)}${option('name','Nome',ui.cardSort)}${option('recent','Adição: recente → antiga',ui.cardSort)}${option('quantity','Quantidade',ui.cardSort)}${option('price-desc','Preço: maior → menor',ui.cardSort)}${option('set','Coleção',ui.cardSort)}
           </select>
-          <select class="field" onchange="ui.cardSet=this.value;ui.cardLimit=40;cardResultCache.key='';refreshSearchResults('cardQuery', true)">
+          <select class="field" onchange="ui.cardSet=this.value;ui.cardLimit=40;cardResultCache.key='';renderKeepingScroll()">
             <option value="all">Todas as coleções</option>
             ${catalog.sets.map(set => option(set.id, set.name, ui.cardSet)).join('')}
           </select>
+          ${seletorDeArtista()}
         </div>
         ${!forcedFilter ? `<div class="chips collection-filter-chips">${filterChips()}</div>` : ''}
       </div>
@@ -4895,7 +4976,181 @@ function aplicarFiltroCartas(valor) {
   renderKeepingScroll();
 }
 
+/* ---------- Filtro por artista ----------
+
+   Com uma coleção escolhida, a lista mostra só quem desenhou cartas dela — e
+   a contagem é da coleção, não do catálogo inteiro. O artista já escolhido
+   fica na lista mesmo sem cartas no recorte, senão o seletor mostraria outro
+   nome no lugar dele. */
+function artistasDoEscopo() {
+  const escopo = ui.cardSet === 'all' ? null : (cardsBySet.get(ui.cardSet) || []);
+  let lista;
+  if (!escopo) {
+    lista = [...artistIndex].map(([chave, info]) => ({ chave, nome: info.nome, total: info.total }));
+  } else {
+    const contagem = new Map();
+    for (const card of escopo) {
+      const chave = cardArtistKey.get(card.id);
+      if (chave) contagem.set(chave, (contagem.get(chave) || 0) + 1);
+    }
+    lista = [...contagem].map(([chave, total]) => ({ chave, nome: artistIndex.get(chave)?.nome || chave, total }));
+  }
+  if (ui.cardArtist !== 'all' && !lista.some(item => item.chave === ui.cardArtist)) {
+    const info = artistIndex.get(ui.cardArtist);
+    if (info) lista.push({ chave: ui.cardArtist, nome: info.nome, total: 0 });
+  }
+  const collator = new Intl.Collator('pt-BR', { sensitivity: 'base' });
+  return lista.sort((a, b) => collator.compare(a.nome, b.nome));
+}
+
+function seletorDeArtista() {
+  // Catálogo sem o nome dos artistas (versão antiga do embutido): sem filtro
+  // vazio na tela.
+  if (!artistIndex.size) return '';
+  const artistas = artistasDoEscopo();
+  return `<select class="field seletor-artista${ui.cardArtist !== 'all' ? ' ativo' : ''}" aria-label="Filtrar por artista"
+      onchange="ui.cardArtist=this.value;ui.cardLimit=40;cardResultCache.key='';this.classList.toggle('ativo', this.value!=='all');refreshSearchResults('cardQuery', true)">
+    <option value="all">Todos os artistas (${artistas.length})</option>
+    ${artistas.map(item => option(item.chave, `${item.nome} · ${item.total}`, ui.cardArtist)).join('')}
+  </select>`;
+}
+
+/* Tocar no nome do artista, no cadastro da carta, abre a Coleção com tudo o
+   que ele desenhou — o catálogo inteiro, não só o que você já tem. */
+function filtrarPorArtista(chave) {
+  if (!artistIndex.has(chave)) return;
+  ui.cardArtist = chave;
+  ui.cardFilter = 'all';
+  ui.cardSet = 'all';
+  ui.cardQuery = '';
+  ui.cardLimit = 40;
+  cardResultCache.key = '';
+  closeModal();
+  setTab('cards');
+  window.scrollTo(0, 0);
+}
+
+/* ---------- Lista, 2 ou 3 colunas ---------- */
+const ICONES_DE_LAYOUT = {
+  lista: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="4" height="5" rx="1"/><path d="M10 6.5h11"/><rect x="3" y="15" width="4" height="5" rx="1"/><path d="M10 17.5h11"/></svg>',
+  'grade-2': '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7.5" height="17" rx="1.6"/><rect x="13" y="3.5" width="7.5" height="17" rx="1.6"/></svg>',
+  'grade-3': '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="4.5" width="5.2" height="15" rx="1.2"/><rect x="9.4" y="4.5" width="5.2" height="15" rx="1.2"/><rect x="16.3" y="4.5" width="5.2" height="15" rx="1.2"/></svg>',
+};
+const ROTULOS_DE_LAYOUT = { lista: 'Lista', 'grade-2': 'Grade de 2 colunas', 'grade-3': 'Grade de 3 colunas' };
+
+function seletorDeLayout() {
+  return `<div class="layout-cartas" role="group" aria-label="Exibição das cartas">${CARD_LAYOUTS.map(valor => `
+    <button type="button" data-layout="${valor}" class="${ui.cardLayout === valor ? 'ativo' : ''}" aria-pressed="${ui.cardLayout === valor}"
+      aria-label="${ROTULOS_DE_LAYOUT[valor]}" title="${ROTULOS_DE_LAYOUT[valor]}" onclick="definirLayoutDeCartas('${valor}')">${ICONES_DE_LAYOUT[valor]}</button>`).join('')}
+  </div>`;
+}
+
+function classeDeLayout() {
+  return `card-list layout-${ui.cardLayout}`;
+}
+
+function definirLayoutDeCartas(valor) {
+  if (!CARD_LAYOUTS.includes(valor)) return;
+  ui.cardLayout = valor;
+  try { localStorage.setItem(CARD_LAYOUT_KEY, valor); } catch (_) {}
+  // Só troca a classe e o botão aceso: a lista é a mesma, e redesenhar tudo
+  // jogaria fora as imagens que já carregaram.
+  document.querySelectorAll('.card-list').forEach(lista => {
+    for (const item of CARD_LAYOUTS) lista.classList.remove(`layout-${item}`);
+    lista.classList.add(`layout-${valor}`);
+  });
+  document.querySelectorAll('.layout-cartas button').forEach(botao => {
+    const ativo = botao.dataset.layout === valor;
+    botao.classList.toggle('ativo', ativo);
+    botao.setAttribute('aria-pressed', String(ativo));
+  });
+}
+
+/* ---------- Adicionadas recentemente ----------
+
+   Quando a carta entrou na coleção pela última vez: a cópia mais nova entre
+   as versões que você tem. Carta que você não tem vale zero e vai para o fim. */
+function momentoDeAdicao(cardId) {
+  let maior = 0;
+  for (const variant of variantsFor(cardId)) {
+    if (!(Number(variant?.quantity) > 0)) continue;
+    const quando = Date.parse(variant.addedAt || variant.updatedAt || '') || 0;
+    if (quando > maior) maior = quando;
+  }
+  return maior;
+}
+
+function cartasAdicionadasRecentemente(limite) {
+  const lista = [];
+  for (const cardId of Object.keys(state.entries || {})) {
+    const card = cardMap.get(cardId);
+    if (!card) continue;
+    const quando = momentoDeAdicao(cardId);
+    if (quando) lista.push({ card, quando });
+  }
+  lista.sort((a, b) => b.quando - a.quando);
+  return limite ? lista.slice(0, limite) : lista;
+}
+
+function quandoFoiAdicionada(ms) {
+  const agora = new Date();
+  const data = new Date(ms);
+  const diaDe = d => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const dias = Math.round((diaDe(agora) - diaDe(data)) / 86400000);
+  if (dias <= 0) return 'hoje';
+  if (dias === 1) return 'ontem';
+  if (dias < 7) return `há ${dias} dias`;
+  return data.toLocaleDateString('pt-BR', data.getFullYear() === agora.getFullYear()
+    ? { day: '2-digit', month: '2-digit' }
+    : { day: '2-digit', month: '2-digit', year: '2-digit' });
+}
+
+function ultimasAdicionadasPanel() {
+  const lista = cartasAdicionadasRecentemente(15);
+  if (!lista.length) return '';
+  return `<section class="recentes-painel">
+    <div class="section-heading"><h3 class="section-title">Adicionadas recentemente</h3><button onclick="verAdicionadasRecentemente()">Ver todas</button></div>
+    <div class="recentes-faixa">${lista.map(({ card, quando }) => {
+      const variantes = variantsFor(card.id);
+      const exibida = variantes.find(item => item.imageUrl && Number(item.quantity) > 0)
+        || variantes.find(item => Number(item.quantity) > 0) || variantes[0];
+      const arte = cardGridImage(card, exibida);
+      const tipo = tipoPrincipalDaCarta(card);
+      return `<button type="button" class="recente-item"${tipo ? ` data-tipo="${esc(tipo)}"` : ''} onclick="openCard('${esc(card.id)}')">
+        <span class="recente-arte">${arte
+          ? `<img src="${esc(arte)}" loading="lazy" decoding="async" alt="${esc(card.name)}" onerror="this.outerHTML='<span class=&quot;card-placeholder&quot;>TCG</span>'">`
+          : '<span class="card-placeholder">TCG</span>'}</span>
+        <strong>${esc(card.name)}</strong>
+        <small>${esc(quandoFoiAdicionada(quando))}</small>
+      </button>`;
+    }).join('')}</div>
+  </section>`;
+}
+
+function verAdicionadasRecentemente() {
+  ui.cardSort = 'recent';
+  ui.cardFilter = 'owned';
+  ui.cardSet = 'all';
+  ui.cardArtist = 'all';
+  ui.cardQuery = '';
+  ui.cardLimit = 40;
+  cardResultCache.key = '';
+  setTab('cards');
+  window.scrollTo(0, 0);
+}
+
 function cardSorter(sort) {
+  if (sort === 'recent') {
+    // A data de cada carta é calculada uma vez por ordenação, não a cada
+    // comparação: com o catálogo inteiro são dezenas de milhares delas.
+    const tempos = new Map();
+    const tempo = id => {
+      if (!tempos.has(id)) tempos.set(id, momentoDeAdicao(id));
+      return tempos.get(id);
+    };
+    const collator = new Intl.Collator('pt-BR');
+    return (a, b) => tempo(b.id) - tempo(a.id) || collator.compare(a.name, b.name) || numericLocal(a) - numericLocal(b);
+  }
   if (sort === 'name') return (a,b) => a.name.localeCompare(b.name,'pt-BR') || a.setName.localeCompare(b.setName,'pt-BR');
   if (sort === 'quantity') return (a,b) => quantityFor(b.id)-quantityFor(a.id) || a.name.localeCompare(b.name,'pt-BR');
   if (sort === 'price-desc') return (a,b) => sortablePriceForCard(b.id)-sortablePriceForCard(a.id) || a.name.localeCompare(b.name,'pt-BR');
@@ -6560,6 +6815,7 @@ function adicionarCartasDaSessao() {
     }
     variant.quantity = Math.max(0, Number(variant.quantity) || 0) + quantidade;
     variant.updatedAt = new Date().toISOString();
+    variant.addedAt = variant.updatedAt;
     syncEntry(linha.cardId);
     gravadas += quantidade;
     cardIds.add(linha.cardId);
@@ -6797,6 +7053,7 @@ function renderCardRow(card) {
     <div class="card-main">
       <div class="card-name">${esc(card.name)}</div>
       <div class="card-meta">${esc(card.number)} · ${esc(card.setName)}</div>
+      ${card.illustrator ? `<div class="card-artista">Arte: ${esc(card.illustrator)}</div>` : ''}
       <div class="tile-price-row"><span>${priceBadge ? esc(priceBadge) : 'Sem preço'}</span>${cardVariants.length > 1 ? `<small>${cardVariants.length} versões</small>` : ''}</div>
     </div>
   </article>`;
@@ -7017,6 +7274,7 @@ function openCard(cardId, variantId = undefined) {
         <span class="registration-kicker">${esc(card.setName)} · ${esc(card.number)}</span>
         <h2>${esc(card.name)}</h2>
         <p class="card-meta">${esc(card.number)} · ${esc(card.setName)}${card.rarity ? ` · ${esc(card.rarity)}` : ''}</p>
+        ${card.illustrator && cardArtistKey.get(card.id) ? `<button type="button" class="card-artista-link" onclick="filtrarPorArtista('${esc(cardArtistKey.get(card.id))}')" title="Ver todas as cartas deste artista">Ilustração: <b>${esc(card.illustrator)}</b> <span aria-hidden="true">›</span></button>` : ''}
         <div class="badges">
           <span class="badge ${quantity ? 'owned' : ''}">${quantity ? `Total no fichário: ${quantity}` : 'Ainda não cadastrada'}</span>
           ${variants.length ? `<span class="badge purple">${variants.length} ${variants.length === 1 ? 'variante' : 'variantes'}</span>` : ''}
@@ -7554,7 +7812,7 @@ function renderPokemonDetail(id) {
           <small>${lista.length} carta${lista.length === 1 ? '' : 's'} no catálogo</small>
         </div>
       </header>
-      <div class="card-list">${lista.length
+      <div class="${classeDeLayout()}">${lista.length
         ? lista.map(renderCardRow).join('')
         : '<div class="empty">Nenhuma carta desta forma no catálogo atual.</div>'}</div>
     </section>`;

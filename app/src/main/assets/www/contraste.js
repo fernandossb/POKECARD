@@ -183,6 +183,12 @@
       var ps;
       try { ps = getComputedStyle(el, qual); } catch (_) { continue; }
       if (!ps || ps.content === 'none' || ps.position !== 'absolute') continue;
+      /* `opacity` também apaga o pseudo, não só o alfa da cor. A marca d'água
+         do tipo nas cartas (::before verde, laranja... com opacity .07) media
+         como fundo opaco e o nome da carta virava letra escura sobre o cartão
+         escuro — sempre que a linha era medida antes de ganhar a altura final. */
+      var opacidade = parseFloat(ps.opacity);
+      if (Number.isFinite(opacidade) && opacidade < 0.5) continue;
       var cor = parseCor(ps.backgroundColor);
       if (!cor || cor.a < 0.999) continue;
       // Precisa ser grande o bastante para servir de fundo ao texto.

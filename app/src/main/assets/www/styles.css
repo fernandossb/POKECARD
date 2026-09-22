@@ -5108,3 +5108,163 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
   box-shadow: 0 10px 24px -10px var(--vision-primary-glow, rgba(37,208,179,.4));
 }
 .modal-sheet{ border-radius: 22px 26px 0 0 !important; }
+/* ---------- v5.52 — Adicionadas recentemente, artista e lista/2/3 colunas ---------- */
+
+/* Faixa das últimas cartas no Início: rola para o lado, cada carta no
+   formato de carta de verdade (63×88) com o contorno na cor do tipo. */
+.recentes-painel{ margin-top: 4px; }
+.recentes-faixa{
+  display: flex; gap: 10px;
+  overflow-x: auto; overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  /* Sem o scroll-padding, o encaixe alinha a 1ª carta na borda da tela e
+     ignora o respiro lateral. */
+  scroll-padding-inline: 16px;
+  margin: 10px -16px 0; padding: 4px 16px 10px;
+  scrollbar-width: none;
+}
+.recentes-faixa::-webkit-scrollbar{ display: none; }
+.recente-item{
+  flex: 0 0 92px; width: 92px; min-width: 0;
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 0; border: 0; background: transparent; text-align: left;
+  scroll-snap-align: start;
+}
+.recente-arte{
+  display: block; width: 100%; aspect-ratio: 63 / 88;
+  border-radius: 9px; overflow: hidden;
+  background: var(--vision-surface-2);
+  box-shadow: 0 0 0 1.5px var(--cor-tipo, var(--v5-borda, rgba(255,255,255,.14))),
+    0 10px 20px -10px var(--vision-primary-glow, rgba(0,0,0,.55));
+  transition: transform .15s ease;
+}
+.recente-arte img,
+.recente-arte .card-placeholder{
+  width: 100% !important; height: 100% !important;
+  object-fit: cover; display: grid; place-items: center; border-radius: 0 !important;
+}
+.recente-item strong{
+  display: block; font-size: 12px; line-height: 1.25;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  color: var(--vision-text) !important; -webkit-text-fill-color: var(--vision-text) !important;
+}
+.recente-item small{
+  display: block; margin-top: -4px; font-size: 11px;
+  color: var(--vision-muted) !important; -webkit-text-fill-color: var(--vision-muted) !important;
+}
+.recente-item:active .recente-arte{ transform: scale(.95); }
+.recente-item[data-tipo="pokemon"]   { --cor-tipo: #7fb2d9; }
+.recente-item[data-tipo="fogo"]      { --cor-tipo: #ef6a3c; }
+.recente-item[data-tipo="agua"]      { --cor-tipo: #4aa3e8; }
+.recente-item[data-tipo="planta"]    { --cor-tipo: #58c46a; }
+.recente-item[data-tipo="eletrico"]  { --cor-tipo: #f2c53d; }
+.recente-item[data-tipo="psiquico"]  { --cor-tipo: #f2749c; }
+.recente-item[data-tipo="lutador"]   { --cor-tipo: #e0704f; }
+.recente-item[data-tipo="sombrio"]   { --cor-tipo: #9b8874; }
+.recente-item[data-tipo="metalico"]  { --cor-tipo: #a9bfcc; }
+.recente-item[data-tipo="fada"]      { --cor-tipo: #f28fce; }
+.recente-item[data-tipo="dragao"]    { --cor-tipo: #8f79f0; }
+.recente-item[data-tipo="fantasma"]  { --cor-tipo: #a864de; }
+.recente-item[data-tipo="venenoso"]  { --cor-tipo: #c66ae0; }
+.recente-item[data-tipo="terrestre"] { --cor-tipo: #dfae4e; }
+.recente-item[data-tipo="voador"]    { --cor-tipo: #92b2f2; }
+.recente-item[data-tipo="inseto"]    { --cor-tipo: #a8cc3a; }
+.recente-item[data-tipo="pedra"]     { --cor-tipo: #c5a765; }
+.recente-item[data-tipo="gelo"]      { --cor-tipo: #62cfe0; }
+.recente-item[data-tipo="normal"]    { --cor-tipo: #c3ba9e; }
+.recente-item[data-tipo="treinador"] { --cor-tipo: #ffa84c; }
+.recente-item[data-tipo="energia"]   { --cor-tipo: #ffd640; }
+
+/* Seletor de artista: linha inteira embaixo de ordenação e coleção, e
+   aceso quando está filtrando — fácil de ver por que a lista encolheu. */
+.filter-grid .seletor-artista{ grid-column: 1 / -1; }
+@media (min-width: 620px){ .filter-grid .seletor-artista{ grid-column: auto; } }
+.seletor-artista.ativo{
+  border-color: var(--vision-primary) !important;
+  color: var(--vision-primary) !important;
+  box-shadow: 0 0 0 1px var(--vision-primary) inset;
+}
+
+/* Contagem de resultados e, na mesma linha, lista / 2 / 3 colunas. */
+.card-results-bar{
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin: 4px 0 10px;
+}
+.card-results-bar .card-results-count{ margin: 0 !important; min-width: 0; }
+.layout-cartas{
+  flex: 0 0 auto; display: inline-flex; gap: 2px; padding: 3px;
+  border-radius: 12px; background: var(--vision-surface-2);
+  border: 1px solid var(--v5-borda, var(--vision-line));
+}
+.layout-cartas button{
+  width: 40px; height: 34px; padding: 0;
+  display: grid; place-items: center;
+  border: 0; border-radius: 9px; background: transparent;
+  color: var(--vision-muted) !important;
+}
+.layout-cartas button svg{
+  width: 19px; height: 19px;
+  fill: none; stroke: currentColor; stroke-width: 1.8;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.layout-cartas button.ativo{
+  background: var(--vision-primary-soft, rgba(37,208,179,.16));
+  color: var(--vision-primary) !important;
+  box-shadow: 0 0 0 1px var(--vision-primary) inset;
+}
+
+/* As três exibições. A classe vem junto da lista, com mais peso que as
+   regras antigas de coluna (inclusive a das telas estreitas): foi escolha
+   de quem usa, então vale em qualquer largura. */
+.card-list.layout-grade-3{ grid-template-columns: repeat(3, minmax(0,1fr)) !important; gap: 10px 8px !important; }
+.card-list.layout-grade-2{ grid-template-columns: repeat(2, minmax(0,1fr)) !important; gap: 12px 10px !important; }
+.card-list.layout-grade-2 .card-row .card-name{ font-size: 14px !important; }
+/* A arte tinha largura fixa de 84px, que só por acaso enchia o cartão na
+   grade de 3. Nas grades ela acompanha a largura do cartão. */
+.card-list.layout-grade-2 .vision-card-art,
+.card-list.layout-grade-3 .vision-card-art{ width: 100% !important; }
+.card-list.layout-lista{ grid-template-columns: minmax(0,1fr) !important; gap: 8px !important; }
+
+/* Lista: arte pequena à esquerda e o texto com espaço para respirar — é o
+   modo de passar o olho em muitas cartas, então mostra também o artista. */
+.card-list.layout-lista .card-row.vision-card-tile{
+  display: grid !important;
+  grid-template-columns: 70px minmax(0,1fr) !important;
+  align-items: center !important;
+  gap: 12px !important;
+  padding: 8px 12px 8px 8px !important;
+}
+.card-list.layout-lista .vision-card-art{ width: 70px !important; }
+.card-list.layout-lista .card-row .card-main{ padding: 0 !important; }
+.card-list.layout-lista .card-row .card-name{
+  font-size: 15px !important; white-space: normal !important;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.card-list.layout-lista .card-row .card-meta{ margin-top: 3px; }
+.card-list.layout-lista .card-row .tile-price-row{ margin-top: 6px; justify-content: flex-start; gap: 10px; }
+.card-list.layout-lista .tile-quantity-badge{ right: 3px; top: 3px; padding: 3px 6px; font-size: 11px; }
+.card-list.layout-lista .tile-wishlist-badge{ left: 3px; bottom: 3px; padding: 3px 6px; font-size: 10px; }
+.card-list.layout-lista .marca-completa{ top: 3px; left: 3px; width: 19px; height: 19px; font-size: 11px; }
+
+/* O artista só aparece na lista; nas grades o texto já está no limite. */
+.card-row .card-artista{ display: none; }
+.card-list.layout-lista .card-row .card-artista{
+  display: block; margin-top: 2px; font-size: 12px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  color: var(--vision-muted) !important; -webkit-text-fill-color: var(--vision-muted) !important;
+}
+
+/* Nome do artista no cadastro da carta: toca e vê tudo o que ele desenhou. */
+.card-artista-link{
+  display: inline-flex; align-items: center; gap: 5px; max-width: 100%;
+  margin: 2px 0 10px; padding: 7px 12px;
+  border: 1px solid var(--v5-borda, var(--vision-line)); border-radius: 999px;
+  background: var(--vision-surface-2);
+  color: var(--vision-muted) !important; font-size: 12px; text-align: left;
+}
+.card-artista-link b{
+  color: var(--vision-text) !important; font-weight: 700;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.card-artista-link span{ color: var(--vision-primary) !important; font-size: 16px; line-height: 1; }
+.card-artista-link:active{ transform: scale(.97); }

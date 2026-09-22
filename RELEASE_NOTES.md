@@ -1,3 +1,12 @@
+# POKECARD Brasil 5.52.0 — Últimas adicionadas, filtro por artista e lista/2/3 colunas
+
+- Tela inicial ganhou a faixa "Adicionadas recentemente": as últimas cartas que entraram na coleção, rolando para o lado, com "hoje", "ontem", "há 3 dias"... Tocar abre a carta; "Ver todas" abre a Coleção já ordenada.
+- Coleção: nova ordenação "Adição: recente → antiga". O app passou a guardar a data em que cada cópia entrou na coleção (botão +, cadastro, scanner). Cartas cadastradas antes desta versão usam a data do último cadastro delas, e corrigir o acabamento ou a condição de uma carta antiga não a faz subir para o topo — só entrada de cópia nova conta.
+- Coleção: novo filtro por artista (quem desenhou a carta), com 322 artistas e a quantidade de cartas de cada um. Com uma coleção escolhida, a lista mostra só os artistas dela. No cadastro da carta aparece "Ilustração: nome do artista" — tocando, a Coleção abre com tudo o que ele desenhou.
+- Coleção: botões para mostrar as cartas em lista, grade de 2 colunas ou grade de 3 colunas. A escolha fica salva no aparelho e vale também para Trocar/Vender e para as cartas na tela de cada Pokémon. Na lista aparece também o nome do artista.
+- O catálogo embutido voltou a trazer o tipo de cada carta de Treinador (Item, Apoiador, Estádio, Ferramenta) e passou a trazer o artista. Quem já tinha atualizado o catálogo pelo app recebe os artistas automaticamente.
+- Corrigido: os nomes das cartas na grade podiam aparecer em letra escura sobre o cartão escuro, quase ilegíveis. O ajuste automático de contraste confundia a marca d'água do tipo (quase transparente) com o fundo do cartão.
+
 # POKECARD Brasil 5.51.0 — Um deck por linha evolutiva, não por Pokémon
 
 - Deck temático agora é por LINHA evolutiva, não por Pokémon: montar o deck do Venusaur também marca Bulbasaur e Ivysaur como completos na Pokédex de decks — os três já eram atacantes do mesmo baralho, não fazia sentido pedir três decks quase iguais.
