@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.56.0 — O app responde quando a carta entra
+
+- Mais uma cópia de uma carta que você já tinha: o cartão dá um pulinho e o número de cópias "estoura". A carta nova continua "ganhando cor", como na versão anterior.
+- O celular dá um toque de vibração quando uma carta é lida no scanner ou adicionada à coleção, e um toque duplo ao gravar as cartas do scanner, completar uma coleção ou ganhar um troféu. No scanner, isso avisa que a leitura entrou sem precisar olhar para a tela. Usa a vibração ao tocar do próprio Android: se ela estiver desligada nas configurações do celular, o app também não vibra.
+- Se você fecha o scanner sem tocar em "Adicionar", as cartas lidas continuam esperando. Agora a Pokébola da barra de baixo balança de tempos em tempos, como nos jogos, com o número de cartas esperando, até você gravar ou descartar.
+
 # POKECARD Brasil 5.55.0 — Início mais limpo e seletores com busca
 
 - Início: o painel "Preços da coleção" virou uma linha de estado, como "✓ Preços atualizados hoje às 08:20 · 18 de 18 cartas com preço", com atalho para revisar os preços pendentes. Os números técnicos do banco, a explicação da fonte e os percentuais por condição foram para "Sobre os preços".

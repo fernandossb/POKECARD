@@ -2536,6 +2536,8 @@ function setQuantity(cardId, nextQuantity) {
   }
   let difference = target - current;
   if (!current && target > 0) marcarAnimacaoDeCarta(cardId);
+  else if (target > current) marcarAnimacaoDeCarta(cardId, 'pulo');
+  if (difference > 0) vibrar();
   if (difference > 0) {
     const variant = primaryVariant(cardId, true);
     variant.quantity += difference;
@@ -2607,7 +2609,8 @@ function variantNeedsExactPricing(variant) {
 function saveCardVariant(cardId, variantId) {
   const card = cardMap.get(cardId);
   if (!card) return;
-  const tinhaAntes = quantityFor(cardId) > 0;
+  const quantidadeAntes = quantityFor(cardId);
+  const tinhaAntes = quantidadeAntes > 0;
   const entry = state.entries[cardId] || { quantity: 0, priceBrl: null, wishlist: false, variants: [] };
   state.entries[cardId] = entry;
   const automaticPokemonIds = Array.isArray(card.pokemonIds) ? card.pokemonIds.map(Number).filter(id => pokemonMap.has(id)) : [];
@@ -2705,7 +2708,10 @@ function saveCardVariant(cardId, variantId) {
   else entry.variants.push(draft);
   entry.wishlist = entry.variants.some(item => item.isWishlist);
   syncEntry(cardId);
-  if (!tinhaAntes && quantityFor(cardId) > 0) marcarAnimacaoDeCarta(cardId);
+  const quantidadeDepois = quantityFor(cardId);
+  if (!tinhaAntes && quantidadeDepois > 0) marcarAnimacaoDeCarta(cardId);
+  else if (quantidadeDepois > quantidadeAntes) marcarAnimacaoDeCarta(cardId, 'pulo');
+  if (quantidadeDepois > quantidadeAntes) vibrar();
   saveState();
   conferirColecaoCompleta();
   if (scannerDraftFinish && scannerSession.active) {
@@ -2780,6 +2786,38 @@ function renderTabs() {
     <button class="tab ${['pokedex','wishlist','repeated','produtos'].includes(ui.tab) ? 'active' : ''}" onclick="openMoreNavigation()" aria-label="Mais opções">
       <span class="tab-icon">${tabIcon('mais')}</span><span class="tab-label">Mais</span>
     </button>`;
+  atualizarPokebolaDoScanner();
+}
+
+/* Leituras do scanner que ainda não entraram na coleção (o scanner fechou sem
+   "Adicionar"): ficam guardadas, e a Pokébola da barra balança como nos jogos,
+   com o número de cartas, até serem gravadas ou descartadas. */
+function leiturasEsperando() {
+  if (scannerSession.active) return 0;
+  const emMemoria = leiturasPendentes();
+  const pendentes = emMemoria.length ? emMemoria : (lerSessaoGuardada()?.pendentes || []);
+  return pendentes.reduce((soma, item) => soma + (Number(item.quantity) || 0), 0);
+}
+
+function atualizarPokebolaDoScanner() {
+  const botao = document.querySelector('#tabs .scanner-tab');
+  if (!botao) return;
+  const quantas = leiturasEsperando();
+  botao.classList.toggle('tem-leituras', quantas > 0);
+  botao.setAttribute('aria-label', quantas
+    ? `Escanear carta (${quantas} ${quantas === 1 ? 'leitura esperando' : 'leituras esperando'})`
+    : 'Escanear carta');
+  let contador = botao.querySelector('.scanner-contador');
+  if (quantas && !contador) {
+    contador = document.createElement('b');
+    contador.className = 'scanner-contador';
+    contador.setAttribute('aria-hidden', 'true');
+    botao.appendChild(contador);
+  }
+  if (contador) {
+    if (quantas) contador.textContent = quantas > 99 ? '99+' : String(quantas);
+    else contador.remove();
+  }
 }
 
 /* Só entra aqui o que NÃO tem outro caminho permanente: Decks (aba fixa),
@@ -5510,6 +5548,7 @@ function salvarSessaoLeitura() {
     if (!pendentes.length) localStorage.removeItem(SCANNER_SESSAO_KEY);
     else localStorage.setItem(SCANNER_SESSAO_KEY, JSON.stringify({ pendentes, setId: scannerSession.setId, salvoEm: Date.now() }));
   } catch (_) { /* aparelho sem espaço: a sessão segue só na memória */ }
+  atualizarPokebolaDoScanner();
 }
 
 function lerSessaoGuardada() {
@@ -5523,6 +5562,7 @@ function lerSessaoGuardada() {
 function descartarSessaoGuardada() {
   scannerSession.pendentes = [];
   try { localStorage.removeItem(SCANNER_SESSAO_KEY); } catch (_) {}
+  atualizarPokebolaDoScanner();
 }
 
 // Duas leituras iguais viram uma linha só com quantidade 2 — como no balcão
@@ -6943,6 +6983,8 @@ function confirmScannedCard(cardId) {
     quantas += vezes;
   }
   if (!quantas) return notify('Escolha ao menos uma versão antes de adicionar.');
+  // A mão está segurando a carta: o toque avisa que a leitura entrou.
+  vibrar();
   scannerSession.quantidades = null;
   scannerSession.ultimaConfirmada = cardId;
   scannerSession.confirmadaEm = Date.now();
@@ -7110,7 +7152,7 @@ function adicionarCartasDaSessao() {
     const card = cardMap.get(linha.cardId);
     const quantidade = Math.max(0, Number(linha.quantity) || 0);
     if (!card || !quantidade) continue;
-    if (!(quantityFor(linha.cardId) > 0)) marcarAnimacaoDeCarta(linha.cardId);
+    marcarAnimacaoDeCarta(linha.cardId, quantityFor(linha.cardId) > 0 ? 'pulo' : 'cor');
 
     const entry = state.entries[linha.cardId] || { quantity: 0, priceBrl: null, wishlist: false, variants: [] };
     state.entries[linha.cardId] = entry;
@@ -7155,6 +7197,7 @@ function adicionarCartasDaSessao() {
   scannerSession.active = false;
   closeModal();
   render();
+  vibrar('duplo');
   notify(`${gravadas} carta(s) adicionada(s) à coleção · ${cardIds.size} carta(s) diferente(s).`);
 }
 
@@ -7186,6 +7229,7 @@ function comemorar(mensagem, detalhe = '') {
       ${detalhe ? `<span>${esc(detalhe)}</span>` : ''}
     </div>`;
   document.body.appendChild(caixa);
+  vibrar('duplo');
   setTimeout(() => { caixa.classList.add('saindo'); }, 2200);
   setTimeout(() => { caixa.remove(); }, 2900);
 }
@@ -7347,26 +7391,40 @@ function seloDeRaridade(card) {
    A capa vazia do fichário vira carta de verdade com uma animação curta.
    A marca espera o painel fechar: salvar pelo cadastro redesenha a lista
    POR TRÁS do painel, e a animação rodaria sem ninguém ver. */
-const animacoesDeCarta = new Map();   // cardId → 'cor'
+const animacoesDeCarta = new Map();   // cardId → 'cor' (0 → 1 cópia) | 'pulo' (+1 cópia)
+const CLASSES_DE_ANIMACAO = { cor: 'ganhou-cor', pulo: 'ganhou-copia' };
 
 function marcarAnimacaoDeCarta(cardId, tipo = 'cor') {
+  // "Ganhar cor" vale mais que o pulinho: a carta nova não perde a animação
+  // dela se ganhar mais uma cópia na mesma leva.
+  if (animacoesDeCarta.get(cardId) === 'cor') return;
   animacoesDeCarta.set(cardId, tipo);
 }
 
 function classeDeAnimacao(cardId) {
-  return animacoesDeCarta.get(cardId) === 'cor' ? ' ganhou-cor' : '';
+  const classe = CLASSES_DE_ANIMACAO[animacoesDeCarta.get(cardId)];
+  return classe ? ` ${classe}` : '';
 }
 
 function tocarAnimacoesDeCarta() {
   if (!animacoesDeCarta.size) return;
   const modal = document.getElementById('modal');
   if (modal && !modal.classList.contains('hidden')) return;
-  const alvos = [...document.querySelectorAll('.ganhou-cor')];
+  const alvos = [...document.querySelectorAll('.ganhou-cor, .ganhou-copia')];
   // Reinicia: se a lista foi desenhada com o painel aberto, a animação já
   // rodou escondida.
-  for (const el of alvos) { el.classList.remove('ganhou-cor'); void el.offsetWidth; el.classList.add('ganhou-cor'); }
+  for (const el of alvos) {
+    const classe = el.classList.contains('ganhou-cor') ? 'ganhou-cor' : 'ganhou-copia';
+    el.classList.remove(classe); void el.offsetWidth; el.classList.add(classe);
+  }
   animacoesDeCarta.clear();
-  setTimeout(() => alvos.forEach(el => el.classList.remove('ganhou-cor')), 1600);
+  setTimeout(() => alvos.forEach(el => el.classList.remove('ganhou-cor', 'ganhou-copia')), 1600);
+}
+
+/* Toque de confirmação no celular (retorno tátil do sistema, pela ponte do
+   Android). No navegador, e em versões antigas do app, não faz nada. */
+function vibrar(padrao = 'curto') {
+  try { window.Android?.vibrar?.(padrao); } catch (_) {}
 }
 
 function renderCardRow(card) {
@@ -9417,6 +9475,8 @@ function closeModal() {
   sheet.className = 'modal-sheet';
   // Carta que entrou na coleção com o painel aberto: agora dá para ver.
   requestAnimationFrame(tocarAnimacoesDeCarta);
+  // Fechar o scanner sem adicionar deixa leituras esperando: a Pokébola avisa.
+  atualizarPokebolaDoScanner();
 }
 
 function openBackupPanel() {

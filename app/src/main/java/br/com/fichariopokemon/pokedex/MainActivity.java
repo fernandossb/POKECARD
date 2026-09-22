@@ -20,6 +20,7 @@ import android.os.Environment;
 import android.provider.Settings;
 import android.provider.MediaStore;
 import android.os.Bundle;
+import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.JavascriptInterface;
@@ -665,6 +666,33 @@ public final class MainActivity extends Activity {
             if (BuildConfig.PLAY_STORE) return;
             runOnUiThread(new Runnable() {
                 @Override public void run() { downloadUpdateNative(url, fileName); }
+            });
+        }
+
+        /* Toque de confirmação: a carta entrou, sem precisar olhar para a tela
+           — no scanner a mão está segurando a carta. Usa o retorno tátil do
+           sistema, que respeita a opção "vibrar ao tocar" do aparelho e não
+           precisa de permissão nova. "curto": carta lida ou adicionada.
+           "duplo": coleção completa, troféu, cartas do scanner gravadas. */
+        @JavascriptInterface
+        public void vibrar(final String padrao) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    if (webView == null) return;
+                    final int efeito = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                            ? HapticFeedbackConstants.CONFIRM
+                            : HapticFeedbackConstants.VIRTUAL_KEY;
+                    webView.performHapticFeedback(efeito);
+                    if ("duplo".equals(padrao)) {
+                        webView.postDelayed(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (webView != null) webView.performHapticFeedback(efeito);
+                            }
+                        }, 140);
+                    }
+                }
             });
         }
 
