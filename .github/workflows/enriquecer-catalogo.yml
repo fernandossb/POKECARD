@@ -1,4 +1,4 @@
-name: Enriquecer catálogo (tipos de Treinador e artistas)
+name: Enriquecer catálogo (Treinadores, artistas, energias, rotação e siglas)
 
 # Roda apenas quando você mandar: Actions -> Enriquecer catálogo -> Run workflow.
 # Não roda em push para não refazer o trabalho a cada commit.
@@ -25,7 +25,7 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Enriquecer catálogo com category, trainerType e illustrator
+      - name: Enriquecer catálogo (category, trainerType, energyType, regulationMark, illustrator, nameEn, siglas)
         run: node scripts/enriquecer-catalogo.mjs
 
       - name: Conferir resultado
@@ -35,16 +35,26 @@ jobs:
             const fs = require('fs');
             const catalog = JSON.parse(fs.readFileSync('app/src/main/assets/www/data/catalog.json', 'utf8'));
             const cards = catalog.cards || [];
-            const withCategory = cards.filter(card => card.category).length;
-            const withTrainerType = cards.filter(card => card.trainerType).length;
-            const withIllustrator = cards.filter(card => card.illustrator).length;
-            console.log('Cartas no catálogo:', cards.length);
-            console.log('Com category:', withCategory);
-            console.log('Com trainerType:', withTrainerType);
-            console.log('Com illustrator:', withIllustrator);
-            if (!withCategory) { console.error('Nenhuma carta recebeu category — o enriquecimento falhou.'); process.exit(1); }
-            if (!withTrainerType) { console.error('Nenhum trainerType gravado — Itens e Apoiadores continuariam indistinguíveis.'); process.exit(1); }
-            if (!withIllustrator) { console.error('Nenhum illustrator gravado — o filtro por artista ficaria vazio.'); process.exit(1); }
+            const sets = catalog.sets || [];
+            const conta = campo => cards.filter(card => card[campo]).length;
+            const withCategory = conta('category');
+            const withTrainerType = conta('trainerType');
+            const withIllustrator = conta('illustrator');
+            const withMark = conta('regulationMark');
+            const withEnergyType = conta('energyType');
+            const withNameEn = conta('nameEn');
+            const withCode = sets.filter(set => set.tcgOnline).length;
+            console.log('Cartas no catálogo:', cards.length, '· coleções:', sets.length);
+            console.log('Com category:', withCategory, '· trainerType:', withTrainerType, '· illustrator:', withIllustrator);
+            console.log('Com regulationMark:', withMark, '· energyType:', withEnergyType, '· nameEn:', withNameEn);
+            console.log('Coleções com sigla PTCGL:', withCode);
+            const falhou = mensagem => { console.error(mensagem); process.exit(1); };
+            if (!withCategory) falhou('Nenhuma carta recebeu category — o enriquecimento falhou.');
+            if (!withTrainerType) falhou('Nenhum trainerType gravado — Itens e Apoiadores continuariam indistinguíveis.');
+            if (!withIllustrator) falhou('Nenhum illustrator gravado — o filtro por artista ficaria vazio.');
+            if (!withMark) falhou('Nenhuma regulationMark gravada — o aviso de rotação continuaria sem dados.');
+            if (!withEnergyType) falhou('Nenhum energyType gravado — a Energia básica continuaria adivinhada pelo nome.');
+            if (!withCode) falhou('Nenhuma sigla de coleção gravada — colar lista do PTCGL continuaria sem reconhecer as impressões.');
           "
 
       - name: Publicar catálogo enriquecido
@@ -56,6 +66,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "Catálogo já estava atualizado; nada a publicar."
           else
-            git commit -m "Enriquecer catálogo com tipos de Treinador e artistas $(date -u +%F)"
+            git commit -m "Enriquecer catálogo com energias, rotação, nomes em inglês e siglas $(date -u +%F)"
             git push
           fi

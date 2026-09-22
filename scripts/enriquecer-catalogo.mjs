@@ -1,15 +1,25 @@
 /**
- * Enriquece o catálogo local com `category`, `trainerType` e `illustrator` do
- * TCGdex.
+ * Enriquece o catálogo local com dados do TCGdex que a listagem simples não
+ * traz:
  *
- * Sem esses campos o app só consegue separar Pokémon / Energia / "Treinador",
- * misturando Item, Apoiador, Ferramenta e Estádio num grupo só — o que impede
- * qualquer análise real de balanceamento do deck. O `illustrator` é quem
- * desenhou a carta: alimenta o filtro por artista da Coleção.
+ * - cartas: `category`, `trainerType`, `rarity`, `illustrator` (artista),
+ *   `energyType` (Energia básica ou especial), `regulationMark` (a letra que
+ *   decide a rotação do formato Padrão) e `nameEn` (o nome em inglês, só
+ *   quando difere do português — é como as listas do PTCGL e do Limitless
+ *   chegam);
+ * - coleções: `tcgOnline`, a sigla do Pokémon TCG Live (OBF, PAF, SVI...),
+ *   que é como qualquer lista de deck identifica a impressão.
+ *
+ * Sem `category`/`trainerType` o app só separa Pokémon / Energia /
+ * "Treinador", misturando Item, Apoiador, Ferramenta e Estádio. Sem
+ * `energyType` ele não sabe, com certeza, o que é Energia básica (a única sem
+ * limite de cópias e legal em qualquer formato).
  *
  * Usa a API GraphQL, que devolve os dados em lote (500 por página) em vez de
  * uma requisição por carta. O argumento `filters` é obrigatório: sem ele a API
- * responde com erro.
+ * responde com erro. A sigla das coleções recentes (Scarlet & Violet e Mega
+ * Evolução) só existe na API REST, uma coleção por vez, como "abreviação
+ * oficial" — o GraphQL não expõe esse campo.
  *
  * Uso:  node scripts/enriquecer-catalogo.mjs
  */
@@ -23,27 +33,36 @@ const catalogPath = path.join(wwwData, 'catalog.json');
 const catalogDataPath = path.join(wwwData, 'catalog-data.js');
 
 const ENDPOINT = 'https://api.tcgdex.net/v2/graphql';
+const REST_EN = 'https://api.tcgdex.net/v2/en';
 const PAGE_SIZE = 500;
 const CATEGORIES = ['Pokemon', 'Trainer', 'Energy'];
+const HEADERS = { 'content-type': 'application/json', 'user-agent': 'FicharioPokemonCatalog/1.0' };
 
-async function graphql(query) {
+// Mesma normalização do app (acentos e pontuação fora, minúsculas).
+const normalize = value => String(value ?? '')
+  .normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+  .replace(/[^a-z0-9]+/g, ' ').trim();
+
+async function comRetentativa(tarefa) {
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
-      const response = await fetch(ENDPOINT, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'user-agent': 'FicharioPokemonCatalog/1.0' },
-        body: JSON.stringify({ query }),
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const payload = await response.json();
-      if (payload.errors?.length) throw new Error(payload.errors[0]?.message || 'erro GraphQL');
-      return payload.data;
+      return await tarefa();
     } catch (error) {
       if (attempt === 3) throw error;
       await new Promise(resolve => setTimeout(resolve, 1500 * attempt));
     }
   }
   return null;
+}
+
+async function graphql(query) {
+  return comRetentativa(async () => {
+    const response = await fetch(ENDPOINT, { method: 'POST', headers: HEADERS, body: JSON.stringify({ query }) });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = await response.json();
+    if (payload.errors?.length) throw new Error(payload.errors[0]?.message || 'erro GraphQL');
+    return payload.data;
+  });
 }
 
 async function fetchCategory(category) {
@@ -53,7 +72,7 @@ async function fetchCategory(category) {
   const MAX_PAGES = 200;
   for (let page = 1; page <= MAX_PAGES; page += 1) {
     const data = await graphql(
-      `{ cards(filters:{category:"${category}"}, pagination:{page:${page},itemsPerPage:${PAGE_SIZE}}) { id trainerType rarity illustrator } }`
+      `{ cards(filters:{category:"${category}"}, pagination:{page:${page},itemsPerPage:${PAGE_SIZE}}) { id name trainerType energyType rarity illustrator regulationMark } }`
     );
     const cards = data?.cards || [];
     const before = found.size;
@@ -61,9 +80,12 @@ async function fetchCategory(category) {
       if (!card?.id) continue;
       found.set(card.id, {
         category,
+        nameEn: String(card.name || '').trim() || null,
         trainerType: card.trainerType || null,
+        energyType: card.energyType || null,
         rarity: card.rarity || null,
         illustrator: String(card.illustrator || '').trim() || null,
+        regulationMark: String(card.regulationMark || '').trim().toUpperCase() || null,
       });
     }
     process.stdout.write(`\r${category}: ${found.size} cartas`);
@@ -72,6 +94,35 @@ async function fetchCategory(category) {
   }
   process.stdout.write('\n');
   return found;
+}
+
+/* Sigla PTCGL de cada coleção. O GraphQL traz `tcgOnline` das coleções
+   antigas; as recentes só têm a "abreviação oficial" na API REST. */
+async function fetchSiglas(setIds) {
+  const siglas = new Map();
+  const data = await graphql('{ sets(filters:{}, pagination:{page:1,itemsPerPage:1000}) { id tcgOnline } }');
+  for (const set of data?.sets || []) {
+    if (set?.id && set.tcgOnline) siglas.set(set.id, String(set.tcgOnline).trim().toUpperCase());
+  }
+  const faltando = setIds.filter(id => !siglas.has(id));
+  const LOTE = 6;
+  for (let i = 0; i < faltando.length; i += LOTE) {
+    await Promise.all(faltando.slice(i, i + LOTE).map(async id => {
+      try {
+        const detalhe = await comRetentativa(async () => {
+          const response = await fetch(`${REST_EN}/sets/${encodeURIComponent(id)}`, { headers: HEADERS });
+          if (response.status === 404) return null;
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return response.json();
+        });
+        const sigla = String(detalhe?.tcgOnline || detalhe?.abbreviation?.official || '').trim().toUpperCase();
+        if (sigla) siglas.set(id, sigla);
+      } catch (_) { /* coleção sem versão em inglês: fica sem sigla */ }
+    }));
+    process.stdout.write(`\rSiglas: ${Math.min(i + LOTE, faltando.length)} de ${faltando.length} coleções consultadas`);
+  }
+  process.stdout.write('\n');
+  return siglas;
 }
 
 const catalog = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
@@ -93,11 +144,26 @@ for (const card of cards) {
   // trainerType só existe para cartas de Treinador; nas demais fica ausente.
   if (info.trainerType) card.trainerType = info.trainerType;
   else delete card.trainerType;
+  // energyType: "Normal" (básica) ou "Special" — só nas Energias.
+  if (info.energyType) card.energyType = info.energyType;
+  else delete card.energyType;
   // "None" é como a fonte marca carta sem raridade impressa.
   if (info.rarity && info.rarity !== 'None') card.rarity = info.rarity;
   // Carta sem artista conhecido fica sem o campo, em vez de guardar vazio.
   if (info.illustrator) card.illustrator = info.illustrator;
+  if (info.regulationMark) card.regulationMark = info.regulationMark;
+  // O nome em inglês só é guardado quando é diferente do nome do catálogo:
+  // "Charizard ex" é igual nas duas línguas, "Ordens do Chefe" não.
+  if (info.nameEn && normalize(info.nameEn) !== normalize(card.name)) card.nameEn = info.nameEn;
+  else delete card.nameEn;
   enriched += 1;
+}
+
+const siglas = await fetchSiglas((catalog.sets || []).map(set => set.id).filter(Boolean));
+let comSigla = 0;
+for (const set of catalog.sets || []) {
+  const sigla = siglas.get(set.id);
+  if (sigla) { set.tcgOnline = sigla; comSigla += 1; }
 }
 
 catalog.enrichedAt = new Date().toISOString();
@@ -113,4 +179,8 @@ for (const card of cards) {
 console.log(`\nCatálogo enriquecido: ${enriched} de ${cards.length} cartas (${missing} sem correspondência no TCGdex).`);
 const artistas = new Set(cards.map(card => card.illustrator).filter(Boolean));
 console.log(`Com artista: ${cards.filter(card => card.illustrator).length} cartas, ${artistas.size} artistas diferentes.`);
+console.log(`Com marca de regulamentação: ${cards.filter(card => card.regulationMark).length} cartas.`);
+console.log(`Energias básicas: ${cards.filter(card => card.energyType === 'Normal').length} · especiais: ${cards.filter(card => card.energyType === 'Special').length}.`);
+console.log(`Com nome em inglês diferente: ${cards.filter(card => card.nameEn).length} cartas.`);
+console.log(`Coleções com sigla PTCGL: ${comSigla} de ${(catalog.sets || []).length}.`);
 for (const [key, count] of [...byType].sort((a, b) => b[1] - a[1])) console.log(`  ${key}: ${count}`);
