@@ -193,9 +193,13 @@ for (const card of cards) {
 /* Rotação: as marcas de regulamentação que valem no Padrão hoje. A fonte
    decide a legalidade pela marca impressa (G saiu em 2026; H, I e J valem),
    então basta guardar as letras — o app aplica a cada carta pela marca dela,
-   e a Treinadores reimpressos pelo nome. */
+   e a Treinadores reimpressos pelo nome. Só os Pokémon contam: a fonte trata
+   a Energia Reversa dourada (marca G) como básica, e Energia básica vale
+   sempre — ela sozinha punha o G de volta no formato. */
 const marcasDoPadrao = new Set();
-for (const info of index.values()) if (info.standard && info.regulationMark) marcasDoPadrao.add(info.regulationMark);
+for (const info of index.values()) {
+  if (info.category === 'Pokemon' && info.standard && info.regulationMark) marcasDoPadrao.add(info.regulationMark);
+}
 catalog.standardMarks = [...marcasDoPadrao].sort();
 
 const siglas = await fetchSiglas((catalog.sets || []).map(set => set.id).filter(Boolean));
