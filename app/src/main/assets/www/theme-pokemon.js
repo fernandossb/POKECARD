@@ -152,9 +152,14 @@
      — é o que garante legibilidade). Um Charizard vermelho-alaranjado-amarelo
      de verdade vem de girar o mesmo matiz de base pra dois lados, não de uma
      cor fixa: funciona para os 18 tipos sem precisar de tabela nova. */
-  function tomVivido(h, deslocamento) {
+  function tomVivido(h, deslocamento, p) {
     var hh = ((h + deslocamento) % 360 + 360) % 360;
-    return hslParaHex(hh, 82, 64);
+    // Sem a paleta (chamada antiga), fica o tom vivo de sempre. Com ela, o
+    // tom vivo precisa ler sobre o cartão: as companheiras aparecem como
+    // números grandes (3:1 basta) e, nos temas claros, o rosa e o amarelo
+    // claros sumiam.
+    if (!p) return hslParaHex(hh, 82, 64);
+    return tomLegivel(hh, 82, p.s1, 3, !p.claro, p.claro ? 40 : 64);
   }
 
   function nivelSalvo() {
@@ -187,15 +192,21 @@
 
   /* Procura o tom mais próximo do desejado que ainda tenha contraste
      suficiente com o fundo. Sem isto, os níveis intermediários deixavam o
-     texto quase invisível: fundo médio com letra clara não funciona. */
-  function tomLegivel(h, s, fundo, alvo, comecarClaro) {
-    var passo = comecarClaro ? -3 : 3;
-    var inicio = comecarClaro ? 97 : 8;
-    for (var l = inicio; l >= 0 && l <= 100; l += passo) {
+     texto quase invisível: fundo médio com letra clara não funciona.
+
+     Parte do tom DESEJADO e só se afasta dele (clareando sobre fundo escuro,
+     escurecendo sobre fundo claro) até alcançar o contraste. A versão antiga
+     partia do extremo (quase branco ou quase preto), que sempre passa no
+     teste — e parava ali: texto, texto secundário e cor de destaque saíam
+     todos quase brancos (ou quase pretos), sem hierarquia nem cor do tema. */
+  function tomLegivel(h, s, fundo, alvo, claroSobreEscuro, desejado) {
+    var passo = claroSobreEscuro ? 2 : -2;
+    var l = typeof desejado === 'number' ? desejado : (claroSobreEscuro ? 97 : 8);
+    for (; l >= 0 && l <= 100; l += passo) {
       var cor = hslParaHex(h, s, l);
       if (contraste(cor, fundo) >= alvo) return cor;
     }
-    return comecarClaro ? '#ffffff' : '#000000';
+    return claroSobreEscuro ? '#ffffff' : '#000000';
   }
 
   /** Monta os tons do tema a partir da cor do tipo e do nível escolhido. */
@@ -215,9 +226,19 @@
     // Quem decide se a letra é clara ou escura é o próprio cartão, não o
     // número do nível — assim os tons do meio também ficam legíveis.
     var claro = luminanciaHex(s1) > 0.18;
-    var texto = tomLegivel(h, 14, s1, 8.5, !claro);
-    var mut = tomLegivel(h, 24, s1, 4.6, !claro);
-    var pri = tomLegivel(h, 68, s1, 3.2, !claro);
+    // Tons desejados: texto quase branco (ou quase preto), secundário no
+    // meio do caminho e destaque vivo na cor do tema.
+    //
+    // O secundário é medido contra s2: ele aparece também em selos e botões,
+    // que usam a segunda camada. O destaque é medido contra o cartão (s1)
+    // para continuar vivo — medido contra as camadas mais claras, o laranja
+    // do Charizard virava bege. Onde o destaque ficaria como texto sobre
+    // fundo mais claro (aba ativa, selos), o CSS usa a cor do texto.
+    var texto = tomLegivel(h, 14, s1, 8.5, !claro, claro ? 12 : 95);
+    var mut = tomLegivel(h, 20, s2, 4.6, !claro, claro ? 36 : 72);
+    // 4,5:1 e não 3:1: o destaque também vira texto pequeno ("Ver todos",
+    // "Atualizar", o filtro ligado).
+    var pri = tomLegivel(h, 70, s1, 4.5, !claro, claro ? 38 : 66);
     var soft = hslParaHex(h, s + 10, claro ? Math.min(95, f + p * 2.6) : f + p * 2);
 
     return {
@@ -383,12 +404,29 @@
     // color-mix() e o elemento ficaria sem cor nenhuma (mesmo motivo do
     // --vision-surface-soft acima).
     root.style.setProperty('--vision-primary-glow', hexParaRgba(p.pri, 0.55));
+    // Tons transparentes do destaque, no lugar do verde-água fixo que várias
+    // regras antigas usavam em fundos e sombras.
+    root.style.setProperty('--vision-primary-tenue', hexParaRgba(p.pri, 0.10));
+    root.style.setProperty('--vision-primary-leve', hexParaRgba(p.pri, 0.25));
+    // Bordas e fundo de campo "suaves": branco transparente some num tema
+    // claro, então ali eles viram preto transparente.
+    var tinta = p.claro ? '0,0,0' : '255,255,255';
+    // Cores de significado usadas como TEXTO (verde de "ok", âmbar de aviso,
+    // vermelho de erro): matiz fixo, mas o tom sai da mesma busca de contraste
+    // do resto do tema — tons fixos sumiam nos níveis claros e no "Suave".
+    root.style.setProperty('--ok-texto', tomLegivel(150, 62, p.s2, 5.2, !p.claro, p.claro ? 30 : 60));
+    root.style.setProperty('--aviso-texto', tomLegivel(38, 88, p.s2, 5.2, !p.claro, p.claro ? 32 : 62));
+    root.style.setProperty('--erro-texto', tomLegivel(4, 78, p.s2, 5.2, !p.claro, p.claro ? 40 : 68));
+    root.style.setProperty('--borda-suave', 'rgba(' + tinta + ',.14)');
+    root.style.setProperty('--v5-borda', 'rgba(' + tinta + ',.08)');
+    root.style.setProperty('--v5-borda-forte', 'rgba(' + tinta + ',.14)');
+    root.style.setProperty('--fundo-campo', 'rgba(' + tinta + ',.05)');
     // Duas cores companheiras vívidas, giradas a partir do mesmo matiz — a
     // variedade "vermelho, laranja, amarelo" do Charizard, não um roxo e um
     // dourado soltos que não têm nada a ver com o tema escolhido.
     var hueBase = hexParaHsl(p.pri).h;
-    var flair1 = tomVivido(hueBase, -30);
-    var flair2 = tomVivido(hueBase, 34);
+    var flair1 = tomVivido(hueBase, -30, p);
+    var flair2 = tomVivido(hueBase, 34, p);
     root.style.setProperty('--vision-flair-1', flair1);
     root.style.setProperty('--vision-flair-2', flair2);
     root.style.setProperty('--vision-flair-1-glow', hexParaRgba(flair1, 0.28));

@@ -1,3 +1,11 @@
+# POKECARD Brasil 5.57.0 — Um só padrão visual
+
+- A cor de cada tema finalmente aparece. Um erro antigo no cálculo das cores deixava o texto, o texto secundário e a cor de destaque todos quase brancos. Agora cada tema tem hierarquia: texto principal, texto secundário mais apagado e o destaque na cor do Pokémon favorito (roxo no Gengar, laranja no Charizard, amarelo no Pikachu...). O contraste foi conferido em 8 temas × 6 níveis de claridade: todas as cores ficam acima de 4,5:1.
+- Saíram as sobras dos temas antigos, que apareciam iguais em qualquer tema: quadradinhos brancos com letra roxa na Pokédex e nas linhas dos decks, o botão azul "Com duplicadas", o botão roxo "Adicionar", textos cinza-esverdeados, painéis verde-menta e amarelo-claro (preço, validação do deck) e as faixas roxa e verde dos decks. Tudo segue o tema agora, e os níveis claros de claridade ficaram legíveis.
+- As etiquetas de versão (N, F, RF...) passaram a mostrar as cores de legenda que deveriam ter (holo em laranja, reverse em azul...). Antes, uma regra antiga pintava todas por cima.
+- Uma escala só no app inteiro: 4 tamanhos de letra (12, 15, 20 e 27) e 3 arredondamentos (10, 16 e 24), no lugar de 14 tamanhos e 10 arredondamentos. As exceções são as etiquetas de versão, que são selos com letra, e o valor do Portfólio.
+- O ajuste automático de contraste deixou de ser remendo: antes ele corrigia vários textos por tela, na hora de desenhar. Agora, no tema padrão, as telas principais (Início, Coleção, cadastro da carta, Pokédex e Decks) não precisam de nenhuma correção.
+
 # POKECARD Brasil 5.56.0 — O app responde quando a carta entra
 
 - Mais uma cópia de uma carta que você já tinha: o cartão dá um pulinho e o número de cópias "estoura". A carta nova continua "ganhando cor", como na versão anterior.
