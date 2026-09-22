@@ -25,7 +25,7 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Enriquecer catálogo (category, trainerType, energyType, regulationMark, illustrator, nameEn, siglas)
+      - name: Enriquecer catálogo (category, trainerType, energyType, energyCost, regulationMark, illustrator, nameEn, siglas)
         run: node scripts/enriquecer-catalogo.mjs
 
       - name: Conferir resultado
@@ -43,10 +43,11 @@ jobs:
             const withMark = conta('regulationMark');
             const withEnergyType = conta('energyType');
             const withNameEn = conta('nameEn');
+            const withCost = conta('energyCost');
             const withCode = sets.filter(set => set.tcgOnline).length;
             console.log('Cartas no catálogo:', cards.length, '· coleções:', sets.length);
             console.log('Com category:', withCategory, '· trainerType:', withTrainerType, '· illustrator:', withIllustrator);
-            console.log('Com regulationMark:', withMark, '· energyType:', withEnergyType, '· nameEn:', withNameEn);
+            console.log('Com regulationMark:', withMark, '· energyType:', withEnergyType, '· nameEn:', withNameEn, '· energyCost:', withCost);
             console.log('Coleções com sigla PTCGL:', withCode);
             const falhou = mensagem => { console.error(mensagem); process.exit(1); };
             if (!withCategory) falhou('Nenhuma carta recebeu category — o enriquecimento falhou.');
@@ -55,6 +56,7 @@ jobs:
             if (!withMark) falhou('Nenhuma regulationMark gravada — o aviso de rotação continuaria sem dados.');
             if (!withEnergyType) falhou('Nenhum energyType gravado — a Energia básica continuaria adivinhada pelo nome.');
             if (!withCode) falhou('Nenhuma sigla de coleção gravada — colar lista do PTCGL continuaria sem reconhecer as impressões.');
+            if (!withCost) falhou('Nenhum energyCost gravado — decks de Dragão e Incolor continuariam sem saber qual Energia levar.');
           "
 
       - name: Publicar catálogo enriquecido

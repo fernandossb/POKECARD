@@ -3,7 +3,8 @@
  * traz:
  *
  * - cartas: `category`, `trainerType`, `rarity`, `illustrator` (artista),
- *   `energyType` (Energia básica ou especial), `regulationMark` (a letra que
+ *   `energyType` (Energia básica ou especial), `energyCost` (as cores de
+ *   Energia que os ataques pedem, "WL"), `regulationMark` (a letra que
  *   decide a rotação do formato Padrão) e `nameEn` (o nome em inglês, só
  *   quando difere do português — é como as listas do PTCGL e do Limitless
  *   chegam);
@@ -65,14 +66,36 @@ async function graphql(query) {
   });
 }
 
+/* Custo de Energia dos ataques, em letras (G R W L P F D M Y), da cor mais
+   pedida para a menos: Dragonite ex → "WL". Incolor não entra — qualquer
+   Energia paga. É o que diz ao montador qual Energia básica levar quando o
+   tipo do Pokémon não tem Energia própria (Dragão) ou aceita qualquer uma
+   (Incolor). */
+const LETRA_DE_ENERGIA = {
+  Grass: 'G', Fire: 'R', Water: 'W', Lightning: 'L', Psychic: 'P',
+  Fighting: 'F', Darkness: 'D', Metal: 'M', Fairy: 'Y',
+};
+function custoDeEnergia(attacks) {
+  const conta = new Map();
+  for (const attack of attacks || []) {
+    for (const tipo of attack?.cost || []) {
+      const letra = LETRA_DE_ENERGIA[tipo];
+      if (letra) conta.set(letra, (conta.get(letra) || 0) + 1);
+    }
+  }
+  return [...conta].sort((a, b) => b[1] - a[1]).map(([letra]) => letra).join('') || null;
+}
+
 async function fetchCategory(category) {
   const found = new Map();
   // Teto de segurança: o catálogo inteiro tem ~23 mil cartas, então 200
   // páginas de 500 é folga larga e evita laço infinito se a API repetir dados.
   const MAX_PAGES = 200;
+  const campos = 'id name trainerType energyType rarity illustrator regulationMark'
+    + (category === 'Pokemon' ? ' attacks { cost }' : '');
   for (let page = 1; page <= MAX_PAGES; page += 1) {
     const data = await graphql(
-      `{ cards(filters:{category:"${category}"}, pagination:{page:${page},itemsPerPage:${PAGE_SIZE}}) { id name trainerType energyType rarity illustrator regulationMark } }`
+      `{ cards(filters:{category:"${category}"}, pagination:{page:${page},itemsPerPage:${PAGE_SIZE}}) { ${campos} } }`
     );
     const cards = data?.cards || [];
     const before = found.size;
@@ -86,6 +109,7 @@ async function fetchCategory(category) {
         rarity: card.rarity || null,
         illustrator: String(card.illustrator || '').trim() || null,
         regulationMark: String(card.regulationMark || '').trim().toUpperCase() || null,
+        energyCost: category === 'Pokemon' ? custoDeEnergia(card.attacks) : null,
       });
     }
     process.stdout.write(`\r${category}: ${found.size} cartas`);
@@ -152,6 +176,9 @@ for (const card of cards) {
   // Carta sem artista conhecido fica sem o campo, em vez de guardar vazio.
   if (info.illustrator) card.illustrator = info.illustrator;
   if (info.regulationMark) card.regulationMark = info.regulationMark;
+  // Só ataque com custo colorido grava; ataque todo Incolor fica sem o campo.
+  if (info.energyCost) card.energyCost = info.energyCost;
+  else delete card.energyCost;
   // O nome em inglês só é guardado quando é diferente do nome do catálogo:
   // "Charizard ex" é igual nas duas línguas, "Ordens do Chefe" não.
   if (info.nameEn && normalize(info.nameEn) !== normalize(card.name)) card.nameEn = info.nameEn;
@@ -181,6 +208,7 @@ const artistas = new Set(cards.map(card => card.illustrator).filter(Boolean));
 console.log(`Com artista: ${cards.filter(card => card.illustrator).length} cartas, ${artistas.size} artistas diferentes.`);
 console.log(`Com marca de regulamentação: ${cards.filter(card => card.regulationMark).length} cartas.`);
 console.log(`Energias básicas: ${cards.filter(card => card.energyType === 'Normal').length} · especiais: ${cards.filter(card => card.energyType === 'Special').length}.`);
+console.log(`Pokémon com custo de ataque colorido: ${cards.filter(card => card.energyCost).length}.`);
 console.log(`Com nome em inglês diferente: ${cards.filter(card => card.nameEn).length} cartas.`);
 console.log(`Coleções com sigla PTCGL: ${comSigla} de ${(catalog.sets || []).length}.`);
 for (const [key, count] of [...byType].sort((a, b) => b[1] - a[1])) console.log(`  ${key}: ${count}`);
