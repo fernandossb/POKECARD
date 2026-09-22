@@ -1,9 +1,11 @@
 /**
- * Enriquece o catálogo local com `category` e `trainerType` do TCGdex.
+ * Enriquece o catálogo local com `category`, `trainerType` e `illustrator` do
+ * TCGdex.
  *
  * Sem esses campos o app só consegue separar Pokémon / Energia / "Treinador",
  * misturando Item, Apoiador, Ferramenta e Estádio num grupo só — o que impede
- * qualquer análise real de balanceamento do deck.
+ * qualquer análise real de balanceamento do deck. O `illustrator` é quem
+ * desenhou a carta: alimenta o filtro por artista da Coleção.
  *
  * Usa a API GraphQL, que devolve os dados em lote (500 por página) em vez de
  * uma requisição por carta. O argumento `filters` é obrigatório: sem ele a API
@@ -51,13 +53,18 @@ async function fetchCategory(category) {
   const MAX_PAGES = 200;
   for (let page = 1; page <= MAX_PAGES; page += 1) {
     const data = await graphql(
-      `{ cards(filters:{category:"${category}"}, pagination:{page:${page},itemsPerPage:${PAGE_SIZE}}) { id trainerType rarity } }`
+      `{ cards(filters:{category:"${category}"}, pagination:{page:${page},itemsPerPage:${PAGE_SIZE}}) { id trainerType rarity illustrator } }`
     );
     const cards = data?.cards || [];
     const before = found.size;
     for (const card of cards) {
       if (!card?.id) continue;
-      found.set(card.id, { category, trainerType: card.trainerType || null, rarity: card.rarity || null });
+      found.set(card.id, {
+        category,
+        trainerType: card.trainerType || null,
+        rarity: card.rarity || null,
+        illustrator: String(card.illustrator || '').trim() || null,
+      });
     }
     process.stdout.write(`\r${category}: ${found.size} cartas`);
     // Para quando a página vem incompleta ou não traz nada novo.
@@ -88,6 +95,8 @@ for (const card of cards) {
   else delete card.trainerType;
   // "None" é como a fonte marca carta sem raridade impressa.
   if (info.rarity && info.rarity !== 'None') card.rarity = info.rarity;
+  // Carta sem artista conhecido fica sem o campo, em vez de guardar vazio.
+  if (info.illustrator) card.illustrator = info.illustrator;
   enriched += 1;
 }
 
@@ -102,4 +111,6 @@ for (const card of cards) {
   byType.set(key, (byType.get(key) || 0) + 1);
 }
 console.log(`\nCatálogo enriquecido: ${enriched} de ${cards.length} cartas (${missing} sem correspondência no TCGdex).`);
+const artistas = new Set(cards.map(card => card.illustrator).filter(Boolean));
+console.log(`Com artista: ${cards.filter(card => card.illustrator).length} cartas, ${artistas.size} artistas diferentes.`);
 for (const [key, count] of [...byType].sort((a, b) => b[1] - a[1])) console.log(`  ${key}: ${count}`);

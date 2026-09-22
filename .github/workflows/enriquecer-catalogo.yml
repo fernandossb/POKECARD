@@ -1,4 +1,4 @@
-name: Enriquecer catálogo (tipos de Treinador)
+name: Enriquecer catálogo (tipos de Treinador e artistas)
 
 # Roda apenas quando você mandar: Actions -> Enriquecer catálogo -> Run workflow.
 # Não roda em push para não refazer o trabalho a cada commit.
@@ -25,7 +25,7 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Enriquecer catálogo com category e trainerType
+      - name: Enriquecer catálogo com category, trainerType e illustrator
         run: node scripts/enriquecer-catalogo.mjs
 
       - name: Conferir resultado
@@ -37,11 +37,14 @@ jobs:
             const cards = catalog.cards || [];
             const withCategory = cards.filter(card => card.category).length;
             const withTrainerType = cards.filter(card => card.trainerType).length;
+            const withIllustrator = cards.filter(card => card.illustrator).length;
             console.log('Cartas no catálogo:', cards.length);
             console.log('Com category:', withCategory);
             console.log('Com trainerType:', withTrainerType);
+            console.log('Com illustrator:', withIllustrator);
             if (!withCategory) { console.error('Nenhuma carta recebeu category — o enriquecimento falhou.'); process.exit(1); }
             if (!withTrainerType) { console.error('Nenhum trainerType gravado — Itens e Apoiadores continuariam indistinguíveis.'); process.exit(1); }
+            if (!withIllustrator) { console.error('Nenhum illustrator gravado — o filtro por artista ficaria vazio.'); process.exit(1); }
           "
 
       - name: Publicar catálogo enriquecido
@@ -53,6 +56,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "Catálogo já estava atualizado; nada a publicar."
           else
-            git commit -m "Enriquecer catálogo com tipos de Treinador $(date -u +%F)"
+            git commit -m "Enriquecer catálogo com tipos de Treinador e artistas $(date -u +%F)"
             git push
           fi
