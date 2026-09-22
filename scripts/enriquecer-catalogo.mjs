@@ -9,7 +9,9 @@
  *   quando difere do português — é como as listas do PTCGL e do Limitless
  *   chegam);
  * - coleções: `tcgOnline`, a sigla do Pokémon TCG Live (OBF, PAF, SVI...),
- *   que é como qualquer lista de deck identifica a impressão.
+ *   que é como qualquer lista de deck identifica a impressão;
+ * - catálogo: `standardMarks`, as marcas de regulamentação que valem hoje no
+ *   formato Padrão (a rotação).
  *
  * Sem `category`/`trainerType` o app só separa Pokémon / Energia /
  * "Treinador", misturando Item, Apoiador, Ferramenta e Estádio. Sem
@@ -92,7 +94,7 @@ async function fetchCategory(category) {
   // Teto de segurança: o catálogo inteiro tem ~23 mil cartas, então 200
   // páginas de 500 é folga larga e evita laço infinito se a API repetir dados.
   const MAX_PAGES = 200;
-  const campos = 'id name trainerType energyType rarity illustrator regulationMark'
+  const campos = 'id name trainerType energyType rarity illustrator regulationMark legal { standard }'
     + (category === 'Pokemon' ? ' attacks { cost }' : '');
   for (let page = 1; page <= MAX_PAGES; page += 1) {
     const data = await graphql(
@@ -111,6 +113,7 @@ async function fetchCategory(category) {
         illustrator: String(card.illustrator || '').trim() || null,
         regulationMark: String(card.regulationMark || '').trim().toUpperCase() || null,
         energyCost: category === 'Pokemon' ? custoDeEnergia(card.attacks) : null,
+        standard: card.legal?.standard === true,
       });
     }
     process.stdout.write(`\r${category}: ${found.size} cartas`);
@@ -187,6 +190,14 @@ for (const card of cards) {
   enriched += 1;
 }
 
+/* Rotação: as marcas de regulamentação que valem no Padrão hoje. A fonte
+   decide a legalidade pela marca impressa (G saiu em 2026; H, I e J valem),
+   então basta guardar as letras — o app aplica a cada carta pela marca dela,
+   e a Treinadores reimpressos pelo nome. */
+const marcasDoPadrao = new Set();
+for (const info of index.values()) if (info.standard && info.regulationMark) marcasDoPadrao.add(info.regulationMark);
+catalog.standardMarks = [...marcasDoPadrao].sort();
+
 const siglas = await fetchSiglas((catalog.sets || []).map(set => set.id).filter(Boolean));
 let comSigla = 0;
 for (const set of catalog.sets || []) {
@@ -208,6 +219,7 @@ console.log(`\nCatálogo enriquecido: ${enriched} de ${cards.length} cartas (${m
 const artistas = new Set(cards.map(card => card.illustrator).filter(Boolean));
 console.log(`Com artista: ${cards.filter(card => card.illustrator).length} cartas, ${artistas.size} artistas diferentes.`);
 console.log(`Com marca de regulamentação: ${cards.filter(card => card.regulationMark).length} cartas.`);
+console.log(`Marcas no formato Padrão: ${catalog.standardMarks.join(', ') || 'nenhuma'}.`);
 console.log(`Energias básicas: ${cards.filter(card => card.energyType === 'Normal').length} · especiais: ${cards.filter(card => card.energyType === 'Special').length}.`);
 console.log(`Pokémon com custo de ataque: ${cards.filter(card => card.energyCost).length} (só Incolor: ${cards.filter(card => card.energyCost === 'C').length}).`);
 console.log(`Com nome em inglês diferente: ${cards.filter(card => card.nameEn).length} cartas.`);

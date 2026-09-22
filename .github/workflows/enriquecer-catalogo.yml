@@ -49,6 +49,8 @@ jobs:
             console.log('Com category:', withCategory, '· trainerType:', withTrainerType, '· illustrator:', withIllustrator);
             console.log('Com regulationMark:', withMark, '· energyType:', withEnergyType, '· nameEn:', withNameEn, '· energyCost:', withCost);
             console.log('Coleções com sigla PTCGL:', withCode);
+            const marcas = catalog.standardMarks || [];
+            console.log('Marcas no Padrão:', marcas.join(', ') || 'nenhuma');
             const falhou = mensagem => { console.error(mensagem); process.exit(1); };
             if (!withCategory) falhou('Nenhuma carta recebeu category — o enriquecimento falhou.');
             if (!withTrainerType) falhou('Nenhum trainerType gravado — Itens e Apoiadores continuariam indistinguíveis.');
@@ -57,6 +59,7 @@ jobs:
             if (!withEnergyType) falhou('Nenhum energyType gravado — a Energia básica continuaria adivinhada pelo nome.');
             if (!withCode) falhou('Nenhuma sigla de coleção gravada — colar lista do PTCGL continuaria sem reconhecer as impressões.');
             if (!withCost) falhou('Nenhum energyCost gravado — decks de Dragão e Incolor continuariam sem saber qual Energia levar.');
+            if (!marcas.length) falhou('Nenhuma marca do Padrão gravada — a rotação continuaria estimada por coleção.');
           "
 
       - name: Publicar catálogo enriquecido
