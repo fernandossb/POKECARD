@@ -68,9 +68,10 @@ async function graphql(query) {
 
 /* Custo de Energia dos ataques, em letras (G R W L P F D M Y), da cor mais
    pedida para a menos: Dragonite ex → "WL". Incolor não entra — qualquer
-   Energia paga. É o que diz ao montador qual Energia básica levar quando o
-   tipo do Pokémon não tem Energia própria (Dragão) ou aceita qualquer uma
-   (Incolor). */
+   Energia paga —, e o Pokémon que só pede Incolor (Snorlax, Larvitar) grava
+   "C": sem isso, "não pede cor" e "ainda sem dados" ficariam iguais. É o que
+   diz ao montador qual Energia básica levar: Dragão nem tem Energia própria,
+   e o tipo da espécie engana (Arbok ex é Venenoso e ataca com Escuridão). */
 const LETRA_DE_ENERGIA = {
   Grass: 'G', Fire: 'R', Water: 'W', Lightning: 'L', Psychic: 'P',
   Fighting: 'F', Darkness: 'D', Metal: 'M', Fairy: 'Y',
@@ -83,7 +84,7 @@ function custoDeEnergia(attacks) {
       if (letra) conta.set(letra, (conta.get(letra) || 0) + 1);
     }
   }
-  return [...conta].sort((a, b) => b[1] - a[1]).map(([letra]) => letra).join('') || null;
+  return [...conta].sort((a, b) => b[1] - a[1]).map(([letra]) => letra).join('') || 'C';
 }
 
 async function fetchCategory(category) {
@@ -176,7 +177,7 @@ for (const card of cards) {
   // Carta sem artista conhecido fica sem o campo, em vez de guardar vazio.
   if (info.illustrator) card.illustrator = info.illustrator;
   if (info.regulationMark) card.regulationMark = info.regulationMark;
-  // Só ataque com custo colorido grava; ataque todo Incolor fica sem o campo.
+  // Só nos Pokémon: as cores que os ataques pedem, ou "C" (só Incolor).
   if (info.energyCost) card.energyCost = info.energyCost;
   else delete card.energyCost;
   // O nome em inglês só é guardado quando é diferente do nome do catálogo:
@@ -208,7 +209,7 @@ const artistas = new Set(cards.map(card => card.illustrator).filter(Boolean));
 console.log(`Com artista: ${cards.filter(card => card.illustrator).length} cartas, ${artistas.size} artistas diferentes.`);
 console.log(`Com marca de regulamentação: ${cards.filter(card => card.regulationMark).length} cartas.`);
 console.log(`Energias básicas: ${cards.filter(card => card.energyType === 'Normal').length} · especiais: ${cards.filter(card => card.energyType === 'Special').length}.`);
-console.log(`Pokémon com custo de ataque colorido: ${cards.filter(card => card.energyCost).length}.`);
+console.log(`Pokémon com custo de ataque: ${cards.filter(card => card.energyCost).length} (só Incolor: ${cards.filter(card => card.energyCost === 'C').length}).`);
 console.log(`Com nome em inglês diferente: ${cards.filter(card => card.nameEn).length} cartas.`);
 console.log(`Coleções com sigla PTCGL: ${comSigla} de ${(catalog.sets || []).length}.`);
 for (const [key, count] of [...byType].sort((a, b) => b[1] - a[1])) console.log(`  ${key}: ${count}`);
