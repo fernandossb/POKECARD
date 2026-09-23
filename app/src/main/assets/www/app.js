@@ -2590,7 +2590,9 @@ function changeQuantity(event, cardId, delta) {
   setQuantity(cardId, quantityFor(cardId) + delta);
 }
 
-function toggleWishlist(cardId) {
+/* Liga ou desliga a carta na Wishlist e devolve como ficou. Não mexe na tela:
+   quem chama decide (o painel da carta fecha; a câmera da consulta, não). */
+function alternarWishlist(cardId) {
   const entry = state.entries[cardId] || { quantity: 0, priceBrl: null, wishlist: false, variants: [] };
   state.entries[cardId] = entry;
   const next = !Boolean(entry.wishlist);
@@ -2599,6 +2601,11 @@ function toggleWishlist(cardId) {
   if (variant) variant.isWishlist = next;
   syncEntry(cardId);
   saveState();
+  return next;
+}
+
+function toggleWishlist(cardId) {
+  const next = alternarWishlist(cardId);
   closeModal();
   refreshAfterEntryChange(cardId);
   notify(next ? 'Carta adicionada à wishlist' : 'Carta removida da wishlist');
@@ -2853,6 +2860,7 @@ function openMoreNavigation() {
   showModal(`<button class="modal-close" onclick="closeModal()" aria-label="Fechar">×</button>
     <h2>Mais opções</h2><p class="screen-subtitle">Acesse todas as áreas do seu fichário.</p>
     <div class="quick-action-list">
+      <button onclick="closeModal();abrirConsultaDePreco()"><span class="quick-action-icon icone-texto" aria-hidden="true">R$</span><span><strong>Consultar preço</strong><small>Aponte a câmera: o preço de cada versão, sem cadastrar</small></span></button>
       <button onclick="closeModal();setTab('wishlist')"><span class="quick-action-icon">${tabIcon('wishlist')}</span><span><strong>Wishlist</strong><small>Cartas que você procura</small></span></button>
       <button onclick="closeModal();setTab('repeated')"><span class="quick-action-icon">${tabIcon('repeated')}</span><span><strong>Repetidas</strong><small>Estoque para troca ou venda</small></span></button>
       <button onclick="closeModal();setTab('produtos')"><span class="quick-action-icon">${tabIcon('collections')}</span><span><strong>Produtos prontos</strong><small>Baralhos de batalha, kits e caixas</small></span></button>
@@ -3273,6 +3281,10 @@ function renderDashboard() {
         <div class="portfolio-languages">${[...languages.entries()].slice(0,4).map(([language,count]) => `<span><b>${esc(languageCode(language))}</b> ${count}</span>`).join('') || '<span><b>PT</b> coleção local</span>'}</div>
         <small class="portfolio-foot">Preços por acabamento, idioma, condição e demais variações cadastradas</small>
       </section>
+
+      <div class="quick-action-list consulta-atalho-inicio">
+        <button onclick="abrirConsultaDePreco()"><span class="quick-action-icon icone-texto" aria-hidden="true">R$</span><span><strong>Consultar preço</strong><small>Aponte a câmera para uma carta. Nada é cadastrado.</small></span></button>
+      </div>
 
       <button class="pokedex-progress-card" onclick="setTab('pokedex')">
         <span class="pokedex-ring" style="--progress:${speciesProgress * 3.6}deg"><b>${speciesProgress}%</b></span>
@@ -5681,6 +5693,13 @@ function openScannerSetup() {
   startScannerSession('normal', scannerPreferences().setId, scannerPreferences());
 }
 
+/* Consulta rápida de preço: a mesma câmera, mas a carta lida não vai para
+   lista nenhuma. Na loja ou na mesa de troca, aponta e vê o preço de cada
+   versão, se você já tem, em que deck ela está e se está na Wishlist. */
+function abrirConsultaDePreco() {
+  startScannerSession('normal', scannerPreferences().setId, scannerPreferences(), { consulta: true });
+}
+
 /* Ajustes durante a leitura: idioma das cartas e coleção alvo. */
 function abrirAjustesScanner() {
   pausarCamera();
@@ -5725,14 +5744,16 @@ function salvarAjustesScanner() {
   avisarNaCamera(`Idioma: ${PRICE_LANGUAGE_LABELS[idioma] || idioma}`);
 }
 
-function startScannerSession(finish, setId = 'all', preferences = scannerPreferences()) {
+function startScannerSession(finish, setId = 'all', preferences = scannerPreferences(), opcoes = {}) {
   // Uma sessão interrompida antes (app fechado, ligação, bateria) volta com as
   // leituras intactas — só o que já entrou na coleção é que sai da lista.
   const guardada = lerSessaoGuardada();
-  scannerSession = { active: true, pricingVariant: 'normal', finish, language: preferences.language || 'pt-br', condition: 'Near Mint', edition: 'unlimited', distribution: 'unstamped', artVariant: 'standard', region: 'Brasil', gradingCompany: 'Não graduada', grade: '', tags: [], manualVariationOverride: false, setId, mode: preferences.mode || 'continuous', speed: preferences.speed || 'normal', fps: preferences.fps || 'balanced', count: 0, lastIds: [], pendentes: guardada?.pendentes || [] };
+  scannerSession = { active: true, pricingVariant: 'normal', finish, language: preferences.language || 'pt-br', condition: 'Near Mint', edition: 'unlimited', distribution: 'unstamped', artVariant: 'standard', region: 'Brasil', gradingCompany: 'Não graduada', grade: '', tags: [], manualVariationOverride: false, setId, mode: preferences.mode || 'continuous', speed: preferences.speed || 'normal', fps: preferences.fps || 'balanced', count: 0, lastIds: [], pendentes: guardada?.pendentes || [],
+    // Consulta de preço: nada do que é lido vai para a lista de cadastro.
+    consulta: Boolean(opcoes.consulta), consultadas: [], voltarParaConsulta: false };
   scannerCandidateBuffer = [];
   closeModal();
-  if (guardada?.pendentes?.length) {
+  if (guardada?.pendentes?.length && !scannerSession.consulta) {
     notify(`${totalLeituras()} carta(s) lidas antes continuam na lista.`);
   }
   scanNextCard();
@@ -6289,7 +6310,7 @@ window.receiveScannerText = function receiveScannerText(text, finish) {
   const primeira = candidates[0].card;
   if (scannerSession.live && primeira.id === scannerSession.ultimaConfirmada
       && Date.now() - (scannerSession.confirmadaEm || 0) < 4000) {
-    return avisarNaCamera('Já adicionada — mostre a próxima carta');
+    return avisarNaCamera(scannerSession.consulta ? 'Já consultada — mostre a próxima carta' : 'Já adicionada — mostre a próxima carta');
   }
 
   scannerCandidateBuffer = candidates;
@@ -6483,6 +6504,7 @@ function telaCameraAoVivo() {
   }
   const pendentes = leiturasPendentes();
   const total = totalLeituras();
+  const consulta = Boolean(scannerSession.consulta);
   const tiras = pendentes.slice(0, 12).map(linha => {
     const card = cardMap.get(linha.cardId);
     const arte = card ? cardGridImage(card, null) : '';
@@ -6493,11 +6515,28 @@ function telaCameraAoVivo() {
     </div>`;
   }).join('');
 
+  /* No modo preço, a faixa de baixo é o histórico da consulta, com o preço de
+     cada carta e a soma — quem avalia um lote na loja quer o total. As
+     leituras de cadastro que existirem continuam guardadas, sem aparecer. */
+  const rodape = consulta ? rodapeDaConsulta(total) : `
+        ${pendentes.length ? `<div class="leitura-tiras">${tiras}</div>` : '<p class="camera-vazio">Nenhuma carta lida ainda.</p>'}
+        <div class="camera-atalhos">
+          <button class="camera-atalho" onclick="abrirBuscaManual()">⌨ Digitar carta</button>
+          <button class="camera-atalho" id="cameraDiagnostico" ${ultimaRecusa ? '' : 'hidden'} onclick="abrirDiagnosticoLeitura()">👁 O que a câmera leu</button>
+        </div>
+        <div class="camera-acoes">
+          <button class="camera-cancelar" onclick="encerrarLeitura()">Cancelar</button>
+          <button class="camera-revisar" ${total ? '' : 'disabled'} onclick="abrirRevisaoSessao()">✓ Revisar (${total})</button>
+        </div>`;
+
   showModal(`
-    <div class="camera-tela">
+    <div class="camera-tela${consulta ? ' camera-consulta' : ''}">
       <div class="camera-topo">
         <button class="camera-icone" onclick="encerrarLeitura()" aria-label="Voltar">←</button>
-        <strong>Escanear</strong>
+        <div class="camera-modos" role="tablist" aria-label="O que fazer com a carta lida">
+          <button type="button" role="tab" aria-selected="${!consulta}" class="${consulta ? '' : 'ativo'}" onclick="mudarModoDoScanner('cadastro')">Cadastrar</button>
+          <button type="button" role="tab" aria-selected="${consulta}" class="${consulta ? 'ativo' : ''}" onclick="mudarModoDoScanner('preco')">Preço</button>
+        </div>
         <span class="camera-topo-acoes">
           <button class="camera-icone" onclick="abrirAjustesScanner()" aria-label="Ajustes da leitura">⚙</button>
           <button class="camera-icone" onclick="comoEscanear()" aria-label="Como escanear">?</button>
@@ -6507,16 +6546,7 @@ function telaCameraAoVivo() {
       <div class="camera-moldura" aria-hidden="true"></div>
       <p class="camera-dica" id="cameraDica">Encaixe a carta dentro da moldura</p>
 
-      <div class="camera-rodape">
-        ${pendentes.length ? `<div class="leitura-tiras">${tiras}</div>` : '<p class="camera-vazio">Nenhuma carta lida ainda.</p>'}
-        <div class="camera-atalhos">
-          <button class="camera-atalho" onclick="abrirBuscaManual()">⌨ Digitar carta</button>
-          <button class="camera-atalho" id="cameraDiagnostico" ${ultimaRecusa ? '' : 'hidden'} onclick="abrirDiagnosticoLeitura()">👁 O que a câmera leu</button>
-        </div>
-        <div class="camera-acoes">
-          <button class="camera-cancelar" onclick="encerrarLeitura()">Cancelar</button>
-          <button class="camera-revisar" ${total ? '' : 'disabled'} onclick="abrirRevisaoSessao()">✓ Revisar (${total})</button>
-        </div>
+      <div class="camera-rodape">${rodape}
       </div>
     </div>
   `, 'camera-sheet');
@@ -6526,41 +6556,51 @@ function telaCameraAoVivo() {
    Sobe de baixo até o meio da tela, sem fechar a câmera. Traz a miniatura em
    tamanho de conferência (2 × 3 cm) e só as versões que a carta realmente
    tem, nos mesmos botões coloridos do cadastro. */
-function showScannerPrimaryCandidate() {
-  const candidate = scannerCandidateBuffer[0];
-  if (!candidate) return telaCameraAoVivo();
-  const { card, score } = candidate;
-  pausarCamera();
+/* A comum vem sempre em primeiro: é o padrão e a mais frequente no bulk.
+   Depois holo, reverse e, por último, as versões especiais. Ordenar só por
+   "tem holo no nome" deixava a comum em segundo, porque nomes como
+   "illustration-rare" vinham antes de "normal" no alfabeto. Comum, holo e
+   reverse são as três de sempre — e são justamente as três que ficam à vista
+   antes do "mostrar mais". As especiais (pokébola, masterball, ilustração
+   rara) vão para o fim: testar só por "holo no nome" jogava
+   masterball-holofoil na frente da Reverse Holo. */
+function ordenarVersoesDaLeitura(versoes) {
+  const peso = value => value === 'normal' ? 0
+    : /^holo(foil)?$/i.test(value) ? 1
+      : /reverse/i.test(value) ? 2 : 3;
+  return versoes.slice().sort((a, b) => peso(a) - peso(b) || a.localeCompare(b, 'pt-BR'));
+}
 
-  const idioma = scannerSession.language || 'pt-br';
+/* As versões da carta lida, já ordenadas, com a escolhida garantida entre
+   elas. A lista definitiva vem do banco de preços; enquanto ela não chega,
+   os botões mostram os acabamentos padrão, e o painel se redesenha quando
+   chegar. */
+function versoesDaLeitura(card, idioma) {
   const visiveis = variantesParaEscolher(card, idioma, scannerSession.pricingVariant);
   if (visiveis.length && !visiveis.includes(scannerSession.pricingVariant)) {
     scannerSession.pricingVariant = visiveis[0];
   }
-  // A lista definitiva vem do banco de preços; enquanto ela não chega, os
-  // botões mostram os acabamentos padrão. Quando chegar, o painel se redesenha.
   loadScannerVariantAvailability(card);
+  return ordenarVersoesDaLeitura(visiveis);
+}
+
+function showScannerPrimaryCandidate() {
+  const candidate = scannerCandidateBuffer[0];
+  if (!candidate) return telaCameraAoVivo();
+  // No modo preço a carta não é cadastrada: o painel é o da consulta.
+  if (scannerSession.consulta) return mostrarConsultaDePreco(candidate);
+  const { card, score } = candidate;
+  pausarCamera();
+
+  const idioma = scannerSession.language || 'pt-br';
 
   /* Uma linha por versão da carta, empilhadas — a mesma ideia da tela de
      cadastro. Cada linha tem o preço DAQUELA versão (holo não vale o mesmo que
      normal) e a sua própria quantidade. Os botões − e + ficam na linha
      selecionada; nas outras aparece só um + para trazer o foco para ela.
      Assim uma leitura só resolve "tenho 2 normais e 1 reverse". */
+  const ordenadas = versoesDaLeitura(card, idioma);
   const quantidades = quantidadesDaLeitura();
-  /* A comum vem sempre em primeiro: é o padrão e a mais frequente no bulk.
-     Depois holo, reverse e, por último, as versões especiais. Ordenar só por
-     "tem holo no nome" deixava a comum em segundo, porque nomes como
-     "illustration-rare" vinham antes de "normal" no alfabeto. */
-  const ordenadas = visiveis.slice().sort((a, b) => {
-    /* Comum, holo e reverse são as três de sempre — e são justamente as três
-       que ficam à vista antes do "mostrar mais". As especiais (pokébola,
-       masterball, ilustração rara) vão para o fim. Testar só por "holo no
-       nome" jogava masterball-holofoil na frente da Reverse Holo. */
-    const peso = value => value === 'normal' ? 0
-      : /^holo(foil)?$/i.test(value) ? 1
-        : /reverse/i.test(value) ? 2 : 3;
-    return peso(a) - peso(b) || a.localeCompare(b, 'pt-BR');
-  });
   /* Da quarta versão em diante fica escondido atrás de um botão. Três linhas
      dão conta de quase toda carta, e é o que garante o cartão inteiro na tela
      sem rolagem por dentro, mesmo em aparelho de tela curta. Versão que já tem
@@ -6597,21 +6637,23 @@ function showScannerPrimaryCandidate() {
   }).join('');
 
   const arte = card.imageUrl ? upgradeCardImageUrl(card.imageUrl) : '';
-  const painel = document.getElementById('leituraPainel');
   const novoNaDex = pokemonInedito(card);
   const jaTem = quantityFor(card.id);
   const totalEscolhido = Object.values(quantidades).reduce((soma, n) => soma + (Number(n) || 0), 0);
   const outras = scannerCandidateBuffer.length - 1;
+  // Carta digitada ou vinda da consulta já é a certa: não há leitura para
+  // pôr em dúvida ("não li a numeração" não faz sentido para ela).
+  const daCamera = !candidate.manual && !candidate.reaberta;
 
   const html = `
     <div class="leitura-painel-alca" aria-hidden="true"></div>
     ${novoNaDex ? `<button type="button" class="leitura-estrela" onclick="explicarEstrela()"
       title="Pokémon que ainda falta na sua Pokédex" aria-label="Pokémon novo na Pokédex">★</button>` : ''}
 
-    <div class="leitura-selo ${candidate.fractionMatch ? 'ok' : 'duvida'}">
+    ${daCamera ? `<div class="leitura-selo ${candidate.fractionMatch ? 'ok' : 'duvida'}">
       ${candidate.fractionMatch ? '✓ CARTA IDENTIFICADA' : '⚠ CONFIRA A COLEÇÃO'}
       <em>${Math.min(99, score)}%</em>
-    </div>
+    </div>` : ''}
 
     <div class="leitura-painel-corpo">
       <button type="button" class="leitura-arte" onclick="abrirZoomLeitura('${esc(card.id)}')" aria-label="Ampliar a carta">
@@ -6623,7 +6665,7 @@ function showScannerPrimaryCandidate() {
         <span>${esc(card.setName)} · ${esc(String(card.number || '').includes('/')
           ? card.number
           : formatCardNumber(card.localId || card.number, card.setTotal))}</span>
-        ${candidate.fractionMatch ? '' : `<small class="leitura-aviso">Não li a numeração do rodapé — confira a coleção antes de adicionar.</small>`}
+        ${candidate.fractionMatch || !daCamera ? '' : `<small class="leitura-aviso">Não li a numeração do rodapé — confira a coleção antes de adicionar.</small>`}
         ${candidate.soPeloNumero ? `<small class="leitura-aviso">Achei pelo número ${esc(card.number)} — o nome não confere, provavelmente por causa do idioma. Confira a arte.</small>` : ''}
         ${jaTem ? `<button type="button" class="leitura-jatem" onclick="verNaColecao('${esc(card.id)}')">
           <span aria-hidden="true">▤</span> Você já tem ${jaTem} <span aria-hidden="true">›</span></button>` : ''}
@@ -6661,19 +6703,7 @@ function showScannerPrimaryCandidate() {
       </button>
     </div>`;
 
-  if (painel) {
-    painel.innerHTML = html;
-    painel.classList.add('aberto');
-    return;
-  }
-  let folha = document.querySelector('.camera-sheet .camera-tela');
-  if (!folha) {
-    // A tela da câmera não estava desenhada: desenha e pega de novo. Sem
-    // chamada recursiva — se ainda assim não existir, não há onde encaixar.
-    telaCameraAoVivo();
-    folha = document.querySelector('.camera-sheet .camera-tela');
-  }
-  if (folha) abrirPainelNovo(folha, html);
+  montarPainelDaLeitura(html);
 }
 
 /* Cria o painel já fechado, obriga o navegador a desenhá-lo nessa posição e
@@ -6760,14 +6790,21 @@ function precoDaVariante(card, versao, idioma) {
     }
   }).catch(() => {});
 
-  const cotacao = automaticPriceQuote(card.id, {
+  const valor = valorDaVariante(card.id, versao, idioma, scannerSession.condition);
+  return valor ? money(valor) : '—';
+}
+
+/* O número por trás do preço de uma versão, ou null sem preço publicado. A
+   consulta soma estes números; o painel de cadastro só os mostra. */
+function valorDaVariante(cardId, versao, idioma, condicao) {
+  const cotacao = automaticPriceQuote(cardId, {
     pricingVariant: versao, finish: versao, language: idioma,
-    condition: scannerSession.condition || 'Near Mint',
+    condition: condicao || 'Near Mint',
     edition: 'unlimited', distribution: 'unstamped', artVariant: 'standard',
     region: idioma === 'pt-br' ? 'Brasil' : 'Internacional',
   });
   const valor = Number(cotacao?.brl ?? cotacao?.basePriceBrl);
-  return Number.isFinite(valor) && valor > 0 ? money(valor) : '—';
+  return Number.isFinite(valor) && valor > 0 ? valor : null;
 }
 
 /* Quantidade por versão. A carta normal já começa com 1: é o caso de longe
@@ -6823,6 +6860,8 @@ function verNaColecao(cardId) {
    pior em vez de simplesmente seguir em frente. */
 function encerrarLeituraAtual() {
   scannerCandidateBuffer = [];
+  // Veio do "Cadastrar" da consulta: recusar volta para o modo preço.
+  voltarAoModoConsulta();
   retomarCamera();
   telaCameraAoVivo();
 }
@@ -6857,7 +6896,10 @@ function recusarLeitura() {
     return showScannerPrimaryCandidate();
   }
   notify('Nenhuma outra correspondência. Aproxime a carta e tente de novo.');
+  scannerCandidateBuffer = [];
   retomarCamera();
+  // Veio do "Cadastrar" da consulta: a câmera volta para o modo preço.
+  if (voltarAoModoConsulta()) telaCameraAoVivo();
 }
 
 function removerLeituraDaTira(linhaId) {
@@ -6934,7 +6976,12 @@ function buscarCartaManual(termo) {
 function escolherCartaManual(cardId) {
   // Entra pelo mesmo caminho de uma leitura da câmera: o painel de confirmação
   // aparece com as versões daquela carta, e nada é gravado sem confirmar.
-  scannerCandidateBuffer = [{ card: cardMap.get(cardId), score: 100 }];
+  scannerCandidateBuffer = [{ card: cardMap.get(cardId), score: 100, manual: true }];
+  // Como uma leitura nova da câmera: começa na versão comum, sem herdar a
+  // versão nem as quantidades da carta anterior.
+  scannerSession.pricingVariant = 'normal';
+  scannerSession.quantidades = null;
+  scannerSession.verTodasVersoes = false;
   showScannerPrimaryCandidate();
 }
 
@@ -6942,13 +6989,339 @@ function comoEscanear() {
   notify('Encaixe a carta na moldura, com o nome e o número do rodapé visíveis. Evite reflexo e sombra.');
 }
 
-/* Sair da câmera sem perder o que já foi lido. */
+/* =====================================================================
+   Consulta rápida de preço
+
+   Na loja ou na mesa de troca: aponta a câmera e vê, sem cadastrar nada,
+   quanto vale cada versão da carta, se você já tem (e quantas com o mesmo
+   nome), em que deck ela entra e se falta, e se está na Wishlist. As cartas
+   consultadas ficam numa faixa com a soma, para avaliar um lote inteiro.
+   ===================================================================== */
+
+function mudarModoDoScanner(modo) {
+  scannerSession.consulta = modo === 'preco';
+  scannerSession.voltarParaConsulta = false;
+  if (!Array.isArray(scannerSession.consultadas)) scannerSession.consultadas = [];
+  scannerCandidateBuffer = [];
+  scannerSession.quantidades = null;
+  scannerSession.verTodasVersoes = false;
+  retomarCamera();
+  telaCameraAoVivo();
+  avisarNaCamera(scannerSession.consulta ? 'Preço: nada do que for lido é cadastrado' : 'Cadastrar: a carta lida vai para a lista');
+}
+
+// O preço desta carta já chegou, ainda está chegando, ou não vem?
+function estadoDoPrecoDaCarta(cardId) {
+  const lote = Number(centralPriceIndex?.cards?.[cardId]);
+  const temLote = Number.isInteger(lote) && lote >= 0;
+  if (temLote && centralPriceLoadedShards.has(lote)) return 'pronto';
+  // A busca terminou e o lote não veio (sem internet, ou carta fora do
+  // banco): dizer "buscando" para sempre seria mentira.
+  if (scannerVariantAvailability.get(cardId)?.loaded) return 'indisponivel';
+  if (!temLote && Object.keys(centralPriceIndex?.cards || {}).length) return 'indisponivel';
+  return 'buscando';
+}
+
+// "R$ 1.234,56" não cabe embaixo da miniatura; "R$ 1,2 mil" cabe.
+function precoCurto(valor) {
+  if (!valor) return '—';
+  return valor >= 1000 ? `R$ ${(valor / 1000).toFixed(1).replace('.', ',')} mil` : money(valor);
+}
+
+/* O que a carta significa para VOCÊ: quantas tem e de quais versões,
+   quantas com o mesmo nome (para o limite de 4, "Ordem da Chefia" de
+   qualquer coleção é a mesma carta), em que decks ela entra e quantas faltam
+   neles, e se está na Wishlist. */
+function contextoDaConsulta(card) {
+  const versoes = new Map();
+  for (const variante of variantsFor(card.id)) {
+    const quantas = Math.max(0, Number(variante.quantity) || 0);
+    if (!quantas) continue;
+    const rotulo = friendlyVariantLabel(variante.pricingVariant || finishKind(variante.finish)) || 'Comum';
+    versoes.set(rotulo, (versoes.get(rotulo) || 0) + quantas);
+  }
+  const tenho = quantityFor(card.id);
+  const chave = deckNameKey(card);
+  let mesmoNome = 0;
+  for (const outra of indicePorNome().get(chave) || []) {
+    if (outra.id !== card.id && deckNameKey(outra) === chave) mesmoNome += quantityFor(outra.id);
+  }
+  // Energia básica nunca falta: qualquer impressão serve e todo mundo tem.
+  const basica = ehEnergiaBasica(card);
+  const decks = [];
+  for (const deck of state.decks || []) {
+    const desta = Math.max(0, Number(deck.cards?.[card.id]) || 0);
+    const usa = desta + deckNameQuantity(deck, card, card.id);
+    if (!usa) continue;
+    decks.push({ nome: deck.name || 'Deck', usa, desta, falta: basica ? 0 : Math.max(0, usa - tenho - mesmoNome) });
+  }
+  return { tenho, versoes, mesmoNome, decks, naWishlist: Boolean(state.entries?.[card.id]?.wishlist) };
+}
+
+/* O painel da consulta. Mesmo lugar e mesma carta do painel de cadastro,
+   mas o que manda é o preço: grande, da versão escolhida, e o de cada versão
+   ao lado do nome. Nada de quantidade — nada vai ser gravado. */
+function mostrarConsultaDePreco(candidate) {
+  const { card, score } = candidate;
+  pausarCamera();
+
+  const idioma = scannerSession.language || 'pt-br';
+  const condicao = scannerSession.condition || 'Near Mint';
+  const ordenadas = versoesDaLeitura(card, idioma);
+  const escolhida = scannerSession.pricingVariant || ordenadas[0] || 'normal';
+  const LIMITE_VERSOES = 3;
+  const mostrarTodas = Boolean(scannerSession.verTodasVersoes);
+  const naLista = mostrarTodas
+    ? ordenadas
+    : ordenadas.filter((value, indice) => indice < LIMITE_VERSOES || value === escolhida);
+  const escondidas = ordenadas.length - naLista.length;
+
+  const linhasVariante = naLista.map(value => {
+    const estilo = variantEstilo(value);
+    const ativa = value === escolhida;
+    return `<div class="leitura-versao consulta-versao ${estilo.classe}${ativa ? ' escolhida' : ''}">
+      <button type="button" class="leitura-versao-nome" onclick="escolherVersaoNaConsulta('${esc(value)}')" aria-pressed="${ativa}">
+        <span class="variante-icone" aria-hidden="true">${estilo.icone}</span>
+        <span class="leitura-versao-rotulo">${esc(friendlyVariantLabel(value))}</span>
+        <span class="leitura-versao-preco">${esc(precoDaVariante(card, value, idioma))}</span>
+      </button>
+    </div>`;
+  }).join('');
+
+  const valor = valorDaVariante(card.id, escolhida, idioma, condicao);
+  const estado = estadoDoPrecoDaCarta(card.id);
+  const destaque = valor
+    ? `<b>${esc(money(valor))}</b>`
+    : `<b class="consulta-sem-preco">${estado === 'buscando' ? 'Buscando preço…' : 'Sem preço publicado'}</b>`;
+  const detalhe = [friendlyVariantLabel(escolhida), (CONDICAO_CURTA[condicao] || condicao).split(' — ')[0], IDIOMA_CURTO[idioma] || idioma].join(' · ');
+
+  const contexto = contextoDaConsulta(card);
+  const versoesTexto = [...contexto.versoes].map(([rotulo, n]) => `${n} ${rotulo}`).join(', ');
+  const linhasContexto = [
+    contexto.tenho
+      ? `<li class="tem"><span aria-hidden="true">▤</span><span>Você tem <b>${contexto.tenho}</b>${versoesTexto ? ` · ${esc(versoesTexto)}` : ''}</span></li>`
+      : '<li><span aria-hidden="true">▤</span><span>Você ainda não tem esta carta</span></li>',
+    contexto.mesmoNome
+      ? `<li><span aria-hidden="true">≡</span><span>Mais ${contexto.mesmoNome} com o mesmo nome, de outras coleções</span></li>`
+      : '',
+    ...contexto.decks.map(deck => `<li class="${deck.falta ? 'falta' : ''}"><span aria-hidden="true">🃏</span><span>${esc(deck.nome)}: usa ${deck.usa}${deck.desta ? '' : ' de outra impressão'}${deck.falta ? ` · <b>faltam ${deck.falta}</b>` : ''}</span></li>`),
+  ].join('');
+
+  // Selo e "não é essa?" só fazem sentido para o que a câmera leu; carta
+  // digitada ou reaberta da faixa já é a certa.
+  const daCamera = !candidate.manual && !candidate.reaberta;
+  const outras = scannerCandidateBuffer.length - 1;
+  const arte = card.imageUrl ? upgradeCardImageUrl(card.imageUrl) : '';
+  const numero = String(card.number || '').includes('/') ? card.number : formatCardNumber(card.localId || card.number, card.setTotal);
+
+  montarPainelDaLeitura(`
+    <div class="leitura-painel-alca" aria-hidden="true"></div>
+    ${daCamera ? `<div class="leitura-selo ${candidate.fractionMatch ? 'ok' : 'duvida'}">
+      ${candidate.fractionMatch ? '✓ CARTA IDENTIFICADA' : '⚠ CONFIRA A COLEÇÃO'}
+      <em>${Math.min(99, score)}%</em>
+    </div>` : ''}
+
+    <div class="leitura-painel-corpo">
+      <button type="button" class="leitura-arte" onclick="abrirZoomLeitura('${esc(card.id)}')" aria-label="Ampliar a carta">
+        ${arte ? `<img src="${esc(arte)}" alt="Arte de ${esc(card.name)}">` : '<span class="card-placeholder">TCG</span>'}
+        <span class="leitura-lupa" aria-hidden="true">⌕</span>
+      </button>
+      <div class="leitura-info">
+        <strong>${esc(card.name)}</strong>
+        <span>${esc(card.setName)} · ${esc(numero)}</span>
+        ${daCamera && !candidate.fractionMatch ? '<small class="leitura-aviso">Não li a numeração do rodapé — confira a coleção.</small>' : ''}
+        ${candidate.soPeloNumero ? `<small class="leitura-aviso">Achei pelo número ${esc(card.number)} — o nome não confere. Confira a arte.</small>` : ''}
+        <div class="consulta-preco" aria-live="polite">${destaque}<small>${esc(detalhe)}</small></div>
+      </div>
+    </div>
+
+    <div class="leitura-copia">
+      <div class="leitura-copia-topo">
+        <span class="leitura-copia-titulo">PREÇO POR VERSÃO</span>
+        <select class="leitura-campo" onchange="escolherIdiomaLeitura(this.value)" aria-label="Idioma da carta">
+          ${PRICE_LANGUAGES.map(value => option(value, IDIOMA_CURTO[value] || value, idioma)).join('')}
+        </select>
+        <select class="leitura-campo" onchange="escolherCondicaoLeitura(this.value)" aria-label="Estado da carta">
+          ${['Mint', 'Near Mint', 'Excelente', 'Bom', 'Regular', 'Danificada']
+            .map(value => option(value, CONDICAO_CURTA[value] || value, condicao)).join('')}
+        </select>
+      </div>
+      <div class="leitura-versoes">${linhasVariante}</div>
+      ${escondidas > 0 || mostrarTodas && ordenadas.length > LIMITE_VERSOES
+        ? `<button type="button" class="leitura-mais-versoes" onclick="alternarVersoesEscondidas()">
+             ${escondidas > 0 ? `▾ Mostrar mais ${escondidas} ${escondidas > 1 ? 'versões' : 'versão'}` : '▴ Mostrar menos'}
+           </button>`
+        : ''}
+    </div>
+
+    <ul class="consulta-contexto">${linhasContexto}</ul>
+    <button type="button" class="consulta-quero${contexto.naWishlist ? ' ativo' : ''}" aria-pressed="${contexto.naWishlist}"
+      onclick="alternarWishlistNaConsulta('${esc(card.id)}')">${contexto.naWishlist ? '♥ Na sua Wishlist' : '♡ Pôr na Wishlist'}</button>
+
+    ${daCamera ? `<button type="button" class="leitura-outra" onclick="recusarLeitura()">
+      ⇄ Não é essa carta?${outras > 0 ? ` <em>(${outras} parecida${outras > 1 ? 's' : ''})</em>` : ''}
+    </button>` : ''}
+
+    <div class="leitura-painel-acoes">
+      <button class="leitura-nao" onclick="cadastrarDaConsulta()">＋ Cadastrar</button>
+      <button class="leitura-sim" onclick="proximaConsulta()">${candidate.reaberta ? 'Voltar à câmera' : 'Próxima carta'}</button>
+    </div>`);
+}
+
+/* Põe o painel na tela da câmera: reaproveita o que está aberto, ou cria um
+   novo que sobe de baixo. Serve ao cadastro e à consulta. */
+function montarPainelDaLeitura(html) {
+  const painel = document.getElementById('leituraPainel');
+  if (painel) {
+    painel.innerHTML = html;
+    painel.classList.add('aberto');
+    return;
+  }
+  let folha = document.querySelector('.camera-sheet .camera-tela');
+  if (!folha) {
+    // A tela da câmera não estava desenhada: desenha e pega de novo. Sem
+    // chamada recursiva — se ainda assim não existir, não há onde encaixar.
+    telaCameraAoVivo();
+    folha = document.querySelector('.camera-sheet .camera-tela');
+  }
+  if (folha) abrirPainelNovo(folha, html);
+}
+
+function escolherVersaoNaConsulta(valor) {
+  scannerSession.pricingVariant = valor;
+  scannerSession.finish = /reverse/i.test(valor) ? 'reverse' : /holo/i.test(valor) ? 'holo' : 'normal';
+  showScannerPrimaryCandidate();
+}
+
+/* Entra na faixa de consultadas com a versão, o idioma e o estado vistos —
+   é com eles que a soma é feita. A mesma carta, do mesmo jeito, não conta
+   duas vezes: ela só volta para a frente. */
+function registrarConsulta(card, substituir = '') {
+  const item = {
+    id: `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`,
+    cardId: card.id,
+    versao: scannerSession.pricingVariant || 'normal',
+    idioma: scannerSession.language || 'pt-br',
+    condicao: scannerSession.condition || 'Near Mint',
+  };
+  const assinatura = linha => [linha.cardId, linha.versao, linha.idioma, linha.condicao].join('|');
+  const anteriores = Array.isArray(scannerSession.consultadas) ? scannerSession.consultadas : [];
+  scannerSession.consultadas = [item, ...anteriores.filter(linha => linha.id !== substituir && assinatura(linha) !== assinatura(item))].slice(0, 60);
+}
+
+function proximaConsulta() {
+  const candidato = scannerCandidateBuffer[0];
+  if (candidato?.card) {
+    registrarConsulta(candidato.card, candidato.reaberta || '');
+    // A carta continua na frente da lente: sem esta trava, ela seria lida de
+    // novo um segundo depois.
+    scannerSession.ultimaConfirmada = candidato.card.id;
+    scannerSession.confirmadaEm = Date.now();
+  }
+  scannerCandidateBuffer = [];
+  scannerSession.verTodasVersoes = false;
+  retomarCamera();
+  telaCameraAoVivo();
+}
+
+function reabrirConsulta(itemId) {
+  const item = (scannerSession.consultadas || []).find(linha => linha.id === itemId);
+  const card = item && cardMap.get(item.cardId);
+  if (!card) return;
+  scannerSession.pricingVariant = item.versao;
+  scannerSession.language = item.idioma;
+  scannerSession.condition = item.condicao;
+  scannerSession.verTodasVersoes = false;
+  scannerCandidateBuffer = [{ card, score: 100, reaberta: item.id }];
+  showScannerPrimaryCandidate();
+}
+
+function removerConsulta(itemId) {
+  scannerSession.consultadas = (scannerSession.consultadas || []).filter(linha => linha.id !== itemId);
+  telaCameraAoVivo();
+}
+
+function limparConsultas() {
+  scannerSession.consultadas = [];
+  telaCameraAoVivo();
+}
+
+/* Gostou do preço e comprou: a mesma carta vai para o painel de cadastro,
+   com a versão escolhida já marcada. Depois de adicionar (ou recusar), a
+   câmera volta sozinha para o modo preço. */
+function cadastrarDaConsulta() {
+  const candidato = scannerCandidateBuffer[0];
+  if (candidato?.card) registrarConsulta(candidato.card, candidato.reaberta || '');
+  scannerSession.consulta = false;
+  scannerSession.voltarParaConsulta = true;
+  scannerSession.quantidades = null;
+  showScannerPrimaryCandidate();
+}
+
+function voltarAoModoConsulta() {
+  if (!scannerSession.voltarParaConsulta) return false;
+  scannerSession.voltarParaConsulta = false;
+  scannerSession.consulta = true;
+  return true;
+}
+
+/* A Wishlist direto do painel, sem fechar a câmera: toggleWishlist fecha a
+   janela aberta, que aqui é a própria câmera. */
+function alternarWishlistNaConsulta(cardId) {
+  alternarWishlist(cardId);
+  refreshAfterEntryChange(cardId);
+  vibrar();
+  showScannerPrimaryCandidate();
+}
+
+/* O rodapé da câmera no modo preço: as cartas consultadas, cada uma com o
+   preço, e a soma. As leituras de cadastro que existirem continuam
+   guardadas; o botão de revisar aparece só se houver alguma. */
+function rodapeDaConsulta(pendentes) {
+  const consultadas = Array.isArray(scannerSession.consultadas) ? scannerSession.consultadas : [];
+  let soma = 0;
+  let semPreco = 0;
+  const tiras = consultadas.map((item, indice) => {
+    const card = cardMap.get(item.cardId);
+    const valor = card ? valorDaVariante(card.id, item.versao, item.idioma, item.condicao) : null;
+    if (valor) soma += valor; else semPreco += 1;
+    if (indice >= 12) return '';
+    const arte = card ? cardGridImage(card, null) : '';
+    return `<div class="leitura-tira consulta-tira">
+      <button type="button" class="consulta-tira-abrir" onclick="reabrirConsulta('${esc(item.id)}')" aria-label="Ver ${esc(card?.name || 'carta')} de novo">
+        ${arte ? `<img src="${esc(arte)}" alt="" loading="lazy">` : '<span class="leitura-tira-vazia">TCG</span>'}
+        <b class="consulta-tira-preco">${esc(precoCurto(valor))}</b>
+      </button>
+      <button class="leitura-tira-x" onclick="removerConsulta('${esc(item.id)}')" aria-label="Tirar ${esc(card?.name || 'carta')} da consulta">×</button>
+    </div>`;
+  }).join('');
+  return `
+        ${consultadas.length ? `<div class="leitura-tiras consulta-tiras">${tiras}</div>
+        <div class="consulta-total">
+          <span>${consultadas.length} ${consultadas.length === 1 ? 'carta' : 'cartas'} · <b>${esc(money(soma))}</b>${semPreco ? ` <small>(${semPreco} sem preço)</small>` : ''}</span>
+          <button type="button" onclick="limparConsultas()">Limpar</button>
+        </div>` : '<p class="camera-vazio">Aponte para uma carta e veja o preço. Nada é cadastrado.</p>'}
+        <div class="camera-acoes consulta-acoes">
+          <button class="camera-atalho" onclick="abrirBuscaManual()">⌨ Digitar carta</button>
+          <button class="camera-atalho consulta-diagnostico" id="cameraDiagnostico" ${ultimaRecusa ? '' : 'hidden'} onclick="abrirDiagnosticoLeitura()" aria-label="O que a câmera leu">👁</button>
+          <button class="camera-cancelar" onclick="encerrarLeitura()">Sair</button>
+        </div>
+        ${pendentes ? `<button class="camera-revisar consulta-revisar" onclick="abrirRevisaoSessao()">✓ Revisar ${pendentes} para cadastrar</button>` : ''}`;
+}
+
+/* Sair da câmera sem perder o que já foi lido. Na consulta de preço, sair é
+   só sair: quem foi conferir preço não quer cair na revisão de cadastro. As
+   leituras para cadastrar que existirem ficam guardadas, e a Pokébola avisa. */
 function encerrarLeitura() {
   const total = totalLeituras();
-  if (total) return abrirRevisaoSessao();
+  if (total && !scannerSession.consulta) return abrirRevisaoSessao();
   sairDaCamera();
   scannerSession.active = false;
   closeModal();
+  if (total) {
+    atualizarPokebolaDoScanner();
+    notify(`${total} carta(s) para cadastrar continuam esperando na Pokébola.`);
+  }
 }
 
 function scannerFinishOption(value, label, description) {
@@ -7036,6 +7409,8 @@ function confirmScannedCard(cardId) {
   scannerSession.ultimaConfirmada = cardId;
   scannerSession.confirmadaEm = Date.now();
   scannerCandidateBuffer = [];
+  // Cadastrou a partir da consulta (comprou na loja): segue consultando.
+  voltarAoModoConsulta();
   retomarCamera();
   telaCameraAoVivo();
   const quanto = quantas > 1 ? `${quantas}× ${card.name}` : card.name;

@@ -1,3 +1,11 @@
+# POKECARD Brasil 5.59.0 — Consulta rápida de preço
+
+- Nova consulta de preço, para a loja e a mesa de troca: "Consultar preço" (no Início e em "Mais") abre a câmera do scanner num modo em que nada é cadastrado. Aponte para a carta e veja na hora o preço de cada versão (comum, holo, reverse...), no idioma e no estado escolhidos. O painel também mostra se você já tem a carta e de quais versões, quantas você tem com o mesmo nome de outras coleções, em quais decks ela entra e quantas faltam neles, e se ela está na Wishlist. Dá para pôr ou tirar da Wishlist ali mesmo, sem sair da câmera.
+- As cartas consultadas ficam numa faixa embaixo, cada uma com o preço, e com a soma de todas, para avaliar um lote ou uma troca. Tocar numa miniatura mostra a carta de novo; o × tira a carta da conta.
+- Comprou? "Cadastrar" leva a mesma carta para o cadastro normal, com a versão já escolhida. Depois de adicionar, a câmera volta sozinha para o modo preço.
+- No topo da câmera, "Cadastrar | Preço" troca de modo a qualquer momento, sem perder as cartas consultadas. Sair da consulta não abre a revisão do cadastro; se houver cartas esperando para cadastrar, a Pokébola avisa, como antes.
+- Correção no scanner: a carta digitada (⌨ Digitar carta) não mostra mais "Confira a coleção — não li a numeração", já que foi você quem escolheu. Ela também começa sempre na versão comum, sem herdar a versão e as quantidades da carta anterior.
+
 # POKECARD Brasil 5.58.0 — Regras de jogo de verdade nos decks
 
 - Colar lista do Pokémon TCG Live e do Limitless: a lista em inglês, com a sigla da coleção e o número ("4 Boss's Orders PAL 172"), entra na impressão exata. Antes o app só procurava pelo nome em português e quase nenhum Treinador era reconhecido. Também valem só o nome (em inglês ou português), as Galerias de Treinador ("BRS TG23"), as promos nas duas grafias ("SVP 27" e "PR-SV 27") e a Energia em qualquer grafia ("Basic {R} Energy", "Fire Energy", "Energia de Fogo"). Sem a sigla, entra a impressão que você tem ou, se não tiver nenhuma, a comum mais recente. Ao final, uma janela mostra o que não foi reconhecido e o que passou do limite.

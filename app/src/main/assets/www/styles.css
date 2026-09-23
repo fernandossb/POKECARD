@@ -5728,3 +5728,100 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
   .card-row.ganhou-copia, .card-row.ganhou-copia .tile-quantity-badge,
   .recente-item.ganhou-copia .recente-arte, .tab.scanner-tab.tem-leituras .scanner-pokebola{ animation: none; }
 }
+
+/* ---------- v5.59 — Consulta rápida de preço ----------
+   A câmera tem a paleta escura fixa dela (fica por cima da imagem), então os
+   elementos novos seguem o painel da leitura, não o tema do app. */
+.camera-modos{
+  display:flex;gap:2px;padding:3px;border-radius:999px;
+  background:rgba(0,0,0,.55);
+}
+.camera-modos button{
+  min-height:34px;padding:0 16px;border:0;border-radius:999px;
+  background:transparent;color:rgba(255,255,255,.82);
+  -webkit-text-fill-color:currentColor;
+  font-size:var(--fs-p);font-weight:700;cursor:pointer;
+}
+.camera-modos button.ativo{background:#fff;color:#16203a;}
+
+/* O preço da versão escolhida é o protagonista do painel. */
+.consulta-preco{display:flex;flex-direction:column;gap:2px;margin-top:6px;}
+.consulta-preco b{
+  font-size:var(--fs-xg);font-weight:800;line-height:1.1;
+  color:#3ddc97;font-variant-numeric:tabular-nums;
+}
+.consulta-preco b.consulta-sem-preco{font-size:var(--fs-m);color:rgba(255,255,255,.78);}
+.consulta-preco small{font-size:var(--fs-p);opacity:.75;}
+
+/* Linha de versão: nome à esquerda, preço à direita — sem contador. */
+.consulta-versao .leitura-versao-nome{grid-template-columns:auto minmax(0,1fr) auto;}
+.consulta-versao .leitura-versao-nome .variante-icone{grid-row:auto;}
+.consulta-versao .leitura-versao-rotulo{grid-column:2;}
+.consulta-versao .leitura-versao-preco{
+  grid-column:3;justify-self:end;
+  font-size:var(--fs-m);opacity:.9;
+}
+.consulta-versao.escolhida .leitura-versao-preco{opacity:1;}
+
+/* O que a carta é para você: coleção, decks. */
+.consulta-contexto{
+  list-style:none;margin:10px 12px 0;padding:0;
+  display:flex;flex-direction:column;gap:6px;
+}
+.consulta-contexto li{display:flex;gap:8px;align-items:flex-start;font-size:var(--fs-m);line-height:1.35;}
+.consulta-contexto li > span:first-child{flex:0 0 1.3em;text-align:center;opacity:.85;}
+.consulta-contexto li.tem b{color:#3ddc97;}
+.consulta-contexto li.falta b{color:#ffb454;}
+
+.consulta-quero{
+  display:block;width:calc(100% - 24px);min-height:44px;margin:10px 12px 0;
+  border-radius:var(--raio-m);border:1px solid rgba(255,255,255,.32);
+  background:transparent;color:#fff;-webkit-text-fill-color:currentColor;
+  font-size:var(--fs-m);font-weight:700;cursor:pointer;
+}
+.consulta-quero.ativo{border-color:#ff6b8a;background:rgba(255,107,138,.14);color:#ff9fb3;}
+
+/* Faixa das consultadas: o preço vai por cima da miniatura, numa tarja. A
+   moldura da câmera é grande de propósito (leitura melhor), então o rodapé
+   da consulta tem de caber no mesmo espaço que o do cadastro. */
+.consulta-tira-abrir{
+  position:relative;display:block;width:54px;padding:0;border:0;background:none;
+  color:#fff;-webkit-text-fill-color:currentColor;cursor:pointer;
+}
+/* Miniatura que ainda não carregou continua com cara de carta. */
+.consulta-tira img{background:rgba(255,255,255,.14);}
+.consulta-tira-preco{
+  position:absolute;left:0;right:0;bottom:0;padding:2px 0;
+  border-radius:0 0 var(--raio-p) var(--raio-p);background:rgba(0,0,0,.8);
+  font-size:var(--fs-p);font-weight:700;text-align:center;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.consulta-acoes{align-items:stretch;}
+.consulta-acoes .camera-atalho{flex:1 1 auto;}
+.consulta-acoes .consulta-diagnostico{flex:0 0 48px;padding:0;}
+.consulta-acoes .camera-cancelar{flex:0 0 34%;padding:12px;}
+.consulta-revisar{flex:none;width:100%;padding:12px;}
+.consulta-total{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  font-size:var(--fs-m);
+}
+.consulta-total b{color:#3ddc97;font-size:var(--fs-g);font-variant-numeric:tabular-nums;}
+.consulta-total small{font-size:var(--fs-p);opacity:.7;}
+.consulta-total button{
+  flex:0 0 auto;padding:6px 14px;border-radius:999px;
+  border:1px solid rgba(255,255,255,.32);background:transparent;
+  color:#fff;-webkit-text-fill-color:currentColor;font-size:var(--fs-p);cursor:pointer;
+}
+
+/* Atalho no Início e no "Mais": o ícone é o próprio "R$". */
+.consulta-atalho-inicio{margin-top:14px;}
+.quick-action-icon.icone-texto{font-weight:800;font-size:var(--fs-m);}
+/* A regra antiga dos painéis pinta todo <b> e <strong> com a cor do texto do
+   tema, com !important. Os números da consulta têm cor de propósito. */
+.consulta-preco b,.consulta-total b,.consulta-contexto li.tem b{
+  color:#3ddc97 !important;-webkit-text-fill-color:#3ddc97 !important;
+}
+.consulta-preco b.consulta-sem-preco{
+  color:rgba(255,255,255,.78) !important;-webkit-text-fill-color:rgba(255,255,255,.78) !important;
+}
+.consulta-contexto li.falta b{color:#ffb454 !important;-webkit-text-fill-color:#ffb454 !important;}
