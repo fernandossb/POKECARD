@@ -1,3 +1,11 @@
+# POKECARD Brasil 5.60.0 — Exportar cartas em PDF ou Excel
+
+- Nova tela "Exportar" na aba Coleção (botão no alto, ao lado do título). Escolha quais cartas: a coleção inteira, a lista que está na tela (com a busca e os filtros que você ligou), o Quero ou as Duplicadas. Cada carta aparece com a foto, a coleção, o número, as versões que você tem e quanto vale. Toque para marcar ou desmarcar, busque pelo nome e use "Marcar todas" ou "Desmarcar".
+- PDF: uma lista pronta para imprimir ou mandar, com a foto de cada carta, nome, coleção e número, raridade e ilustrador, as versões (com idioma e estado quando não são os de sempre) e o preço de cada uma, a quantidade e o valor. O total vem no fim, e as páginas são A4 numeradas.
+- Excel: uma planilha (.xlsx) com a foto de cada carta na primeira coluna e colunas de carta, coleção, número, raridade, versões, quantidade, valor em reais e artista, com filtro no cabeçalho e linha de total. Quantidade e valor são números de verdade, para somar e ordenar.
+- As fotos são as mesmas que o app mostra: a da sua cópia, se você fotografou; a imagem que você adicionou; a do catálogo; ou outra fonte, quando o catálogo não tem (como nas Energias básicas). O valor é o mesmo do Portfólio, e a carta do Quero leva o preço de mercado de uma cópia comum.
+- No celular, o arquivo pronto pode ser salvo onde você escolher ou compartilhado direto (WhatsApp, e-mail, Drive). Até 1.000 cartas por arquivo.
+
 # POKECARD Brasil 5.59.0 — Consulta rápida de preço
 
 - Nova consulta de preço, para a loja e a mesa de troca: "Consultar preço" (no Início e em "Mais") abre a câmera do scanner num modo em que nada é cadastrado. Aponte para a carta e veja na hora o preço de cada versão (comum, holo, reverse...), no idioma e no estado escolhidos. O painel também mostra se você já tem a carta e de quais versões, quantas você tem com o mesmo nome de outras coleções, em quais decks ela entra e quantas faltam neles, e se ela está na Wishlist. Dá para pôr ou tirar da Wishlist ali mesmo, sem sair da câmera.

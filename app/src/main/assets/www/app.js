@@ -5060,7 +5060,10 @@ function renderCards() {
      ligado aparece como etiqueta com × para desligar num toque. */
   return `
     <section class="screen vision-collection-screen">
-      <div class="collection-head"><h2>${esc(title)}</h2></div>
+      <div class="collection-head"><h2>${esc(title)}</h2>${ui.tab === 'cards' ? `
+        <button type="button" class="colecao-exportar" onclick="abrirExportacao()" aria-label="Exportar cartas em PDF ou Excel">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/></svg><span>Exportar</span>
+        </button>` : ''}</div>
 
       ${ui.tab === 'wishlist' ? renderFaltamParaDecks() : ''}
       <div class="toolbar collection-toolbar">

@@ -84,6 +84,7 @@ public final class MainActivity extends Activity {
     private static final int OPEN_BACKUP = 1002;
     private static final int PICK_CARD_IMAGE = 1003;
     private static final int CREATE_CSV_EXPORT = 1005;
+    private static final int CREATE_FILE_EXPORT = 1006;
     private static final String UPDATE_API_URL = "https://api.github.com/repos/fernandossb/POKECARD/releases/latest";
     private static final String APK_MIME = "application/vnd.android.package-archive";
 
@@ -95,6 +96,9 @@ public final class MainActivity extends Activity {
     private String pendingBackup;
     private String pendingCsvExport;
     private String pendingCsvExportName;
+    // Exportação em PDF ou Excel: o arquivo chega da página em pedaços.
+    private ByteArrayOutputStream arquivoEmMontagem;
+    private byte[] arquivoPendente;
     private ValueCallback<Uri[]> pendingImageChooser;
     private Uri pendingCameraImageUri;
     private double topInsetCss;
@@ -338,6 +342,18 @@ public final class MainActivity extends Activity {
                 pendingCsvExport = null;
                 pendingCsvExportName = null;
                 Toast.makeText(this, "Planilha salva", Toast.LENGTH_SHORT).show();
+            } else if (requestCode == CREATE_FILE_EXPORT && arquivoPendente != null) {
+                OutputStream output = null;
+                try {
+                    output = getContentResolver().openOutputStream(uri);
+                    if (output == null) throw new IllegalStateException("Arquivo indisponível");
+                    output.write(arquivoPendente);
+                } finally {
+                    if (output != null) try { output.close(); } catch (Exception ignored) {}
+                }
+                arquivoPendente = null;
+                Toast.makeText(this, "Arquivo salvo", Toast.LENGTH_SHORT).show();
+                runJavascript("window.receberArquivoExportado&&window.receberArquivoExportado('salvo');");
             } else if (requestCode == OPEN_BACKUP) {
                 InputStream input = null;
                 ByteArrayOutputStream output = null;
@@ -543,6 +559,21 @@ public final class MainActivity extends Activity {
         }
     }
 
+    // O arquivo de exportação que a página terminou de mandar, ou null.
+    private synchronized byte[] arquivoMontado() {
+        if (arquivoEmMontagem == null || arquivoEmMontagem.size() == 0) return null;
+        return arquivoEmMontagem.toByteArray();
+    }
+
+    private static String nomeDeArquivoSeguro(String nome) {
+        String limpo = nome == null ? "" : nome.replaceAll("[\\\\/:*?\"<>|]", "-").trim();
+        return limpo.isEmpty() ? "pokecard-exportacao" : limpo;
+    }
+
+    private static String tipoDoArquivo(String mime) {
+        return mime == null || mime.trim().isEmpty() ? "application/octet-stream" : mime.trim();
+    }
+
     public final class AppBridge {
         @JavascriptInterface
         public double getTopInsetCss() {
@@ -634,6 +665,85 @@ public final class MainActivity extends Activity {
                     intent.setType("text/csv");
                     intent.putExtra(Intent.EXTRA_TITLE, pendingCsvExportName);
                     startActivityForResult(intent, CREATE_CSV_EXPORT);
+                }
+            });
+        }
+
+        /* Exportação das cartas em PDF ou Excel (tela "Exportar" da Coleção).
+           O arquivo é binário e pode passar de alguns megabytes — uma foto por
+           carta —, então chega em pedaços de base64 que aqui voltam a ser
+           bytes. Depois vai para o "Salvar como" do sistema ou para o
+           compartilhamento (WhatsApp, e-mail, Drive). */
+        @JavascriptInterface
+        public void arquivoComecar() {
+            synchronized (MainActivity.this) {
+                arquivoEmMontagem = new ByteArrayOutputStream();
+            }
+        }
+
+        @JavascriptInterface
+        public void arquivoPedaco(String base64) {
+            if (base64 == null || base64.isEmpty()) return;
+            byte[] pedaco = android.util.Base64.decode(base64, android.util.Base64.DEFAULT);
+            synchronized (MainActivity.this) {
+                if (arquivoEmMontagem == null) arquivoEmMontagem = new ByteArrayOutputStream();
+                arquivoEmMontagem.write(pedaco, 0, pedaco.length);
+            }
+        }
+
+        @JavascriptInterface
+        public void arquivoSalvar(final String nome, final String mime) {
+            final byte[] bytes = arquivoMontado();
+            if (bytes == null) return;
+            arquivoPendente = bytes;
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                    intent.addCategory(Intent.CATEGORY_OPENABLE);
+                    intent.setType(tipoDoArquivo(mime));
+                    intent.putExtra(Intent.EXTRA_TITLE, nomeDeArquivoSeguro(nome));
+                    startActivityForResult(intent, CREATE_FILE_EXPORT);
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void arquivoCompartilhar(final String nome, final String mime) {
+            final byte[] bytes = arquivoMontado();
+            if (bytes == null) return;
+            backgroundExecutor.execute(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        // A pasta de cache já está liberada no FileProvider
+                        // (cache-path "."), como as fotos da câmera.
+                        File pasta = new File(getCacheDir(), "exportacoes");
+                        if (!pasta.exists() && !pasta.mkdirs()) throw new IllegalStateException("sem pasta");
+                        File arquivo = new File(pasta, nomeDeArquivoSeguro(nome));
+                        java.io.FileOutputStream saida = new java.io.FileOutputStream(arquivo);
+                        try { saida.write(bytes); } finally { saida.close(); }
+                        final Uri uri = FileProvider.getUriForFile(MainActivity.this, getPackageName() + ".fileprovider", arquivo);
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                Intent envio = new Intent(Intent.ACTION_SEND);
+                                envio.setType(tipoDoArquivo(mime));
+                                envio.putExtra(Intent.EXTRA_STREAM, uri);
+                                envio.putExtra(Intent.EXTRA_SUBJECT, nomeDeArquivoSeguro(nome));
+                                envio.setClipData(android.content.ClipData.newRawUri(nomeDeArquivoSeguro(nome), uri));
+                                envio.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                                startActivity(Intent.createChooser(envio, "Compartilhar " + nomeDeArquivoSeguro(nome)));
+                            }
+                        });
+                    } catch (Exception erro) {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                Toast.makeText(MainActivity.this, "Não foi possível compartilhar o arquivo", Toast.LENGTH_LONG).show();
+                            }
+                        });
+                    }
                 }
             });
         }

@@ -720,6 +720,14 @@
       if (Date.now() - Number(entry.savedAt || 0) >= CACHE_TTL) return '';
       return entry.url;
     },
+    // Todas as fontes de arte desta carta, na ordem da cascata (imagem que a
+    // pessoa adicionou, catálogo, espelho em inglês, CDN direto, APIs). A
+    // exportação em PDF/Excel recorre a elas quando a arte principal falha.
+    async candidates(cardId) {
+      const card = cardFor(String(cardId || ''));
+      if (!card) return [];
+      return (await providerCandidates(card, false)).map(item => item.url);
+    },
     retry(cardId) {
       const id = String(cardId || '');
       attempts.delete(id);
