@@ -5265,7 +5265,7 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 .layout-cartas{
   flex: 0 0 auto; display: inline-flex; gap: 2px; padding: 3px;
   border-radius: var(--raio-p); background: var(--vision-surface-2);
-  border: 1px solid var(--v5-borda, var(--vision-line));
+  border: 1px solid var(--vision-line);
 }
 .layout-cartas button{
   width: 40px; height: 34px; padding: 0;
@@ -5329,7 +5329,7 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 .card-artista-link{
   display: inline-flex; align-items: center; gap: 5px; max-width: 100%;
   margin: 2px 0 10px; padding: 7px 12px;
-  border: 1px solid var(--v5-borda, var(--vision-line)); border-radius: 999px;
+  border: 1px solid var(--vision-line); border-radius: 999px;
   background: var(--vision-surface-2);
   color: var(--vision-muted) !important; font-size: var(--fs-p); text-align: left;
 }
@@ -5350,7 +5350,7 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 .botao-filtros{
   display: inline-flex; align-items: center; gap: 7px;
   padding: 0 14px; min-height: 50px;
-  border: 1px solid var(--v5-borda, var(--vision-line)); border-radius: var(--raio-m);
+  border: 1px solid var(--vision-line); border-radius: var(--raio-m);
   background: var(--vision-surface-2); color: var(--vision-text) !important;
   font-size: var(--fs-m); font-weight: 700;
 }
@@ -5420,7 +5420,7 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 .gaveta-opcoes{ display: flex; flex-wrap: wrap; gap: 8px; }
 .gaveta-opcao{
   min-height: 40px; padding: 0 14px;
-  border: 1px solid var(--v5-borda, var(--vision-line)); border-radius: 999px;
+  border: 1px solid var(--vision-line); border-radius: 999px;
   background: var(--vision-surface-2); color: var(--vision-text) !important;
   font-size: var(--fs-p); font-weight: 600;
 }
@@ -5435,7 +5435,7 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
   display: grid; grid-template-columns: auto 1fr; gap: 10px;
   margin: 22px -17px 0; padding: 12px 17px calc(14px + env(safe-area-inset-bottom));
   background: inherit;
-  border-top: 1px solid var(--v5-borda, var(--vision-line));
+  border-top: 1px solid var(--vision-line);
 }
 .gaveta-rodape button{ min-height: 50px; }
 .gaveta-rodape .secondary-btn{ padding: 0 18px; }
@@ -5507,7 +5507,7 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 /* Preços: uma linha de estado em vez do painel técnico. */
 .precos-resumo{
   margin-top: 16px; padding: 14px 16px;
-  border: 1px solid var(--v5-borda, var(--vision-line)); border-radius: var(--raio-g);
+  border: 1px solid var(--vision-line); border-radius: var(--raio-g);
   background: var(--vision-surface);
 }
 .precos-resumo-linha{ display: flex; align-items: center; gap: 12px; }
@@ -5534,7 +5534,7 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
   width: 100%; min-height: 58px;
   display: grid; grid-template-columns: 48px minmax(0,1fr) auto; align-items: center; gap: 12px;
   padding: 7px 14px 7px 8px; text-align: left;
-  border: 1px solid var(--v5-borda, var(--vision-line)); border-radius: var(--raio-m);
+  border: 1px solid var(--vision-line); border-radius: var(--raio-m);
   background: var(--vision-surface-2); color: var(--vision-text) !important;
 }
 .gaveta-escolha.ativo{ border-color: var(--vision-primary); box-shadow: 0 0 0 1px var(--vision-primary) inset; }
@@ -5552,7 +5552,7 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 .gaveta-voltar{
   width: 40px; height: 40px; flex: 0 0 40px; border-radius: 50%;
   display: grid; place-items: center;
-  border: 1px solid var(--v5-borda, var(--vision-line));
+  border: 1px solid var(--vision-line);
   background: var(--vision-surface-2); color: var(--vision-text) !important;
   font-size: var(--fs-xg); line-height: 1;
 }
