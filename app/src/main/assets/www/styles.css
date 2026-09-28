@@ -5265,7 +5265,7 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 .layout-cartas{
   flex: 0 0 auto; display: inline-flex; gap: 2px; padding: 3px;
   border-radius: var(--raio-p); background: var(--vision-surface-2);
-  border: 1px solid var(--v5-borda, var(--vision-line));
+  border: 1px solid var(--vision-line);
 }
 .layout-cartas button{
   width: 40px; height: 34px; padding: 0;
@@ -5329,7 +5329,7 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 .card-artista-link{
   display: inline-flex; align-items: center; gap: 5px; max-width: 100%;
   margin: 2px 0 10px; padding: 7px 12px;
-  border: 1px solid var(--v5-borda, var(--vision-line)); border-radius: 999px;
+  border: 1px solid var(--vision-line); border-radius: 999px;
   background: var(--vision-surface-2);
   color: var(--vision-muted) !important; font-size: var(--fs-p); text-align: left;
 }
@@ -5350,7 +5350,7 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 .botao-filtros{
   display: inline-flex; align-items: center; gap: 7px;
   padding: 0 14px; min-height: 50px;
-  border: 1px solid var(--v5-borda, var(--vision-line)); border-radius: var(--raio-m);
+  border: 1px solid var(--vision-line); border-radius: var(--raio-m);
   background: var(--vision-surface-2); color: var(--vision-text) !important;
   font-size: var(--fs-m); font-weight: 700;
 }
@@ -5420,7 +5420,7 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 .gaveta-opcoes{ display: flex; flex-wrap: wrap; gap: 8px; }
 .gaveta-opcao{
   min-height: 40px; padding: 0 14px;
-  border: 1px solid var(--v5-borda, var(--vision-line)); border-radius: 999px;
+  border: 1px solid var(--vision-line); border-radius: 999px;
   background: var(--vision-surface-2); color: var(--vision-text) !important;
   font-size: var(--fs-p); font-weight: 600;
 }
@@ -5435,7 +5435,7 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
   display: grid; grid-template-columns: auto 1fr; gap: 10px;
   margin: 22px -17px 0; padding: 12px 17px calc(14px + env(safe-area-inset-bottom));
   background: inherit;
-  border-top: 1px solid var(--v5-borda, var(--vision-line));
+  border-top: 1px solid var(--vision-line);
 }
 .gaveta-rodape button{ min-height: 50px; }
 .gaveta-rodape .secondary-btn{ padding: 0 18px; }
@@ -5507,7 +5507,7 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 /* Preços: uma linha de estado em vez do painel técnico. */
 .precos-resumo{
   margin-top: 16px; padding: 14px 16px;
-  border: 1px solid var(--v5-borda, var(--vision-line)); border-radius: var(--raio-g);
+  border: 1px solid var(--vision-line); border-radius: var(--raio-g);
   background: var(--vision-surface);
 }
 .precos-resumo-linha{ display: flex; align-items: center; gap: 12px; }
@@ -5534,7 +5534,7 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
   width: 100%; min-height: 58px;
   display: grid; grid-template-columns: 48px minmax(0,1fr) auto; align-items: center; gap: 12px;
   padding: 7px 14px 7px 8px; text-align: left;
-  border: 1px solid var(--v5-borda, var(--vision-line)); border-radius: var(--raio-m);
+  border: 1px solid var(--vision-line); border-radius: var(--raio-m);
   background: var(--vision-surface-2); color: var(--vision-text) !important;
 }
 .gaveta-escolha.ativo{ border-color: var(--vision-primary); box-shadow: 0 0 0 1px var(--vision-primary) inset; }
@@ -5552,7 +5552,7 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 .gaveta-voltar{
   width: 40px; height: 40px; flex: 0 0 40px; border-radius: 50%;
   display: grid; place-items: center;
-  border: 1px solid var(--v5-borda, var(--vision-line));
+  border: 1px solid var(--vision-line);
   background: var(--vision-surface-2); color: var(--vision-text) !important;
   font-size: var(--fs-xg); line-height: 1;
 }
@@ -5567,10 +5567,17 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 }
 .seletor-linha.ativo{ border-color: var(--vision-primary); background: var(--vision-primary-soft, rgba(37,208,179,.14)); }
 .seletor-logo{
+  position: relative;
   width: 48px; height: 34px; display: grid; place-items: center;
   border-radius: var(--raio-p); background: rgba(255,255,255,.06); overflow: hidden;
 }
 .seletor-logo img{ width: 100%; height: 100%; object-fit: contain; padding: 3px; }
+/* .set-logo-fallback usa position:absolute;inset:0 pensado para preencher um
+   cartão de coleção inteiro (.timeline-set-card, que é position:relative). Sem
+   o position:relative acima, o preenchimento "escapava" deste ícone de 48×34px
+   e virava uma camada invisível cobrindo boa parte da gaveta — dentro do
+   próprio botão da coleção, engolindo o toque em tudo que estivesse por cima
+   (os botões de ordenar, as linhas da lista de coleções/artistas). */
 .seletor-logo .set-logo-fallback{ font-size: var(--fs-g); opacity: .7; }
 .seletor-inicial{
   width: 40px; height: 40px; margin-left: 4px; border-radius: 50%;
@@ -5943,3 +5950,77 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 }
 .revisao-carimbo{ max-width: 100%; }
 .revisao-carimbo.ligado{ border-color: var(--vision-flair-2, #ffb548) !important; font-weight: 700; }
+
+/* ---------- v5.62 — Arte Estendida ---------- */
+.arte-estendida-sheet{ max-width: 720px; }
+.arte-estendida-busca{ margin: 14px 0 12px; }
+
+/* Lista das obras. */
+.arte-estendida-lista{ display: flex; flex-direction: column; gap: 8px; padding-bottom: 4px; }
+.arte-estendida-item{
+  display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 12px;
+  width: 100%; text-align: left; padding: 10px 12px; border-radius: var(--raio-m);
+  border: 1px solid var(--vision-line); background: var(--vision-surface-2); color: var(--vision-text) !important;
+}
+.arte-estendida-item.completa{ border-color: var(--vision-primary); box-shadow: 0 0 0 1px var(--vision-primary) inset; }
+.arte-estendida-item-tiras{ display: flex; flex: 0 0 auto; }
+.arte-estendida-mini{
+  width: 34px; aspect-ratio: 63 / 88; border-radius: 4px; overflow: hidden; flex: 0 0 auto;
+  background: var(--vision-surface); box-shadow: 0 0 0 1px rgba(0,0,0,.35);
+  margin-left: -12px; display: grid; place-items: center;
+}
+.arte-estendida-mini:first-child{ margin-left: 0; }
+.arte-estendida-mini img{ width: 100%; height: 100%; object-fit: cover; display: block; }
+.arte-estendida-mini.vazia{ opacity: .5; font-size: var(--fs-m); margin-left: 0; }
+.arte-estendida-item-texto{ min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.arte-estendida-item-texto strong{ font-size: var(--fs-m); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.arte-estendida-item-texto small{ font-size: var(--fs-p); opacity: .7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.arte-estendida-barra{ display: block; height: 4px; margin-top: 3px; border-radius: 999px; background: rgba(255,255,255,.1); overflow: hidden; }
+.arte-estendida-barra i{ display: block; height: 100%; border-radius: inherit; background: var(--vision-primary); }
+.arte-estendida-item-conta{ font-weight: 700; font-size: var(--fs-p); opacity: .85; flex: 0 0 auto; }
+.arte-estendida-item.completa .arte-estendida-item-conta{ color: var(--vision-primary) !important; font-size: var(--fs-m); }
+.arte-estendida-fonte{ margin-top: 14px; font-size: var(--fs-p); opacity: .6; line-height: 1.4; }
+
+/* Botão de voltar da obra: par do × (modal-close), flutuando do outro lado. */
+.arte-estendida-voltar{ float: left; margin-right: 10px; }
+.arte-estendida-obra-sheet h2{ margin-left: 45px; }
+
+/* A obra: as cartas lado a lado, sem espaço entre elas — é isso que faz a
+   arte parecer uma peça só, não um álbum de figurinhas. */
+.arte-estendida-obra{
+  display: flex; margin: 16px 0; border-radius: var(--raio-m); overflow: hidden;
+  border: 1px solid var(--vision-line); box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  background: var(--vision-surface-2);
+}
+.arte-estendida-obra.coluna{ flex-direction: column; }
+.arte-estendida-obra.grade{ display: grid; grid-template-columns: repeat(var(--arte-colunas, 3), 1fr); }
+.arte-estendida-slot{
+  position: relative; aspect-ratio: 63 / 88; border: 0; border-radius: 0; padding: 0;
+  background: var(--vision-surface-2); color: inherit; overflow: hidden; flex: 1 1 0; min-width: 0;
+}
+.arte-estendida-obra.linha .arte-estendida-slot + .arte-estendida-slot{ border-left: 1px solid rgba(0,0,0,.4); }
+.arte-estendida-obra.coluna .arte-estendida-slot + .arte-estendida-slot{ border-top: 1px solid rgba(0,0,0,.4); }
+.arte-estendida-obra.grade .arte-estendida-slot{ border: 1px solid rgba(0,0,0,.4); }
+.arte-estendida-slot img{ width: 100%; height: 100%; object-fit: cover; display: block; }
+.arte-estendida-selo{
+  position: absolute; top: 5px; right: 5px; width: 22px; height: 22px; border-radius: 50%;
+  display: grid; place-items: center; font-size: var(--fs-p); font-weight: 800; line-height: 1;
+  background: rgba(0,0,0,.6); color: #ff8a80;
+}
+.arte-estendida-selo.ok{ color: var(--ok-texto, #3ddc97); }
+.arte-estendida-manual{
+  position: absolute; bottom: 5px; left: 5px; width: 20px; height: 20px; border-radius: 50%;
+  display: grid; place-items: center; font-size: var(--fs-p); line-height: 1;
+  background: rgba(0,0,0,.6); color: #fff;
+}
+.arte-estendida-slot.vazio{
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  padding: 8px; text-align: center;
+  background: repeating-linear-gradient(135deg, rgba(255,255,255,.05) 0 8px, transparent 8px 16px), var(--vision-surface-2);
+}
+.arte-estendida-slot-nome{ font-size: var(--fs-p); font-weight: 700; color: var(--vision-text) !important; }
+.arte-estendida-slot-ajuda{ font-size: var(--fs-p); opacity: .65; }
+.arte-estendida-slot-numero{ font-size: var(--fs-p); opacity: .5; font-variant-numeric: tabular-nums; }
+.arte-estendida-slot-numero.fraco{ font-style: italic; }
+.arte-estendida-dica{ margin-top: 4px; font-size: var(--fs-p); opacity: .65; line-height: 1.4; }
+.arte-estendida-vinculo-lista{ margin-top: 10px; }
