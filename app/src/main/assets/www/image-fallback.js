@@ -50,8 +50,26 @@
     'mee-003': 'https://assets.tcgdex.net/en/me/mee/003',
   });
 
+  /* Diagnóstico é para entender a carta que falhou agora, não um histórico.
+     Guardava 20 registros de TODA carta já vista, no mesmo localStorage da
+     coleção: com mais de mil cartas, disputava espaço com ela e era regravado
+     a cada imagem. Ficam as 150 cartas mais recentes, 6 registros cada. */
+  const DIAGNOSTICO_CARTAS = 150;
+  const DIAGNOSTICO_POR_CARTA = 6;
+
+  function aparaDiagnosticos() {
+    const ids = Object.keys(diagnostics);
+    if (ids.length <= DIAGNOSTICO_CARTAS) return false;
+    // A ordem das chaves é a de inserção: as primeiras são as mais antigas.
+    for (const id of ids.slice(0, ids.length - DIAGNOSTICO_CARTAS)) delete diagnostics[id];
+    return true;
+  }
+
   try { cache = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}') || {}; } catch (_) { cache = {}; }
   try { diagnostics = JSON.parse(localStorage.getItem(DIAGNOSTIC_KEY) || '{}') || {}; } catch (_) { diagnostics = {}; }
+  if (aparaDiagnosticos()) {
+    try { localStorage.setItem(DIAGNOSTIC_KEY, JSON.stringify(diagnostics)); } catch (_) {}
+  }
 
   function persistCacheNow() {
     clearTimeout(cacheSaveTimer);
@@ -84,8 +102,11 @@
   function record(cardId, provider, status, detail = '') {
     if (!cardId) return;
     const list = Array.isArray(diagnostics[cardId]) ? diagnostics[cardId] : [];
-    list.push({ provider, status, detail: String(detail || '').slice(0, 500), at: Date.now() });
-    diagnostics[cardId] = list.slice(-20);
+    list.push({ provider, status, detail: String(detail || '').slice(0, 200), at: Date.now() });
+    // Sai e volta: a carta vai para o fim da fila, a das mais recentes.
+    delete diagnostics[cardId];
+    diagnostics[cardId] = list.slice(-DIAGNOSTICO_POR_CARTA);
+    aparaDiagnosticos();
     saveDiagnostics();
   }
 

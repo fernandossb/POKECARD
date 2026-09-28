@@ -4793,8 +4793,8 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
   vector-effect:non-scaling-stroke;
 }
 .valor-grafico .valor-area{fill:var(--ok,#3ddc97);opacity:.12;stroke:none;}
-.valor-grafico .valor-ponta{fill:var(--ok,#3ddc97);}
-.valor-grafico.caiu .valor-linha,.valor-grafico.caiu .valor-ponta{stroke:var(--erro,#e8544a);fill:var(--erro,#e8544a);}
+.valor-grafico .valor-ponta{fill:none;stroke:var(--ok,#3ddc97);stroke-width:12;stroke-linecap:round;vector-effect:non-scaling-stroke;}
+.valor-grafico.caiu .valor-linha,.valor-grafico.caiu .valor-ponta{stroke:var(--erro,#e8544a);fill:none;}
 .valor-grafico.caiu .valor-linha{fill:none;}
 .valor-grafico.caiu .valor-area{fill:var(--erro,#e8544a);}
 
@@ -5470,7 +5470,6 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
    (--vision-muted) é quase branca, e o texto ficava igual ao das cartas que
    você tem. */
 .card-row.vision-card-tile.missing .card-main{ opacity: .6 !important; }
-.numero-no-bolso{ display: none; }
 
 /* Entrou na coleção: a capa vazia "ganha cor", com um pulinho e um brilho
    na cor do tema. */
@@ -5495,69 +5494,6 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
   .card-row.ganhou-cor, .recente-item.ganhou-cor .recente-arte{ animation: none; }
 }
 
-/* Páginas de fichário: 3×3 bolsos por página, com os furos da argola na
-   margem e o quanto a página já está preenchida. */
-.card-list.layout-fichario{ display: block !important; }
-.pagina-fichario{
-  position: relative;
-  padding: 10px 10px 12px 30px;
-  border-radius: var(--raio-m);
-  background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,0) 30%), var(--vision-surface);
-  border: 1px solid var(--v5-borda, var(--vision-line));
-  box-shadow: 0 12px 26px -14px rgba(0,0,0,.7);
-}
-.pagina-fichario + .pagina-fichario{ margin-top: 16px; }
-.pagina-fichario::before{
-  content: ''; position: absolute; left: 9px; top: 14px; bottom: 14px; width: 12px;
-  background: radial-gradient(circle at 50% 50%, var(--vision-bg, #10141a) 0 4.5px, rgba(255,255,255,.2) 5px 5.8px, transparent 6.3px)
-    center / 12px 33.333% repeat-y;
-}
-.pagina-fichario header{ display: flex; align-items: baseline; gap: 8px; margin: 0 2px 8px; }
-.pagina-fichario header strong{ font-size: var(--fs-m); color: var(--vision-text) !important; }
-.pagina-fichario header small{ font-size: var(--fs-p); color: var(--vision-muted) !important; }
-.pagina-preenchida{ margin-left: auto; font-size: var(--fs-p); font-weight: 700; color: var(--vision-muted) !important; }
-.pagina-fichario.completa{ border-color: rgba(255,206,92,.55); }
-.pagina-fichario.completa .pagina-preenchida{ color: #ffd166 !important; -webkit-text-fill-color: #ffd166 !important; }
-.bolsos{ display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 6px; }
-
-/* Cada bolso é só a carta, dentro de um plástico com reflexo. */
-.layout-fichario .card-row.vision-card-tile{
-  position: relative;
-  display: block !important;
-  padding: 3px !important;
-  border: 1px solid rgba(255,255,255,.12) !important;
-  border-radius: var(--raio-p) !important;
-  background: rgba(255,255,255,.035) !important;
-  box-shadow: none !important;
-  overflow: hidden !important;
-}
-.layout-fichario .card-row.completa{ border-color: rgba(255,209,102,.85) !important; }
-.layout-fichario .card-row .card-main,
-.layout-fichario .etiquetas-variante,
-.layout-fichario .tile-wishlist-badge,
-.layout-fichario .card-row::before{ display: none !important; }
-.layout-fichario .vision-card-art{ width: 100% !important; border: 0 !important; border-radius: var(--raio-p) !important; }
-.layout-fichario .card-thumb,
-.layout-fichario .card-placeholder{ border-radius: var(--raio-p) !important; }
-.layout-fichario .card-row::after{
-  content: ''; position: absolute; inset: 0; z-index: 4; pointer-events: none;
-  background: linear-gradient(122deg, rgba(255,255,255,.16), rgba(255,255,255,0) 32%, rgba(255,255,255,0) 68%, rgba(255,255,255,.07));
-}
-.layout-fichario .card-row.missing .vision-card-art{ outline-offset: -4px; }
-.layout-fichario .numero-no-bolso{
-  display: grid; place-items: center;
-  position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); z-index: 3;
-  min-width: 34px; height: 22px; padding: 0 7px; border-radius: 999px;
-  background: rgba(0,0,0,.55);
-  color: rgba(255,255,255,.88) !important; -webkit-text-fill-color: rgba(255,255,255,.88) !important;
-  font-size: var(--fs-p); font-weight: 700; letter-spacing: .03em;
-}
-.layout-fichario .tile-quantity-badge{ right: 3px; top: 3px; padding: 2px 6px; font-size: var(--fs-p); }
-.bolso-vazio{
-  aspect-ratio: 63 / 88; border-radius: var(--raio-p);
-  border: 1px dashed rgba(255,255,255,.12);
-  background: rgba(255,255,255,.02);
-}
 
 /* "Quero" ficava embaixo, escondido atrás das etiquetas de versão (N, F,
    RF). Sobe para o canto de cima; se a carta tiver a estrela de completa,
@@ -5943,3 +5879,67 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
   font-size: var(--fs-m); font-weight: 800; letter-spacing: .04em;
 }
 .exportar-pronto-acoes{ display: grid; gap: 10px; width: min(320px, 100%); margin-top: 8px; }
+
+/* ---------- v5.61 — Números da coleção ----------
+   Total, únicas e repetidas voltaram (ficavam no cabeçalho antigo), ao lado
+   de versões, especiais e Quero: seis números em duas linhas, mais baixos
+   que os cartões grandes de antes para não empurrar o resto do Início. */
+.collection-summary-grid button{ min-height: 94px !important; padding: 11px 10px !important; }
+.collection-summary-grid button span{ width: 34px !important; height: 34px !important; padding: 8px !important; }
+.collection-summary-grid strong{ margin: 9px 0 2px !important; font-size: var(--fs-g) !important; line-height: 1.1; }
+.collection-summary-grid button:nth-child(5) span{
+  background: var(--vision-flair-1-glow, rgba(155,124,255,.24));
+  color: var(--vision-flair-1, #9b7cff) !important;
+}
+.collection-summary-grid button:nth-child(5) strong{ color: var(--vision-flair-1, #9b7cff) !important; }
+.collection-summary-grid button:nth-child(6) span{
+  background: var(--vision-flair-2-glow, rgba(255,181,72,.26));
+  color: var(--vision-flair-2, #ffb548) !important;
+}
+.collection-summary-grid button:nth-child(6) strong{ color: var(--vision-flair-2, #ffb548) !important; }
+
+/* ---------- v5.61 — Carimbo, edição e foil especial no scanner ----------
+   As variações que o TCGdex conhece da carta entram como linhas depois das
+   versões com preço, com o traço tracejado de "sem preço de fonte". O botão
+   "Carimbo, edição ou foil" divide a linha com "Não é essa carta?". */
+.leitura-outras-acoes{ display: flex; gap: var(--esp-2, 8px); margin-top: var(--esp-2, 8px); }
+.leitura-outras-acoes .leitura-outra{
+  flex: 1 1 0; min-width: 0; margin-top: 0; padding: 4px 6px;
+  line-height: 1.15; text-align: center; white-space: normal;
+  border: 1px solid var(--borda-suave, rgba(255,255,255,.18)); border-radius: var(--raio-medio, 10px);
+  font-size: var(--fs-p, 14px);
+}
+.leitura-variacao-btn{ color: #ffd66b !important; }
+.leitura-versao.variacao{ border-style: dashed; }
+.leitura-versao.variacao .leitura-versao-rotulo{ font-size: var(--fs-p, 14px); }
+.leitura-mais-versoes em{ font-style: normal; opacity: .7; }
+
+.leitura-variacao{ gap: 10px; }
+.leitura-variacao-titulo{
+  font-size: var(--fs-menor, 12px); letter-spacing: .08em; text-transform: uppercase; opacity: .7;
+  margin-top: 4px;
+}
+.leitura-variacao-conhecidas{ display: flex; flex-wrap: wrap; gap: 8px; }
+.leitura-variacao-chip{
+  min-height: 40px; padding: 8px 12px; border-radius: 999px; cursor: pointer;
+  border: 1px dashed rgba(255,214,107,.6); background: rgba(255,214,107,.1); color: #fff;
+  font-size: var(--fs-p, 14px); text-align: left;
+}
+.leitura-variacao-chip.ativo{ border-style: solid; border-color: #ffd66b; background: rgba(255,214,107,.26); font-weight: 700; }
+.leitura-variacao-campos{ display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
+.leitura-variacao-campos .registration-field{ min-width: 0; }
+.leitura-variacao-campos .field{ width: 100%; min-width: 0; }
+@media (max-width: 340px){ .leitura-variacao-campos{ grid-template-columns: 1fr; } }
+.leitura-variacao-nota{ opacity: .75; line-height: 1.35; }
+
+/* "Acabamento das próximas": aceso quando não está no automático. */
+.camera-lote b{ font-weight: 700; }
+.camera-lote.ligado{ border-color: #ffd66b; background: rgba(255,214,107,.22); }
+
+/* Revisão: a variação da linha e o carimbo. */
+.revisao-variacao{
+  display: inline-block; margin: 2px 0 4px; font-size: var(--fs-p, 14px); font-weight: 700;
+  color: var(--vision-flair-2, #c98a00) !important;
+}
+.revisao-carimbo{ max-width: 100%; }
+.revisao-carimbo.ligado{ border-color: var(--vision-flair-2, #ffb548) !important; font-weight: 700; }

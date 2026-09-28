@@ -69,6 +69,8 @@ let centralPriceData = { meta: {}, prices: {}, variantCatalog: {} };
 let centralPriceStatus = {};
 let centralPriceIndex = { meta: {}, cards: {} };
 let centralPriceLoadedShards = new Set();
+// Coleção, número e raridade de cada carta com preço (uma vez por carta, não por preço).
+let centralPriceCards = {};
 let centralPriceSyncing = false;
 let centralPriceLastCheck = 0;
 let cardSearchIndex = new Map();
@@ -304,11 +306,11 @@ function invalidateDerivedState() {
   cardResultCache.value = null;
 }
 
-/* Lista, grade de 2, grade de 3 ou páginas de fichário. É gosto de quem usa,
-   não estado da tela: fica guardado no aparelho e volta igual na próxima
-   abertura. */
+/* Lista, grade de 2 ou grade de 3. É gosto de quem usa, não estado da tela:
+   fica guardado no aparelho e volta igual na próxima abertura. (As "páginas
+   de fichário" saíram na 5.61: quem as tinha escolhido volta para a grade.) */
 const CARD_LAYOUT_KEY = 'pokecard-layout-cartas';
-const CARD_LAYOUTS = ['lista', 'grade-2', 'grade-3', 'fichario'];
+const CARD_LAYOUTS = ['lista', 'grade-2', 'grade-3'];
 
 function lerLayoutDeCartas() {
   try {
@@ -687,7 +689,11 @@ function sourceVariantEnumsFromTcgDexDetail(detail, language = '') {
 }
 
 function centralVariantEntries(cardId, language = '') {
-  const list = Array.isArray(centralPriceData?.variantCatalog?.[cardId]) ? centralPriceData.variantCatalog[cardId] : [];
+  const bruto = Array.isArray(centralPriceData?.variantCatalog?.[cardId]) ? centralPriceData.variantCatalog[cardId] : [];
+  // Guardado compacto (loteCompacto): [idioma, versão, tem preço, fontes, tipos].
+  const list = bruto.map(item => Array.isArray(item)
+    ? { language: item[0], value: item[1], priced: Boolean(item[2]), sources: item[3] ? item[3].split('+') : [], kinds: item[4] ? item[4].split('+') : [] }
+    : item);
   if (!language) return list;
   const own = list.filter(item => !item?.language || item.language === language);
   // O catálogo pt-br do TCGdex só marca "normal". Os acabamentos realmente
@@ -780,6 +786,10 @@ const VARIANT_FRIENDLY_LABELS = {
   // Padrões de fundo das coleções novas: são cartas diferentes, não acabamento.
   'pokeball-holofoil': 'Padrão Poké Bola',
   'masterball-holofoil': 'Padrão Master Ball',
+  // Subtipos de impressão que o TCGdex separa (variants_detailed.subtype).
+  '1999-2000-copyright': 'Copyright 1999-2000',
+  'missing-expansion-symbol': 'Sem símbolo da coleção',
+  'first-edition': '1ª Edição',
 };
 // Puxa os rótulos das listas do cadastro manual, sem repetir texto.
 for (const [valor, rotulo] of [...EDITION_OPTIONS, ...STAMP_OPTIONS, ...SPECIAL_FOIL_OPTIONS, ...ART_OPTIONS]) {
@@ -796,6 +806,8 @@ function humanizarCarimbo(value) {
 function friendlyVariantLabel(value) {
   const exact = exactSourceEnum(value);
   if (VARIANT_FRIENDLY_LABELS[exact]) return VARIANT_FRIENDLY_LABELS[exact];
+  // Carta com dois carimbos ("1st-edition+pre-release"): um rótulo por carimbo.
+  if (exact.includes('+')) return exact.split('+').map(friendlyVariantLabel).join(' + ');
   // Carimbo raro digitado à mão (ex.: "jason-klaczynski"): mostra legível.
   return exact ? humanizarCarimbo(exact) : exact;
 }
@@ -1282,49 +1294,156 @@ function openCentralPriceDatabase() {
   });
 }
 
-function centralCachePayload() {
-  return {
-    meta: centralPriceStatus || centralPriceData.meta || {},
-    prices: centralPriceData.prices || {},
-    variantCatalog: centralPriceData.variantCatalog || {},
-    index: centralPriceIndex,
-    loadedShards: [...centralPriceLoadedShards],
-  };
+/* ---------- Cache do banco de preços no aparelho ----------
+
+   O banco tem 12 lotes de ~6,7 MB cada. Antes, o cache era UM registro com
+   tudo o que já tinha sido baixado, regravado inteiro a cada lote novo — e
+   lido inteiro na abertura. Numa coleção grande (que acaba usando todos os
+   lotes), cada carta de coleção nova escaneada copiava dezenas de MB de uma
+   vez: o WebView ficava sem memória e o Android fechava o app. Na abertura
+   seguinte, ler o cache derrubava de novo — até alguém limpar os dados.
+
+   Agora:
+   • cada preço guarda só o que o app usa (menos de um quinto do tamanho);
+   • cada lote é um registro separado, gravado uma vez, quando chega;
+   • a abertura lê só o índice; um lote volta do aparelho quando uma carta
+     dele é necessária — e só um lote é aberto por vez. */
+const CACHE_PRECOS_META = 'meta-v2';
+const CACHE_PRECOS_LOTE = indice => `lote-v2-${indice}`;
+
+async function comBancoDePrecos(modo, trabalho) {
+  const db = await openCentralPriceDatabase();
+  try {
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(CENTRAL_PRICE_DB_STORE, modo);
+      const pedido = trabalho(tx.objectStore(CENTRAL_PRICE_DB_STORE));
+      tx.oncomplete = () => resolve(pedido?.result);
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error || new Error('Gravação cancelada'));
+    });
+  } finally {
+    db.close();
+  }
 }
 
 async function loadCentralPriceCache() {
   try {
-    const db = await openCentralPriceDatabase();
-    const cached = await new Promise((resolve, reject) => {
-      const tx = db.transaction(CENTRAL_PRICE_DB_STORE, 'readonly');
-      const req = tx.objectStore(CENTRAL_PRICE_DB_STORE).get(CENTRAL_PRICE_DB_KEY);
-      req.onsuccess = () => resolve(req.result || null);
-      req.onerror = () => reject(req.error);
-    });
-    db.close();
-    if (Number(cached?.meta?.schemaVersion) === 4 && cached?.prices && cached?.index?.cards) {
-      centralPriceData = {
-        meta: cached.meta || {},
-        prices: cached.prices || {},
-        variantCatalog: cached.variantCatalog || {},
-      };
-      centralPriceStatus = cached.meta || {};
-      centralPriceIndex = cached.index;
-      centralPriceLoadedShards = new Set(Array.isArray(cached.loadedShards) ? cached.loadedShards.map(Number) : []);
+    const meta = await comBancoDePrecos('readonly', loja => loja.get(CACHE_PRECOS_META));
+    if (Number(meta?.status?.schemaVersion) === 4 && meta?.index?.cards) {
+      centralPriceStatus = meta.status;
+      centralPriceData = { meta: meta.status, prices: {}, variantCatalog: {} };
+      centralPriceCards = {};
+      centralPriceIndex = meta.index;
+      centralPriceLoadedShards = new Set();
+    } else {
+      // Cache no formato antigo: apagado SEM ler. Ler era justamente o que
+      // estourava a memória.
+      await comBancoDePrecos('readwrite', loja => loja.delete(CENTRAL_PRICE_DB_KEY));
     }
   } catch (_) {}
   return centralPriceData;
 }
 
-async function saveCentralPriceCache(payload = centralCachePayload()) {
-  const db = await openCentralPriceDatabase();
-  await new Promise((resolve, reject) => {
-    const tx = db.transaction(CENTRAL_PRICE_DB_STORE, 'readwrite');
-    tx.objectStore(CENTRAL_PRICE_DB_STORE).put(payload, CENTRAL_PRICE_DB_KEY);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-  db.close();
+async function salvarMetaDosPrecos() {
+  try {
+    await comBancoDePrecos('readwrite', loja => loja.put({
+      status: centralPriceStatus || centralPriceData.meta || {},
+      index: centralPriceIndex,
+      salvoEm: Date.now(),
+    }, CACHE_PRECOS_META));
+  } catch (_) { /* sem espaço: segue só na memória */ }
+}
+
+/* Textos que se repetem aos milhares ("exact", "cardmarket", "pt-br",
+   "holofoil"...) viram uma cópia só na memória. */
+const textosDoBanco = new Map();
+function textoUnico(texto) {
+  const valor = String(texto ?? '');
+  const existente = textosDoBanco.get(valor);
+  if (existente !== undefined) return existente;
+  textosDoBanco.set(valor, valor);
+  return valor;
+}
+
+/* Um preço do banco, só com o que o app usa. O original traz nome, coleção,
+   ilustrador e a lista de todas as fontes (≈1 KB por preço); aqui ficam o
+   preço, a confiança, o mercado usado e os valores dele — o mesmo resultado,
+   inclusive a mesma impressão digital das validações já feitas. */
+function precoCompacto(bruto) {
+  const preco = Number(bruto?.priceBrl);
+  if (!Number.isFinite(preco) || preco <= 0) return null;
+  const fontes = Array.isArray(bruto.sources) ? bruto.sources : [];
+  const publicado = String(bruto.priceMarket || '').trim();
+  const provedores = new Set(fontes.map(item => providerFromSourceId(item.source)).filter(Boolean));
+  const mercado = publicado || (provedores.size > 1 ? priorityMarketValues(fontes).provider : [...provedores][0] || '');
+  const valores = (mercado ? fontes.filter(item => providerFromSourceId(item.source) === mercado) : fontes)
+    .map(item => Number(item?.valueBrl))
+    .filter(valor => Number.isFinite(valor) && valor > 0);
+  // Banco antigo, sem o mercado publicado: a conta que o app fazia na hora.
+  const recalcular = !publicado && provedores.size > 1 && valores.length > 0;
+  return {
+    p: recalcular ? Math.round((valores.reduce((soma, valor) => soma + valor, 0) / valores.length) * 100) / 100 : preco,
+    c: Math.max(0, Math.min(100, Number(bruto.confidence) || 0)),
+    x: bruto.matchLevel === 'exact' ? 1 : 0,
+    k: textoUnico(mercado),
+    u: String(bruto.updatedAt || ''),
+    v: valores,
+    t: fontes.length,
+  };
+}
+
+function loteCompacto(payload, geracao) {
+  const precos = {};
+  const cartas = {};
+  for (const [chave, bruto] of Object.entries(payload.prices || {})) {
+    const compacto = precoCompacto(bruto);
+    if (!compacto) continue;
+    precos[chave] = compacto;
+    const cardId = chave.split('::', 1)[0];
+    if (!cartas[cardId]) {
+      cartas[cardId] = [textoUnico(bruto.setId || ''), textoUnico(bruto.setName || ''), String(bruto.number || ''), String(bruto.setTotal || ''), textoUnico(bruto.rarity || '')];
+    }
+  }
+  const versoes = {};
+  for (const [cardId, lista] of Object.entries(payload.variantCatalog || {})) {
+    if (!Array.isArray(lista)) continue;
+    versoes[cardId] = lista.map(item => [
+      textoUnico(item?.language || ''), textoUnico(item?.value || ''), item?.priced ? 1 : 0,
+      textoUnico((item?.sources || []).join('+')), textoUnico((item?.kinds || []).join('+')),
+    ]);
+  }
+  return { geracao: geracao || '', catalogHash: payload.meta?.catalogHash || '', precos, cartas, versoes };
+}
+
+// O que veio do aparelho chega com cópias novas dos textos: junta de novo.
+function reunirTextosDoLote(lote) {
+  for (const preco of Object.values(lote.precos || {})) preco.k = textoUnico(preco.k);
+  for (const carta of Object.values(lote.cartas || {})) { carta[0] = textoUnico(carta[0]); carta[1] = textoUnico(carta[1]); carta[4] = textoUnico(carta[4]); }
+  for (const lista of Object.values(lote.versoes || {})) {
+    for (const item of lista) { item[0] = textoUnico(item[0]); item[1] = textoUnico(item[1]); item[3] = textoUnico(item[3]); item[4] = textoUnico(item[4]); }
+  }
+  return lote;
+}
+
+function cardIdsDoLote(indice) {
+  return new Set(Object.entries(centralPriceIndex?.cards || {}).filter(([, valor]) => Number(valor) === indice).map(([id]) => id));
+}
+
+function aplicarLoteDePrecos(indice, lote, substituir = false) {
+  if (substituir) {
+    const ids = cardIdsDoLote(indice);
+    for (const chave of Object.keys(centralPriceData.prices)) if (ids.has(chave.split('::', 1)[0])) delete centralPriceData.prices[chave];
+    for (const id of ids) { delete centralPriceData.variantCatalog[id]; delete centralPriceCards[id]; }
+  }
+  Object.assign(centralPriceData.prices, lote.precos);
+  Object.assign(centralPriceData.variantCatalog, lote.versoes);
+  Object.assign(centralPriceCards, lote.cartas);
+  centralPriceLoadedShards.add(indice);
+  /* O resumo da coleção fica guardado e só é refeito quando o ESTADO muda.
+     Só que baixar preço não muda estado nenhum: o valor total continuava sendo
+     o que foi calculado antes de os preços existirem — normalmente baixo
+     demais, às vezes zero. Chegou preço novo, o resumo precisa ser refeito. */
+  collectionSummaryCache = { revision: -1, value: null };
 }
 
 function centralPriceGeneratedAt() {
@@ -1369,7 +1488,7 @@ function stampedCounterpartsFor(cardId) {
 
 function centralPriceKeyExists(key) {
   const match = centralPriceData?.prices?.[key];
-  return Boolean(match && hasFiniteNumber(match.priceBrl) && Number(match.priceBrl) > 0);
+  return Boolean(match && hasFiniteNumber(match.p) && Number(match.p) > 0);
 }
 
 // Resolve a chave `cardId::idioma::variantEnum` que realmente existe no banco,
@@ -1429,33 +1548,22 @@ function centralPriceQuote(cardId, variant = 'normal') {
   const compatibility = centralPriceCompatibility(cardId, variant);
   if (!compatibility) return null;
   const match = prices[compatibility.key];
-  if (!match || !hasFiniteNumber(match.priceBrl) || Number(match.priceBrl) <= 0) return null;
+  if (!match || !hasFiniteNumber(match.p) || Number(match.p) <= 0) return null;
 
-  const sources = Array.isArray(match.sources) ? match.sources : [];
-  const confidenceNumber = Math.max(0, Math.min(100, Number(match.confidence) || 0));
+  /* O preço já vem compacto (precoCompacto): o mercado usado — um só, na
+     ordem de preferência TCGplayer, TCGdex, Cardmarket — e os valores dele já
+     separados. Misturar os três numa média única esconderia de onde veio o
+     número. Quem calcula o preço é o banco; com banco antigo, a conta pela
+     prioridade já foi refeita ao compactar. */
+  const sourceValues = Array.isArray(match.v) ? match.v : [];
+  const totalSources = Number(match.t) || sourceValues.length;
+  const confidenceNumber = Math.max(0, Math.min(100, Number(match.c) || 0));
   const reasons = [...compatibility.reasons];
-  const verified = compatibility.exact && match.matchLevel === 'exact';
+  const verified = compatibility.exact && Boolean(match.x);
   const identity = compatibility.identity;
-  // Um mercado só, na ordem de preferência: TCGplayer, TCGdex, Cardmarket.
-  // Misturar os três numa média única esconde de onde veio o número e mistura
-  // mercados com liquidez muito diferente.
-  const providers = new Set(sources.map(item => providerFromSourceId(item.source)).filter(Boolean));
-  // Banco novo já publica o mercado que usou; banco antigo não tem esse campo.
-  const publishedMarket = String(match.priceMarket || '').trim();
-  const usedMarket = publishedMarket || (providers.size > 1 ? priorityMarketValues(sources).provider : [...providers][0] || '');
-  const sourceValues = (usedMarket ? sources.filter(item => providerFromSourceId(item.source) === usedMarket) : sources)
-    .map(item => Number(item?.valueBrl))
-    .filter(value => Number.isFinite(value) && value > 0);
-
-  // Quem calcula o preço é o banco: `priceBrl` é a resposta oficial. O app só
-  // refaz a conta no caso em que o banco publicado ainda é antigo E a lista
-  // mistura mais de um mercado — aí a prioridade muda o número e vale a pena
-  // aplicá-la já, sem esperar a próxima reconstrução. Com um mercado só, a
-  // prioridade não altera nada e o valor publicado fica como está.
-  const recalcular = !publishedMarket && providers.size > 1 && sourceValues.length > 0;
-  const basePriceBrl = recalcular
-    ? Math.round((sourceValues.reduce((sum, value) => sum + value, 0) / sourceValues.length) * 100) / 100
-    : Number(match.priceBrl);
+  const usedMarket = match.k || '';
+  const basePriceBrl = Number(match.p);
+  const infoDaCarta = centralPriceCards[cardId] || [];
   if (usedMarket) {
     reasons.push(`Valor do ${PRICE_SOURCE_LABELS[usedMarket] || usedMarket} (${sourceValues.length} referência(s)) — mercado de maior prioridade com preço para esta versão.`);
   }
@@ -1472,14 +1580,14 @@ function centralPriceQuote(cardId, variant = 'normal') {
     label: 'Price Database',
     source: 'preco-brasil',
     provider: 'Pokémon Price Database Brasil',
-    fetchedAt: new Date(match.updatedAt || centralPriceGeneratedAt() || Date.now()).getTime(),
+    fetchedAt: new Date(match.u || centralPriceGeneratedAt() || Date.now()).getTime(),
     confidence: verified ? 'verified' : 'review',
     confidencePercent: confidenceNumber,
     verified,
     usable: verified,
     // O multiplicador entra na impressão digital: mudar a tabela de condição
     // invalida as confirmações manuais feitas sobre o valor anterior.
-    fingerprint: ['preco-brasil', compatibility.key, basePriceBrl, usedMarket, compatibility.conditionMultiplier, match.updatedAt || centralPriceGeneratedAt() || ''].join('|'),
+    fingerprint: ['preco-brasil', compatibility.key, basePriceBrl, usedMarket, compatibility.conditionMultiplier, match.u || centralPriceGeneratedAt() || ''].join('|'),
     priceLanguage: compatibility.language,
     requestedLanguage: compatibility.requestedLanguage,
     fallbackLanguage: compatibility.fallbackLanguage,
@@ -1489,21 +1597,21 @@ function centralPriceQuote(cardId, variant = 'normal') {
         `cardId ${cardId}`,
         // Identidade exata publicada pelo banco: coleção + número local +
         // total impresso ("015/094"), para conferir que é mesmo esta carta.
-        match.setId ? `set ${match.setId}${match.setName ? ` (${match.setName})` : ''}` : '',
-        match.number ? `nº ${formatCardNumber(match.number, match.setTotal)}` : '',
-        match.rarity ? `raridade ${match.rarity}` : '',
+        infoDaCarta[0] ? `set ${infoDaCarta[0]}${infoDaCarta[1] ? ` (${infoDaCarta[1]})` : ''}` : '',
+        infoDaCarta[2] ? `nº ${formatCardNumber(infoDaCarta[2], infoDaCarta[3])}` : '',
+        infoDaCarta[4] ? `raridade ${infoDaCarta[4]}` : '',
         compatibility.fallbackLanguage
           ? `language ${compatibility.requestedLanguage} → ${compatibility.language} (${PRICE_MARKET_LABELS[compatibility.language] || compatibility.language})`
           : `language ${compatibility.language}`,
         `variantEnum ${compatibility.variantEnum}`,
         usedMarket
-          ? `mercado ${PRICE_SOURCE_LABELS[usedMarket] || usedMarket} · ${sourceValues.length} de ${sources.length} valor(es)`
-          : `${sources.length} valor(es) de fonte`,
+          ? `mercado ${PRICE_SOURCE_LABELS[usedMarket] || usedMarket} · ${sourceValues.length} de ${totalSources} valor(es)`
+          : `${totalSources} valor(es) de fonte`,
       ].filter(Boolean),
     },
     priceMarket: usedMarket,
     priceMarketLabel: PRICE_SOURCE_LABELS[usedMarket] || usedMarket,
-    sources,
+    sources: [],
     // As referências acompanham o mesmo ajuste de condição do preço exibido.
     low: Math.round((sourceValues.length ? Math.min(...sourceValues) : basePriceBrl) * compatibility.conditionMultiplier * 100) / 100,
     high: Math.round((sourceValues.length ? Math.max(...sourceValues) : basePriceBrl) * compatibility.conditionMultiplier * 100) / 100,
@@ -1559,36 +1667,56 @@ function adiantarLotesDaLista(listaDeCartas) {
   }
 }
 
+// Um lote por vez: abrir dois de 6,7 MB ao mesmo tempo era pedir para faltar
+// memória. E o mesmo lote pedido duas vezes espera a primeira carga.
+const lotesCarregando = new Map();
+let filaDeLotes = Promise.resolve();
+
 async function ensureCentralPriceShard(cardId, force = false) {
   const shardIndex = Number(centralPriceIndex?.cards?.[cardId]);
   if (!Number.isInteger(shardIndex) || shardIndex < 0) throw new Error(`Carta ${cardId} não encontrada no índice do Price Database.`);
   if (!force && centralPriceLoadedShards.has(shardIndex)) return false;
-
-  const payload = await fetchJsonWithTimeout(`${CENTRAL_PRICE_SHARD_BASE}/${centralShardFileName(shardIndex)}?t=${Date.now()}`, 60000);
-  if (!payload?.prices || !payload?.variantCatalog || Number(payload?.meta?.schemaVersion) !== 4 || payload.meta?.format !== 'price-shard-v2') {
-    throw new Error('Shard de preços dinâmicos inválido.');
+  if (!force && lotesCarregando.has(shardIndex)) return lotesCarregando.get(shardIndex);
+  const tarefa = filaDeLotes.then(() => carregarLoteDePrecos(shardIndex, force));
+  filaDeLotes = tarefa.catch(() => {});
+  lotesCarregando.set(shardIndex, tarefa);
+  try {
+    return await tarefa;
+  } finally {
+    lotesCarregando.delete(shardIndex);
   }
-  if (centralPriceStatus?.catalogHash && payload.meta?.catalogHash !== centralPriceStatus.catalogHash) throw new Error('Shard pertence a outra versão do catálogo.');
+}
 
-  centralPriceData.prices = centralPriceData.prices || {};
-  centralPriceData.variantCatalog = centralPriceData.variantCatalog || {};
-  if (force && centralPriceLoadedShards.has(shardIndex)) {
-    const shardCardIds = new Set(Object.entries(centralPriceIndex.cards || {}).filter(([, value]) => Number(value) === shardIndex).map(([id]) => id));
-    for (const key of Object.keys(centralPriceData.prices)) {
-      if (shardCardIds.has(key.split('::', 1)[0])) delete centralPriceData.prices[key];
+async function carregarLoteDePrecos(indice, force) {
+  if (!force && centralPriceLoadedShards.has(indice)) return false;
+  const geracao = String(centralPriceStatus?.generatedAt || '');
+  // 1. Do aparelho, se é da geração atual do banco.
+  let guardado = null;
+  try { guardado = await comBancoDePrecos('readonly', loja => loja.get(CACHE_PRECOS_LOTE(indice))); } catch (_) { guardado = null; }
+  if (!force && guardado?.precos && (!geracao || guardado.geracao === geracao)) {
+    aplicarLoteDePrecos(indice, reunirTextosDoLote(guardado));
+    return true;
+  }
+  // 2. Da internet — e grava só este lote.
+  try {
+    const payload = await fetchJsonWithTimeout(`${CENTRAL_PRICE_SHARD_BASE}/${centralShardFileName(indice)}?t=${Date.now()}`, 60000);
+    if (!payload?.prices || !payload?.variantCatalog || Number(payload?.meta?.schemaVersion) !== 4 || payload.meta?.format !== 'price-shard-v2') {
+      throw new Error('Shard de preços dinâmicos inválido.');
     }
-    for (const id of shardCardIds) delete centralPriceData.variantCatalog[id];
+    if (centralPriceStatus?.catalogHash && payload.meta?.catalogHash !== centralPriceStatus.catalogHash) throw new Error('Shard pertence a outra versão do catálogo.');
+    const lote = loteCompacto(payload, geracao);
+    guardado = null;
+    aplicarLoteDePrecos(indice, lote, force && centralPriceLoadedShards.has(indice));
+    try { await comBancoDePrecos('readwrite', loja => loja.put(lote, CACHE_PRECOS_LOTE(indice))); } catch (_) { /* sem espaço: fica só na memória */ }
+    return true;
+  } catch (erro) {
+    // 3. Sem internet: o lote de ontem vale mais do que nenhum.
+    if (guardado?.precos && !centralPriceLoadedShards.has(indice)) {
+      aplicarLoteDePrecos(indice, reunirTextosDoLote(guardado));
+      return true;
+    }
+    throw erro;
   }
-  Object.assign(centralPriceData.prices, payload.prices);
-  Object.assign(centralPriceData.variantCatalog, payload.variantCatalog);
-  centralPriceLoadedShards.add(shardIndex);
-  /* O resumo da coleção fica guardado e só é refeito quando o ESTADO muda.
-     Só que baixar preço não muda estado nenhum: o valor total continuava sendo
-     o que foi calculado antes de os preços existirem — normalmente baixo
-     demais, às vezes zero. Chegou preço novo, o resumo precisa ser refeito. */
-  collectionSummaryCache = { revision: -1, value: null };
-  await saveCentralPriceCache();
-  return true;
 }
 
 async function syncCentralPrices(force = false, silent = false) {
@@ -1613,13 +1741,16 @@ async function syncCentralPrices(force = false, silent = false) {
       if (indexPayload.meta?.catalogHash !== status.catalogHash) throw new Error('Índice e status do Price Database estão divergentes.');
       centralPriceIndex = indexPayload;
       if (changedCatalog || newer) {
+        // Os lotes guardados ficam no aparelho: são trocados um a um quando
+        // voltam a ser usados, e servem de reserva se faltar internet.
         centralPriceData = { meta: status, prices: {}, variantCatalog: {} };
+        centralPriceCards = {};
         centralPriceLoadedShards = new Set();
       }
     }
     centralPriceStatus = status;
     centralPriceData.meta = status;
-    await saveCentralPriceCache();
+    await salvarMetaDosPrecos();
     if (force && !silent) notify(`Price Database atualizado · ${Number(status.variantsPriced || 0).toLocaleString('pt-BR')} enums com preço.`);
     return true;
   } catch (error) {
@@ -2528,7 +2659,7 @@ function updateCardRowInPlace(cardId) {
   // 'trade' também: vender uma cópia precisa tirar a linha da lista na hora.
   // Ordenado por quantidade ou por data de adição, a carta muda de lugar. No
   // fichário, o cabeçalho da página ("5/9") também precisa refazer a conta.
-  if (['owned', 'missing', 'repeated', 'trade'].includes(filter) || ui.cardSort === 'quantity' || ui.cardSort === 'recent' || ui.cardLayout === 'fichario') {
+  if (['owned', 'missing', 'repeated', 'trade'].includes(filter) || ui.cardSort === 'quantity' || ui.cardSort === 'recent') {
     refreshSearchResults('cardQuery', true);
     return true;
   }
@@ -3186,6 +3317,19 @@ async function startOwnedPriceUpdate() {
   setPriceUpdateProgress('Sincronizando o Pokémon Price Database...', 0, Math.max(1, targets.length));
 
   const synced = await syncCentralPrices(true, true);
+  // Os lotes que as cartas da coleção usam, um por vez — do aparelho quando
+  // já estão lá, da internet quando o banco mudou.
+  const lotes = new Map();
+  for (const item of targets) {
+    const indice = Number(centralPriceIndex?.cards?.[item.cardId]);
+    if (Number.isInteger(indice) && indice >= 0 && !centralPriceLoadedShards.has(indice) && !lotes.has(indice)) lotes.set(indice, item.cardId);
+  }
+  let lotesFeitos = 0;
+  for (const cardId of lotes.values()) {
+    setPriceUpdateProgress(`Carregando preços: lote ${lotesFeitos + 1} de ${lotes.size}`, lotesFeitos, lotes.size);
+    try { await ensureCentralPriceShard(cardId); } catch (_) { /* sem internet: fica o preço que já estava */ }
+    lotesFeitos += 1;
+  }
   let verified = 0;
   let review = 0;
   let missing = 0;
@@ -3292,10 +3436,15 @@ function renderDashboard() {
       </button>
 
       <div class="section-heading"><h3 class="section-title">Sua coleção</h3><button onclick="setTab('cards')">Ver todos</button></div>
+      <!-- Os números da coleção. O total ficava no cabeçalho antigo, que o
+           visual atual não mostra: quem cadastrou mil cartas perdeu a conta. -->
       <div class="collection-summary-grid">
-        <button onclick="ui.cardFilter='owned';setTab('cards')"><span>${tabIcon('cards')}</span><strong>${summary.uniqueOwned}</strong><small>Cartas</small></button>
-        <button onclick="ui.cardFilter='owned';setTab('cards')"><span>${tabIcon('collections')}</span><strong>${ownedVariants}</strong><small>Versões</small></button>
-        <button onclick="ui.cardFilter='owned';setTab('cards')"><span>${tabIcon('pokedex')}</span><strong>${specialCopies}</strong><small>Especiais</small></button>
+        <button onclick="ui.cardFilter='owned';setTab('cards')"><span>${tabIcon('cards')}</span><strong>${summary.totalCopies.toLocaleString('pt-BR')}</strong><small>Total de cartas</small></button>
+        <button onclick="ui.cardFilter='owned';setTab('cards')"><span>${tabIcon('collections')}</span><strong>${summary.uniqueOwned.toLocaleString('pt-BR')}</strong><small>Únicas</small></button>
+        <button onclick="ui.cardFilter='repeated';setTab('cards')"><span>${tabIcon('repeated')}</span><strong>${summary.repeated.toLocaleString('pt-BR')}</strong><small>Repetidas</small></button>
+        <button onclick="ui.cardFilter='owned';setTab('cards')"><span>${tabIcon('collections')}</span><strong>${ownedVariants.toLocaleString('pt-BR')}</strong><small>Versões</small></button>
+        <button onclick="ui.cardFilter='owned';setTab('cards')"><span>${tabIcon('pokedex')}</span><strong>${specialCopies.toLocaleString('pt-BR')}</strong><small>Especiais</small></button>
+        <button onclick="setTab('wishlist')"><span>${tabIcon('wishlist')}</span><strong>${summary.wishlist.toLocaleString('pt-BR')}</strong><small>Quero</small></button>
       </div>
       ${ultimasAdicionadasPanel()}
       ${graficoDeValor()}
@@ -3437,14 +3586,21 @@ function graficoDeValor() {
   const L = 1000;
   const A = 260;
   const margem = 26;
+  const margemLateral = 14;   // o ponto final não fica cortado na borda
 
-  const coordenadas = pontos.map((item, indice) => {
-    const x = pontos.length === 1 ? L / 2 : (indice / (pontos.length - 1)) * L;
-    const y = A - margem - ((Number(item.valor) - menor) / faixa) * (A - margem * 2);
-    return [x, y];
+  /* A altura de cada ponto usa o MESMO valor da escala. Antes ela usava
+     sempre o valor com duplicadas, enquanto a escala seguia a opção "Só a
+     coleção": numa coleção com muitas repetidas, a linha passava do topo e
+     saía da área do gráfico. */
+  const coordenadas = valores.map((valor, indice) => {
+    const x = valores.length === 1 ? L / 2 : margemLateral + (indice / (valores.length - 1)) * (L - margemLateral * 2);
+    const y = A - margem - ((valor - menor) / faixa) * (A - margem * 2);
+    return [x, Math.min(A - margem, Math.max(margem, y))];
   });
   const linha = coordenadas.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
-  const area = `${linha} L${L} ${A} L0 ${A} Z`;
+  const [inicioX] = coordenadas[0];
+  const [fimX, fimY] = coordenadas[coordenadas.length - 1];
+  const area = `${linha} L${fimX.toFixed(1)} ${A} L${inicioX.toFixed(1)} ${A} Z`;
 
   const primeiro = valores[0];
   const ultimo = valores[valores.length - 1];
@@ -3464,7 +3620,9 @@ function graficoDeValor() {
         role="img" aria-label="Valor da coleção de ${esc(rotuloCurtoDeDia(pontos[0].dia))} a ${esc(rotuloCurtoDeDia(pontos[pontos.length-1].dia))}">
         <path class="valor-area" d="${area}"></path>
         <path class="valor-linha" d="${linha}"></path>
-        <circle class="valor-ponta" cx="${coordenadas[coordenadas.length-1][0].toFixed(1)}" cy="${coordenadas[coordenadas.length-1][1].toFixed(1)}" r="9"></circle>
+        <!-- Ponto final: um traço de comprimento zero com ponta redonda fica
+             sempre redondo; um círculo esticava junto com o gráfico. -->
+        <path class="valor-ponta" d="M${fimX.toFixed(1)} ${fimY.toFixed(1)} l0.01 0"></path>
       </svg>
       <div class="valor-eixo">
         <span>${esc(rotuloCurtoDeDia(pontos[0].dia))} · ${esc(money(primeiro))}</span>
@@ -4914,14 +5072,21 @@ function filteredCardsForUi() {
   if (cardResultCache.key === key && cardResultCache.revision === stateRevision && cardResultCache.value) {
     result = cardResultCache.value;
   } else {
-    result = cardsForCurrentFilter(filter);
-    if (filter === 'missing') result = result.filter(card => quantityFor(card.id) <= 0);
-    if (query) result = result.filter(card => (cardSearchIndex.get(card.id) || '').includes(query));
-    if (artista !== 'all') result = result.filter(card => cardArtistKey.get(card.id) === artista);
-    const cacheKey = `${ui.cardSet}|${filter}|${query || '-'}|${artista}`;
-    result = (!query && (filter === 'all' || filter === 'missing'))
-      ? cachedStaticSort(result, ui.cardSort, cacheKey)
-      : result.slice().sort(cardSorter(ui.cardSort));
+    if (!query && (filter === 'all' || filter === 'missing')) {
+      /* Ordenar o catálogo inteiro (13 mil cartas) é caro, e essa ordem não
+         muda com a coleção: fica guardada. "Faltantes" é filtrado DEPOIS, na
+         hora. Antes a lista já filtrada é que ficava guardada — e a carta
+         recém-cadastrada continuava aparecendo em "Faltantes" até o app
+         fechar. */
+      result = cachedStaticSort(cardsForCurrentFilter('all'), ui.cardSort, `${ui.cardSet}|all`);
+      if (artista !== 'all') result = result.filter(card => cardArtistKey.get(card.id) === artista);
+      if (filter === 'missing') result = result.filter(card => quantityFor(card.id) <= 0);
+    } else {
+      result = cardsForCurrentFilter(filter);
+      if (query) result = result.filter(card => (cardSearchIndex.get(card.id) || '').includes(query));
+      if (artista !== 'all') result = result.filter(card => cardArtistKey.get(card.id) === artista);
+      result = result.slice().sort(cardSorter(ui.cardSort));
+    }
     cardResultCache = { key, revision: stateRevision, value: result };
   }
 
@@ -5036,17 +5201,10 @@ function renderCardSearchResults() {
   return `
     <div class="card-results-bar">
       <p class="card-results-count">${result.length.toLocaleString('pt-BR')} ${result.length === 1 ? 'carta encontrada' : 'cartas encontradas'}</p>
-      ${seletorDeLayout(true)}
+      ${seletorDeLayout()}
     </div>
-    <div class="${classeDeLayout(true)}">${!visible.length ? emptyCards()
-      : ui.cardLayout === 'fichario' ? renderPaginasDeFichario(visible, result.length)
-      : visible.map(renderCardRow).join('')}</div>
-    ${visible.length < result.length ? `<button class="load-more" onclick="ui.cardLimit+=60;refreshSearchResults('cardQuery', true)">${ui.cardLayout === 'fichario'
-      ? (() => {
-          const paginas = Math.ceil((Math.min(result.length, Math.ceil((ui.cardLimit + 60) / 9) * 9) - visible.length) / 9);
-          return `Mostrar mais ${paginas} ${paginas === 1 ? 'página' : 'páginas'}`;
-        })()
-      : `Mostrar mais ${Math.min(60, result.length-visible.length)}`}</button>` : ''}`;
+    <div class="${classeDeLayout()}">${!visible.length ? emptyCards() : visible.map(renderCardRow).join('')}</div>
+    ${visible.length < result.length ? `<button class="load-more" onclick="ui.cardLimit+=60;refreshSearchResults('cardQuery', true)">Mostrar mais ${Math.min(60, result.length-visible.length)}</button>` : ''}`;
 }
 
 function renderCards() {
@@ -5406,70 +5564,31 @@ const ICONES_DE_LAYOUT = {
   lista: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="4" height="5" rx="1"/><path d="M10 6.5h11"/><rect x="3" y="15" width="4" height="5" rx="1"/><path d="M10 17.5h11"/></svg>',
   'grade-2': '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7.5" height="17" rx="1.6"/><rect x="13" y="3.5" width="7.5" height="17" rx="1.6"/></svg>',
   'grade-3': '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="4.5" width="5.2" height="15" rx="1.2"/><rect x="9.4" y="4.5" width="5.2" height="15" rx="1.2"/><rect x="16.3" y="4.5" width="5.2" height="15" rx="1.2"/></svg>',
-  // Uma página de fichário: 3×3 bolsos.
-  fichario: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="2.5" width="17" height="19" rx="2"/><path d="M9.2 2.5v19M14.8 2.5v19M3.5 8.8h17M3.5 15.2h17"/></svg>',
 };
-const ROTULOS_DE_LAYOUT = { lista: 'Lista', 'grade-2': 'Grade de 2 colunas', 'grade-3': 'Grade de 3 colunas', fichario: 'Páginas de fichário (3×3)' };
+const ROTULOS_DE_LAYOUT = { lista: 'Lista', 'grade-2': 'Grade de 2 colunas', 'grade-3': 'Grade de 3 colunas' };
 
-/* As páginas de fichário só fazem sentido na lista principal de cartas. Em
-   Trocar/Vender (uma linha por versão) e na tela do Pokémon (blocos por
-   forma), quem escolheu fichário vê a grade de 3, que é o mais parecido. */
-function layoutEfetivo(permiteFichario) {
-  return ui.cardLayout === 'fichario' && !permiteFichario ? 'grade-3' : ui.cardLayout;
-}
-
-function seletorDeLayout(permiteFichario = false) {
-  const atual = layoutEfetivo(permiteFichario);
-  const opcoes = permiteFichario ? CARD_LAYOUTS : CARD_LAYOUTS.filter(valor => valor !== 'fichario');
-  return `<div class="layout-cartas" role="group" aria-label="Exibição das cartas">${opcoes.map(valor => `
+function seletorDeLayout() {
+  const atual = ui.cardLayout;
+  return `<div class="layout-cartas" role="group" aria-label="Exibição das cartas">${CARD_LAYOUTS.map(valor => `
     <button type="button" data-layout="${valor}" class="${atual === valor ? 'ativo' : ''}" aria-pressed="${atual === valor}"
       aria-label="${ROTULOS_DE_LAYOUT[valor]}" title="${ROTULOS_DE_LAYOUT[valor]}" onclick="definirLayoutDeCartas('${valor}')">${ICONES_DE_LAYOUT[valor]}</button>`).join('')}
   </div>`;
 }
 
-function classeDeLayout(permiteFichario = false) {
-  return `card-list layout-${layoutEfetivo(permiteFichario)}`;
+function classeDeLayout() {
+  return `card-list layout-${ui.cardLayout}`;
 }
 
-// No fichário, a lista anda de página em página: sempre múltiplos de 9.
 function limiteDeCartasVisiveis() {
-  return ui.cardLayout === 'fichario' ? Math.ceil(ui.cardLimit / 9) * 9 : ui.cardLimit;
-}
-
-/* Páginas de 9 bolsos, como um fichário de verdade. Cada página diz quantos
-   bolsos já estão preenchidos; a última, se sobrar espaço, completa com
-   bolsos vazios. */
-function renderPaginasDeFichario(visiveis, total) {
-  const paginas = [];
-  for (let inicio = 0; inicio < visiveis.length; inicio += 9) {
-    const cartas = visiveis.slice(inicio, inicio + 9);
-    const preenchidos = cartas.filter(card => quantityFor(card.id) > 0).length;
-    const ultimaDaLista = inicio + 9 >= total;
-    const vazios = ultimaDaLista ? 9 - cartas.length : 0;
-    paginas.push(`<section class="pagina-fichario${preenchidos === cartas.length ? ' completa' : ''}">
-      <header>
-        <strong>Página ${inicio / 9 + 1}</strong>
-        <small>${inicio + 1}–${inicio + cartas.length} de ${total.toLocaleString('pt-BR')}</small>
-        <span class="pagina-preenchida">${preenchidos === cartas.length ? '✓ completa' : `${preenchidos}/${cartas.length}`}</span>
-      </header>
-      <div class="bolsos">${cartas.map(renderCardRow).join('')}${'<div class="bolso-vazio" aria-hidden="true"></div>'.repeat(vazios)}</div>
-    </section>`);
-  }
-  return paginas.join('');
+  return ui.cardLimit;
 }
 
 function definirLayoutDeCartas(valor) {
   if (!CARD_LAYOUTS.includes(valor)) return;
-  const anterior = ui.cardLayout;
   ui.cardLayout = valor;
   try { localStorage.setItem(CARD_LAYOUT_KEY, valor); } catch (_) {}
-  // Entrar ou sair do fichário muda o desenho (páginas de 9): redesenha.
-  if ((valor === 'fichario' || anterior === 'fichario') && document.getElementById('cardSearchResults')) {
-    refreshSearchResults('cardQuery', true);
-    return;
-  }
-  // Nos outros casos só troca a classe e o botão aceso: a lista é a mesma, e
-  // redesenhar tudo jogaria fora as imagens que já carregaram.
+  // Só troca a classe e o botão aceso: a lista é a mesma, e redesenhar tudo
+  // jogaria fora as imagens que já carregaram.
   document.querySelectorAll('.card-list').forEach(lista => {
     for (const item of CARD_LAYOUTS) lista.classList.remove(`layout-${item}`);
     lista.classList.add(`layout-${valor}`);
@@ -5630,7 +5749,7 @@ function descartarSessaoGuardada() {
 // Duas leituras iguais viram uma linha só com quantidade 2 — como no balcão
 // de loja, onde três cópias da mesma carta são "3x", não três linhas.
 function assinaturaLeitura(linha) {
-  return [linha.cardId, linha.pricingVariant, linha.finish, linha.language, linha.condition, linha.edition, linha.distribution].join('|');
+  return [linha.cardId, linha.pricingVariant, linha.finish, linha.language, linha.condition, linha.edition, linha.distribution, linha.artVariant || 'standard'].join('|');
 }
 
 function registrarLeitura(cardId, opcoes = {}) {
@@ -5646,6 +5765,7 @@ function registrarLeitura(cardId, opcoes = {}) {
     condition: opcoes.condition || scannerSession.condition || 'Near Mint',
     edition: opcoes.edition || scannerSession.edition || 'unlimited',
     distribution: opcoes.distribution || scannerSession.distribution || 'unstamped',
+    artVariant: opcoes.artVariant || 'standard',
     lidoEm: Date.now(),
   };
   const pendentes = leiturasPendentes();
@@ -5676,7 +5796,7 @@ function mudarQuantidadeLeitura(linhaId, delta) {
    com ele salvo no aparelho e caía na câmera antiga, que travava a tela.
    Por isso o modo é forçado aqui, ignorando o que estiver guardado. */
 function scannerPreferences() {
-  const defaults = { language: 'pt-br', speed: 'normal', fps: 'balanced', setId: ui.cardSet !== 'all' ? ui.cardSet : 'all' };
+  const defaults = { language: 'pt-br', speed: 'normal', fps: 'balanced', setId: ui.cardSet !== 'all' ? ui.cardSet : 'all', acabamento: 'auto' };
   let salvas = {};
   try { salvas = JSON.parse(localStorage.getItem(SCANNER_PREFS_KEY) || '{}') || {}; } catch (_) {}
   delete salvas.mode;
@@ -5703,7 +5823,52 @@ function abrirConsultaDePreco() {
   startScannerSession('normal', scannerPreferences().setId, scannerPreferences(), { consulta: true });
 }
 
-/* Ajustes durante a leitura: idioma das cartas e coleção alvo. */
+/* ---------- Acabamento das próximas cartas ----------
+   A câmera não sabe dizer se a carta é holo, reverse ou comum: toda carta é
+   brilhante, o foil só aparece em certos ângulos e a diferença entre holo e
+   reverse é ONDE está o brilho. Adivinhar erraria em silêncio, no meio de um
+   monte. O que funciona é o que quem separa o bulk já faz: um monte por
+   acabamento. Com "Reverse" ligado, toda carta lida que existe em reverse já
+   vem marcada reverse; a que não existe cai no automático. */
+const ACABAMENTOS_DO_LOTE = [
+  ['auto', 'Automático', '✦'],
+  ['normal', 'Comum', '◻'],
+  ['holo', 'Holo', '✦'],
+  ['reverse', 'Reverse', '◧'],
+];
+
+function rotuloDoLote(valor) {
+  const [, rotulo, icone] = ACABAMENTOS_DO_LOTE.find(item => item[0] === valor) || ACABAMENTOS_DO_LOTE[0];
+  return `${icone} ${rotulo}`;
+}
+
+function guardarAcabamentoDoLote(valor) {
+  scannerSession.acabamentoLote = ACABAMENTOS_DO_LOTE.some(item => item[0] === valor) ? valor : 'auto';
+  try {
+    localStorage.setItem(SCANNER_PREFS_KEY, JSON.stringify({ ...scannerPreferences(), acabamento: scannerSession.acabamentoLote }));
+  } catch (_) {}
+}
+
+// O botão da câmera passa pelos quatro, em roda: um toque por troca de monte.
+function alternarAcabamentoDoLote() {
+  const ordem = ACABAMENTOS_DO_LOTE.map(item => item[0]);
+  const atual = scannerSession.acabamentoLote || 'auto';
+  guardarAcabamentoDoLote(ordem[(ordem.indexOf(atual) + 1) % ordem.length]);
+  const botao = document.getElementById('cameraLote');
+  if (botao) {
+    botao.innerHTML = botaoDoLote();
+    botao.classList.toggle('ligado', scannerSession.acabamentoLote !== 'auto');
+  }
+  avisarNaCamera(scannerSession.acabamentoLote === 'auto'
+    ? 'Próximas cartas: acabamento automático'
+    : `Próximas cartas: ${rotuloDoLote(scannerSession.acabamentoLote)} (quando a carta tiver)`);
+}
+
+function botaoDoLote() {
+  return `Acabamento: <b>${esc(rotuloDoLote(scannerSession.acabamentoLote || 'auto'))}</b>`;
+}
+
+/* Ajustes durante a leitura: idioma das cartas, acabamento e coleção alvo. */
 function abrirAjustesScanner() {
   pausarCamera();
   const prefs = scannerPreferences();
@@ -5715,6 +5880,14 @@ function abrirAjustesScanner() {
         <span>Idioma das cartas lidas</span>
         <select id="scannerAjusteIdioma" class="field">
           ${PRICE_LANGUAGES.map(value => option(value, PRICE_LANGUAGE_LABELS[value] || value, scannerSession.language || prefs.language)).join('')}
+        </select>
+      </label>
+      <label class="registration-field">
+        <span>Acabamento das próximas cartas</span>
+        <select id="scannerAjusteAcabamento" class="field">
+          ${ACABAMENTOS_DO_LOTE.map(([valor, rotulo]) => option(valor, valor === 'auto'
+            ? 'Automático — pela lista de versões da carta'
+            : `${rotulo} — para um monte só de ${rotulo.toLowerCase()}`, scannerSession.acabamentoLote || 'auto')).join('')}
         </select>
       </label>
       <label class="registration-field">
@@ -5736,15 +5909,17 @@ function abrirAjustesScanner() {
 function salvarAjustesScanner() {
   const idioma = document.getElementById('scannerAjusteIdioma')?.value || 'pt-br';
   const setId = document.getElementById('scannerAjusteSet')?.value || 'all';
+  const acabamento = document.getElementById('scannerAjusteAcabamento')?.value || 'auto';
   scannerSession.language = idioma;
   scannerSession.setId = setId;
   try {
     const prefs = { ...scannerPreferences(), language: idioma, setId };
     localStorage.setItem(SCANNER_PREFS_KEY, JSON.stringify(prefs));
   } catch (_) {}
+  guardarAcabamentoDoLote(acabamento);
   retomarCamera();
   telaCameraAoVivo();
-  avisarNaCamera(`Idioma: ${PRICE_LANGUAGE_LABELS[idioma] || idioma}`);
+  avisarNaCamera(`Idioma: ${PRICE_LANGUAGE_LABELS[idioma] || idioma} · Acabamento: ${rotuloDoLote(scannerSession.acabamentoLote)}`);
 }
 
 function startScannerSession(finish, setId = 'all', preferences = scannerPreferences(), opcoes = {}) {
@@ -5753,7 +5928,9 @@ function startScannerSession(finish, setId = 'all', preferences = scannerPrefere
   const guardada = lerSessaoGuardada();
   scannerSession = { active: true, pricingVariant: 'normal', finish, language: preferences.language || 'pt-br', condition: 'Near Mint', edition: 'unlimited', distribution: 'unstamped', artVariant: 'standard', region: 'Brasil', gradingCompany: 'Não graduada', grade: '', tags: [], manualVariationOverride: false, setId, mode: preferences.mode || 'continuous', speed: preferences.speed || 'normal', fps: preferences.fps || 'balanced', count: 0, lastIds: [], pendentes: guardada?.pendentes || [],
     // Consulta de preço: nada do que é lido vai para a lista de cadastro.
-    consulta: Boolean(opcoes.consulta), consultadas: [], voltarParaConsulta: false };
+    consulta: Boolean(opcoes.consulta), consultadas: [], voltarParaConsulta: false,
+    // Acabamento das próximas cartas (modo lote) e o que ajuda a leitura foil.
+    acabamentoLote: preferences.acabamento || 'auto', quantidadeAutomatica: true, linhasCriadas: [], leiturasRecentes: [] };
   scannerCandidateBuffer = [];
   closeModal();
   if (guardada?.pendentes?.length && !scannerSession.consulta) {
@@ -6283,28 +6460,103 @@ function avisarNaCamera(mensagem) {
   }, 2200);
 }
 
+/* Nome e numeração concordando: a única leitura que dispensa conferência. */
+function leituraCerteira(candidatos) {
+  return Boolean(candidatos?.length) && Number(candidatos[0].score) >= 999;
+}
+
+/* Junta o texto de quadros seguidos da mesma carta. O que cada quadro leu da
+   carta inteira vem primeiro, e as faixas ampliadas do rodapé vão juntas para
+   o fim, depois de um marcador só — é por ele que o reconhecimento separa a
+   numeração do resto do texto. */
+function juntarLeituras(textos) {
+  const marca = /\[(?:FAIXA INFERIOR AMPLIADA|NUMERO AMPLIADO|CANTO INFERIOR AMPLIADO)\]/i;
+  const corpos = [];
+  const rodapes = [];
+  for (const texto of textos) {
+    const partes = String(texto || '').split(marca);
+    corpos.push(partes[0]);
+    if (partes.length > 1) rodapes.push(partes.slice(1).join('\n'));
+  }
+  return rodapes.length
+    ? `${corpos.join('\n')}\n[FAIXA INFERIOR AMPLIADA]\n${rodapes.join('\n')}`
+    : corpos.join('\n');
+}
+
+// Leitura que falhou por pouco: a câmera tenta de novo sem esperar o intervalo.
+function pedirOutraLeituraLogo() {
+  try { window.Android?.lerDeNovoLogo?.(); } catch (_) {}
+}
+
+function reflexoRecente() {
+  return Date.now() - (scannerSession.reflexoEm || 0) < 4000;
+}
+
+/* O Android mede o reflexo da imagem. Carta foil ou reverse brilhando em
+   cima do nome ou do número não é lida até a pessoa inclinar a carta — então
+   o app diz isso, em vez de só "não reconheci". */
+window.receiveScannerGlare = function receiveScannerGlare() {
+  if (!scannerSession.active || !scannerSession.live) return;
+  scannerSession.reflexoEm = Date.now();
+  if (document.querySelector('#leituraPainel.aberto') || !document.getElementById('cameraDica')) return;
+  avisarNaCamera('✦ Reflexo forte — incline um pouco a carta');
+};
+
 window.receiveScannerText = function receiveScannerText(text, finish) {
   if (!scannerSession.active) return;
   scannerSession.finish = finish || scannerSession.finish;
-  scannerLastOcrText = String(text || '').trim();
+  const lido = String(text || '').trim();
+  scannerLastOcrText = lido;
 
+  /* Quadros seguidos se completam. Na carta foil o reflexo anda com a mão:
+     num quadro ele cobre o número, no seguinte cobre o nome — e nenhum dos
+     dois, sozinho, fecha a leitura. Quando o quadro atual não basta, ele é
+     lido junto com os dos últimos segundos. A junção só vale se nome e
+     numeração concordarem na mesma carta: é o que impede misturar duas
+     cartas diferentes que passaram na frente da lente. */
+  const agora = Date.now();
+  const recentes = (scannerSession.leiturasRecentes || []).filter(item => agora - item.em < 6000);
+  let texto = lido;
   /* Primeiro: isto é uma carta? A câmera lê a madeira da mesa como se fossem
      letras, e esse ruído chegava até o reconhecimento. */
-  const conferencia = pareceUmaCarta(text);
+  let conferencia = pareceUmaCarta(texto);
+  let candidates = conferencia.aceita ? scannerCandidates(texto) : [];
+  if (!leituraCerteira(candidates) && recentes.length) {
+    const junto = juntarLeituras([...recentes.map(item => item.texto), lido]);
+    const conferenciaJunta = pareceUmaCarta(junto);
+    const juntos = conferenciaJunta.aceita ? scannerCandidates(junto) : [];
+    if (leituraCerteira(juntos)) {
+      texto = junto;
+      conferencia = conferenciaJunta;
+      candidates = juntos;
+    }
+  }
+  scannerSession.leiturasRecentes = leituraCerteira(candidates) ? [] : [...recentes, { texto: lido, em: agora }].slice(-2);
+
   if (!conferencia.aceita) {
-    registrarRecusa(text, 'Não reconheci nenhuma marca de carta (nome, HP, numeração, rodapé).', conferencia);
-    if (scannerSession.live) return avisarNaCamera('Nenhuma carta na moldura');
+    registrarRecusa(texto, 'Não reconheci nenhuma marca de carta (nome, HP, numeração, rodapé).', conferencia);
+    if (scannerSession.live) {
+      // Com reflexo na imagem, a carta está lá: vale tentar de novo logo.
+      if (reflexoRecente()) {
+        pedirOutraLeituraLogo();
+        return avisarNaCamera('✦ Reflexo forte — incline um pouco a carta');
+      }
+      return avisarNaCamera('Nenhuma carta na moldura');
+    }
     return showScannerMessage('Nenhuma carta reconhecida na imagem.', true);
   }
 
-  const candidates = scannerCandidates(String(text || ''));
-
   if (!candidates.length) {
-    registrarRecusa(text, 'Vi que é uma carta, mas não achei ela no catálogo.', conferencia);
+    registrarRecusa(texto, 'Vi que é uma carta, mas não achei ela no catálogo.', conferencia);
     /* Com a câmera ao vivo, não dá para abrir um aviso em cima da tela: ele
        cobriria a imagem e os botões, e o caminho de volta reabria a câmera por
        cima dela mesma. Aqui a leitura falha em silêncio e a câmera continua. */
-    if (scannerSession.live) return avisarNaCamera('Não reconheci — aproxime e evite reflexo');
+    if (scannerSession.live) {
+      pedirOutraLeituraLogo();
+      return avisarNaCamera(reflexoRecente()
+        ? '✦ Reflexo forte — incline um pouco a carta'
+        : 'Não reconheci — aproxime e evite reflexo');
+    }
     return showScannerMessage('Aproxime a carta, evite reflexos e mantenha nome e numeração visíveis.', true);
   }
 
@@ -6317,14 +6569,20 @@ window.receiveScannerText = function receiveScannerText(text, finish) {
   }
 
   scannerCandidateBuffer = candidates;
-  // Cada carta lida começa do zero: a versão normal em 1, o resto zerado e a
-  // lista de versões recolhida de novo.
-  scannerSession.pricingVariant = 'normal';
-  scannerSession.quantidades = null;
-  scannerSession.verTodasVersoes = false;
+  // Cada carta lida começa do zero: a versão mais provável em 1, o resto
+  // zerado, sem variação montada e a lista de versões recolhida de novo.
+  comecarLeituraNova();
   showScannerPrimaryCandidate();
   loadScannerVariantAvailability(primeira);
 };
+
+function comecarLeituraNova() {
+  scannerSession.pricingVariant = 'normal';
+  scannerSession.quantidades = null;
+  scannerSession.quantidadeAutomatica = true;
+  scannerSession.linhasCriadas = [];
+  scannerSession.verTodasVersoes = false;
+}
 
 function languageFromMarketKey(value) { return PRICE_LANGUAGES.includes(value) ? value : ''; }
 function editionFromMarketKey(value) { return PRICE_PRINT_VARIATIONS.includes(value) ? value : ''; }
@@ -6409,6 +6667,7 @@ async function loadCardVariantAvailability(card) {
     const editions = ['unlimited'];
     const distributions = ['unstamped'];
     const sourceDetails = [];
+    const detalhadas = [];
     for (const result of localeResults) {
       const variants = result.detail?.variants || {};
       if (variants.normal !== false) finishes.push('normal');
@@ -6418,6 +6677,7 @@ async function loadCardVariantAvailability(card) {
       if (variants.wPromo === true) distributions.push('stamped');
       languages.push(result.language);
       sourceDetails.push(...sourceVariantEnumsFromTcgDexDetail(result.detail, result.language));
+      if (Array.isArray(result.detail?.variants_detailed)) detalhadas.push(...result.detail.variants_detailed);
     }
     const centralDetails = centralVariantEntries(card.id);
     const pricingVariantDetails = mergeSourceVariantDetails(centralDetails, sourceDetails);
@@ -6436,6 +6696,8 @@ async function loadCardVariantAvailability(card) {
       artVariants: ['standard'],
       pricingVariantDetails,
       pricingVariants: pricingVariantDetails.map(item => item.value),
+      // Carimbos, padrões de foil, edições e tamanhos que existem desta carta.
+      variacoesDetalhadas: variacoesDoTcgdex(detalhadas),
     });
   } catch (_) {
     const centralDetails = centralVariantEntries(card.id);
@@ -6525,6 +6787,8 @@ function telaCameraAoVivo() {
         ${pendentes.length ? `<div class="leitura-tiras">${tiras}</div>` : '<p class="camera-vazio">Nenhuma carta lida ainda.</p>'}
         <div class="camera-atalhos">
           <button class="camera-atalho" onclick="abrirBuscaManual()">⌨ Digitar carta</button>
+          <button class="camera-atalho camera-lote${(scannerSession.acabamentoLote || 'auto') === 'auto' ? '' : ' ligado'}" id="cameraLote"
+            onclick="alternarAcabamentoDoLote()" aria-label="Acabamento das próximas cartas">${botaoDoLote()}</button>
           <button class="camera-atalho" id="cameraDiagnostico" ${ultimaRecusa ? '' : 'hidden'} onclick="abrirDiagnosticoLeitura()">👁 O que a câmera leu</button>
         </div>
         <div class="camera-acoes">
@@ -6579,12 +6843,181 @@ function ordenarVersoesDaLeitura(versoes) {
    os botões mostram os acabamentos padrão, e o painel se redesenha quando
    chegar. */
 function versoesDaLeitura(card, idioma) {
-  const visiveis = variantesParaEscolher(card, idioma, scannerSession.pricingVariant);
-  if (visiveis.length && !visiveis.includes(scannerSession.pricingVariant)) {
+  // Uma variação com carimbo ou foil especial escolhida não é versão de preço:
+  // ela fica de fora desta lista e continua escolhida.
+  const extra = linhaDaChave(scannerSession.pricingVariant).extra;
+  const visiveis = variantesParaEscolher(card, idioma, extra ? '' : scannerSession.pricingVariant);
+  if (!extra && visiveis.length && !visiveis.includes(scannerSession.pricingVariant)) {
     scannerSession.pricingVariant = visiveis[0];
   }
   loadScannerVariantAvailability(card);
   return ordenarVersoesDaLeitura(visiveis);
+}
+
+/* ---------- Carimbo, edição, foil especial e tamanho no scanner ----------
+
+   As versões com preço (comum, holo, reverse, Poké Bola…) não dizem tudo: a
+   mesma carta existe com carimbo de pré-lançamento, de liga, de Pokémon
+   Center, em Cosmos Holo, sem sombra, em tamanho jumbo. Nenhuma fonte de preço
+   separa essas cartas, mas o TCGdex publica, carta a carta, TODAS as
+   variações físicas que existem dela (`variants_detailed`): acabamento, padrão
+   de foil, carimbos, subtipo de impressão e tamanho. É essa lista que entra no
+   painel da leitura, depois das versões com preço.
+
+   Cada linha do painel é identificada por uma chave. Versão de preço usa o
+   próprio código ("reverse-holofoil"); variação usa uma chave que carrega
+   tudo o que a define — assim a quantidade de cada uma fica separada e a
+   leitura grava a variação completa, sem tabela à parte:
+
+     x|<versão de preço>|<acabamento>|<carimbo>|<edição>|<arte/tamanho>        */
+const PADRAO_DO_ACABAMENTO = { normal: 'normal', holo: 'holofoil', reverse: 'reverse-holofoil' };
+const FAMILIA_DO_ACABAMENTO = { normal: 'comum', holo: 'holo', reverse: 'reverse' };
+
+// Comum, holo ou reverse de um código de versão de preço.
+function acabamentoDaVersao(valor) {
+  return /reverse/i.test(valor) ? 'reverse' : /holo/i.test(valor) ? 'holo' : 'normal';
+}
+
+/* As variações do TCGdex no formato do app, sem repetição. O mesmo cartão
+   chega pelos catálogos em inglês e japonês; a chave junta os dois. */
+function variacoesDoTcgdex(lista) {
+  const vistas = new Map();
+  for (const bruta of Array.isArray(lista) ? lista : []) {
+    if (!bruta || typeof bruta !== 'object') continue;
+    const tipo = String(bruta.type || '').toLowerCase();
+    const finish = tipo === 'holo' ? 'holo' : tipo === 'reverse' ? 'reverse' : 'normal';
+    const foil = slugDeVariacao(bruta.foil || '').replace(/-?holo(foil)?$/, '').replace(/-ball$/, 'ball');
+    const carimbos = (Array.isArray(bruta.stamp) ? bruta.stamp : bruta.stamp ? [bruta.stamp] : [])
+      .map(slugDeVariacao).filter(Boolean);
+    const subtipo = slugDeVariacao(bruta.subtype || '');
+    const tamanho = slugDeVariacao(bruta.size || '');
+    const item = {
+      finish,
+      foil: foil ? `${foil}-holofoil` : '',
+      carimbos,
+      edition: subtipo && subtipo !== 'unlimited' ? subtipo : 'unlimited',
+      artVariant: tamanho && tamanho !== 'standard' ? tamanho : 'standard',
+    };
+    vistas.set([item.finish, item.foil, item.carimbos.join('+'), item.edition, item.artVariant].join('|'), item);
+  }
+  return [...vistas.values()];
+}
+
+function chaveDaLinhaExtra(linha) {
+  return ['x', linha.pricingVariant, linha.finish, linha.distribution, linha.edition, linha.artVariant].join('|');
+}
+
+/* A linha do painel descrita pela chave: versão de preço, acabamento e o que
+   mais a variação tiver. */
+function linhaDaChave(chave) {
+  const texto = exactSourceEnum(chave);
+  if (texto.startsWith('x|')) {
+    const [, pricingVariant, finish, distribution, edition, artVariant] = texto.split('|');
+    return {
+      chave: texto, extra: true,
+      pricingVariant: pricingVariant || 'normal',
+      finish: ['normal', 'holo', 'reverse'].includes(finish) ? finish : acabamentoDaVersao(pricingVariant),
+      distribution: distribution || 'unstamped',
+      edition: edition || 'unlimited',
+      artVariant: artVariant || 'standard',
+    };
+  }
+  return {
+    chave: texto || 'normal', extra: false,
+    pricingVariant: texto || 'normal',
+    finish: acabamentoDaVersao(texto),
+    distribution: 'unstamped', edition: 'unlimited', artVariant: 'standard',
+  };
+}
+
+// Códigos que só dizem o acabamento comum, holo ou reverse — sem padrão de foil.
+const VERSOES_PLANAS = new Set(['normal', 'holo', 'holofoil', 'reverse', 'reverse-holofoil',
+  'unlimited', 'unlimited-holofoil', '1st-edition', '1st-edition-holofoil', 'firstEdition']);
+
+// "Reverse Holo · carimbo Pré-lançamento", "Cosmos Holo (reverse)", "Holográfica · Shadowless".
+function rotuloDaLinha(linha) {
+  if (!linha.extra) return friendlyVariantLabel(linha.pricingVariant);
+  let acabamento = friendlyVariantLabel(linha.pricingVariant);
+  // Cosmos, Gold e cia. existem em holo e em reverse; os padrões de bola
+  // já são reverse por definição.
+  if (!VERSOES_PLANAS.has(linha.pricingVariant) && linha.finish === 'reverse'
+      && !/ball-holofoil$/.test(linha.pricingVariant)) {
+    acabamento += ' (reverse)';
+  }
+  const partes = [acabamento];
+  if (linha.distribution !== 'unstamped') partes.push(`carimbo ${friendlyVariantLabel(linha.distribution)}`);
+  if (linha.edition !== 'unlimited') partes.push(friendlyVariantLabel(linha.edition));
+  if (linha.artVariant !== 'standard') partes.push(friendlyVariantLabel(linha.artVariant));
+  return partes.join(' · ');
+}
+
+/* As variações do TCGdex que as versões de preço não cobrem. A plana
+   ("holo", sem mais nada) já é uma versão de preço; a 1ª edição também,
+   quando o banco de preços a separa; o padrão Poké Bola, quando tem preço
+   próprio. O resto vira linha nova: carimbo, foil especial, edição, tamanho. */
+function variacoesExtrasDaCarta(card, basicas) {
+  const detalhadas = scannerVariantAvailability.get(card?.id || '')?.variacoesDetalhadas || [];
+  if (!detalhadas.length) return [];
+  const acabamentoPadrao = acabamentosDoCatalogo(card)[0] || 'comum';
+  const chavesBasicas = new Set(basicas.map(valor => chaveDaVersao(valor, acabamentoPadrao)));
+  const familias = new Set(basicas.map(acabamentoDaVersao));
+  const extras = new Map();
+  for (const item of detalhadas) {
+    const semMais = item.edition === 'unlimited' && item.artVariant === 'standard';
+    if (!item.foil && !item.carimbos.length && semMais && familias.has(item.finish)) continue;
+    // 1ª edição que o banco de preços já separa (a de Base Set é sempre sem
+    // sombra; o subtipo não faz dela outra carta).
+    const soPrimeira = item.carimbos.length === 1 && item.carimbos[0] === '1st-edition';
+    if (soPrimeira && !item.foil && item.artVariant === 'standard'
+        && chavesBasicas.has(`${FAMILIA_DO_ACABAMENTO[item.finish]}|primeira`)) continue;
+    if (item.foil && !item.carimbos.length && semMais && basicas.includes(item.foil)) continue;
+    const pricingVariant = item.foil
+      || basicas.find(valor => acabamentoDaVersao(valor) === item.finish && !EDICAO_DO_ENUM[exactSourceEnum(valor)])
+      || PADRAO_DO_ACABAMENTO[item.finish];
+    const linha = {
+      extra: true, pricingVariant, finish: item.finish,
+      distribution: item.carimbos.join('+') || 'unstamped',
+      edition: item.edition, artVariant: item.artVariant,
+    };
+    linha.chave = chaveDaLinhaExtra(linha);
+    extras.set(linha.chave, linha);
+  }
+  // Por acabamento; dentro dele, foil especial, depois carimbo, depois o resto.
+  const peso = linha => ['normal', 'holo', 'reverse'].indexOf(linha.finish) * 10
+    + (linha.distribution !== 'unstamped' ? 2 : !VERSOES_PLANAS.has(linha.pricingVariant) ? 1 : 3);
+  return [...extras.values()].sort((a, b) => peso(a) - peso(b) || rotuloDaLinha(a).localeCompare(rotuloDaLinha(b), 'pt-BR'));
+}
+
+/* Todas as linhas do painel: versões de preço, variações do TCGdex, a
+   variação montada à mão e — para nada marcado sumir — qualquer linha que já
+   tenha quantidade. */
+function linhasDaLeitura(card, basicas) {
+  const linhas = basicas.map(linhaDaChave);
+  const vistas = new Set(linhas.map(linha => linha.chave));
+  const incluir = linha => {
+    if (vistas.has(linha.chave)) return;
+    vistas.add(linha.chave);
+    linhas.push(linha);
+  };
+  variacoesExtrasDaCarta(card, basicas).forEach(incluir);
+  const quantidades = scannerSession.quantidades || {};
+  [...(scannerSession.linhasCriadas || []), ...Object.keys(quantidades).filter(chave => Number(quantidades[chave]) > 0)]
+    .map(linhaDaChave).forEach(incluir);
+  return linhas;
+}
+
+/* A versão que já vem marcada numa leitura nova. Com o "acabamento das
+   próximas" ligado (quem separa o monte por acabamento), vale ele sempre que
+   a carta existir nele; senão, a comum — ou, para carta que só existe em
+   holo, a holo. 1ª edição nunca vem marcada sozinha: é a exceção. */
+function versaoInicialDaLeitura(basicas) {
+  const lote = scannerSession.acabamentoLote || 'auto';
+  const tiragemNormal = valor => !EDICAO_DO_ENUM[exactSourceEnum(valor)];
+  if (lote !== 'auto') {
+    const doLote = basicas.find(valor => acabamentoDaVersao(valor) === lote && tiragemNormal(valor));
+    if (doLote) return doLote;
+  }
+  return basicas.find(tiragemNormal) || basicas[0] || 'normal';
 }
 
 function showScannerPrimaryCandidate() {
@@ -6602,40 +7035,58 @@ function showScannerPrimaryCandidate() {
      normal) e a sua própria quantidade. Os botões − e + ficam na linha
      selecionada; nas outras aparece só um + para trazer o foco para ela.
      Assim uma leitura só resolve "tenho 2 normais e 1 reverse". */
-  const ordenadas = versoesDaLeitura(card, idioma);
+  const basicas = versoesDaLeitura(card, idioma);
+  /* Leitura nova, sem ninguém ter mexido: a versão marcada acompanha o que
+     se sabe da carta (e o "acabamento das próximas"). A lista real de versões
+     chega depois da primeira pintura; enquanto ninguém tocou em nada, a
+     marcação é refeita com ela, em vez de deixar 1 numa versão que a carta
+     nem tem. */
+  if (scannerSession.quantidadeAutomatica) {
+    const inicial = versaoInicialDaLeitura(basicas);
+    scannerSession.pricingVariant = inicial;
+    scannerSession.finish = acabamentoDaVersao(inicial);
+    scannerSession.quantidades = { [inicial]: 1 };
+  }
   const quantidades = quantidadesDaLeitura();
+  const linhas = linhasDaLeitura(card, basicas);
   /* Da quarta versão em diante fica escondido atrás de um botão. Três linhas
      dão conta de quase toda carta, e é o que garante o cartão inteiro na tela
      sem rolagem por dentro, mesmo em aparelho de tela curta. Versão que já tem
      quantidade escolhida nunca some — sumir com o que a pessoa marcou seria
      esconder trabalho feito. */
   const LIMITE_VERSOES = 3;
-  const marcadas = new Set(ordenadas.filter(value => Number(quantidades[value]) > 0));
   const mostrarTodas = Boolean(scannerSession.verTodasVersoes);
   const naLista = mostrarTodas
-    ? ordenadas
-    : ordenadas.filter((value, indice) => indice < LIMITE_VERSOES || marcadas.has(value));
-  const escondidas = ordenadas.length - naLista.length;
+    ? linhas
+    : linhas.filter((linha, indice) => indice < LIMITE_VERSOES
+      || Number(quantidades[linha.chave]) > 0 || linha.chave === scannerSession.pricingVariant);
+  const escondidas = linhas.length - naLista.length;
+  const escondidasEspeciais = linhas.filter(linha => linha.extra && !naLista.includes(linha)).length;
 
-  const linhasVariante = naLista.map(value => {
-    const estilo = variantEstilo(value);
+  const linhasVariante = naLista.map(linha => {
+    const value = linha.chave;
+    // Cosmos em reverse leva a cor de reverse; os padrões de bola têm a sua.
+    const estilo = linha.extra && linha.finish === 'reverse' && !/ball-holofoil$/.test(linha.pricingVariant)
+      ? variantEstilo('reverse') : variantEstilo(linha.pricingVariant);
+    const rotulo = rotuloDaLinha(linha);
     const escolhida = value === scannerSession.pricingVariant;
     const quantas = Number(quantidades[value]) || 0;
-    const valor = precoDaVariante(card, value, idioma);
-    return `<div class="leitura-versao ${estilo.classe}${escolhida ? ' escolhida' : ''}${quantas ? ' tem' : ''}">
+    // Variação com carimbo, edição ou tamanho não tem preço em fonte nenhuma.
+    const valor = linha.extra ? '—' : precoDaVariante(card, value, idioma);
+    return `<div class="leitura-versao ${estilo.classe}${linha.extra ? ' variacao' : ''}${escolhida ? ' escolhida' : ''}${quantas ? ' tem' : ''}">
       <button type="button" class="leitura-versao-nome" onclick="escolherVarianteLeitura('${esc(value)}')">
-        <span class="variante-icone" aria-hidden="true">${estilo.icone}</span>
-        <span class="leitura-versao-rotulo">${esc(friendlyVariantLabel(value))}</span>
-        <span class="leitura-versao-preco">${esc(valor)}</span>
+        <span class="variante-icone" aria-hidden="true">${linha.distribution !== 'unstamped' ? '🏷' : estilo.icone}</span>
+        <span class="leitura-versao-rotulo">${esc(rotulo)}</span>
+        <span class="leitura-versao-preco"${linha.extra ? ' title="Sem preço nas fontes — entra com valor manual"' : ''}>${esc(valor)}</span>
       </button>
       ${escolhida
         ? `<div class="leitura-qtd">
-             <button type="button" onclick="mudarQuantidadeDaLeitura(-1)" aria-label="Menos uma ${esc(friendlyVariantLabel(value))}">−</button>
+             <button type="button" onclick="mudarQuantidadeDaLeitura(-1)" aria-label="Menos uma ${esc(rotulo)}">−</button>
              <b>${quantas}</b>
-             <button type="button" onclick="mudarQuantidadeDaLeitura(1)" aria-label="Mais uma ${esc(friendlyVariantLabel(value))}">+</button>
+             <button type="button" onclick="mudarQuantidadeDaLeitura(1)" aria-label="Mais uma ${esc(rotulo)}">+</button>
            </div>`
         : `<button type="button" class="leitura-versao-mais" onclick="somarNaVariante('${esc(value)}')"
-             aria-label="Adicionar uma ${esc(friendlyVariantLabel(value))}">${quantas ? `<b>${quantas}</b>` : '+'}</button>`}
+             aria-label="Adicionar uma ${esc(rotulo)}">${quantas ? `<b>${quantas}</b>` : '+'}</button>`}
     </div>`;
   }).join('');
 
@@ -6687,16 +7138,21 @@ function showScannerPrimaryCandidate() {
         </select>
       </div>
       <div class="leitura-versoes">${linhasVariante}</div>
-      ${escondidas > 0 || mostrarTodas && ordenadas.length > LIMITE_VERSOES
+      ${escondidas > 0 || mostrarTodas && linhas.length > LIMITE_VERSOES
         ? `<button type="button" class="leitura-mais-versoes" onclick="alternarVersoesEscondidas()">
              ${escondidas > 0
-               ? `▾ Mostrar mais ${escondidas} ${escondidas > 1 ? 'versões' : 'versão'}`
+               ? `▾ Mostrar mais ${escondidas} ${escondidas > 1 ? 'versões' : 'versão'}${escondidasEspeciais ? ' <em>(carimbos e especiais)</em>' : ''}`
                : '▴ Mostrar menos'}
            </button>`
         : ''}
-      <button type="button" class="leitura-outra" onclick="recusarLeitura()">
-        ⇄ Não é essa carta?${outras > 0 ? ` <em>(${outras} parecida${outras > 1 ? 's' : ''})</em>` : ''}
-      </button>
+      <div class="leitura-outras-acoes">
+        <button type="button" class="leitura-outra leitura-variacao-btn" onclick="abrirVariacaoDaLeitura()">
+          🏷 Carimbo, edição ou foil
+        </button>
+        <button type="button" class="leitura-outra" onclick="recusarLeitura()">
+          ⇄ Não é essa carta?${outras > 0 ? ` <em>(${outras} parecida${outras > 1 ? 's' : ''})</em>` : ''}
+        </button>
+      </div>
     </div>
 
     <div class="leitura-painel-acoes">
@@ -6824,6 +7280,7 @@ function mudarQuantidadeDaLeitura(delta) {
   const quantidades = quantidadesDaLeitura();
   const atual = Number(quantidades[versao]) || 0;
   quantidades[versao] = Math.min(99, Math.max(0, atual + Number(delta || 0)));
+  scannerSession.quantidadeAutomatica = false;
   showScannerPrimaryCandidate();
 }
 
@@ -6836,9 +7293,10 @@ function alternarVersoesEscondidas() {
 }
 
 function somarNaVariante(versao) {
-  scannerSession.pricingVariant = versao;
-  scannerSession.finish = /reverse/i.test(versao) ? 'reverse' : /holo/i.test(versao) ? 'holo' : 'normal';
   const quantidades = quantidadesDaLeitura();
+  scannerSession.pricingVariant = versao;
+  scannerSession.finish = linhaDaChave(versao).finish;
+  scannerSession.quantidadeAutomatica = false;
   quantidades[versao] = Math.min(99, (Number(quantidades[versao]) || 0) + 1);
   showScannerPrimaryCandidate();
 }
@@ -6863,6 +7321,8 @@ function verNaColecao(cardId) {
    pior em vez de simplesmente seguir em frente. */
 function encerrarLeituraAtual() {
   scannerCandidateBuffer = [];
+  // Recusada: o texto dela não serve para completar a próxima leitura.
+  scannerSession.leiturasRecentes = [];
   // Veio do "Cadastrar" da consulta: recusar volta para o modo preço.
   voltarAoModoConsulta();
   retomarCamera();
@@ -6883,12 +7343,130 @@ function abrirZoomLeitura(cardId) {
 }
 
 function escolherVarianteLeitura(valor) {
-  scannerSession.pricingVariant = valor;
-  scannerSession.finish = /reverse/i.test(valor) ? 'reverse' : /holo/i.test(valor) ? 'holo' : 'normal';
-  // Escolher uma versão que ainda está zerada já deixa ela em 1: quem tocou na
-  // linha quis essa carta, não quis apenas mover o foco.
   const quantidades = quantidadesDaLeitura();
-  if (!Number(quantidades[valor])) quantidades[valor] = 1;
+  if (scannerSession.quantidadeAutomatica) {
+    /* Carta recém-lida, com a marcação que o app pôs sozinho: tocar noutra
+       versão é dizer "a minha é esta", não "tenho as duas". A marcação muda
+       de linha em vez de virar duas cartas. Para somar uma segunda versão
+       existe o + da própria linha. */
+    scannerSession.quantidades = { [valor]: 1 };
+  } else if (!Number(quantidades[valor])) {
+    // Escolher uma versão que ainda está zerada já deixa ela em 1: quem tocou
+    // na linha quis essa carta, não quis apenas mover o foco.
+    quantidades[valor] = 1;
+  }
+  scannerSession.quantidadeAutomatica = false;
+  scannerSession.pricingVariant = valor;
+  scannerSession.finish = linhaDaChave(valor).finish;
+  showScannerPrimaryCandidate();
+}
+
+/* ---------- "🏷 Carimbo, edição ou foil" ----------
+   Para a carta que não é a impressão comum da coleção. Em cima, as variações
+   que o TCGdex conhece DESTA carta: um toque e pronto. Embaixo, os campos
+   para montar qualquer outra — acabamento, foil especial, carimbo, edição e
+   arte/tamanho —, porque nenhuma lista é completa. */
+function abrirVariacaoDaLeitura() {
+  const card = scannerCandidateBuffer[0]?.card;
+  if (!card) return;
+  const idioma = scannerSession.language || 'pt-br';
+  const basicas = versoesDaLeitura(card, idioma);
+  const conhecidas = variacoesExtrasDaCarta(card, basicas);
+  const atual = linhaDaChave(scannerSession.pricingVariant);
+  const buscando = !scannerVariantAvailability.get(card.id)?.loaded;
+  const foilAtual = VERSOES_PLANAS.has(atual.pricingVariant) ? '' : atual.pricingVariant;
+  const carimboDaLista = STAMP_VALUES.has(atual.distribution);
+  const edicoes = uniqueValues(EDITION_OPTIONS.map(item => item[0]).filter(valor => valor !== 'other-edition'),
+    [...conhecidas.map(linha => linha.edition), atual.edition]);
+  const numero = String(card.number || '').includes('/') ? card.number : formatCardNumber(card.localId || card.number, card.setTotal);
+
+  montarPainelDaLeitura(`
+    <div class="leitura-painel-alca" aria-hidden="true"></div>
+    <div class="busca-manual leitura-variacao">
+      <strong>🏷 Carimbo, edição ou foil especial</strong>
+      <small>${esc(card.name)} · ${esc(card.setName)} · ${esc(numero)}</small>
+      ${conhecidas.length
+        ? `<span class="leitura-variacao-titulo">Variações que existem desta carta</span>
+           <div class="leitura-variacao-conhecidas">${conhecidas.map(linha => `<button type="button"
+             class="leitura-variacao-chip${linha.chave === atual.chave ? ' ativo' : ''}" onclick="usarVariacaoDaLeitura('${esc(linha.chave)}')">
+             ${esc(rotuloDaLinha(linha))}</button>`).join('')}</div>
+           <small class="leitura-variacao-nota">Lista do TCGdex. Não achou a sua? Monte abaixo.</small>`
+        : `<small class="leitura-variacao-nota">${buscando
+            ? 'Buscando no TCGdex as variações desta carta…'
+            : 'O TCGdex não lista carimbo nem foil especial para esta carta. Monte a variação abaixo.'}</small>`}
+      <span class="leitura-variacao-titulo">Montar a variação</span>
+      <div class="leitura-variacao-campos">
+        <label class="registration-field"><span>Acabamento</span>
+          <select id="lvAcabamento" class="field">${[['normal', 'Comum'], ['holo', 'Holográfica'], ['reverse', 'Reverse Holo']]
+            .map(([valor, rotulo]) => option(valor, rotulo, atual.finish)).join('')}</select></label>
+        <label class="registration-field"><span>Foil especial</span>
+          <select id="lvFoil" class="field">${SPECIAL_FOIL_OPTIONS.filter(([valor]) => valor !== 'other-foil')
+            .map(([valor, rotulo]) => option(valor, valor ? rotulo : 'Nenhum', foilAtual)).join('')}${foilAtual && !SPECIAL_FOIL_VALUES.has(foilAtual)
+            ? option(foilAtual, friendlyVariantLabel(foilAtual), foilAtual) : ''}</select></label>
+        <label class="registration-field"><span>Carimbo</span>
+          <select id="lvCarimbo" class="field">${STAMP_OPTIONS.filter(([valor]) => valor !== 'other-stamp')
+            .map(([valor, rotulo]) => option(valor, rotulo, atual.distribution)).join('')}</select></label>
+        <label class="registration-field"><span>Outro carimbo</span>
+          <input id="lvCarimboOutro" class="field" list="lvCarimbosTcgdex" autocomplete="off"
+            placeholder="se não estiver na lista" value="${carimboDaLista ? '' : esc(atual.distribution)}"></label>
+        <label class="registration-field"><span>Edição / impressão</span>
+          <select id="lvEdicao" class="field">${edicoes.map(valor => option(valor, friendlyVariantLabel(valor), atual.edition)).join('')}</select></label>
+        <label class="registration-field"><span>Arte / tamanho</span>
+          <select id="lvArte" class="field">${ART_OPTIONS.filter(([valor]) => valor !== 'other-art')
+            .map(([valor, rotulo]) => option(valor, rotulo, atual.artVariant)).join('')}</select></label>
+      </div>
+      <datalist id="lvCarimbosTcgdex">${ALL_TCGDEX_STAMPS.map(carimbo => `<option value="${esc(carimbo)}">${esc(friendlyVariantLabel(carimbo))}</option>`).join('')}</datalist>
+      <small class="leitura-variacao-nota">Nenhuma fonte de preço separa carimbo, edição ou foil especial: a carta entra na coleção sem preço automático, para você pôr o valor.</small>
+      <div class="leitura-painel-acoes">
+        <button class="leitura-nao" onclick="showScannerPrimaryCandidate()">← Voltar</button>
+        <button class="leitura-sim" onclick="aplicarVariacaoDaLeitura()">✓ Usar nesta cópia</button>
+      </div>
+    </div>`);
+}
+
+function aplicarVariacaoDaLeitura() {
+  const card = scannerCandidateBuffer[0]?.card;
+  if (!card) return;
+  const campo = id => exactSourceEnum(document.getElementById(id)?.value);
+  const finish = ['normal', 'holo', 'reverse'].includes(campo('lvAcabamento')) ? campo('lvAcabamento') : 'normal';
+  const foil = campo('lvFoil');
+  const distribution = slugDeVariacao(campo('lvCarimboOutro')) || campo('lvCarimbo') || 'unstamped';
+  const edition = campo('lvEdicao') || 'unlimited';
+  const artVariant = campo('lvArte') || 'standard';
+  const basicas = versoesDaLeitura(card, scannerSession.language || 'pt-br');
+  const pricingVariant = foil
+    || basicas.find(valor => acabamentoDaVersao(valor) === finish && !EDICAO_DO_ENUM[exactSourceEnum(valor)])
+    || PADRAO_DO_ACABAMENTO[finish];
+  // Sem carimbo, edição nem tamanho, é uma versão que já tem linha de preço
+  // (comum, holo, reverse, Poké Bola…): vai para a linha dela, com o preço
+  // dela. Foil especial fora da lista de preços vira variação.
+  const simples = distribution === 'unstamped' && edition === 'unlimited' && artVariant === 'standard';
+  const chave = simples && basicas.includes(pricingVariant) && (foil || acabamentoDaVersao(pricingVariant) === finish)
+    ? pricingVariant
+    : chaveDaLinhaExtra({ pricingVariant, finish, distribution, edition, artVariant });
+  usarVariacaoDaLeitura(chave);
+}
+
+/* A variação escolhida vira a cópia marcada: a quantidade da linha que
+   estava marcada passa para ela. Quem abre "Carimbo, edição ou foil" está
+   dizendo que a carta na mão é aquela — não que tem mais uma. */
+function usarVariacaoDaLeitura(chave) {
+  const quantidades = quantidadesDaLeitura();
+  const anterior = scannerSession.pricingVariant;
+  if (anterior !== chave) {
+    const quantas = Math.max(1, Number(quantidades[anterior]) || 0);
+    delete quantidades[anterior];
+    quantidades[chave] = Math.min(99, (Number(quantidades[chave]) || 0) + quantas);
+  } else if (!Number(quantidades[chave])) {
+    quantidades[chave] = 1;
+  }
+  const linha = linhaDaChave(chave);
+  if (linha.extra && !(scannerSession.linhasCriadas || []).includes(chave)) {
+    scannerSession.linhasCriadas = [...(scannerSession.linhasCriadas || []), chave];
+  }
+  scannerSession.pricingVariant = chave;
+  scannerSession.finish = linha.finish;
+  scannerSession.quantidadeAutomatica = false;
   showScannerPrimaryCandidate();
 }
 
@@ -6980,11 +7558,9 @@ function escolherCartaManual(cardId) {
   // Entra pelo mesmo caminho de uma leitura da câmera: o painel de confirmação
   // aparece com as versões daquela carta, e nada é gravado sem confirmar.
   scannerCandidateBuffer = [{ card: cardMap.get(cardId), score: 100, manual: true }];
-  // Como uma leitura nova da câmera: começa na versão comum, sem herdar a
-  // versão nem as quantidades da carta anterior.
-  scannerSession.pricingVariant = 'normal';
-  scannerSession.quantidades = null;
-  scannerSession.verTodasVersoes = false;
+  // Como uma leitura nova da câmera: começa na versão mais provável, sem
+  // herdar a versão nem as quantidades da carta anterior.
+  comecarLeituraNova();
   showScannerPrimaryCandidate();
 }
 
@@ -7008,6 +7584,7 @@ function mudarModoDoScanner(modo) {
   scannerCandidateBuffer = [];
   scannerSession.quantidades = null;
   scannerSession.verTodasVersoes = false;
+  scannerSession.leiturasRecentes = [];
   retomarCamera();
   telaCameraAoVivo();
   avisarNaCamera(scannerSession.consulta ? 'Preço: nada do que for lido é cadastrado' : 'Cadastrar: a carta lida vai para a lista');
@@ -7071,6 +7648,9 @@ function mostrarConsultaDePreco(candidate) {
   const idioma = scannerSession.language || 'pt-br';
   const condicao = scannerSession.condition || 'Near Mint';
   const ordenadas = versoesDaLeitura(card, idioma);
+  // Leitura nova: o preço em destaque é o da versão mais provável (ou a do
+  // "acabamento das próximas", para quem avalia um monte de reverse).
+  if (scannerSession.quantidadeAutomatica) scannerSession.pricingVariant = versaoInicialDaLeitura(ordenadas);
   const escolhida = scannerSession.pricingVariant || ordenadas[0] || 'normal';
   const LIMITE_VERSOES = 3;
   const mostrarTodas = Boolean(scannerSession.verTodasVersoes);
@@ -7192,7 +7772,8 @@ function montarPainelDaLeitura(html) {
 
 function escolherVersaoNaConsulta(valor) {
   scannerSession.pricingVariant = valor;
-  scannerSession.finish = /reverse/i.test(valor) ? 'reverse' : /holo/i.test(valor) ? 'holo' : 'normal';
+  scannerSession.finish = acabamentoDaVersao(valor);
+  scannerSession.quantidadeAutomatica = false;
   showScannerPrimaryCandidate();
 }
 
@@ -7223,6 +7804,7 @@ function proximaConsulta() {
   }
   scannerCandidateBuffer = [];
   scannerSession.verTodasVersoes = false;
+  scannerSession.leiturasRecentes = [];
   retomarCamera();
   telaCameraAoVivo();
 }
@@ -7235,6 +7817,8 @@ function reabrirConsulta(itemId) {
   scannerSession.language = item.idioma;
   scannerSession.condition = item.condicao;
   scannerSession.verTodasVersoes = false;
+  // Volta com a versão que foi vista, não com a mais provável.
+  scannerSession.quantidadeAutomatica = false;
   scannerCandidateBuffer = [{ card, score: 100, reaberta: item.id }];
   showScannerPrimaryCandidate();
 }
@@ -7257,7 +7841,10 @@ function cadastrarDaConsulta() {
   if (candidato?.card) registrarConsulta(candidato.card, candidato.reaberta || '');
   scannerSession.consulta = false;
   scannerSession.voltarParaConsulta = true;
+  // A versão vista na consulta é a que vem marcada, com 1.
   scannerSession.quantidades = null;
+  scannerSession.quantidadeAutomatica = false;
+  scannerSession.linhasCriadas = [];
   showScannerPrimaryCandidate();
 }
 
@@ -7395,12 +7982,17 @@ function confirmScannedCard(cardId) {
      o reverse na mão precisava ler a mesma carta duas vezes. */
   const quantidades = quantidadesDaLeitura();
   let quantas = 0;
-  for (const [versao, numero] of Object.entries(quantidades)) {
+  for (const [chave, numero] of Object.entries(quantidades)) {
     const vezes = Math.max(0, Number(numero) || 0);
+    // A chave da linha já diz tudo: versão, acabamento, carimbo, edição, arte.
+    const linha = linhaDaChave(chave);
     for (let i = 0; i < vezes; i += 1) {
       registrarLeitura(cardId, {
-        pricingVariant: versao,
-        finish: /reverse/i.test(versao) ? 'reverse' : /holo/i.test(versao) ? 'holo' : 'normal',
+        pricingVariant: linha.pricingVariant,
+        finish: linha.finish,
+        distribution: linha.distribution,
+        edition: linha.edition,
+        artVariant: linha.artVariant,
       });
     }
     quantas += vezes;
@@ -7409,6 +8001,8 @@ function confirmScannedCard(cardId) {
   // A mão está segurando a carta: o toque avisa que a leitura entrou.
   vibrar();
   scannerSession.quantidades = null;
+  scannerSession.linhasCriadas = [];
+  scannerSession.leiturasRecentes = [];
   scannerSession.ultimaConfirmada = cardId;
   scannerSession.confirmadaEm = Date.now();
   scannerCandidateBuffer = [];
@@ -7437,7 +8031,15 @@ function abrirRevisaoSessao() {
     if (!card) return '';
     const arte = card.imageUrl ? upgradeCardImageUrl(card.imageUrl) : '';
     const idioma = linha.language || 'pt-br';
-    const variantes = variantesParaEscolher(card, idioma, linha.pricingVariant);
+    // Foil especial fora da lista de preços (Cosmos, Gold…) continua à vista.
+    const variantes = uniqueValues(variantesParaEscolher(card, idioma, linha.pricingVariant), [linha.pricingVariant]);
+    const extras = [
+      linha.edition && linha.edition !== 'unlimited' ? friendlyVariantLabel(linha.edition) : '',
+      linha.artVariant && linha.artVariant !== 'standard' ? friendlyVariantLabel(linha.artVariant) : '',
+    ].filter(Boolean);
+    const carimbado = linha.distribution && linha.distribution !== 'unstamped';
+    const semPrecoDeFonte = carimbado || extras.length || (linha.pricingVariant && !VERSOES_PLANAS.has(linha.pricingVariant)
+      && !centralPriceResolveKey(card.id, idioma, linha.pricingVariant));
     const pills = variantes.map(value => {
       const estilo = variantEstilo(value);
       return `<button type="button" class="variante-pill ${estilo.classe}${value === linha.pricingVariant ? ' ativo' : ''}"
@@ -7460,6 +8062,7 @@ function abrirRevisaoSessao() {
         <span class="revisao-sub">${esc(card.setName)} · ${esc(formatCardNumber(card.localId || card.number, card.setTotal))}</span>
         ${card.rarity ? `<span class="revisao-raridade">${esc(card.rarity)}</span>` : ''}
         <div class="variante-pills revisao-pills">${pills}</div>
+        ${extras.length ? `<span class="revisao-variacao">${esc(extras.join(' · '))}</span>` : ''}
         <div class="revisao-linha-controles">
           <select class="revisao-campo" onchange="mudarIdiomaRevisao('${esc(linha.id)}',this.value)">
             ${PRICE_LANGUAGES.map(value => option(value, value, idioma)).join('')}
@@ -7467,13 +8070,20 @@ function abrirRevisaoSessao() {
           <select class="revisao-campo" onchange="mudarCondicaoRevisao('${esc(linha.id)}',this.value)">
             ${['Mint','Near Mint','Excelente','Bom','Regular','Danificada'].map(value => option(value, value, linha.condition)).join('')}
           </select>
+          <select class="revisao-campo revisao-carimbo${carimbado ? ' ligado' : ''}" onchange="mudarCarimboRevisao('${esc(linha.id)}',this.value)" aria-label="Carimbo">
+            ${STAMP_OPTIONS.filter(([value]) => value !== 'other-stamp')
+              .map(([value, rotulo]) => option(value, value === 'unstamped' ? '🏷 Sem carimbo' : `🏷 ${rotulo}`, linha.distribution || 'unstamped')).join('')}
+            ${carimbado && !STAMP_VALUES.has(linha.distribution) ? option(linha.distribution, `🏷 ${friendlyVariantLabel(linha.distribution)}`, linha.distribution) : ''}
+          </select>
           <div class="revisao-qtd">
             <button onclick="mudarQuantidadeRevisao('${esc(linha.id)}',-1)" aria-label="Menos uma">−</button>
             <b>${Number(linha.quantity) || 0}</b>
             <button onclick="mudarQuantidadeRevisao('${esc(linha.id)}',1)" aria-label="Mais uma">+</button>
           </div>
         </div>
-        <span class="revisao-preco">${preco ? esc(money(preco.brl)) : 'sem preço publicado'}</span>
+        <span class="revisao-preco">${semPrecoDeFonte
+          ? 'sem preço nas fontes — você informa o valor depois'
+          : preco ? esc(money(preco.brl)) : 'sem preço publicado'}</span>
         ${faltando.length ? `<div class="revisao-atalhos">${faltando.map(value => `<button onclick="acrescentarVersao('${esc(linha.cardId)}','${esc(value)}')">+ ${esc(friendlyVariantLabel(value))}</button>`).join('')}</div>` : ''}
       </div>
     </article>`;
@@ -7527,6 +8137,21 @@ function mudarCondicaoRevisao(linhaId, valor) {
   if (!linha) return;
   linha.condition = valor;
   salvarSessaoLeitura();
+}
+
+/* Carimbo trocado na revisão. Se a mesma carta, do mesmo jeito, já está em
+   outra linha, as duas viram uma só — como na leitura. */
+function mudarCarimboRevisao(linhaId, valor) {
+  const linha = linhaRevisao(linhaId);
+  if (!linha) return;
+  linha.distribution = exactSourceEnum(valor) || 'unstamped';
+  const igual = leiturasPendentes().find(item => item.id !== linha.id && assinaturaLeitura(item) === assinaturaLeitura(linha));
+  if (igual) {
+    igual.quantity = (Number(igual.quantity) || 0) + (Number(linha.quantity) || 0);
+    scannerSession.pendentes = leiturasPendentes().filter(item => item.id !== linha.id);
+  }
+  salvarSessaoLeitura();
+  abrirRevisaoSessao();
 }
 
 function mudarQuantidadeRevisao(linhaId, delta) {
@@ -7583,16 +8208,18 @@ function adicionarCartasDaSessao() {
     state.entries[linha.cardId] = entry;
     entry.variants = Array.isArray(entry.variants) ? entry.variants : [];
 
+    const arte = linha.artVariant || 'standard';
     let variant = entry.variants.find(item => exactSourceEnum(item.pricingVariant) === exactSourceEnum(linha.pricingVariant)
       && finishKind(item.finish) === finishKind(linha.finish)
       && item.language === linha.language && item.condition === linha.condition
       && item.edition === linha.edition && item.distribution === linha.distribution
+      && (item.artVariant || 'standard') === arte
       && item.gradingCompany === 'Não graduada' && !(item.variantTags || []).length);
     if (!variant) {
       variant = defaultVariant(0, {
         pricingVariant: linha.pricingVariant, finish: linha.finish, language: linha.language,
         condition: linha.condition, edition: linha.edition, distribution: linha.distribution,
-        artVariant: 'standard', region: 'Brasil', gradingCompany: 'Não graduada', grade: '', variantTags: [],
+        artVariant: arte, region: 'Brasil', gradingCompany: 'Não graduada', grade: '', variantTags: [],
       });
       entry.variants.push(variant);
     }
@@ -7871,7 +8498,6 @@ function renderCardRow(card) {
   return `<article class="card-row vision-card-tile ${quantity > 0 ? '' : 'missing'}${variantes.completa ? ' completa' : ''}${classeDeAnimacao(card.id)}" data-card-id="${esc(card.id)}"${tipo ? ` data-tipo="${esc(tipo)}"` : ''}${selo ? ` data-raridade="${esc(selo)}"` : ''} onclick="openCard('${esc(card.id)}')">
     <div class="vision-card-art${brilho ? ` brilho-${brilho}` : ''}">
       ${displayImage ? `<img class="card-thumb" src="${esc(displayImage)}" loading="lazy" decoding="async" fetchpriority="low" onerror="this.outerHTML='<div class=&quot;card-placeholder&quot;>TCG</div>'">` : '<div class="card-placeholder">TCG</div>'}
-      ${quantity > 0 ? '' : `<span class="numero-no-bolso" aria-hidden="true">${esc(card.localId || card.number)}</span>`}
       ${quantity > 1 ? `<span class="tile-quantity-badge">x${quantity}</span>` : ''}
       ${entry.wishlist ? '<span class="tile-wishlist-badge">Quero</span>' : ''}
       ${variantes.completa ? '<span class="marca-completa" title="Você tem todas as versões desta carta">★</span>' : ''}
@@ -10234,8 +10860,10 @@ function searchAndRender(field, value, inputId) {
     cardResultCache.key = '';
   }
   if (field === 'dexQuery') ui.dexLimit = 180;
-  const input = document.getElementById(inputId);
-  if (input?.dataset.composing === '1') return;
+  /* Não espera o fim da "composição" do teclado. No Android (Gboard), a
+     palavra fica em composição até o espaço: esperar por ela fazia a busca
+     não andar enquanto a pessoa digitava "pikachu". Só a lista de resultados
+     é redesenhada — o campo não é tocado —, então o teclado não se perde. */
   clearTimeout(searchRenderTimer);
   searchRenderTimer = setTimeout(() => refreshSearchResults(field), field === 'cardQuery' ? 250 : 100);
 }

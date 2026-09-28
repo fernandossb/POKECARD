@@ -148,6 +148,8 @@ function resumoDasVersoes(dados) {
 /* ---------- A tela ---------- */
 
 function abrirExportacao() {
+  // As fotos da exportação anterior (até 1000 JPEG) não ficam presas na memória.
+  fotosDaExportacao.clear();
   exportacao.cache = null;
   exportacao.fonte = listaDaTelaEhDiferente() && cartasDaFonte('lista').length ? 'lista' : 'colecao';
   exportacao.busca = '';

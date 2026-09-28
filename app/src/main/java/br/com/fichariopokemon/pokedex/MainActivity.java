@@ -61,7 +61,11 @@ import android.content.pm.PackageManager;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import android.util.Size;
+import android.util.Range;
+import android.util.Rational;
+import androidx.camera.core.Camera;
 import androidx.camera.core.CameraSelector;
+import androidx.camera.core.ExposureState;
 import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.ImageProxy;
 import androidx.camera.core.Preview;
@@ -125,10 +129,37 @@ public final class MainActivity extends Activity {
         bottomInsetCss = systemBarHeightCss("navigation_bar_height");
 
         rootView = new FrameLayout(this);
+        setContentView(rootView);
+        criarWebView();
+        registerUpdateReceiver();
+    }
+
+    /* A tela do aplicativo. Fica num método próprio porque pode precisar ser
+       recriada: quando o Android encerra o processo do WebView por falta de
+       memória, o padrão é derrubar o aplicativo inteiro junto. */
+    @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
+    private void criarWebView() {
         webView = new WebView(this);
         webView.setBackgroundColor(Color.rgb(255, 248, 220));
         configureWebView(webView);
-        webView.setWebViewClient(new WebViewClient());
+        webView.setWebViewClient(new WebViewClient() {
+            /* O processo que desenha a página caiu (quase sempre memória).
+               Sem este tratamento, o Android fecha o aplicativo. Aqui a tela
+               morta sai e uma nova é criada: a coleção está salva no aparelho,
+               então é só recarregar. */
+            @Override
+            public boolean onRenderProcessGone(WebView view, android.webkit.RenderProcessGoneDetail detail) {
+                if (view != webView) return true;
+                // A tela morta não pode receber mais nenhuma chamada.
+                webView = null;
+                closeLiveScanner();
+                rootView.removeView(view);
+                view.destroy();
+                criarWebView();
+                Toast.makeText(MainActivity.this, "O aplicativo recarregou para liberar memória", Toast.LENGTH_LONG).show();
+                return true;
+            }
+        });
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
@@ -148,8 +179,6 @@ public final class MainActivity extends Activity {
         rootView.addView(webView, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
-        setContentView(rootView);
-        registerUpdateReceiver();
         webView.loadUrl("file:///android_asset/www/index.html");
     }
 
@@ -850,6 +879,15 @@ public final class MainActivity extends Activity {
             liveScannerPaused = false;
             liveScannerLastDelivery = System.currentTimeMillis();
         }
+
+        /* A leitura parecia carta mas não fechou — quase sempre reflexo em
+           cima do nome ou do número. Tentar de novo logo, em vez de esperar o
+           intervalo inteiro, aproveita o momento em que a pessoa inclina a
+           carta e o brilho sai de cima do texto. */
+        @JavascriptInterface
+        public void lerDeNovoLogo() {
+            liveScannerLastDelivery = System.currentTimeMillis() - LIVE_SCAN_INTERVAL_MS + LIVE_RETRY_MS;
+        }
     }
 
     /* =====================================================================
@@ -865,8 +903,14 @@ public final class MainActivity extends Activity {
     /* Espaço mínimo entre dois envios, para o app conseguir mostrar a carta
        reconhecida antes de aceitar a próxima. */
     private static final long LIVE_SCAN_INTERVAL_MS = 1800L;
+    // Depois de uma leitura que não fechou, a próxima tentativa vem antes.
+    private static final long LIVE_RETRY_MS = 600L;
     /* Texto muito curto costuma ser reflexo ou borda; não vale tentar. */
     private static final int LIVE_MIN_TEXT_LENGTH = 12;
+    /* Reflexo: fração do miolo da imagem que está branco estourado. Acima de
+       3% a exposição desce meio ponto; acima de 4% a pessoa recebe o aviso. */
+    private static final float REFLEXO_BAIXAR_EXPOSICAO = 0.03f;
+    private static final float REFLEXO_AVISAR = 0.04f;
 
     private FrameLayout liveScannerOverlay;
     private ExecutorService liveScannerExecutor;
@@ -880,6 +924,13 @@ public final class MainActivity extends Activity {
     /* Ligada enquanto o app mostra o painel "é esta carta?": a câmera segue
        ligada, só não entrega leitura nova até o usuário responder. */
     private volatile boolean liveScannerPaused;
+    // Pixels do quadro em análise, reaproveitados de um quadro para o outro.
+    private int[] quadroPixels;
+    // A câmera aberta: é por ela que a exposição é baixada quando há reflexo.
+    private volatile Camera liveCamera;
+    private volatile long ultimaMedidaDeReflexo;
+    private volatile long ultimoAjusteDeExposicao;
+    private volatile long ultimoAvisoDeReflexo;
 
     /** Ciclo de vida próprio: a tela principal estende Activity simples,
         que a CameraX não aceita como dona da câmera. */
@@ -1020,8 +1071,98 @@ public final class MainActivity extends Activity {
 
         liveCameraProvider.unbindAll();
         liveScannerLifecycle.start();
-        liveCameraProvider.bindToLifecycle(liveScannerLifecycle,
+        liveCamera = liveCameraProvider.bindToLifecycle(liveScannerLifecycle,
                 CameraSelector.DEFAULT_BACK_CAMERA, preview, analise);
+    }
+
+    /**
+     * Mede o reflexo do quadro: quanto do miolo da imagem está branco puro.
+     *
+     * Carta foil e reverse devolve a luz da lâmpada em manchas estouradas, e
+     * o nome ou o número somem dentro delas. Olha só o miolo (onde fica a
+     * carta) e um pixel a cada oito — a conta é leve o bastante para rodar
+     * quatro vezes por segundo sem pesar na leitura.
+     */
+    private void medirReflexo(ImageProxy proxy) {
+        ImageProxy.PlaneProxy plano = proxy.getPlanes()[0];
+        ByteBuffer buffer = plano.getBuffer();
+        int largura = proxy.getWidth();
+        int altura = proxy.getHeight();
+        int rowStride = plano.getRowStride();
+        int pixelStride = plano.getPixelStride();
+        int limite = buffer.limit();
+        final int passo = 8;
+        long soma = 0;
+        int total = 0;
+        int estourados = 0;
+        for (int y = altura / 6; y < altura - altura / 6; y += passo) {
+            int linha = y * rowStride;
+            for (int x = largura / 6; x < largura - largura / 6; x += passo) {
+                int posicao = linha + x * pixelStride;
+                if (posicao >= limite) break;
+                // Leitura por índice: não mexe na posição do buffer.
+                int v = buffer.get(posicao) & 0xFF;
+                soma += v;
+                total++;
+                if (v >= 250) estourados++;
+            }
+        }
+        if (total == 0) return;
+        float reflexo = estourados / (float) total;
+        ajustarExposicao(reflexo, soma / (float) total);
+        avisarReflexo(reflexo);
+    }
+
+    /* Com reflexo, a exposição desce meio ponto por vez, até dois pontos
+       abaixo do normal: a mancha estourada encolhe e as letras em volta dela
+       voltam a aparecer. As letras da carta têm contraste de sobra para uma
+       imagem um pouco mais escura. Só volta a subir quando a imagem ficou
+       escura de verdade — subir assim que o reflexo some faria a exposição
+       ficar subindo e descendo. */
+    private void ajustarExposicao(float reflexo, float media) {
+        final Camera camera = liveCamera;
+        if (camera == null) return;
+        long agora = System.currentTimeMillis();
+        // Cada mudança leva alguns quadros para assentar.
+        if (agora - ultimoAjusteDeExposicao < 900L) return;
+        ExposureState estado = camera.getCameraInfo().getExposureState();
+        if (!estado.isExposureCompensationSupported()) return;
+        Range<Integer> faixa = estado.getExposureCompensationRange();
+        Rational passo = estado.getExposureCompensationStep();
+        float ev = passo == null || passo.floatValue() <= 0f ? 1f / 3f : passo.floatValue();
+        int passosPorPonto = Math.max(1, Math.round(1f / ev));
+        int degrau = Math.max(1, passosPorPonto / 2);
+        int minimo = Math.max(faixa.getLower(), -2 * passosPorPonto);
+        int atual = estado.getExposureCompensationIndex();
+        int alvo = atual;
+        if (reflexo > REFLEXO_BAIXAR_EXPOSICAO && atual > minimo) {
+            alvo = Math.max(minimo, atual - degrau);
+        } else if (reflexo < 0.005f && media < 75f && atual < 0) {
+            alvo = Math.min(0, atual + degrau);
+        }
+        if (alvo == atual) return;
+        ultimoAjusteDeExposicao = agora;
+        final int indice = alvo;
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (liveCamera != camera) return;
+                try {
+                    camera.getCameraControl().setExposureCompensationIndex(indice);
+                } catch (Exception ignorado) {
+                }
+            }
+        });
+    }
+
+    // O aviso "incline a carta" aparece no máximo a cada três segundos.
+    private void avisarReflexo(float reflexo) {
+        if (reflexo < REFLEXO_AVISAR) return;
+        long agora = System.currentTimeMillis();
+        if (agora - ultimoAvisoDeReflexo < 3000L) return;
+        ultimoAvisoDeReflexo = agora;
+        runJavascript("window.receiveScannerGlare&&window.receiveScannerGlare("
+                + Math.round(reflexo * 100f) + ");");
     }
 
     /**
@@ -1040,7 +1181,12 @@ public final class MainActivity extends Activity {
         int rowStride = plano.getRowStride();
         int pixelStride = plano.getPixelStride();
 
-        int[] pixels = new int[largura * altura];
+        /* O mesmo vetor serve a todos os quadros: a 1080×1920 são 8 MB, e
+           alocar isso de novo a cada leitura, numa sessão de centenas de
+           cartas, fazia a memória do aplicativo subir em serra. */
+        int total = largura * altura;
+        if (quadroPixels == null || quadroPixels.length != total) quadroPixels = new int[total];
+        int[] pixels = quadroPixels;
         byte[] linha = new byte[rowStride];
         int destino = 0;
         for (int y = 0; y < altura; y++) {
@@ -1077,6 +1223,15 @@ public final class MainActivity extends Activity {
     @SuppressWarnings("UnsafeOptInUsageError")
     private void analisarQuadro(final ImageProxy proxy) {
         long agora = System.currentTimeMillis();
+        /* O reflexo é medido mesmo nos quadros que não vão para a leitura:
+           a exposição precisa acompanhar a mão, não só os quadros lidos. */
+        if (!liveScannerPaused && agora - ultimaMedidaDeReflexo >= 250L) {
+            ultimaMedidaDeReflexo = agora;
+            try {
+                medirReflexo(proxy);
+            } catch (Exception ignorado) {
+            }
+        }
         if (liveScannerPaused || liveScannerBusy
                 || agora - liveScannerLastDelivery < LIVE_SCAN_INTERVAL_MS
                 || proxy.getImage() == null || liveRecognizer == null) {
@@ -1253,6 +1408,7 @@ public final class MainActivity extends Activity {
         }
         liveScannerHint = null;
         liveCameraProvider = null;
+        liveCamera = null;
         liveScannerBusy = false;
         liveScannerPaused = false;
     }
