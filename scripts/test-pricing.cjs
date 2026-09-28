@@ -17,6 +17,8 @@ const context = {
   normalize: value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(),
   hasFiniteNumber: value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value)),
   centralPriceStatus: {},
+  // Guardado à parte do preço (loteCompacto): [setId, setName, number, setTotal, rarity].
+  centralPriceCards: {},
   scannerVariantAvailability: new Map(),
   variantsFor: () => [],
   document: { getElementById: () => null },
@@ -30,32 +32,27 @@ const context = {
   centralPriceData: {
     meta: { generatedAt: '2026-08-05T12:00:00Z', schemaVersion: 4 },
     variantCatalog: {},
+    /* Formato compacto (precoCompacto, fora destas fatias do app.js): cada
+       preço grava só o que o app usa — p preço em BRL, c confiança 0-100,
+       x 1 quando matchLevel é "exact", k mercado escolhido, u updatedAt,
+       v os valores desse mercado (para low/high) e t o total de fontes.
+       As fixtures abaixo são o resultado de precoCompacto sobre um preço
+       "cru" do banco — comentado ao lado de cada uma para explicar a conta. */
     prices: {
+      // priceBrl: 12,34 · confidence: 75 · exact · um mercado só (tcgplayer).
       'sv03.5-001::pt-br::reverse-holofoil': {
-        cardId: 'sv03.5-001', language: 'pt-br', variantEnum: 'reverse-holofoil',
-        priceBrl: 12.34, confidence: 75, matchLevel: 'exact', updatedAt: '2026-08-05T12:00:00Z',
-        sources: [{ source: 'tcgplayer:reverse-holofoil:marketPrice', valueBrl: 13.68 }],
+        p: 12.34, c: 75, x: 1, k: 'tcgplayer', u: '2026-08-05T12:00:00Z', v: [13.68], t: 1,
       },
-      // Banco antigo (sem `priceMarket`) com valores dos dois mercados: aqui a
-      // prioridade muda o número, então o app aplica a regra na hora.
+      // Banco antigo (sem `priceMarket`) com valores dos dois mercados: a
+      // prioridade (TCGplayer antes de Cardmarket) já foi aplicada ao
+      // compactar, então só o TCGplayer [10, 8] entra em v — média 9.
       'sv03.5-002::pt-br::normal': {
-        cardId: 'sv03.5-002', language: 'pt-br', variantEnum: 'normal',
-        priceBrl: 30, confidence: 80, matchLevel: 'exact', updatedAt: '2026-08-05T12:00:00Z',
-        sources: [
-          { source: 'tcgplayer:normal:marketPrice', valueBrl: 10 },
-          { source: 'tcgplayer:normal:lowPrice', valueBrl: 8 },
-          { source: 'cardmarket:normal:trend', valueBrl: 50 },
-          { source: 'cardmarket:normal:avg7', valueBrl: 52 },
-        ],
+        p: 9, c: 80, x: 1, k: 'tcgplayer', u: '2026-08-05T12:00:00Z', v: [10, 8], t: 4,
       },
-      // Banco novo: já publicou o mercado escolhido, o app respeita o valor.
+      // Banco novo: já publicou o mercado escolhido (cardmarket) e o preço
+      // (7,77) sem recalcular — v guarda as referências dele só para low/high.
       'sv03.5-003::pt-br::normal': {
-        cardId: 'sv03.5-003', language: 'pt-br', variantEnum: 'normal',
-        priceBrl: 7.77, priceMarket: 'cardmarket', confidence: 80, matchLevel: 'exact', updatedAt: '2026-08-05T12:00:00Z',
-        sources: [
-          { source: 'cardmarket:normal:trend', valueBrl: 7.5, used: true },
-          { source: 'cardmarket:normal:avg7', valueBrl: 8.04, used: true },
-        ],
+        p: 7.77, c: 80, x: 1, k: 'cardmarket', u: '2026-08-05T12:00:00Z', v: [7.5, 8.04], t: 2,
       },
     },
   },

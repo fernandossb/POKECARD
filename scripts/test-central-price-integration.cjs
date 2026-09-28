@@ -21,20 +21,21 @@ const context = {
         { language: 'pt-br', value: 'future-parallel-foil', sources: ['tcgdex'], priced: true },
       ],
     },
+    // Formato compacto (precoCompacto, fora desta fatia do app.js): p preço
+    // em BRL, c confiança 0-100, x 1 quando matchLevel é "exact", k mercado
+    // escolhido, u updatedAt, v valores desse mercado, t total de fontes.
     prices: {
       'sv03.5-001::pt-br::reverse-holofoil': {
-        cardId: 'sv03.5-001', language: 'pt-br', variantEnum: 'reverse-holofoil',
-        priceBrl: 12.34, confidence: 75, matchLevel: 'exact', updatedAt: '2026-08-05T12:00:00Z',
-        sources: [{ source: 'tcgplayer:reverse-holofoil:marketPrice', valueBrl: 12.34 }],
+        p: 12.34, c: 75, x: 1, k: 'tcgplayer', u: '2026-08-05T12:00:00Z', v: [12.34], t: 1,
       },
       'sv03.5-001::pt-br::future-parallel-foil': {
-        cardId: 'sv03.5-001', language: 'pt-br', variantEnum: 'future-parallel-foil',
-        priceBrl: 20, confidence: 60, matchLevel: 'exact', updatedAt: '2026-08-05T12:00:00Z',
-        sources: [{ source: 'tcgplayer:future-parallel-foil:marketPrice', valueBrl: 20 }],
+        p: 20, c: 60, x: 1, k: 'tcgplayer', u: '2026-08-05T12:00:00Z', v: [20], t: 1,
       },
     },
   },
   centralPriceStatus: {},
+  // Guardado à parte do preço (loteCompacto): [setId, setName, number, setTotal, rarity].
+  centralPriceCards: {},
   scannerVariantAvailability: new Map(),
   variantsFor: () => [],
   document: { getElementById: () => null },

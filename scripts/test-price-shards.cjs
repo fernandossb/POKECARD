@@ -6,7 +6,10 @@ const assert = require('assert');
   const source = fs.readFileSync('app/src/main/assets/www/app.js', 'utf8');
   const variantStart = source.indexOf('const PRICE_FINISHES =');
   const variantEnd = source.indexOf('function ligaNumberPart(', variantStart);
-  const centralStart = source.indexOf('function centralPriceGeneratedAt(');
+  // Começa em CACHE_PRECOS_META: syncCentralPrices/carregarLoteDePrecos
+  // chamam salvarMetaDosPrecos, loteCompacto e aplicarLoteDePrecos, que vivem
+  // antes de centralPriceGeneratedAt no arquivo.
+  const centralStart = source.indexOf('const CACHE_PRECOS_META');
   const centralEnd = source.indexOf('function centralPriceStatusPanel(', centralStart);
   assert(variantStart >= 0 && variantEnd > variantStart);
   assert(centralStart >= 0 && centralEnd > centralStart);
@@ -20,6 +23,8 @@ const assert = require('assert');
     CENTRAL_PRICE_SHARD_BASE: 'https://database.test/shards',
     CENTRAL_PRICE_SYNC_TTL: 0,
     centralPriceData: { meta: {}, prices: {}, variantCatalog: {} },
+    // Guardado à parte do preço (loteCompacto): [setId, setName, number, setTotal, rarity].
+    centralPriceCards: {},
     centralPriceStatus: {},
     centralPriceIndex: { meta: {}, cards: {} },
     centralPriceLoadedShards: new Set(),
@@ -68,7 +73,8 @@ const assert = require('assert');
   await context.ensureCentralPriceShard('sv03.5-001', false);
   assert(context.centralPriceLoadedShards.has(7));
   assert(requests.some(url => url.includes('/shards/shard-07.json')));
-  assert(context.centralPriceData.variantCatalog['sv03.5-001'].some(item => item.value === 'future-no-price'));
+  // Guardado compacto (loteCompacto): [idioma, versão, tem preço, fontes, tipos].
+  assert(context.centralPriceData.variantCatalog['sv03.5-001'].some(item => item[1] === 'future-no-price'));
 
   const quote = context.centralPriceQuote('sv03.5-001', {
     pricingVariant: 'reverse-holofoil', language: 'pt-br', condition: 'Near Mint',
