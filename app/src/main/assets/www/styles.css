@@ -399,6 +399,8 @@ button, input, select, textarea { font: inherit; }
 .registration-field .field { min-height: 44px; }
 .read-only-field { min-height: 44px; display: flex; flex-direction: column; justify-content: center; border: 1px solid #d3ddea; border-radius: var(--raio-p); background: #f3f6fa; color: var(--vision-text); padding: 7px 11px; font-weight: 700; }
 .read-only-field small { display: block; margin-top: 2px; color: var(--muted); font-size: var(--fs-p); font-weight: 700; }
+.manual-value-hint { display: block; margin-top: 4px; color: var(--muted); font-size: var(--fs-p); line-height: 1.35; }
+.registration-field .price-verification { font-size: var(--fs-p); }
 .toggle-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; margin: 12px 0; }
 .toggle-card { min-height: 48px; display: flex; align-items: center; gap: 8px; border: 1px solid #c7d3e3; border-radius: var(--raio-p); background: #f9fbfe; padding: 8px 10px; }
 .toggle-card input { position: absolute; opacity: 0; pointer-events: none; }

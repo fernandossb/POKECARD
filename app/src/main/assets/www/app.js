@@ -88,6 +88,11 @@ let scannerDraftMetadata = {};
 let scannerCandidateBuffer = [];
 let scannerLastOcrText = '';
 const scannerVariantAvailability = new Map();
+// A Coleção agora adianta esta consulta para quem está passando pela tela
+// (adiantarVariacoesDaLista), não só para quem abre ou escaneia uma carta —
+// sem teto, navegar bastante pelo catálogo inteiro acumulava uma entrada por
+// carta tocada e nunca soltava nenhuma.
+const TETO_DE_VARIACOES_EM_MEMORIA = 500;
 
 /* Chamado pelo Android (onTrimMemory) quando o sistema avisa que a memória
    do aparelho está ficando escassa — ANTES de precisar matar o processo.
@@ -112,6 +117,7 @@ function limparCachesDeMemoria(nivel) {
     staticCardSortCache.clear();
     variantImageCache = {};
     ligaSetCache = {};
+    scannerVariantAvailability.clear();
   }
   labRecord('memoria_liberada', 0, { nivel: Number(nivel) || 0, critico });
 }
@@ -1709,12 +1715,59 @@ function adiantarLotesDaLista(listaDeCartas) {
   // Poucos por vez: a lista precisa continuar rolando sem travar.
   for (const indice of [...lotes].slice(0, 3)) {
     lotesEmAndamento.add(indice);
-    const carta = listaDeCartas.find(item => Number(centralPriceIndex.cards[item.id]) === indice);
+    const cartasDoLote = listaDeCartas.filter(item => Number(centralPriceIndex.cards[item.id]) === indice);
+    const carta = cartasDoLote[0];
     if (!carta) { lotesEmAndamento.delete(indice); continue; }
     ensureCentralPriceShard(carta.id)
-      .then(carregou => { if (carregou) renderKeepingScroll(); })
+      // Só as cartas deste lote específico trocam de figura — nada de
+      // redesenhar a grade inteira (e recarregar todas as imagens) por causa
+      // do preço de algumas dezenas de cartas.
+      .then(carregou => { if (carregou) atualizarLinhasVisiveisEmSegundoPlano(cartasDoLote); })
       .catch(() => {})
-      .then(() => { lotesEmAndamento.delete(indice); });
+      .then(() => {
+        lotesEmAndamento.delete(indice);
+        // Sem o redesenho completo de antes, ninguém mais chama de volta esta
+        // função sozinho: ela mesma precisa reabrir a vaga que acabou de
+        // sobrar, senão os lotes seguintes da lista nunca chegam a pedir.
+        adiantarLotesDaLista(listaDeCartas);
+      });
+  }
+}
+
+function atualizarLinhasVisiveisEmSegundoPlano(listaDeCartas) {
+  if (!listaDeCartas.length) return;
+  if (!podeAtualizarLinhasNoLugar()) { agendarRenderKeepingScroll(); return; }
+  updateHeader();
+  for (const card of listaDeCartas) replaceCardRowInPlace(card.id);
+}
+
+/* ---------- Adiantar carimbo/edição/foil especial das cartas visíveis ----------
+
+   Os quadradinhos de versão (etiquetasDeVariante) só mostram carimbo, edição
+   e foil especial depois que a carta foi consultada (aberta ou escaneada) —
+   antes disso a Coleção não pedia essa consulta, e cartas nunca tocadas
+   ficavam sem os quadradinhos mesmo tendo a variação. Aqui a mesma consulta
+   do scanner é adiantada para quem está na tela, algumas cartas por vez: é
+   uma consulta por carta (bem mais cara que o lote de preços, que cobre
+   centenas de uma vez), então o teto de simultâneas é bem menor. */
+let variacoesEmAndamento = 0;
+const TETO_DE_VARIACOES_SIMULTANEAS = 2;
+function adiantarVariacoesDaLista(listaDeCartas) {
+  for (const card of listaDeCartas.slice(0, 40)) {
+    if (variacoesEmAndamento >= TETO_DE_VARIACOES_SIMULTANEAS) break;
+    const estado = scannerVariantAvailability.get(card.id);
+    if (estado?.loaded || estado?.loading) continue;
+    variacoesEmAndamento++;
+    loadCardVariantAvailability(card)
+      .catch(() => {})
+      .then(() => {
+        variacoesEmAndamento--;
+        if (podeAtualizarLinhasNoLugar()) replaceCardRowInPlace(card.id);
+        // Reabre a vaga para a próxima carta ainda não consultada da mesma
+        // lista — sem isto, a busca parava depois da primeira leva porque
+        // nada mais chama esta função de volta.
+        adiantarVariacoesDaLista(listaDeCartas);
+      });
   }
 }
 
@@ -2399,8 +2452,11 @@ async function init() {
     setTimeout(() => { talvezSalvarBackup(); }, 6000);
     /* A anotação do dia espera os preços chegarem — só o valor completo conta.
        Se ainda estiverem carregando, a próxima abertura anota; e a regra do
-       "maior valor do dia" conserta qualquer anotação feita pela metade. */
-    setTimeout(() => { registrarValorDoDia(); renderKeepingScroll(); }, 12000);
+       "maior valor do dia" conserta qualquer anotação feita pela metade.
+       O gráfico que este valor alimenta só existe no Início — redesenhar a
+       tela inteira 12s depois de QUALQUER abertura do app, mesmo com a
+       pessoa navegando a Coleção, é a tela "piscando" sem necessidade. */
+    setTimeout(() => { registrarValorDoDia(); if (ui.tab === 'dashboard') renderKeepingScroll(); }, 12000);
     labRecord('startup', performance.now() - labInitStart, { cards: cards.length });
   } catch (error) {
     document.getElementById('loading').innerHTML = `
@@ -2430,6 +2486,9 @@ function defaultVariant(quantity = 0, overrides = {}) {
     isForSale: Boolean(overrides.isForSale),
     paidPrice: nullableNumber(overrides.paidPrice),
     manualEstimatedValue: nullableNumber(overrides.manualEstimatedValue),
+    // Quando o valor manual foi confirmado pela última vez — base da
+    // expiração de 4 meses que obriga a reconferir o preço real.
+    manualEstimatedValueUpdatedAt: overrides.manualEstimatedValueUpdatedAt || null,
     automaticEstimatedValue: nullableNumber(overrides.automaticEstimatedValue),
     automaticPriceSource: String(overrides.automaticPriceSource || ''),
     automaticPriceLabel: String(overrides.automaticPriceLabel || ''),
@@ -2703,17 +2762,17 @@ function findRenderedCardRow(cardId) {
     .find(node => node.dataset.cardId === String(cardId)) || null;
 }
 
-function updateCardRowInPlace(cardId) {
+// true quando a grade atual mostra uma linha por CARTA (não por versão, como
+// em Trocar/Vender) e nem o filtro nem a ordenação podem fazer a carta somir
+// da lista ou pular de lugar — só nesse caso é seguro trocar UMA linha sem
+// redesenhar a grade inteira.
+function podeAtualizarLinhasNoLugar() {
   if (!['cards', 'wishlist', 'repeated'].includes(ui.tab)) return false;
   const filter = currentCardFilter();
-  // Nestes filtros a mudança de quantidade pode incluir/remover o item da lista.
-  // 'trade' também: vender uma cópia precisa tirar a linha da lista na hora.
-  // Ordenado por quantidade ou por data de adição, a carta muda de lugar. No
-  // fichário, o cabeçalho da página ("5/9") também precisa refazer a conta.
-  if (['owned', 'missing', 'repeated', 'trade'].includes(filter) || ui.cardSort === 'quantity' || ui.cardSort === 'recent') {
-    refreshSearchResults('cardQuery', true);
-    return true;
-  }
+  return !(['owned', 'missing', 'repeated', 'trade'].includes(filter) || ui.cardSort === 'quantity' || ui.cardSort === 'recent');
+}
+
+function replaceCardRowInPlace(cardId) {
   const card = cardMap.get(cardId);
   const current = findRenderedCardRow(cardId);
   if (!card || !current) return false;
@@ -2722,6 +2781,34 @@ function updateCardRowInPlace(cardId) {
   const replacement = holder.firstElementChild;
   if (!replacement) return false;
   current.replaceWith(replacement);
+  return true;
+}
+
+// Redesenho completo da grade, mas só depois de um instante sem novas
+// chamadas: preço e variação chegam aos poucos, em lotes separados, e sem
+// isso cada lote redesenhava a grade inteira na hora — a tela "piscava"
+// várias vezes seguidas assim que a coleção abria.
+let renderKeepingScrollTimer = null;
+function agendarRenderKeepingScroll(atraso = 350) {
+  if (renderKeepingScrollTimer) clearTimeout(renderKeepingScrollTimer);
+  renderKeepingScrollTimer = setTimeout(() => {
+    renderKeepingScrollTimer = null;
+    renderKeepingScroll();
+  }, atraso);
+}
+
+function updateCardRowInPlace(cardId) {
+  if (!['cards', 'wishlist', 'repeated'].includes(ui.tab)) return false;
+  const filter = currentCardFilter();
+  // Nestes filtros a mudança de quantidade pode incluir/remover o item da lista.
+  // 'trade' também: vender uma cópia precisa tirar a linha da lista na hora.
+  // Ordenado por quantidade ou por data de adição, a carta muda de lugar. No
+  // fichário, o cabeçalho da página ("5/9") também precisa refazer a conta.
+  if (!podeAtualizarLinhasNoLugar()) {
+    refreshSearchResults('cardQuery', true);
+    return true;
+  }
+  if (!replaceCardRowInPlace(cardId)) return false;
   tocarAnimacoesDeCarta();
   return true;
 }
@@ -2865,6 +2952,14 @@ function saveCardVariant(cardId, variantId) {
     && JSON.stringify((previous.variantTags || []).map(marketTagToken).filter(Boolean).sort()) === JSON.stringify(String(document.getElementById('regVariantTags')?.value || '').split(',').map(marketTagToken).filter(Boolean).sort())
     && marketLanguageKey(previous.language) === marketLanguageKey(document.getElementById('regLanguage')?.value)
     && marketConditionKey(previous.condition) === marketConditionKey(document.getElementById('regCondition')?.value);
+  const nextManualValue = parseCurrencyInput(document.getElementById('regManualValue')?.value);
+  const previousManualValue = previous?.manualEstimatedValue;
+  // Só um valor DIFERENTE conta como "atualizei". Salvar a carta de novo por
+  // outro motivo (quantidade, condição...) não pode renovar em silêncio os 4
+  // meses de validade — senão o preço nunca mais precisaria ser reconferido.
+  const manualValueChanged = nextManualValue == null
+    ? previousManualValue != null
+    : (previousManualValue == null || Number(previousManualValue) !== Number(nextManualValue));
   const draft = defaultVariant(quantity, {
     id: variantId || undefined,
     condition: document.getElementById('regCondition')?.value,
@@ -2884,7 +2979,10 @@ function saveCardVariant(cardId, variantId) {
     isForSale: document.getElementById('regSale')?.checked,
     artConfirmed: document.getElementById('regArt')?.checked,
     paidPrice: parseCurrencyInput(document.getElementById('regPaidPrice')?.value),
-    manualEstimatedValue: parseCurrencyInput(document.getElementById('regManualValue')?.value),
+    manualEstimatedValue: nextManualValue,
+    manualEstimatedValueUpdatedAt: nextManualValue == null
+      ? null
+      : (manualValueChanged || !previous?.manualEstimatedValueUpdatedAt ? new Date().toISOString() : previous.manualEstimatedValueUpdatedAt),
     automaticEstimatedValue: keepAutomatic ? previous.automaticEstimatedValue : null,
     automaticPriceSource: keepAutomatic ? previous.automaticPriceSource : '',
     automaticPriceLabel: keepAutomatic ? previous.automaticPriceLabel : '',
@@ -3251,10 +3349,7 @@ function pricedOwnedCount() {
       ? variants.some(variant => effectiveVariantPrice(cardId, variant)?.brl != null)
       : automaticPriceQuote(cardId, defaultVariant(0))?.confidence === 'verified';
     if (hasPrice) priced++;
-    if (variants.some(variant => {
-      const stored = storedAutomaticPriceQuote(variant);
-      return stored && stored.confidence === 'review' && !stored.userValidated;
-    })) pending++;
+    if (variants.some(variant => pendingPriceQuoteForVariant(cardId, variant))) pending++;
   }
   return { priced, owned, pending };
 }
@@ -5056,15 +5151,42 @@ function openSet(setId) {
   setTab('cards');
 }
 
+// Um valor manual só vale por um tempo: sem reconferência, a etiqueta do
+// preço fica cada vez mais desatualizada e a coleção "parece" valer o que
+// valia há meses. 4 meses obriga a visitar a Liga Pokémon de vez em quando.
+const MESES_DE_VALIDADE_DO_PRECO_MANUAL = 4;
+function precoManualExpirado(variant) {
+  if (!hasFiniteNumber(variant?.manualEstimatedValue)) return false;
+  const atualizadoEm = new Date(variant.manualEstimatedValueUpdatedAt || 0).getTime();
+  if (!Number.isFinite(atualizadoEm) || !atualizadoEm) return false;
+  const limite = new Date(atualizadoEm);
+  limite.setMonth(limite.getMonth() + MESES_DE_VALIDADE_DO_PRECO_MANUAL);
+  return Date.now() >= limite.getTime();
+}
+
+/* "Preços pendentes" é sobre CONFIRMAÇÃO MANUAL, não sobre a confiança da
+   correspondência automática (isso já tem o próprio fluxo, em
+   automaticPriceBox/confirmAutomaticPrice). Toda carta sem valor manual em
+   dia fica pendente — o valor do Pokémon Price Database Brasil continua
+   sendo mostrado normalmente, só a etiqueta de "revisar" que muda. */
 function pendingPriceQuoteForVariant(cardId, variant) {
-  if (!variant || Number(variant.quantity) <= 0 || hasFiniteNumber(variant.manualEstimatedValue)) return null;
-  const stored = storedAutomaticPriceQuote(variant);
-  if (stored?.confidence === 'review' && !stored.userValidated) return stored;
-  const live = automaticPriceQuote(cardId, variant.finish || 'normal');
-  const liveAccepted = Boolean(live?.fingerprint)
-    && Boolean(variant.automaticPriceUserValidated)
-    && variant.automaticPriceAcceptedFingerprint === live.fingerprint;
-  return live?.confidence === 'review' && !liveAccepted ? live : null;
+  if (!variant || Number(variant.quantity) <= 0) return null;
+  if (hasFiniteNumber(variant.manualEstimatedValue) && !precoManualExpirado(variant)) return null;
+  return storedAutomaticPriceQuote(variant) || automaticPriceQuote(cardId, variant.finish || 'normal') || { brl: null, pending: true };
+}
+
+// Aviso embaixo do campo "Valor manual", pra pessoa entender por que a carta
+// está (ou não) em "Preços pendentes" sem precisar ir atrás da explicação.
+function dicaDoValorManual(variant) {
+  if (!hasFiniteNumber(variant?.manualEstimatedValue)) {
+    return '<small class="manual-value-hint">Sem valor manual — entra em "Preços pendentes" até você confirmar.</small>';
+  }
+  if (precoManualExpirado(variant)) {
+    return `<small class="price-verification review">⚠ Valor confirmado em ${esc(formatPriceDate(variant.manualEstimatedValueUpdatedAt))} — passou de ${MESES_DE_VALIDADE_DO_PRECO_MANUAL} meses e voltou para "Preços pendentes".</small>`;
+  }
+  return variant.manualEstimatedValueUpdatedAt
+    ? `<small class="manual-value-hint">Confirmado em ${esc(formatPriceDate(variant.manualEstimatedValueUpdatedAt))}.</small>`
+    : '';
 }
 
 function cardNeedsPriceValidation(cardId) {
@@ -5262,6 +5384,7 @@ function renderCardSearchResults() {
   const { result, visible } = filteredCardsForUi();
   // Busca em segundo plano o que falta para as etiquetas e o dourado.
   adiantarLotesDaLista(visible);
+  adiantarVariacoesDaLista(visible);
   return `
     <div class="card-results-bar">
       <p class="card-results-count">${result.length.toLocaleString('pt-BR')} ${result.length === 1 ? 'carta encontrada' : 'cartas encontradas'}</p>
@@ -6816,6 +6939,9 @@ async function loadCardVariantAvailability(card) {
       unavailable: !centralDetails.length,
       pricingVariantDetails: mergeSourceVariantDetails(local.pricingVariantDetails, centralDetails),
     });
+  }
+  while (scannerVariantAvailability.size > TETO_DE_VARIACOES_EM_MEMORIA) {
+    scannerVariantAvailability.delete(scannerVariantAvailability.keys().next().value);
   }
   refreshCardVariationAvailability(card);
 }
@@ -8983,7 +9109,7 @@ function openCard(cardId, variantId = undefined) {
 
       <div class="registration-grid two-columns">
         ${registrationField('Preço que paguei (R$)', `<input id="regPaidPrice" class="field" inputmode="decimal" placeholder="Ex.: 5,50" value="${esc(formatInputNumber(draft.paidPrice))}">`)}
-        ${registrationField('Valor manual (R$)', `<input id="regManualValue" class="field" inputmode="decimal" placeholder="Ex.: 8,00" value="${esc(formatInputNumber(draft.manualEstimatedValue))}">`)}
+        ${registrationField('Valor manual (R$)', `<input id="regManualValue" class="field" inputmode="decimal" placeholder="Ex.: 8,00" value="${esc(formatInputNumber(draft.manualEstimatedValue))}">${dicaDoValorManual(draft)}`)}
       </div>
       ${registrationField('Observações da carta', `<textarea id="regNotes" class="field notes-field" rows="4" placeholder="Ex.: pequeno risco no verso, veio no booster...">${esc(draft.notes)}</textarea>`)}
 
