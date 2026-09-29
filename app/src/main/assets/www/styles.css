@@ -4140,16 +4140,38 @@ h3 {
   .etiquetas-variante { gap: 2px; padding: 3px; }
 }
 
-/* Os mesmos selos do quadradinho da lista, soltos no alto da tela de
-   cadastro — sem a barra escura por baixo, que só faz sentido em cima da
-   arte da carta lá na grade. */
+/* No cadastro os selos viram linha: cada versão ganha controle de
+   quantidade e preço da unidade ali mesmo, sem abrir o formulário de baixo
+   para cada ajuste. */
 .registration-etiquetas { margin-top: 8px; }
 .registration-etiquetas:empty { display: none; margin: 0; }
-.registration-etiquetas .etiquetas-variante {
-  position: static; display: flex; flex-wrap: wrap; gap: 5px; padding: 0;
-  background: none; pointer-events: auto;
+.variant-quick-list { display: grid; gap: 6px; }
+.variant-quick-row {
+  display: grid; grid-template-columns: auto 1fr auto auto;
+  align-items: center; gap: 8px;
+  padding: 7px 9px; border-radius: var(--raio-p);
+  border: 1px solid var(--vision-line); background: var(--vision-bg);
 }
-.registration-etiquetas .etiqueta-variante { min-width: 22px; height: 22px; font-size: 11px; }
+.variant-quick-row.tenho { border-color: var(--vision-primary); background: var(--vision-primary-tenue); }
+.variant-quick-icone { font-size: 15px; line-height: 1; }
+.variant-quick-icone.v-comum      { color: #b9c6d1; }
+.variant-quick-icone.v-holo       { color: #ffb454; }
+.variant-quick-icone.v-reverse    { color: #62b6ff; }
+.variant-quick-icone.v-primeira   { color: #f2c94c; }
+.variant-quick-icone.v-pokebola   { color: #e8544a; }
+.variant-quick-icone.v-masterball { color: #a259d9; }
+.variant-quick-icone.v-outra      { color: #b79bff; }
+.variant-quick-nome { min-width: 0; color: var(--vision-text); font-size: var(--fs-p); font-weight: 700; overflow-wrap: break-word; }
+.variant-quick-preco { color: var(--vision-muted); font-size: var(--fs-p); font-weight: 700; white-space: nowrap; }
+.variant-quick-stepper { display: flex; align-items: center; gap: 6px; }
+.variant-quick-stepper .quantity-step-btn {
+  min-height: 30px; min-width: 30px; height: 30px; width: 30px;
+  border: 0; border-radius: var(--raio-sm); background: var(--navy); color: #fff;
+  font-size: var(--fs-g); font-weight: 700; line-height: 1; padding: 0; cursor: pointer;
+}
+.variant-quick-stepper .quantity-step-btn:disabled { opacity: .35; cursor: default; }
+.variant-quick-stepper .quantity-step-btn:active:not(:disabled) { transform: scale(.94); }
+.variant-quick-stepper b { min-width: 18px; text-align: center; color: var(--vision-text); font-size: var(--fs-p); font-weight: 700; }
 
 /* ============================================================
    v5.16 — Carta completa fica dourada

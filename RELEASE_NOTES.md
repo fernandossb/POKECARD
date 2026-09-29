@@ -1,3 +1,7 @@
+# POKECARD Brasil 5.67.0 — Quadradinho virou linha, com quantidade e preço no cadastro
+
+- No cadastro de cartas, os quadradinhos de versão (comum, holo, reverse, carimbo, edição, foil especial...) viraram uma lista de linhas: cada versão mostra o preço da unidade e um controle de − / + para ajustar a quantidade direto ali, sem precisar abrir o formulário "Cadastrar nova versão" para cada acabamento. A primeira cópia de uma versão nova é criada sozinha (português, Near Mint, Brasil — os mesmos padrões de sempre) assim que você toca em "+"; se a carta ainda não tem nenhuma cópia e o app não sabe que Pokémon ela representa, o "+" pede para escolher antes, do mesmo jeito que o formulário completo já pedia. Os quadradinhos da grade da Coleção continuam do jeito que estavam — a mudança é só na tela de cadastro.
+
 # POKECARD Brasil 5.66.0 — Preços pendentes revisados, carimbo em toda a Coleção, e mais um pisca-pisca corrigido
 
 - **"Preços pendentes" agora é sobre confirmação MANUAL, não sobre a confiança do banco.** Antes só entravam nesse filtro as cartas cujo preço automático precisava de revisão (correspondência incerta). Agora toda carta sem um valor manual seu entra em "Preços pendentes" — mesmo que o Price Database já tenha um preço "verificado" para ela — porque o objetivo é você mesmo conferir o valor real, na Liga Pokémon ou onde for possível. Enquanto não houver valor manual, a carta continua mostrando o preço do Pokémon Price Database Brasil normalmente, como sempre mostrou — só a etiqueta de "revisar" que mudou de critério.

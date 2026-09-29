@@ -6842,7 +6842,7 @@ function refreshCardSpecificVariationFields(card) {
   reconstruirPills(card);
   atualizarResumoVariante(card);
   const etiquetas = document.getElementById('regEtiquetasVariante');
-  if (etiquetas) etiquetas.innerHTML = etiquetasDeVariante(analiseDeVariantes(card));
+  if (etiquetas) etiquetas.innerHTML = linhasDeCadastroHtml(card);
   const profile = cardVariationProfile(card);
   document.querySelectorAll('.owned-variant-row[data-owned-pricing-variant]').forEach(row => {
     const supported = profile.pricingVariants.includes(exactSourceEnum(row.dataset.ownedPricingVariant));
@@ -8722,6 +8722,154 @@ function etiquetasDeVariante(analise) {
   return `<span class="etiquetas-variante">${etiquetas}${sobra ? `<span class="etiqueta-variante mais">+${sobra}</span>` : ''}</span>`;
 }
 
+/* ---------- Linhas de variante do cadastro (quadradinho virou linha) ----------
+
+   Mesma cobertura de analiseDeVariantes (comuns + carimbo/edição/foil
+   especial), mas com QUANTIDADE exata por linha em vez de um "tenho"
+   booleano: cada cópia sua entra em UMA linha só — a comum separada da
+   carimbada — para o +/- desta tela poder somar e tirar sem contar a mesma
+   carta física duas vezes (o que aconteceria reaproveitando direto o
+   "tenho" de analiseDeVariantes, que conta uma cópia carimbada tanto na
+   etiqueta comum quanto na etiqueta de carimbo, de propósito, para o
+   quadradinho). Os quadradinhos da grade da Coleção continuam como estavam. */
+function linhasDeCadastro(card) {
+  const idioma = 'pt-br';
+  const daFonte = centralVariantEntries(card.id, idioma).map(item => item.value).filter(Boolean);
+  const conhecidas = daFonte.length ? variantesVisiveis(card.id, daFonte, '', idioma) : [];
+  const todas = variantsFor(card.id).filter(item => !item.isWishlist);
+  const ehPlana = v => (v.distribution || 'unstamped') === 'unstamped'
+    && (v.edition || 'unlimited') === 'unlimited' && (v.artVariant || 'standard') === 'standard';
+  const planas = todas.filter(ehPlana);
+  const extras = todas.filter(v => !ehPlana(v));
+
+  const siglasConhecidas = new Map();
+  for (const valor of conhecidas) {
+    const sigla = siglaDaVariante(valor);
+    if (!siglasConhecidas.has(sigla)) siglasConhecidas.set(sigla, valor);
+  }
+  for (const v of planas) {
+    const pv = exactSourceEnum(v.pricingVariant) || finishKind(v.finish);
+    const sigla = siglaDaVariante(pv);
+    if (!siglasConhecidas.has(sigla)) siglasConhecidas.set(sigla, pv);
+  }
+  const linhasBasicas = [...siglasConhecidas.entries()].map(([sigla, valor]) => {
+    const donos = planas.filter(v => siglaDaVariante(exactSourceEnum(v.pricingVariant) || finishKind(v.finish)) === sigla);
+    return {
+      id: `s|${sigla}`, extra: false,
+      identidade: { pricingVariant: valor, finish: acabamentoDaVersao(valor), edition: 'unlimited', distribution: 'unstamped', artVariant: 'standard' },
+      titulo: friendlyVariantLabel(valor), classe: variantEstilo(valor).classe, icone: variantEstilo(valor).icone,
+      donos, quantidade: donos.reduce((soma, v) => soma + Math.max(0, Number(v.quantity) || 0), 0),
+    };
+  });
+
+  const identidadeDeExtra = v => ({
+    pricingVariant: exactSourceEnum(v.pricingVariant) || finishKind(v.finish), finish: finishKind(v.finish),
+    distribution: v.distribution || 'unstamped', edition: v.edition || 'unlimited', artVariant: v.artVariant || 'standard',
+  });
+  const porExtra = new Map();
+  for (const linha of variacoesExtrasDaCarta(card, conhecidas)) porExtra.set(linha.chave, linha);
+  for (const v of extras) {
+    const identidade = identidadeDeExtra(v);
+    const chave = chaveDaLinhaExtra(identidade);
+    if (!porExtra.has(chave)) porExtra.set(chave, { ...identidade, chave });
+  }
+  const linhasExtras = [...porExtra.values()].map(linha => {
+    const donos = extras.filter(v => chaveDaLinhaExtra(identidadeDeExtra(v)) === linha.chave);
+    return {
+      id: linha.chave, extra: true, identidade: linha,
+      titulo: rotuloDaLinha(linha), classe: variantEstilo(linha.pricingVariant).classe, icone: variantEstilo(linha.pricingVariant).icone,
+      donos, quantidade: donos.reduce((soma, v) => soma + Math.max(0, Number(v.quantity) || 0), 0),
+    };
+  });
+
+  return [...linhasBasicas, ...linhasExtras].sort((a, b) => b.quantidade - a.quantidade);
+}
+
+function linhasDeCadastroHtml(card) {
+  const linhas = linhasDeCadastro(card);
+  if (!linhas.length) return '';
+  const corpo = linhas.map(linha => {
+    const dono = linha.donos.find(v => Number(v.quantity) > 0);
+    const preco = dono ? effectiveVariantPrice(card.id, dono) : automaticPriceQuote(card.id, linha.identidade);
+    const precoTexto = preco?.brl != null ? money(preco.brl) : 'sem preço';
+    const linhaIdEsc = esc(linha.id);
+    return `<div class="variant-quick-row${linha.quantidade > 0 ? ' tenho' : ''}">
+      <span class="variant-quick-icone ${linha.classe}" aria-hidden="true">${linha.icone}</span>
+      <span class="variant-quick-nome">${esc(linha.titulo)}</span>
+      <span class="variant-quick-preco">${esc(precoTexto)}</span>
+      <span class="variant-quick-stepper">
+        <button type="button" class="quantity-step-btn" ${linha.quantidade <= 0 ? 'disabled' : ''} onclick="event.stopPropagation();ajustarQuantidadeDeLinha('${esc(card.id)}','${linhaIdEsc}',-1)" aria-label="Diminuir ${esc(linha.titulo)}">−</button>
+        <b>${linha.quantidade}</b>
+        <button type="button" class="quantity-step-btn" onclick="event.stopPropagation();ajustarQuantidadeDeLinha('${esc(card.id)}','${linhaIdEsc}',1)" aria-label="Aumentar ${esc(linha.titulo)}">+</button>
+      </span>
+    </div>`;
+  }).join('');
+  return `<div class="variant-quick-list">${corpo}</div>`;
+}
+
+// +1/-1 direto na linha, sem abrir o formulário de baixo. Cria a variante na
+// hora (com os padrões de sempre: pt-br, Near Mint, Brasil) se ainda não
+// existir nenhuma cópia dessa versão específica.
+function ajustarQuantidadeDeLinha(cardId, linhaId, delta) {
+  const card = cardMap.get(cardId);
+  if (!card) return;
+  const linha = linhasDeCadastro(card).find(item => item.id === linhaId);
+  if (!linha) return;
+  if (delta > 0) {
+    let entry = state.entries[cardId];
+    if (!entry) {
+      entry = { quantity: 0, priceBrl: null, wishlist: false, variants: [] };
+      state.entries[cardId] = entry;
+    }
+    entry.variants = Array.isArray(entry.variants) ? entry.variants : [];
+    // Mesma exigência do formulário completo: sem nenhuma cópia e sem saber
+    // que Pokémon a carta representa, o atalho não pode criar a variante.
+    const automaticPokemonIds = Array.isArray(card.pokemonIds) ? card.pokemonIds.map(Number).filter(id => pokemonMap.has(id)) : [];
+    const selectedPokemonId = Number(entry.manualPokemonId) || Number(document.getElementById('regPokemonId')?.value || 0);
+    const categoriaConhecida = categoriaDaCarta(card);
+    const precisaDeVinculo = !categoriaConhecida || categoriaConhecida.classe === 'pokemon';
+    if (!quantityFor(cardId) && !automaticPokemonIds.length && !selectedPokemonId && precisaDeVinculo) {
+      notify('Selecione o Pokémon representado por esta carta antes de adicionar.');
+      return;
+    }
+    // A pessoa pode ter escolhido o Pokémon no formulário sem ainda ter
+    // apertado "Salvar" — sem gravar aqui, esse vínculo se perderia assim
+    // que o atalho reabrisse a tela.
+    if (!automaticPokemonIds.length && ((selectedPokemonId > 0 && selectedPokemonId <= 1025) || selectedPokemonId === 1026)) {
+      entry.manualPokemonId = selectedPokemonId;
+    }
+    const tinhaAntes = quantityFor(cardId) > 0;
+    let alvo = linha.donos[0];
+    if (!alvo) {
+      alvo = defaultVariant(0, {
+        pricingVariant: linha.identidade.pricingVariant, finish: linha.identidade.finish,
+        edition: linha.identidade.edition, distribution: linha.identidade.distribution, artVariant: linha.identidade.artVariant,
+        language: 'pt-br', condition: 'Near Mint', region: 'Brasil', gradingCompany: 'Não graduada',
+      });
+      entry.variants.push(alvo);
+    }
+    alvo.quantity = Math.max(0, Number(alvo.quantity) || 0) + 1;
+    alvo.updatedAt = new Date().toISOString();
+    if (!alvo.addedAt) alvo.addedAt = alvo.updatedAt;
+    applyAutomaticPriceToVariant(cardId, alvo);
+    marcarAnimacaoDeCarta(cardId, tinhaAntes ? 'pulo' : 'cor');
+    vibrar();
+  } else if (delta < 0) {
+    const alvo = linha.donos.find(v => Number(v.quantity) > 0);
+    if (!alvo) return;
+    alvo.quantity = Math.max(0, Number(alvo.quantity) - 1);
+    alvo.updatedAt = new Date().toISOString();
+  } else {
+    return;
+  }
+  syncEntry(cardId);
+  saveState();
+  conferirColecaoCompleta();
+  const variantIdAtual = document.getElementById('regVariantId')?.value || '';
+  render();
+  openCard(cardId, variantIdAtual || undefined);
+}
+
 /** Selo só para o que é realmente raro — senão perde a graça. */
 function seloDeRaridade(card) {
   const raridade = normalize(card?.rarity || '');
@@ -9027,7 +9175,7 @@ function openCard(cardId, variantId = undefined) {
           ${variants.length ? `<span class="badge purple">${variants.length} ${variants.length === 1 ? 'variante' : 'variantes'}</span>` : ''}
           ${identidadeDaCartaHtml(card, linked, manualPokemonId)}
         </div>
-        <div class="registration-etiquetas" id="regEtiquetasVariante">${etiquetasDeVariante(analiseDeVariantes(card))}</div>
+        <div class="registration-etiquetas" id="regEtiquetasVariante">${linhasDeCadastroHtml(card)}</div>
       </div>
     </div>
 
