@@ -2821,6 +2821,12 @@ body::before, body::after, .gengar-atmosphere { display: none !important; }
   background: var(--vision-surface-2) !important;
   color: var(--vision-text) !important;
 }
+/* O aviso que troca de lugar com "Mostrar mais" ao bater no teto da lista. */
+.load-more-limite {
+  margin-top: 13px; padding: 11px 14px; border-radius: var(--raio-m);
+  border: 1px solid var(--vision-line); background: var(--vision-surface-2);
+  color: var(--vision-muted) !important; font-size: var(--fs-p); line-height: 1.4; text-align: center;
+}
 .secondary-btn, .quick-action-list button, .price-refresh-btn {
   background: var(--vision-surface-2) !important;
   color: var(--vision-text) !important;

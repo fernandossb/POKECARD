@@ -89,6 +89,34 @@ let scannerCandidateBuffer = [];
 let scannerLastOcrText = '';
 const scannerVariantAvailability = new Map();
 
+/* Chamado pelo Android (onTrimMemory) quando o sistema avisa que a memória
+   do aparelho está ficando escassa — ANTES de precisar matar o processo.
+
+   Até aqui, o aplicativo só reagia DEPOIS que a tela já tinha caído: o
+   WebView recarregava sozinho (onRenderProcessGone, no lado nativo), o que
+   para quem está usando parece a tela "piscar" e recarregar a coleção do
+   nada. Agora, ao primeiro aviso, ele solta o que é só controle interno —
+   nunca dados da coleção, nunca o que está na tela — na esperança de nunca
+   chegar a precisar recarregar. Nível baixo esvazia só os caches de imagem
+   (os mais pesados); nível alto some também com os de ordenação e preço de
+   variante, que se reconstroem sozinhos na próxima vez que fizerem falta. */
+function limparCachesDeMemoria(nivel) {
+  try { window.FicharioImageFallback?.trimMemory?.(); } catch (_) {}
+  /* ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW = 10: o aviso que chega com
+     o aplicativo ainda ABERTO na tela, sistema apertado — exatamente o
+     momento que "trava, fica lento" descreve. Os níveis de aplicativo em
+     segundo plano (20 a 80) são todos maiores; então >= 10 cobre o caso que
+     importa aqui sem esperar o aplicativo já ter ido para trás. */
+  const critico = Number(nivel) >= 10;
+  if (critico) {
+    staticCardSortCache.clear();
+    variantImageCache = {};
+    ligaSetCache = {};
+  }
+  labRecord('memoria_liberada', 0, { nivel: Number(nivel) || 0, critico });
+}
+window.limparCachesDeMemoria = limparCachesDeMemoria;
+
 // Performance v2.1.1: cache das consultas visíveis, pré-carregamento moderado
 // e pausa temporária das animações durante a rolagem.
 let cardResultCache = { key: '', revision: -1, value: null };
@@ -237,6 +265,7 @@ function labToggle() {
   if (lab.enabled) {
     lab.startedAt = Date.now();
     labRecord('laboratorio_iniciado', 0);
+    iniciarLoopDeFps();
   } else labSaveReport();
   renderLabPanel();
 }
@@ -274,19 +303,41 @@ function openLaboratoryPanel() {
     </div>`);
 }
 
-(function startLabObservers(){
-  function frame(now) {
-    lab.frames++;
-    if (now - lab.lastFpsAt >= 1000) {
-      lab.fps = Math.round((lab.frames * 1000) / (now - lab.lastFpsAt));
-      lab.fpsMin = Math.min(lab.fpsMin, lab.fps);
-      lab.frames = 0;
-      lab.lastFpsAt = now;
-      if (lab.enabled && document.getElementById('lab-live-metrics')) renderLabPanel();
-    }
-    requestAnimationFrame(frame);
+/* O relógio de FPS só roda enquanto o Modo Laboratório está ligado.
+
+   Antes rodava para sempre, a cada quadro, do momento em que o aplicativo
+   abria até ser fechado — mesmo que ninguém jamais tivesse aberto o
+   laboratório. Uma função chamada 60 vezes por segundo, a vida inteira da
+   sessão, não vaza memória sozinha, mas mantém a aba de JavaScript sempre
+   ocupada: menos folga para o coletor de lixo rodar sem atrapalhar, e mais
+   uma fonte de trabalho constante numa sessão que já vai ficando pesada
+   pelos outros motivos. Como só serve para alimentar um painel que o
+   usuário quase nunca abre, passa a existir só enquanto ele está aberto. */
+let labFpsLoopAtivo = false;
+function labFrame(now) {
+  if (!lab.enabled) { labFpsLoopAtivo = false; return; }
+  lab.frames++;
+  if (now - lab.lastFpsAt >= 1000) {
+    lab.fps = Math.round((lab.frames * 1000) / (now - lab.lastFpsAt));
+    lab.fpsMin = Math.min(lab.fpsMin, lab.fps);
+    lab.frames = 0;
+    lab.lastFpsAt = now;
+    if (document.getElementById('lab-live-metrics')) renderLabPanel();
   }
-  requestAnimationFrame(frame);
+  requestAnimationFrame(labFrame);
+}
+function iniciarLoopDeFps() {
+  if (labFpsLoopAtivo) return;
+  labFpsLoopAtivo = true;
+  lab.frames = 0;
+  lab.lastFpsAt = performance.now();
+  requestAnimationFrame(labFrame);
+}
+
+(function startLabObservers(){
+  // O relatório de "tarefa longa" é evento, não laço: não custa nada ficado
+  // ligado em silêncio (labRecord já não faz nada com o laboratório
+  // desligado), então continua sempre ativo.
   try {
     new PerformanceObserver(list => {
       for (const entry of list.getEntries()) {
@@ -5054,10 +5105,22 @@ function cardsForCurrentFilter(filter) {
   return result;
 }
 
+// Cada combinação de coleção + ordenação guarda um array ordenado inteiro
+// (até o catálogo todo, em "Todas as coleções"). Sem teto, uma sessão longa
+// passeando por muitas coleções diferentes ia empilhando um desses a cada
+// visita e nenhum saía nunca. 24 cobre folgado o uso normal (navegar
+// algumas coleções, trocar de ordem algumas vezes); passado isso, a mais
+// antiga sai — ela só custa ser recalculada na próxima vez que fizer falta.
+const TETO_DO_CACHE_DE_ORDENACAO = 24;
 function cachedStaticSort(source, sort, cacheKey) {
   if (!['number','name','set'].includes(sort)) return source.slice().sort(cardSorter(sort));
   const key = `${cacheKey}|${sort}`;
-  if (!staticCardSortCache.has(key)) staticCardSortCache.set(key, source.slice().sort(cardSorter(sort)));
+  if (!staticCardSortCache.has(key)) {
+    staticCardSortCache.set(key, source.slice().sort(cardSorter(sort)));
+    while (staticCardSortCache.size > TETO_DO_CACHE_DE_ORDENACAO) {
+      staticCardSortCache.delete(staticCardSortCache.keys().next().value);
+    }
+  }
   return staticCardSortCache.get(key);
 }
 
@@ -5190,7 +5253,7 @@ function renderResultadosDeTroca() {
     <div class="${classeDeLayout()}">${visiveis.length
       ? visiveis.map(renderLinhaDeSobra).join('')
       : '<div class="empty"><strong>Nada sobrando</strong>Quando você tiver duas ou mais cópias da mesma versão, o excedente aparece aqui.</div>'}</div>
-    ${visiveis.length < lista.length ? `<button class="load-more" onclick="ui.cardLimit+=60;refreshSearchResults('cardQuery', true)">Mostrar mais ${Math.min(60, lista.length - visiveis.length)}</button>` : ''}`;
+    ${botaoMostrarMais(visiveis.length, lista.length, ui.cardLimit, LIMITE_MAXIMO_DE_CARTAS_NA_TELA, 60, 'expandirLimiteDeCartas', 'versões')}`;
 }
 
 function renderCardSearchResults() {
@@ -5205,7 +5268,7 @@ function renderCardSearchResults() {
       ${seletorDeLayout()}
     </div>
     <div class="${classeDeLayout()}">${!visible.length ? emptyCards() : visible.map(renderCardRow).join('')}</div>
-    ${visible.length < result.length ? `<button class="load-more" onclick="ui.cardLimit+=60;refreshSearchResults('cardQuery', true)">Mostrar mais ${Math.min(60, result.length-visible.length)}</button>` : ''}`;
+    ${botaoMostrarMais(visible.length, result.length, ui.cardLimit, LIMITE_MAXIMO_DE_CARTAS_NA_TELA, 60, 'expandirLimiteDeCartas', 'cartas')}`;
 }
 
 function renderCards() {
@@ -5582,6 +5645,40 @@ function classeDeLayout() {
 
 function limiteDeCartasVisiveis() {
   return ui.cardLimit;
+}
+
+/* "Mostrar mais" empilhava sem parar: cada toque só somava ao limite, e
+   nada nunca tirava as linhas antigas de cena. Numa coleção de milhares de
+   cartas, dava para chegar a centenas de linhas montadas ao mesmo tempo —
+   cada uma com imagem, preço, etiquetas — e, como a lista inteira é
+   redesenhada do zero a cada busca ou filtro (para não montar uma tela de
+   renderização incremental agora), esse tanto de linha era destruído e
+   reconstruído inteiro a cada pequena mudança. Era um dos motivos do
+   aplicativo ir ficando mais pesado e mais lento quanto mais tempo passava
+   numa coleção grande. Um teto — generoso, mas um teto — limita o estrago:
+   passado ele, a busca e os filtros continuam sendo o caminho para achar o
+   resto, sem sobrecarregar o aparelho. */
+const LIMITE_MAXIMO_DE_CARTAS_NA_TELA = 300;
+const LIMITE_MAXIMO_DE_POKEMON_NA_TELA = 720;
+
+function expandirLimiteDeCartas() {
+  ui.cardLimit = Math.min(ui.cardLimit + 60, LIMITE_MAXIMO_DE_CARTAS_NA_TELA);
+  refreshSearchResults('cardQuery', true);
+}
+
+function expandirLimiteDaDex() {
+  ui.dexLimit = Math.min(ui.dexLimit + 180, LIMITE_MAXIMO_DE_POKEMON_NA_TELA);
+  refreshSearchResults('dexQuery', true);
+}
+
+// O botão "Mostrar mais", ou o aviso de que bateu no teto — mesma lógica
+// nos três lugares que paginam uma lista grande.
+function botaoMostrarMais(visiveisLength, totalLength, limiteAtual, teto, quantoPorVez, expandirFn, unidade = 'cartas') {
+  if (visiveisLength >= totalLength) return '';
+  if (limiteAtual >= teto) {
+    return `<p class="load-more-limite">Mostrando as ${teto.toLocaleString('pt-BR')} primeiras ${unidade}. Use a busca ou os filtros para achar o resto sem sobrecarregar o aparelho.</p>`;
+  }
+  return `<button class="load-more" onclick="${expandirFn}()">Mostrar mais ${Math.min(quantoPorVez, totalLength - visiveisLength)}</button>`;
 }
 
 function definirLayoutDeCartas(valor) {
@@ -9111,7 +9208,7 @@ function renderPokedexSearchResults() {
   }
   return result.length
     ? `${REGION_ORDER.filter(region=>grouped.has(region)).map(region => renderRegion(region, grouped.get(region), stats)).join('')}
-      ${visible.length < result.length ? `<button class="load-more" onclick="ui.dexLimit+=180;refreshSearchResults('dexQuery', true)">Mostrar mais ${Math.min(180, result.length-visible.length)} Pokémon</button>` : ''}`
+      ${botaoMostrarMais(visible.length, result.length, ui.dexLimit, LIMITE_MAXIMO_DE_POKEMON_NA_TELA, 180, 'expandirLimiteDaDex', 'Pokémon')}`
     : '<div class="empty"><strong>Nenhum Pokémon encontrado</strong>Altere os filtros para continuar.</div>';
 }
 

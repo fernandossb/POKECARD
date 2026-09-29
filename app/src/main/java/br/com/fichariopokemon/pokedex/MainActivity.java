@@ -242,6 +242,21 @@ public final class MainActivity extends Activity {
         super.onDestroy();
     }
 
+    /* O Android avisa por aqui QUANDO a memória do aparelho está ficando
+       escassa — antes de precisar matar alguém para liberar espaço. Sem
+       ouvir esse aviso, o único jeito do aplicativo "descobrir" que estava
+       pesado demais era o processo do WebView já ter caído (onRenderProcessGone
+       recupera daquilo, mas recuperar já é recarregar a tela inteira, o que
+       para quem está usando parece a coleção "piscar"). Repassando o aviso
+       para o lado do JavaScript, os caches que só servem de atalho — não a
+       coleção, não o que está na tela — têm a chance de esvaziar sozinhos
+       antes que o sistema precise agir. */
+    @Override
+    public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        runJavascript("window.limparCachesDeMemoria && window.limparCachesDeMemoria(" + level + ");");
+    }
+
     private void launchImageChooser(boolean cameraOnly) throws Exception {
         Intent galleryIntent = new Intent(Intent.ACTION_GET_CONTENT);
         galleryIntent.addCategory(Intent.CATEGORY_OPENABLE);

@@ -65,6 +65,22 @@
     return true;
   }
 
+  /* `attempts` (URLs já tentadas por carta) e `localImageState` (se a carta
+     tem foto local, em cache na memória) crescem uma entrada por carta
+     tocada — abrir, escanear, só rolar a lista até ela aparecer. Numa
+     coleção de milhares de cartas, uma sessão longa passando por boa parte
+     delas acumulava as duas listas inteiras na memória, sem nunca soltar
+     nada. Agora, passado o teto, a mais antiga sai para a mais nova entrar —
+     o pior que acontece é tentar de novo uma URL que já tinha falhado, ou
+     reconferir uma foto local no IndexedDB; nenhum dos dois corrompe nada. */
+  const TETO_DE_CARTAS_EM_MEMORIA = 600;
+  function limitarMapa(mapa, teto = TETO_DE_CARTAS_EM_MEMORIA) {
+    while (mapa.size > teto) {
+      const maisAntiga = mapa.keys().next().value;
+      mapa.delete(maisAntiga);
+    }
+  }
+
   try { cache = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}') || {}; } catch (_) { cache = {}; }
   try { diagnostics = JSON.parse(localStorage.getItem(DIAGNOSTIC_KEY) || '{}') || {}; } catch (_) { diagnostics = {}; }
   if (aparaDiagnosticos()) {
@@ -462,6 +478,7 @@
   async function readLocalImage(cardId, force = false) {
     const id = String(cardId || '');
     if (!id) return null;
+    limitarMapa(localImageState);
     if (!force && localImageState.has(id)) return localImageState.get(id);
     if (!force && localImageChecks.has(id)) return localImageChecks.get(id);
     // Já sabemos quais cartas têm foto local: as demais nem tocam no IndexedDB.
@@ -605,6 +622,7 @@
     const promise = (async () => {
       const tried = attempts.get(id) || new Set();
       attempts.set(id, tried);
+      limitarMapa(attempts);
       if (failedUrl) tried.add(failedUrl);
 
       const candidates = await providerCandidates(card, force);
@@ -670,29 +688,60 @@
     });
   }
 
-  function scanCards() {
-    document.querySelectorAll('.card-row').forEach(row => {
-      const cardId = parseCardId(row.getAttribute('onclick'), 'openCard');
-      prepareTarget(row.querySelector('.card-thumb, .card-placeholder'), cardId);
-    });
+  function processCardRow(row) {
+    const cardId = parseCardId(row.getAttribute('onclick'), 'openCard');
+    prepareTarget(row.querySelector('.card-thumb, .card-placeholder'), cardId);
+  }
 
-    document.querySelectorAll('.deck-card-row').forEach(row => {
-      const button = [...row.querySelectorAll('[onclick]')]
-        .find(item => String(item.getAttribute('onclick')).includes('changeDeckCard'));
-      const cardId = parseCardId(button?.getAttribute('onclick'), 'changeDeckCard');
-      const target = row.querySelector('img, .card-placeholder');
-      if (target) prepareTarget(target, cardId);
-      else if (cardId) {
-        const holder = makePlaceholder(cardId, 'card-placeholder', 'Buscando arte…');
-        row.prepend(holder);
-        resolveAndApply(cardId, false);
-      }
-    });
-
-    if (activeCardId) {
-      const modal = document.getElementById('modal-content');
-      prepareTarget(modal?.querySelector('.registration-card-image, .registration-placeholder'), activeCardId);
+  function processDeckRow(row) {
+    const button = [...row.querySelectorAll('[onclick]')]
+      .find(item => String(item.getAttribute('onclick')).includes('changeDeckCard'));
+    const cardId = parseCardId(button?.getAttribute('onclick'), 'changeDeckCard');
+    const target = row.querySelector('img, .card-placeholder');
+    if (target) prepareTarget(target, cardId);
+    else if (cardId) {
+      const holder = makePlaceholder(cardId, 'card-placeholder', 'Buscando arte…');
+      row.prepend(holder);
+      resolveAndApply(cardId, false);
     }
+  }
+
+  function processModal() {
+    if (!activeCardId) return;
+    const modal = document.getElementById('modal-content');
+    prepareTarget(modal?.querySelector('.registration-card-image, .registration-placeholder'), activeCardId);
+  }
+
+  /* Varredura completa: só na carga inicial e ao abrir uma carta — os dois
+     momentos em que não dá para saber de antemão quais nós vão precisar de
+     arte. Cresce com o tamanho da lista na tela (pode chegar a centenas de
+     linhas numa coleção grande), então não é chamada a cada mudança no
+     documento — só a varredura incremental abaixo é. */
+  function scanCards() {
+    document.querySelectorAll('.card-row').forEach(processCardRow);
+    document.querySelectorAll('.deck-card-row').forEach(processDeckRow);
+    processModal();
+  }
+
+  /* Varredura incremental: olha só os nós que ACABARAM de entrar no
+     documento, não a lista inteira de novo.
+
+     Antes, qualquer mudança em QUALQUER lugar da página — um preço
+     atualizando dentro de um modal aberto, um toast aparecendo — disparava
+     uma nova varredura completa (scanCards) por cima de uma lista que podia
+     ter centenas de linhas já prontas, sempre pulando cada uma pela marca
+     `cardArtPrepared`, mas ainda assim percorrendo e testando todas de novo.
+     Numa coleção grande, com a lista de cartas montada atrás de um modal
+     aberto, isso rodava a cada tecla digitada em qualquer campo do modal —
+     um dos motivos do aplicativo ir ficando mais lento e mais pesado quanto
+     mais tempo ficava aberto. Agora só os nós que entraram naquela leva são
+     examinados: o custo acompanha o que mudou, não o que já estava pronto. */
+  function scanNode(node) {
+    if (node.nodeType !== 1) return;
+    if (node.matches?.('.card-row')) processCardRow(node);
+    else node.querySelectorAll?.('.card-row').forEach(processCardRow);
+    if (node.matches?.('.deck-card-row')) processDeckRow(node);
+    else node.querySelectorAll?.('.deck-card-row').forEach(processDeckRow);
   }
 
   try {
@@ -708,15 +757,26 @@
   } catch (_) {}
 
   let scanScheduled = false;
-  const scheduleScan = () => {
+  let pendingNodes = new Set();
+  const observer = new MutationObserver(mutations => {
+    for (const mutation of mutations) {
+      for (const node of mutation.addedNodes) pendingNodes.add(node);
+    }
     if (scanScheduled) return;
     scanScheduled = true;
     requestAnimationFrame(() => {
       scanScheduled = false;
-      scanCards();
+      const nodes = [...pendingNodes];
+      pendingNodes.clear();
+      for (const node of nodes) {
+        // O nó pode ter sido removido de novo antes deste quadro (troca
+        // rápida de tela): sem isso, tentaria buscar arte para algo que já
+        // não está mais na página.
+        if (document.contains(node)) scanNode(node);
+      }
+      processModal();
     });
-  };
-  const observer = new MutationObserver(scheduleScan);
+  });
   const start = () => {
     observer.observe(document.body, { childList: true, subtree: true });
     scanCards();
@@ -769,6 +829,18 @@
     },
     diagnostics(cardId) {
       return cardId ? diagnostics[String(cardId)] || [] : diagnostics;
+    },
+    /* Chamado quando o Android avisa que a memória está ficando escassa
+       (onTrimMemory, do lado nativo). Só solta o que é só controle interno —
+       "quais URLs já tentei", "esta carta tem foto local" — nunca a arte que
+       já está na tela nem o cache de URLs resolvidas (esse é pequeno, uma
+       linha por carta, e perdê-lo forçaria a cascata inteira de novo na
+       próxima abertura). O pior que pode acontecer é tentar de novo uma URL
+       que falhou antes, ou reconferir uma foto local: nenhum dos dois é
+       visível para quem está usando o aplicativo. */
+    trimMemory() {
+      attempts.clear();
+      localImageState.clear();
     },
   };
 })();
