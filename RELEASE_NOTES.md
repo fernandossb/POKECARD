@@ -1,3 +1,7 @@
+# POKECARD Brasil 5.65.1 — Ajuste: sem teto na Pokédex
+
+- O teto de "Mostrar mais" da versão anterior (item 4 do aviso de desempenho) valia também para a Pokédex — mas ela não precisa: é um universo fixo e pequeno (pouco mais de mil espécies e formas, contando tudo), bem diferente do catálogo de 13 mil e tantas cartas ou de uma coleção com milhares de cópias. A Coleção continua limitada a 300 cartas por vez; a Pokédex volta a mostrar tudo, sem parar antes do fim.
+
 # POKECARD Brasil 5.65.0 — App travando e ficando pesado com o uso: 6 causas corrigidas
 
 Depois de cadastrar bastante e usar por um tempo seguido, o aplicativo vinha ficando lento, travando em qualquer tela e "piscando" como se estivesse recarregando a coleção sozinho, até lotar a memória do celular. Investiguei a fundo e encontrei seis causas reais, todas corrigidas nesta versão:

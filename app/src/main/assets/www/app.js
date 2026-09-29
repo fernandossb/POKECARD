@@ -5657,9 +5657,15 @@ function limiteDeCartasVisiveis() {
    aplicativo ir ficando mais pesado e mais lento quanto mais tempo passava
    numa coleção grande. Um teto — generoso, mas um teto — limita o estrago:
    passado ele, a busca e os filtros continuam sendo o caminho para achar o
-   resto, sem sobrecarregar o aparelho. */
+   resto, sem sobrecarregar o aparelho.
+
+   Só vale para a Coleção: o catálogo de cartas tem 13 mil e tantas, e uma
+   coleção cadastrada pode chegar a milhares de cópias — sem teto, dava para
+   montar a lista inteira na tela. A Pokédex não corre esse risco: é um
+   universo fixo e pequeno (pouco mais de mil espécies e formas, contando
+   tudo), então "Mostrar mais" nela já para sozinho quando não sobra mais
+   nada — não precisa de teto artificial nenhum. */
 const LIMITE_MAXIMO_DE_CARTAS_NA_TELA = 300;
-const LIMITE_MAXIMO_DE_POKEMON_NA_TELA = 720;
 
 function expandirLimiteDeCartas() {
   ui.cardLimit = Math.min(ui.cardLimit + 60, LIMITE_MAXIMO_DE_CARTAS_NA_TELA);
@@ -5667,12 +5673,13 @@ function expandirLimiteDeCartas() {
 }
 
 function expandirLimiteDaDex() {
-  ui.dexLimit = Math.min(ui.dexLimit + 180, LIMITE_MAXIMO_DE_POKEMON_NA_TELA);
+  ui.dexLimit += 180;
   refreshSearchResults('dexQuery', true);
 }
 
 // O botão "Mostrar mais", ou o aviso de que bateu no teto — mesma lógica
-// nos três lugares que paginam uma lista grande.
+// nos lugares que paginam uma lista grande. `teto: Infinity` (a Pokédex)
+// nunca bate no aviso: só some quando a lista realmente acabar.
 function botaoMostrarMais(visiveisLength, totalLength, limiteAtual, teto, quantoPorVez, expandirFn, unidade = 'cartas') {
   if (visiveisLength >= totalLength) return '';
   if (limiteAtual >= teto) {
@@ -9208,7 +9215,7 @@ function renderPokedexSearchResults() {
   }
   return result.length
     ? `${REGION_ORDER.filter(region=>grouped.has(region)).map(region => renderRegion(region, grouped.get(region), stats)).join('')}
-      ${botaoMostrarMais(visible.length, result.length, ui.dexLimit, LIMITE_MAXIMO_DE_POKEMON_NA_TELA, 180, 'expandirLimiteDaDex', 'Pokémon')}`
+      ${botaoMostrarMais(visible.length, result.length, ui.dexLimit, Infinity, 180, 'expandirLimiteDaDex', 'Pokémon')}`
     : '<div class="empty"><strong>Nenhum Pokémon encontrado</strong>Altere os filtros para continuar.</div>';
 }
 
