@@ -4132,6 +4132,17 @@ h3 {
   .etiquetas-variante { gap: 2px; padding: 3px; }
 }
 
+/* Os mesmos selos do quadradinho da lista, soltos no alto da tela de
+   cadastro — sem a barra escura por baixo, que só faz sentido em cima da
+   arte da carta lá na grade. */
+.registration-etiquetas { margin-top: 8px; }
+.registration-etiquetas:empty { display: none; margin: 0; }
+.registration-etiquetas .etiquetas-variante {
+  position: static; display: flex; flex-wrap: wrap; gap: 5px; padding: 0;
+  background: none; pointer-events: auto;
+}
+.registration-etiquetas .etiqueta-variante { min-width: 22px; height: 22px; font-size: 11px; }
+
 /* ============================================================
    v5.16 — Carta completa fica dourada
 

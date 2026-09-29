@@ -6614,6 +6614,8 @@ function refreshCardSpecificVariationFields(card) {
   }
   reconstruirPills(card);
   atualizarResumoVariante(card);
+  const etiquetas = document.getElementById('regEtiquetasVariante');
+  if (etiquetas) etiquetas.innerHTML = etiquetasDeVariante(analiseDeVariantes(card));
   const profile = cardVariationProfile(card);
   document.querySelectorAll('.owned-variant-row[data-owned-pricing-variant]').forEach(row => {
     const supported = profile.pricingVariants.includes(exactSourceEnum(row.dataset.ownedPricingVariant));
@@ -8359,6 +8361,20 @@ const SIGLAS_VARIANTE = {
   'firstEdition': '1E',
   'pokeball-holofoil': 'PB',
   'masterball-holofoil': 'MB',
+  // Demais foils especiais (SPECIAL_FOIL_OPTIONS) e subtipos de impressão
+  // (variants_detailed.subtype) que o scanner já reconhece — mesma sigla
+  // curta nos dois lugares.
+  'greatball-holofoil': 'GB',
+  'ultraball-holofoil': 'UB',
+  'cosmos-holofoil': 'CO',
+  'cracked-ice-holofoil': 'CI',
+  'tinsel-holofoil': 'TI',
+  'mirror-holofoil': 'MI',
+  'galaxy-holofoil': 'GA',
+  'gold-holofoil': 'GD',
+  'rainbow-holofoil': 'RB',
+  'shadowless': 'SS',
+  '1st-print': '1P',
 };
 
 function siglaDaVariante(valor) {
@@ -8367,6 +8383,19 @@ function siglaDaVariante(valor) {
   // Enum novo que a fonte inventar: duas primeiras letras, sem travar.
   const limpo = exato.replace(/[^a-z0-9]/gi, '');
   return (limpo.slice(0, 2) || '?').toUpperCase();
+}
+
+/* A sigla de uma variação "extra" (carimbo, edição ou foil especial — a
+   mesma lista que o botão "🏷 Carimbo, edição ou foil" do scanner usa).
+   Carimbo vira o selo 🏷: os nomes de carimbo são longos e variados demais
+   para caber em duas letras, mas o selo já diz "esta cópia é carimbada" de
+   relance — a etiqueta inteira, com o nome certo, está no title. */
+function siglaDaLinha(linha) {
+  if (!VERSOES_PLANAS.has(linha.pricingVariant)) return siglaDaVariante(linha.pricingVariant);
+  if (linha.distribution && linha.distribution !== 'unstamped') return '🏷';
+  if (linha.edition && linha.edition !== 'unlimited') return siglaDaVariante(linha.edition);
+  if (linha.artVariant && linha.artVariant !== 'standard') return siglaDaVariante(linha.artVariant);
+  return siglaDaVariante(linha.pricingVariant);
 }
 
 /**
@@ -8388,9 +8417,8 @@ function analiseDeVariantes(card) {
      mesma lista. */
   const daFonte = centralVariantEntries(card.id, idioma).map(item => item.value).filter(Boolean);
   const conhecidas = daFonte.length ? variantesVisiveis(card.id, daFonte, '', idioma) : [];
-  const minhas = variantsFor(card.id)
-    .filter(item => !item.isWishlist && (Number(item.quantity) || 0) > 0)
-    .map(item => exactSourceEnum(item.pricingVariant) || finishKind(item.finish));
+  const minhasVariantes = variantsFor(card.id).filter(item => !item.isWishlist && (Number(item.quantity) || 0) > 0);
+  const minhas = minhasVariantes.map(item => exactSourceEnum(item.pricingVariant) || finishKind(item.finish));
 
   // Uma etiqueta por sigla: "reverse" e "reverse-holofoil" são a mesma
   // coisa para quem olha a carta, como já vale nos botões do cadastro.
@@ -8406,25 +8434,60 @@ function analiseDeVariantes(card) {
   const completa = siglasDaFonte.size > 0
     && [...siglasDaFonte].every(sigla => porSigla.get(sigla)?.tenho);
 
+  /* Carimbo, edição e foil especial — a mesma lista que o botão "🏷 Carimbo,
+     edição ou foil" do scanner mostra (variants_detailed do TCGdex), quando
+     esta carta já foi consultada (aberta ou escaneada alguma vez — a busca
+     não é disparada aqui, só reaproveitada). Mais o que você já cadastrou à
+     mão, mesmo sem confirmação da fonte: é uma cópia real seu, e a etiqueta
+     tem que mostrar isso mesmo que o TCGdex nunca tenha visto essa carta
+     carimbada. "Completa" (dourado) continua olhando só para as versões
+     comuns acima — foil especial e carimbo não entram nessa conta: são raros
+     demais para exigir a coleção inteira deles. */
+  const porExtra = new Map();
+  for (const linha of variacoesExtrasDaCarta(card, conhecidas)) {
+    porExtra.set(linha.chave, { chave: linha.chave, linha, tenho: false });
+  }
+  for (const item of minhasVariantes) {
+    const distribution = item.distribution || 'unstamped';
+    const edition = item.edition || 'unlimited';
+    const artVariant = item.artVariant || 'standard';
+    if (distribution === 'unstamped' && edition === 'unlimited' && artVariant === 'standard') continue;
+    const linha = {
+      pricingVariant: exactSourceEnum(item.pricingVariant) || finishKind(item.finish),
+      finish: finishKind(item.finish), distribution, edition, artVariant,
+    };
+    const chave = chaveDaLinhaExtra(linha);
+    if (porExtra.has(chave)) porExtra.get(chave).tenho = true;
+    else porExtra.set(chave, { chave, linha, tenho: true });
+  }
+
   return {
     // As que você tem vêm primeiro: é a informação que o olho procura.
     lista: [...porSigla.values()].sort((a, b) => Number(b.tenho) - Number(a.tenho)),
+    extras: [...porExtra.values()].sort((a, b) => Number(b.tenho) - Number(a.tenho)),
     completa,
     totalDaFonte: siglasDaFonte.size,
   };
 }
 
 function etiquetasDeVariante(analise) {
-  const porSigla = new Map((analise?.lista || []).map(item => [item.sigla, item]));
-  if (!porSigla.size) return '';
-  const lista = analise.lista;
+  const lista = [
+    ...(analise?.lista || []).map(item => ({
+      texto: item.sigla, classe: variantEstilo(item.valor).classe,
+      titulo: friendlyVariantLabel(item.valor), tenho: item.tenho,
+    })),
+    ...(analise?.extras || []).map(item => ({
+      texto: siglaDaLinha(item.linha), classe: variantEstilo(item.linha.pricingVariant).classe,
+      titulo: rotuloDaLinha(item.linha), tenho: item.tenho,
+    })),
+  ];
+  if (!lista.length) return '';
   const cabem = lista.slice(0, 4);
   const sobra = lista.length - cabem.length;
 
-  const etiquetas = cabem.map(item => {
-    const estilo = variantEstilo(item.valor);
-    return `<span class="etiqueta-variante ${estilo.classe}${item.tenho ? ' tenho' : ''}" title="${esc(friendlyVariantLabel(item.valor))}${item.tenho ? ' · você tem' : ''}">${esc(item.sigla)}</span>`;
-  }).join('');
+  const etiquetas = cabem.map(item =>
+    `<span class="etiqueta-variante ${item.classe}${item.tenho ? ' tenho' : ''}" title="${esc(item.titulo)}${item.tenho ? ' · você tem' : ''}">${esc(item.texto)}</span>`
+  ).join('');
 
   return `<span class="etiquetas-variante">${etiquetas}${sobra ? `<span class="etiqueta-variante mais">+${sobra}</span>` : ''}</span>`;
 }
@@ -8734,6 +8797,7 @@ function openCard(cardId, variantId = undefined) {
           ${variants.length ? `<span class="badge purple">${variants.length} ${variants.length === 1 ? 'variante' : 'variantes'}</span>` : ''}
           ${identidadeDaCartaHtml(card, linked, manualPokemonId)}
         </div>
+        <div class="registration-etiquetas" id="regEtiquetasVariante">${etiquetasDeVariante(analiseDeVariantes(card))}</div>
       </div>
     </div>
 
