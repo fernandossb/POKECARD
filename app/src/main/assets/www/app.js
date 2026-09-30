@@ -2559,7 +2559,12 @@ function syncEntry(cardId) {
 
 function migrateState(saved) {
   if (!saved?.entries) return null;
-  const migrated = { version: 2, entries: {}, decks: Array.isArray(saved.decks) ? saved.decks : [], importedAt: saved.importedAt || null };
+  /* Tudo o que não é carta nem deck (Produtos prontos, lacrados, vínculos e
+     obras próprias da Arte Estendida...) segue junto. Antes só entradas,
+     decks e data de importação eram copiados: o resto sumia a cada vez que
+     o app abria — e também ao importar um backup. */
+  const { entries: _entradas, decks: _decks, importedAt: _importado, version: _versao, ...demais } = saved;
+  const migrated = { ...demais, version: 2, entries: {}, decks: Array.isArray(saved.decks) ? saved.decks : [], importedAt: saved.importedAt || null };
   for (const [cardId, raw] of Object.entries(saved.entries)) {
     const entry = {
       priceBrl: nullableNumber(raw.priceBrl),

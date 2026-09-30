@@ -6072,14 +6072,43 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
   background: rgba(0,0,0,.6); color: #ff8a80;
 }
 .arte-estendida-selo.ok{ color: var(--ok-texto, #3ddc97); }
-.arte-estendida-manual{
-  position: absolute; bottom: 5px; left: 5px; width: 20px; height: 20px; border-radius: 50%;
-  display: grid; place-items: center; font-size: var(--fs-p); line-height: 1;
-  background: rgba(0,0,0,.6); color: #fff;
-}
 .arte-estendida-slot-nome{ font-size: var(--fs-p); font-weight: 700; color: var(--vision-text) !important; }
-.arte-estendida-slot-ajuda{ font-size: var(--fs-p); opacity: .65; }
-.arte-estendida-slot-numero{ font-size: var(--fs-p); opacity: .5; font-variant-numeric: tabular-nums; }
-.arte-estendida-slot-numero.fraco{ font-style: italic; }
 .arte-estendida-dica{ margin-top: 4px; font-size: var(--fs-p); opacity: .65; line-height: 1.4; }
-.arte-estendida-vinculo-lista{ margin-top: 10px; }
+
+/* Criar obra: o botão da lista e a etiqueta das obras suas. */
+.arte-estendida-criar{ width: 100%; margin: 12px 0 0; }
+.arte-obra-tag{
+  display: inline-block; margin-left: 6px; padding: 2px 7px; border-radius: 999px; vertical-align: 2px;
+  font-size: 11px; font-weight: 700; letter-spacing: .02em;
+  background: var(--vision-primary); color: var(--vision-bg, #10141a) !important;
+}
+
+/* Editor: campos, encaixes, prévia montada e a fila das cartas. */
+.arte-editor-campo{ margin-top: 12px; }
+.arte-editor-encaixes{ display: flex; flex-wrap: wrap; gap: 6px; }
+.arte-editor-previa{ margin: 14px 0 8px; }
+.arte-editor-previa .arte-composicao{ --arte-altura-max: 46vh; border: 1px solid var(--vision-line); }
+/* Na prévia, tudo colorido: o que importa ali é ver se a arte encaixa, não
+   o que já está na coleção. */
+.arte-editor-previa .arte-celula.falta img{ filter: none; opacity: 1; }
+.arte-editor-vazio{
+  margin: 0; padding: 22px 12px; text-align: center; border-radius: var(--raio-m);
+  border: 1.5px dashed var(--vision-line); font-size: var(--fs-p); opacity: .75;
+}
+.arte-editor-cartas{ display: grid; gap: 6px; }
+.arte-editor-carta{
+  display: grid; grid-template-columns: auto 36px minmax(0, 1fr) auto; align-items: center; gap: 9px;
+  padding: 6px 8px; border-radius: var(--raio-p);
+  border: 1px solid var(--vision-line); background: var(--vision-surface-2);
+}
+.arte-editor-ordem{ min-width: 20px; text-align: center; font-size: var(--fs-p); opacity: .8; }
+.arte-editor-carta img, .arte-editor-carta .card-placeholder{ width: 36px !important; height: 50px !important; object-fit: cover; border-radius: 4px; }
+.arte-editor-carta-texto{ display: flex; flex-direction: column; min-width: 0; }
+.arte-editor-carta-texto strong{ font-size: var(--fs-p); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.arte-editor-carta-texto small{ font-size: 11px; opacity: .7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.arte-editor-acoes{ display: flex; gap: 4px; }
+.arte-editor-acoes button{
+  width: 32px; height: 32px; border-radius: var(--raio-sm); border: 1px solid var(--vision-line);
+  background: var(--vision-surface); color: var(--vision-text) !important; font-weight: 700; line-height: 1;
+}
+.arte-editor-acoes button:disabled{ opacity: .3; }
