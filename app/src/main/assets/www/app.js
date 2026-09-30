@@ -1146,6 +1146,55 @@ function sincronizarAcabamentoComVariante(valor) {
   finish.value = alvo;
 }
 
+/* ---------- Outra versão: a que o app ainda não conhece ----------
+
+   Os botões de versão vêm do que as fontes publicaram para a carta — e o
+   catálogo às vezes não trouxe todas (uma reverse que a fonte não listou,
+   uma 1ª edição). Aqui entram as versões básicas que faltam na lista; a
+   escolhida fica marcada como escolha manual, para a dedução automática não
+   trocá-la de volta, e é salva como qualquer outra. */
+const VERSOES_BASICAS = ['normal', 'holofoil', 'reverse-holofoil', '1st-edition', '1st-edition-holofoil'];
+
+function atualizarOutraVersao(cardId) {
+  const alvo = document.getElementById('regOutraVersaoOpcoes');
+  if (!alvo) return;
+  const padrao = acabamentosDoCatalogo(cardMap.get(cardId))[0] || 'comum';
+  const vistas = new Set([...document.querySelectorAll('#regVariantePills [data-pill]')].map(botao => chaveDaVersao(botao.dataset.pill, padrao)));
+  const faltam = [];
+  for (const valor of VERSOES_BASICAS) {
+    const chave = chaveDaVersao(valor, padrao);
+    if (vistas.has(chave)) continue;
+    vistas.add(chave);
+    faltam.push(valor);
+  }
+  alvo.innerHTML = faltam.length
+    ? faltam.map(valor => {
+      const estilo = variantEstilo(valor);
+      return `<button type="button" class="variante-pill ${estilo.classe}" onclick="escolherVersaoForaDaLista('${esc(cardId)}','${valor}')"><span class="variante-icone" aria-hidden="true">${estilo.icone}</span>${esc(friendlyVariantLabel(valor))}</button>`;
+    }).join('')
+    : '<small>Todas as versões básicas já estão nos botões acima.</small>';
+}
+
+function escolherVersaoForaDaLista(cardId, valor) {
+  const pricing = document.getElementById('regPricingVariant');
+  if (!pricing) return;
+  if (![...pricing.options].some(opcao => opcao.value === valor)) pricing.add(new Option(friendlyVariantLabel(valor), valor));
+  pricing.value = valor;
+  sincronizarAcabamentoComVariante(valor);
+  const marcador = document.getElementById('regManualVariationOverride');
+  if (marcador) marcador.value = '1';
+  // Carta sem nenhuma versão conhecida não tem a fileira de botões: cria-se
+  // uma, para a versão escolhida aparecer como as outras.
+  if (!document.getElementById('regVariantePills')) {
+    document.getElementById('regOutraVersao')?.insertAdjacentHTML('beforebegin', '<div class="variante-pills destaque" id="regVariantePills"></div>');
+  }
+  handleRegistrationVariantChange(cardId, 'variante');
+  marcarPillAtiva(valor);
+  const detalhes = document.getElementById('regOutraVersao');
+  if (detalhes) detalhes.open = false;
+  vibrar();
+}
+
 function escolherVariante(cardId, valor) {
   const campo = document.getElementById('regPricingVariant');
   if (campo) {
@@ -3845,25 +3894,42 @@ function cartasQueMaisValorizaram() {
  * As 10 coleções em que você está mais perto de completar, da mais adiantada
  * para a menos. Só entram coleções com pelo menos uma carta cadastrada.
  */
+// Mesma régua do filtro "Completas" do Explorar: todas as cartas da contagem
+// oficial da coleção.
+function colecaoCompleta(set) {
+  const total = set.officialCardCount || set.totalCardCount || 0;
+  return total > 0 && set.ownedUnique >= total;
+}
+
 function topColecoesPanel() {
-  const lista = buildSetStats()
-    .filter(set => set.ownedUnique > 0)
+  const comecadas = buildSetStats().filter(set => set.ownedUnique > 0);
+  // As completas saem do ranking: já chegaram lá, e ganham selo no Explorar.
+  const completas = comecadas.filter(colecaoCompleta);
+  const lista = comecadas
+    .filter(set => !colecaoCompleta(set))
     .map(set => {
       const total = set.officialCardCount || set.totalCardCount || 0;
       return { ...set, total, pct: total ? Math.min(100, (set.ownedUnique / total) * 100) : 0 };
     })
     .sort((a, b) => b.pct - a.pct || b.ownedUnique - a.ownedUnique)
     .slice(0, 10);
+  const linkCompletas = completas.length
+    ? `<button type="button" class="top-sets-completas" onclick="ui.setStatus='completas';setTab('sets')">✓ ${completas.length} ${completas.length === 1 ? 'coleção completa' : 'coleções completas'} — ver no Explorar ›</button>`
+    : '';
 
   if (!lista.length) {
     return `<section class="top-sets">
       <div class="section-heading"><h3 class="section-title">Coleções mais completas</h3></div>
-      <div class="empty">Cadastre cartas para acompanhar o progresso das suas coleções.</div>
+      <div class="empty">${completas.length
+        ? 'Todas as coleções que você começou estão completas!'
+        : 'Cadastre cartas para acompanhar o progresso das suas coleções.'}</div>
+      ${linkCompletas}
     </section>`;
   }
 
   return `<section class="top-sets">
     <div class="section-heading"><h3 class="section-title">Coleções mais completas</h3><button onclick="setTab('sets')">Ver todas</button></div>
+    ${linkCompletas}
     <ol class="top-sets-lista">
       ${lista.map((set, i) => `
         <li class="top-set" onclick="ui.cardSet='${esc(set.id)}';ui.cardFilter='all';setTab('cards')">
@@ -5169,7 +5235,9 @@ function renderSetCard(item) {
   const fallbacks = imageCandidates.slice(1).join('|');
   const releaseYear = setReleaseYear(item);
   const releaseDate = mesAnoDoLancamento(item) || releaseYear;
-  return `<button class="set-card timeline-set-card ${owned ? 'owned' : 'missing'}" onclick="openSet('${esc(item.id)}')">
+  const completa = colecaoCompleta(item);
+  return `<button class="set-card timeline-set-card ${owned ? 'owned' : 'missing'}${completa ? ' completa' : ''}" onclick="openSet('${esc(item.id)}')">
+    ${completa ? '<span class="selo-colecao-completa">✓ Completa</span>' : ''}
     ${logo
       ? `<img class="set-logo-background" src="${esc(logo)}" loading="lazy" decoding="async" alt=""${fallbacks ? ` data-fallbacks="${esc(fallbacks)}"` : ''} onerror="loadNextSetImage(this)"><span class="set-logo-fallback" hidden>◓</span>`
       : '<span class="set-logo-fallback">◓</span>'}
@@ -8863,10 +8931,12 @@ function linhasDeCadastroHtml(card) {
     const preco = dono ? effectiveVariantPrice(card.id, dono) : automaticPriceQuote(card.id, linha.identidade);
     const precoTexto = preco?.brl != null ? money(preco.brl) : 'sem preço';
     const linhaIdEsc = esc(linha.id);
+    // O preço é um botão: tocar vira campo, ali mesmo. Valor manual aparece
+    // destacado, para não confundir com o preço automático do banco.
     return `<div class="variant-quick-row${linha.quantidade > 0 ? ' tenho' : ''}">
       <span class="variant-quick-icone ${linha.classe}" aria-hidden="true">${linha.icone}</span>
       <span class="variant-quick-nome">${esc(linha.titulo)}</span>
-      <span class="variant-quick-preco">${esc(precoTexto)}</span>
+      <button type="button" class="variant-quick-preco${preco?.manual ? ' manual' : ''}" onclick="event.stopPropagation();editarPrecoDaLinha('${esc(card.id)}','${linhaIdEsc}',this)" aria-label="Alterar o preço de ${esc(linha.titulo)} (${esc(precoTexto)}${preco?.manual ? ', valor manual' : ''})">${esc(precoTexto)}<span class="variant-quick-lapis" aria-hidden="true">✎</span></button>
       <span class="variant-quick-stepper">
         <button type="button" class="quantity-step-btn" ${linha.quantidade <= 0 ? 'disabled' : ''} onclick="event.stopPropagation();ajustarQuantidadeDeLinha('${esc(card.id)}','${linhaIdEsc}',-1)" aria-label="Diminuir ${esc(linha.titulo)}">−</button>
         <b>${linha.quantidade}</b>
@@ -8875,6 +8945,90 @@ function linhasDeCadastroHtml(card) {
     </div>`;
   }).join('');
   return `<div class="variant-quick-list">${corpo}</div>`;
+}
+
+/* ---------- Preço direto na linha ----------
+
+   O valor digitado vira o "Valor manual" das cópias dessa versão (o mesmo
+   campo do formulário de baixo). Apagar volta ao preço automático. Enter com
+   o MESMO número é o jeito de dizer "conferi, ainda vale isso": renova os 4
+   meses de validade sem precisar mudar o valor — tirar o dedo do campo sem
+   Enter não renova, para um toque acidental não confirmar nada. */
+function variantesDaLinhaParaPreco(linha) {
+  const comCopia = linha.donos.filter(v => Number(v.quantity) > 0);
+  return comCopia.length ? comCopia : linha.donos;
+}
+
+function redesenharLinhasDoCadastro(cardId) {
+  const alvo = document.getElementById('regEtiquetasVariante');
+  const card = cardMap.get(cardId);
+  if (alvo && card) alvo.innerHTML = linhasDeCadastroHtml(card);
+}
+
+function editarPrecoDaLinha(cardId, linhaId, botao) {
+  const card = cardMap.get(cardId);
+  const linha = card ? linhasDeCadastro(card).find(item => item.id === linhaId) : null;
+  if (!linha || !botao) return;
+  const variantes = variantesDaLinhaParaPreco(linha);
+  if (!variantes.length) return notify('Toque em + para ter esta versão; depois ajuste o preço aqui.');
+  const manual = variantes.find(v => hasFiniteNumber(v.manualEstimatedValue))?.manualEstimatedValue;
+  const referencia = effectiveVariantPrice(cardId, variantes[0])?.brl ?? automaticPriceQuote(cardId, linha.identidade)?.brl;
+
+  const campo = document.createElement('input');
+  campo.className = 'field variant-quick-preco-campo';
+  campo.inputMode = 'decimal';
+  campo.enterKeyHint = 'done';
+  campo.autocomplete = 'off';
+  campo.value = formatInputNumber(manual);
+  campo.placeholder = referencia != null ? formatInputNumber(Math.round(referencia * 100) / 100) : 'R$';
+  campo.setAttribute('aria-label', `Preço de ${linha.titulo} em reais — apague para voltar ao automático`);
+  botao.replaceWith(campo);
+  campo.focus();
+  campo.select();
+
+  let concluido = false;
+  const concluir = modo => {
+    if (concluido) return;
+    concluido = true;
+    if (modo === 'cancelar') redesenharLinhasDoCadastro(cardId);
+    else salvarPrecoDaLinha(cardId, linhaId, campo.value, modo === 'confirmar');
+  };
+  campo.addEventListener('keydown', evento => {
+    if (evento.key === 'Enter') { evento.preventDefault(); concluir('confirmar'); }
+    else if (evento.key === 'Escape') { evento.preventDefault(); concluir('cancelar'); }
+  });
+  campo.addEventListener('blur', () => concluir('salvar'));
+}
+
+function salvarPrecoDaLinha(cardId, linhaId, texto, confirmado) {
+  const card = cardMap.get(cardId);
+  const linha = card ? linhasDeCadastro(card).find(item => item.id === linhaId) : null;
+  if (!linha) return redesenharLinhasDoCadastro(cardId);
+  const variantes = variantesDaLinhaParaPreco(linha);
+  const valor = parseCurrencyInput(texto);
+  const agora = new Date().toISOString();
+  let mudou = false;
+  let renovou = false;
+  for (const variante of variantes) {
+    const antes = hasFiniteNumber(variante.manualEstimatedValue) ? Number(variante.manualEstimatedValue) : null;
+    if (valor === antes) {
+      if (confirmado && valor != null) { variante.manualEstimatedValueUpdatedAt = agora; renovou = true; }
+      continue;
+    }
+    variante.manualEstimatedValue = valor;
+    variante.manualEstimatedValueUpdatedAt = valor == null ? null : agora;
+    variante.updatedAt = agora;
+    mudou = true;
+  }
+  if (!mudou && !renovou) return redesenharLinhasDoCadastro(cardId);
+  syncEntry(cardId);
+  saveState();
+  const variantIdAtual = document.getElementById('regVariantId')?.value || '';
+  render();
+  openCard(cardId, variantIdAtual || undefined);
+  notify(!mudou ? 'Preço confirmado — vale por mais 4 meses.'
+    : valor == null ? 'Valor manual removido: volta o preço automático.'
+    : `Preço de ${linha.titulo} atualizado.`);
 }
 
 // +1/-1 direto na linha, sem abrir o formulário de baixo. Cria a variante na
@@ -9276,7 +9430,12 @@ function openCard(cardId, variantId = undefined) {
           <select id="regFinish" class="hidden" aria-hidden="true" tabindex="-1">${optionListForCard(card,'finishes',draft.finish,Boolean(selected?.manualVariationOverride))}</select>
           <select id="regPricingVariant" class="hidden" aria-hidden="true" tabindex="-1">${optionListForCard(card,'pricingVariants',draft.pricingVariant,true,draft.language)}</select>
           ${variantPillsHtml(card, draft)}
-          <small>Só aparecem as versões desta carta que têm preço publicado. O app já marca a mais provável.</small>
+          <details class="outra-versao" id="regOutraVersao" ontoggle="if(this.open)atualizarOutraVersao('${esc(card.id)}')">
+            <summary>＋ Outra versão (não está na lista)</summary>
+            <div class="outra-versao-opcoes" id="regOutraVersaoOpcoes"></div>
+            <small>Para quando a carta existe numa versão que o app ainda não trouxe. Foil especial, carimbo e edição ficam em "Impressão, carimbo e acabamento especial", mais abaixo.</small>
+          </details>
+          <small>O app já marca a versão mais provável. Se a sua não estiver aqui, use "Outra versão".</small>
         </div>
         ${registrationField('Preço automático', `<div id="automaticPriceBox">${automaticPriceBox(card.id, draft.finish, existingId, draft)}</div>`, 'span-2')}
       </div>

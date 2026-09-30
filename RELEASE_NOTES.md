@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.72.0 — Preço na linha, versão que falta e coleções completas
+
+- **Preço direto na linha do cadastro.** Na lista de versões da carta, o preço virou um botão (com um ✎): toque, digite o valor e pronto — ele vira o valor manual daquela versão (o mesmo campo do formulário de baixo) e aparece destacado na cor do tema, para não confundir com o preço automático do banco. Apagar o número volta ao preço automático. Confirmar com Enter o MESMO valor renova os 4 meses de validade — é o jeito de dizer "conferi na Liga, ainda vale isso" e tirar a carta de "Preços pendentes" sem mudar o número. Esc desiste.
+- **"Adicionar" aceita versões que o app ainda não conhece.** No formulário de nova versão, "＋ Outra versão (não está na lista)" oferece as versões básicas que faltam nos botões da carta — Comum, Holográfica, Reverse Holo, 1ª Edição e 1ª Edição holográfica —, para quando a fonte não trouxe todas. A escolhida vira botão, fica marcada como escolha sua (a dedução automática não a troca) e é salva normalmente. Foil especial, carimbo e edição continuam em "Impressão, carimbo e acabamento especial".
+- **Coleções completas.** Saem da lista "Coleções mais completas" do Início — no lugar, um atalho "✓ N coleções completas — ver no Explorar" abre o Explorar já filtrado nelas. No Explorar, a coleção completa ganha borda dourada e o selo "✓ Completa".
+
 # POKECARD Brasil 5.71.0 — Arte Estendida só com as suas obras
 
 - As obras prontas do estudo saíram do app por completo (o arquivo de dados também). A Arte Estendida agora começa vazia e mostra só as obras que você cria em "＋ Criar obra" — do zero, com as cartas que você escolher. As obras que você já criou continuam como estavam.

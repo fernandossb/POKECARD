@@ -4162,7 +4162,36 @@ h3 {
 .variant-quick-icone.v-masterball { color: #a259d9; }
 .variant-quick-icone.v-outra      { color: #b79bff; }
 .variant-quick-nome { min-width: 0; color: var(--vision-text); font-size: var(--fs-p); font-weight: 700; overflow-wrap: break-word; }
-.variant-quick-preco { color: var(--vision-muted); font-size: var(--fs-p); font-weight: 700; white-space: nowrap; }
+/* O preço é um botão discreto: parece texto, com um lápis dizendo que dá
+   para mexer. Valor manual fica na cor de destaque. */
+.variant-quick-preco {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 30px; padding: 0 6px;
+  border: 1px dashed transparent; border-radius: var(--raio-sm); background: none;
+  color: var(--vision-muted) !important; font-size: var(--fs-p); font-weight: 700; white-space: nowrap;
+}
+.variant-quick-preco:active, .variant-quick-preco:focus-visible { border-color: var(--vision-line); }
+.variant-quick-preco.manual { color: var(--vision-primary) !important; }
+.variant-quick-lapis { font-size: 11px; opacity: .6; }
+.variant-quick-preco-campo { width: 84px; min-height: 32px !important; padding: 4px 8px !important; font-size: var(--fs-p) !important; text-align: right; }
+
+/* Outra versão (a que o app ainda não conhece), no formulário de cadastro. */
+.outra-versao { margin: 8px 0 4px; }
+.outra-versao > summary { cursor: pointer; color: var(--vision-primary) !important; font-size: var(--fs-p); font-weight: 700; }
+.outra-versao-opcoes { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 6px; }
+
+/* Coleção completa: selo no Explorar e atalho no Início. */
+.set-card.timeline-set-card.completa { border-color: #f5c134 !important; box-shadow: 0 0 0 1px #f5c134 inset, 0 8px 22px -10px rgba(245,193,52,.55) !important; }
+.selo-colecao-completa {
+  position: absolute; top: 8px; right: 8px; z-index: 3;
+  padding: 3px 8px; border-radius: 999px;
+  background: #f5c134; color: #2b1d00 !important; -webkit-text-fill-color: #2b1d00 !important;
+  font-size: 11px; font-weight: 800; letter-spacing: .02em; box-shadow: 0 2px 8px rgba(0,0,0,.35);
+}
+.top-sets-completas {
+  display: block; width: 100%; margin: 0 0 10px; padding: 9px 12px; text-align: left;
+  border: 1px solid rgba(245,193,52,.55); border-radius: var(--raio-p); background: rgba(245,193,52,.12);
+  color: #f5c134 !important; font-size: var(--fs-p); font-weight: 700;
+}
 .variant-quick-stepper { display: flex; align-items: center; gap: 6px; }
 .variant-quick-stepper .quantity-step-btn {
   min-height: 30px; min-width: 30px; height: 30px; width: 30px;
