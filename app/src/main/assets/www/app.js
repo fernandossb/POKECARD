@@ -3208,6 +3208,7 @@ function openMoreNavigation() {
       <button onclick="closeModal();setTab('repeated')"><span class="quick-action-icon">${tabIcon('repeated')}</span><span><strong>Repetidas</strong><small>Estoque para troca ou venda</small></span></button>
       <button onclick="closeModal();setTab('produtos')"><span class="quick-action-icon">${tabIcon('collections')}</span><span><strong>Produtos prontos</strong><small>Baralhos de batalha, kits e caixas</small></span></button>
       <button onclick="closeModal();abrirTrofeus()"><span class="quick-action-icon">🏆</span><span><strong>Troféus</strong><small>${(() => { const r = typeof resumoTrofeus === 'function' ? resumoTrofeus() : null; return r ? `${r.conquistadas} de ${r.total} medalhas conquistadas` : 'Medalhas por coleção, tipo e região'; })()}</small></span></button>
+      <button onclick="closeModal();abrirEnergiasBasicas()"><span class="quick-action-icon icone-texto" aria-hidden="true">E</span><span><strong>Energias básicas</strong><small>Escolha pelo tipo e pela tiragem — sem precisar do número</small></span></button>
       <button onclick="closeModal();abrirArteEstendida()"><span class="quick-action-icon">🖼</span><span><strong>Arte Estendida</strong><small>${(() => { const r = typeof resumoArteEstendida === 'function' ? resumoArteEstendida() : null; return r ? `${r.tenho} de ${r.ligadas} cartas já na coleção · ${r.totalObras} ${r.totalObras === 1 ? 'obra' : 'obras'}` : 'Cartas que se completam lado a lado'; })()}</small></span></button>
       <button onclick="closeModal();abrirTemaPokemon()"><span class="quick-action-icon">${tabIcon('pokedex')}</span><span><strong>Tema do aplicativo</strong><small>${esc(window.__TEMA_ATUAL__?.nome || 'Gengar')} · deixe o app com a cara do seu favorito</small></span></button>
     </div>`);
@@ -5496,7 +5497,14 @@ function renderCardSearchResults() {
   // Busca em segundo plano o que falta para as etiquetas e o dourado.
   adiantarLotesDaLista(visible);
   adiantarVariacoesDaLista(visible);
+  // Energia básica atual não tem número impresso e aparece em várias
+  // coleções: quem busca por ela ganha o atalho do seletor por tipo/tiragem.
+  const buscandoEnergia = /\benerg/.test(normalize(ui.cardQuery)) && typeof abrirEnergiasBasicas === 'function';
   return `
+    ${buscandoEnergia ? `<button type="button" class="energias-atalho" onclick="abrirEnergiasBasicas()">
+      <strong>Procurando Energia básica?</strong>
+      <small>Escolha pelo tipo e pela tiragem, com o preço de cada coleção — sem precisar do número. ›</small>
+    </button>` : ''}
     <div class="card-results-bar">
       <p class="card-results-count">${result.length.toLocaleString('pt-BR')} ${result.length === 1 ? 'carta encontrada' : 'cartas encontradas'}</p>
       ${seletorDeLayout()}
@@ -8890,6 +8898,10 @@ function linhasDeCadastro(card) {
     const sigla = siglaDaVariante(pv);
     if (!siglasConhecidas.has(sigla)) siglasConhecidas.set(sigla, pv);
   }
+  // Carta de que o app ainda não sabe versão nenhuma (banco de preços sem
+  // ela, ou ainda não carregado): ganha ao menos a Comum, para dar para
+  // cadastrar pelo + sem descer até o formulário.
+  if (!siglasConhecidas.size) siglasConhecidas.set(siglaDaVariante('normal'), 'normal');
   const linhasBasicas = [...siglasConhecidas.entries()].map(([sigla, valor]) => {
     const donos = planas.filter(v => siglaDaVariante(exactSourceEnum(v.pricingVariant) || finishKind(v.finish)) === sigla);
     return {
@@ -9035,10 +9047,19 @@ function salvarPrecoDaLinha(cardId, linhaId, texto, confirmado) {
 // hora (com os padrões de sempre: pt-br, Near Mint, Brasil) se ainda não
 // existir nenhuma cópia dessa versão específica.
 function ajustarQuantidadeDeLinha(cardId, linhaId, delta) {
+  if (!aplicarAjusteDeLinha(cardId, linhaId, delta)) return;
+  const variantIdAtual = document.getElementById('regVariantId')?.value || '';
+  render();
+  openCard(cardId, variantIdAtual || undefined);
+}
+
+// Só a mudança na coleção (sem redesenhar tela nenhuma): serve ao cadastro e
+// ao seletor de Energias básicas. Devolve true quando algo mudou.
+function aplicarAjusteDeLinha(cardId, linhaId, delta) {
   const card = cardMap.get(cardId);
-  if (!card) return;
+  if (!card) return false;
   const linha = linhasDeCadastro(card).find(item => item.id === linhaId);
-  if (!linha) return;
+  if (!linha) return false;
   if (delta > 0) {
     let entry = state.entries[cardId];
     if (!entry) {
@@ -9054,7 +9075,7 @@ function ajustarQuantidadeDeLinha(cardId, linhaId, delta) {
     const precisaDeVinculo = !categoriaConhecida || categoriaConhecida.classe === 'pokemon';
     if (!quantityFor(cardId) && !automaticPokemonIds.length && !selectedPokemonId && precisaDeVinculo) {
       notify('Selecione o Pokémon representado por esta carta antes de adicionar.');
-      return;
+      return false;
     }
     // A pessoa pode ter escolhido o Pokémon no formulário sem ainda ter
     // apertado "Salvar" — sem gravar aqui, esse vínculo se perderia assim
@@ -9080,18 +9101,16 @@ function ajustarQuantidadeDeLinha(cardId, linhaId, delta) {
     vibrar();
   } else if (delta < 0) {
     const alvo = linha.donos.find(v => Number(v.quantity) > 0);
-    if (!alvo) return;
+    if (!alvo) return false;
     alvo.quantity = Math.max(0, Number(alvo.quantity) - 1);
     alvo.updatedAt = new Date().toISOString();
   } else {
-    return;
+    return false;
   }
   syncEntry(cardId);
   saveState();
   conferirColecaoCompleta();
-  const variantIdAtual = document.getElementById('regVariantId')?.value || '';
-  render();
-  openCard(cardId, variantIdAtual || undefined);
+  return true;
 }
 
 /** Selo só para o que é realmente raro — senão perde a graça. */
@@ -11962,7 +11981,7 @@ window.handleAndroidBack = function() {
 
   // Na Arte Estendida (e na carta aberta a partir de uma obra), Voltar faz o
   // mesmo que o ‹ da tela: um passo atrás, sem perder o lugar na lista.
-  const voltarArte = document.querySelector('#modal-content .arte-estendida-voltar-carta, #modal-content .arte-estendida-voltar');
+  const voltarArte = document.querySelector('#modal-content .arte-estendida-voltar-carta, #modal-content .arte-estendida-voltar, #modal-content .energias-voltar-carta, #modal-content .energias-voltar');
   if (voltarArte) { voltarArte.click(); return true; }
 
   const modal = document.getElementById('modal');

@@ -6051,7 +6051,8 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 .arte-estendida-voltar{ float: left; margin-right: 10px; }
 .arte-estendida-obra-sheet h2{ margin-left: 45px; margin-right: 45px; font-size: var(--fs-g); line-height: 1.2; }
 /* O ‹ de volta à obra, no cadastro da carta: ao lado do × fixo dele. */
-.card-detail-sheet .arte-estendida-voltar-carta{
+.card-detail-sheet .arte-estendida-voltar-carta,
+.card-detail-sheet .energias-voltar-carta{
   position: fixed; z-index: 10;
   top: calc(12px + env(safe-area-inset-top));
   left: calc(max(14px, calc((100vw - 750px) / 2)) + 50px);
@@ -6135,3 +6136,68 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
   background: var(--vision-surface); color: var(--vision-text) !important; font-weight: 700; line-height: 1;
 }
 .arte-editor-acoes button:disabled{ opacity: .3; }
+
+/* ---------- v5.73 — Energias básicas: tipo → tiragem ---------- */
+.energias-sheet{ max-width: 720px; }
+.energias-voltar{ float: left; margin-right: 10px; }
+.energias-tipo-sheet h2{ margin-left: 45px; margin-right: 45px; display: flex; align-items: center; gap: 8px; }
+.energias-tipos{ display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-top: 12px; }
+.energia-tipo{
+  display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 10px; align-items: center;
+  padding: 12px; text-align: left; border-radius: var(--raio-m);
+  border: 1px solid var(--vision-line); background: var(--vision-surface-2); color: var(--vision-text) !important;
+}
+.energia-tipo .energia-bolinha{ grid-row: span 2; width: 30px; height: 30px; }
+.energia-tipo strong{ font-size: var(--fs-m); }
+.energia-tipo small{ font-size: 11px; opacity: .75; }
+.energia-bolinha{
+  display: inline-block; width: 22px; height: 22px; flex: 0 0 auto; border-radius: 50%;
+  border: 2px solid rgba(255,255,255,.75); box-shadow: 0 0 0 1px rgba(0,0,0,.35);
+}
+.energia-grass{ background: #4caf50; }
+.energia-fire{ background: #e8542d; }
+.energia-water{ background: #2f8fe0; }
+.energia-lightning{ background: #f5c52b; }
+.energia-psychic{ background: #9b5fc0; }
+.energia-fighting{ background: #b7652b; }
+.energia-darkness{ background: #2f3a44; }
+.energia-metal{ background: #9aa6b1; }
+.energia-fairy{ background: #e87fb8; }
+
+/* Cada tiragem: a arte à esquerda, o que a diferencia e as versões à direita. */
+.energias-tiragens{ display: grid; gap: 10px; margin-top: 10px; }
+.energia-tiragem{
+  display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 12px; align-items: start;
+  padding: 10px; border-radius: var(--raio-m);
+  border: 1px solid var(--vision-line); background: var(--vision-surface-2);
+}
+.energia-tiragem.tenho{ border-color: var(--vision-primary); }
+.energia-tiragem-arte{
+  width: 92px; aspect-ratio: 63 / 88; padding: 0; border: 0; border-radius: var(--raio-p); overflow: hidden;
+  background: var(--vision-surface); display: grid; place-items: center;
+}
+.energia-tiragem-arte img{ width: 100%; height: 100%; object-fit: cover; display: block; }
+.energia-sem-imagem{ display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 6px; text-align: center; font-size: 11px; color: var(--vision-muted) !important; }
+.energia-sem-imagem .energia-bolinha{ width: 40px; height: 40px; }
+.energia-tiragem-info{ display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.energia-tiragem-info > strong{ font-size: var(--fs-p); line-height: 1.25; }
+.energia-tiragem-ano{ font-size: var(--fs-p); font-weight: 700; color: var(--vision-primary) !important; }
+.energia-tiragem-info > small{ font-size: 11px; opacity: .72; line-height: 1.35; }
+.energia-versoes{ display: grid; gap: 4px; margin-top: 6px; }
+.energia-versao{ display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 6px; }
+.energia-versao-nome{ font-size: var(--fs-p); font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
+.energia-versao-preco{ font-size: var(--fs-p); color: var(--vision-muted) !important; white-space: nowrap; }
+.energia-versao-preco.manual{ color: var(--vision-primary) !important; }
+.energia-mais-versoes{
+  align-self: flex-start; margin-top: 4px; padding: 4px 0; border: 0; background: none;
+  color: var(--vision-primary) !important; font-size: 12px; font-weight: 700; text-align: left;
+}
+
+/* Atalho na busca da Coleção quando se procura por energia. */
+.energias-atalho{
+  display: block; width: 100%; margin: 0 0 10px; padding: 10px 12px; text-align: left;
+  border: 1px solid var(--vision-primary); border-radius: var(--raio-m); background: var(--vision-primary-tenue, rgba(37,208,179,.12));
+  color: var(--vision-text) !important;
+}
+.energias-atalho strong{ display: block; font-size: var(--fs-p); }
+.energias-atalho small{ display: block; margin-top: 2px; font-size: 12px; opacity: .8; }

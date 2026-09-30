@@ -1,3 +1,11 @@
+# POKECARD Brasil 5.73.0 — Energias básicas: escolha pelo tipo e pela tiragem
+
+- **Novo seletor de Energias básicas** (menu Mais → "Energias básicas", ou o atalho que aparece quando você busca "energia" na Coleção). Energia básica era a carta mais difícil de cadastrar: as atuais não têm número impresso — o número que o app mostrava é só do catálogo — e a mesma energia aparece em várias coleções e reimpressões quase iguais, com preços diferentes. Agora você escolhe o tipo (Grama, Fogo, Água...) e vê todas as tiragens, da mais nova para a mais antiga, cada uma com o que a diferencia: coleção, **ano da tiragem**, raridade, se tem número impresso (e qual) — e o **preço de cada versão** (Comum, Holográfica, Reverse), com − / + ali mesmo, sem abrir a carta.
+- As energias de Escarlate e Violeta tiveram três tiragens, que o catálogo tratava como se fossem do mesmo ano: agora aparecem como de 2023, 2024 e 2025 (conferido nas datas de lançamento de cada uma). A diferença fica no rodapé da carta.
+- "Reverse especial, carimbo e condição ›" abre o cadastro completo daquela tiragem; o ‹ (ou o Voltar do celular) traz de volta para a mesma tiragem.
+- A fonte não tem imagem das energias mais novas (e as fontes de reserva trazem a arte de outra tiragem), então nesses casos aparece a cor do tipo em vez de uma imagem errada.
+- No cadastro de qualquer carta, carta de que o app ainda não conhece versão nenhuma ganha ao menos a linha "Comum", para cadastrar pelo + sem descer até o formulário.
+
 # POKECARD Brasil 5.72.0 — Preço na linha, versão que falta e coleções completas
 
 - **Preço direto na linha do cadastro.** Na lista de versões da carta, o preço virou um botão (com um ✎): toque, digite o valor e pronto — ele vira o valor manual daquela versão (o mesmo campo do formulário de baixo) e aparece destacado na cor do tema, para não confundir com o preço automático do banco. Apagar o número volta ao preço automático. Confirmar com Enter o MESMO valor renova os 4 meses de validade — é o jeito de dizer "conferi na Liga, ainda vale isso" e tirar a carta de "Preços pendentes" sem mudar o número. Esc desiste.
