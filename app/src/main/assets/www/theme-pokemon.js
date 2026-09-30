@@ -417,6 +417,70 @@
     root.style.setProperty('--ok-texto', tomLegivel(150, 62, p.s2, 5.2, !p.claro, p.claro ? 30 : 60));
     root.style.setProperty('--aviso-texto', tomLegivel(38, 88, p.s2, 5.2, !p.claro, p.claro ? 32 : 62));
     root.style.setProperty('--erro-texto', tomLegivel(4, 78, p.s2, 5.2, !p.claro, p.claro ? 40 : 68));
+    /* Cores de significado como ORNAMENTO — barras, selos, bordas, fundos.
+       (As de texto ficam logo acima.) O significado é o mesmo em qualquer
+       tema; só o tom muda, pela mesma busca de contraste do resto: um verde
+       fixo sumia nos níveis claros, e um dourado fixo virava bege.
+         tenho    verde     "você tem"
+         completa dourado   "completa"
+         pendente laranja   "precisa de atenção" (preço a conferir)
+         falta    rosa      "falta"
+         troca    azul      "repetida / para trocar"
+         desejo   pink      "quero"
+       Cada uma dá: a cor viva (--cor-X), uma companheira mais clara para
+       degradês (-2), a cor como texto (-texto), fundo, borda e brilho. */
+    var SIGNIFICADOS = [
+      ['tenho', 152, 60], ['completa', 46, 94], ['pendente', 25, 92],
+      ['falta', 352, 72], ['troca', 203, 78], ['desejo', 330, 78]
+    ];
+    for (var si = 0; si < SIGNIFICADOS.length; si++) {
+      var sNome = SIGNIFICADOS[si][0], sMatiz = SIGNIFICADOS[si][1], sSat = SIGNIFICADOS[si][2];
+      var sForte = tomLegivel(sMatiz, sSat, p.s1, 3, !p.claro, p.claro ? 40 : 58);
+      // Fundo médio com letra escura (nível 4): 3:1 empurraria o dourado e o
+      // verde para quase preto. Um piso de claridade mantém a cor viva; o
+      // texto dessas cores continua garantido por -texto, abaixo.
+      if (p.claro && hexParaHsl(sForte).l < 28) sForte = hslParaHex(sMatiz, sSat, 28);
+      var sLuz = Math.max(18, Math.min(88, hexParaHsl(sForte).l + (p.claro ? -6 : 13)));
+      root.style.setProperty('--cor-' + sNome, sForte);
+      root.style.setProperty('--cor-' + sNome + '-2', hslParaHex((sMatiz + 10) % 360, sSat, sLuz));
+      root.style.setProperty('--cor-' + sNome + '-texto', tomLegivel(sMatiz, sSat, p.s2, 4.6, !p.claro, p.claro ? 30 : 68));
+      root.style.setProperty('--cor-' + sNome + '-fundo', hexParaRgba(sForte, p.claro ? 0.16 : 0.17));
+      root.style.setProperty('--cor-' + sNome + '-borda', hexParaRgba(sForte, 0.55));
+      root.style.setProperty('--cor-' + sNome + '-brilho', hexParaRgba(sForte, 0.42));
+      // Letra sobre um preenchimento dessa cor (selo dourado, botão verde...).
+      root.style.setProperty('--cor-' + sNome + '-tinta', tintaSobre(sForte));
+    }
+    /* Profundidade: a luz vem de cima. O cartão ganha um fio claro no topo e
+       uma sombra por baixo; no tema claro o fio é branco e a sombra é azulada
+       (sombra preta suja o claro). */
+    root.style.setProperty('--elev-fio', p.claro ? 'rgba(255,255,255,.92)' : 'rgba(255,255,255,.09)');
+    root.style.setProperty('--elev-luz', p.claro
+      ? 'linear-gradient(180deg, rgba(255,255,255,.62), rgba(255,255,255,0) 60%)'
+      : 'linear-gradient(180deg, rgba(255,255,255,.075), rgba(255,255,255,0) 55%)');
+    root.style.setProperty('--elev-sombra', p.claro
+      ? '0 1px 0 rgba(255,255,255,.95) inset, 0 10px 22px -14px rgba(26,36,70,.38)'
+      : '0 1px 0 rgba(255,255,255,.10) inset, 0 10px 24px -12px rgba(0,0,0,.65)');
+    root.style.setProperty('--elev-sombra-alta', p.claro
+      ? '0 1px 0 rgba(255,255,255,.95) inset, 0 18px 34px -16px rgba(26,36,70,.46)'
+      : '0 1px 0 rgba(255,255,255,.12) inset, 0 18px 38px -14px rgba(0,0,0,.75)');
+    /* Explorar: o cartão de cada coleção usa o matiz do logo dela (vem do
+       app, inline em --cc-h/--cc-s); aqui fica só a claridade, que depende do
+       nível escolhido — a mesma cor precisa ser um vinho escuro no tema
+       escuro e um rosé claro no claro. */
+    root.style.setProperty('--cc-l-a', p.claro ? '93%' : '31%');
+    root.style.setProperty('--cc-l-b', p.claro ? '85%' : '13%');
+    root.style.setProperty('--cc-l-linha', p.claro ? '55%' : '64%');
+    root.style.setProperty('--cc-l-brilho', p.claro ? '72%' : '54%');
+    root.style.setProperty('--cc-l-era', p.claro ? '26%' : '82%');
+    // Logo com letra escura (Pitch Black, Black & White) some no fundo
+    // escuro: um halo de luz atrás e um fio claro em volta dão contorno sem
+    // incomodar os logos coloridos.
+    root.style.setProperty('--cc-halo', p.claro ? 'rgba(255,255,255,.80)' : 'rgba(255,255,255,.24)');
+    root.style.setProperty('--cc-filtro-logo', p.claro
+      ? 'drop-shadow(0 0 1px rgba(255,255,255,.85)) drop-shadow(0 2px 4px rgba(26,36,70,.30))'
+      : 'drop-shadow(0 0 1.5px rgba(255,255,255,.55)) drop-shadow(0 3px 7px rgba(0,0,0,.50))');
+    root.style.setProperty('--cc-trilho', p.claro ? 'rgba(26,36,70,.14)' : 'rgba(0,0,0,.34)');
+    root.style.setProperty('--cc-h-padrao', String(Math.round(hexParaHsl(p.pri).h)));
     root.style.setProperty('--borda-suave', 'rgba(' + tinta + ',.14)');
     root.style.setProperty('--v5-borda', 'rgba(' + tinta + ',.08)');
     root.style.setProperty('--v5-borda-forte', 'rgba(' + tinta + ',.14)');

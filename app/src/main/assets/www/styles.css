@@ -6201,3 +6201,202 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 }
 .energias-atalho strong{ display: block; font-size: var(--fs-p); }
 .energias-atalho small{ display: block; margin-top: 2px; font-size: 12px; opacity: .8; }
+
+/* ============================================================
+   v5.74 — Paleta com significado, profundidade e Explorar colorido
+
+   Três ideias, todas construídas sobre o que o tema já calcula:
+   1. Cores com significado (--cor-tenho, --cor-completa, --cor-pendente,
+      --cor-falta, --cor-troca, --cor-desejo): o roxo do tema fica para o
+      "chrome" (botões, abas) e o conteúdo ganha cor com sentido.
+   2. Profundidade (--elev-*): a luz vem de cima — fio claro no topo e
+      sombra por baixo em vez de cartões chapados.
+   3. O cartão de coleção do Explorar veste a cor do próprio logo.
+   Tudo via variáveis do tema, então vale nos 6 níveis de claridade.
+   ============================================================ */
+
+/* ---------- 1. Explorar: o cartão da coleção ---------- */
+.set-timeline, .set-list { gap: 12px !important; }
+.set-card.timeline-set-card.colecao-cartao {
+  --cc-h-uso: var(--cc-h, var(--cc-h-padrao, 260));
+  --cc-s-uso: var(--cc-s, 38%);
+  position: relative; isolation: isolate; overflow: hidden;
+  display: flex !important; flex-direction: column !important; justify-content: flex-start !important;
+  min-height: 186px !important; padding: 9px 11px 11px !important;
+  border: 1px solid hsla(var(--cc-h-uso), var(--cc-s-uso), var(--cc-l-linha, 62%), .40) !important;
+  border-radius: var(--raio-m) !important;
+  background:
+    radial-gradient(120% 75% at 50% 0%, hsla(var(--cc-h-uso), var(--cc-s-uso), var(--cc-l-brilho, 54%), .30), transparent 72%),
+    linear-gradient(165deg, hsl(var(--cc-h-uso), var(--cc-s-uso), var(--cc-l-a, 31%)), hsl(var(--cc-h-uso), var(--cc-s-uso), var(--cc-l-b, 13%))),
+    hsl(var(--cc-h-uso), var(--cc-s-uso), var(--cc-l-b, 13%)) !important;
+  color: var(--vision-text) !important;
+  box-shadow: var(--elev-sombra) !important;
+  opacity: 1 !important; filter: none !important; backdrop-filter: none !important;
+  text-align: left;
+}
+.set-card.timeline-set-card.colecao-cartao::before,
+.set-card.timeline-set-card.colecao-cartao::after { content: none !important; display: none !important; }
+/* O que você ainda não começou fica um pouco mais quieto — mas continua
+   colorido, como a capa de um fichário à espera das cartas. */
+.set-card.timeline-set-card.colecao-cartao.missing { --cc-s-uso: var(--cc-sp, 24%); }
+.set-card.timeline-set-card.colecao-cartao.owned {
+  box-shadow: var(--elev-sombra), 0 12px 26px -14px hsla(var(--cc-h-uso), var(--cc-s-uso), var(--cc-l-brilho, 54%), .75) !important;
+}
+.set-card.timeline-set-card.colecao-cartao:active { transform: scale(.985); }
+
+.colecao-topo { position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 20px; }
+.colecao-era {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 10px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase;
+  color: hsl(var(--cc-h-uso), 72%, var(--cc-l-era, 82%)) !important; opacity: .92;
+}
+.colecao-cartao .selo-colecao-completa {
+  position: static; flex: 0 0 auto; padding: 2px 8px;
+  background: linear-gradient(135deg, var(--cor-completa), var(--cor-completa-2)) !important;
+  color: var(--cor-completa-tinta, #2b1d00) !important; -webkit-text-fill-color: var(--cor-completa-tinta, #2b1d00) !important;
+}
+/* Completa: o selo ganha a própria linha. Ao lado da era não cabe — o rótulo
+   "ESCARLATE E VIOLETA" ficava cortado. */
+.colecao-cartao.completa .colecao-topo { flex-direction: column; align-items: center; gap: 4px; }
+.colecao-cartao.completa .colecao-era { max-width: 100%; text-align: center; }
+
+.colecao-palco {
+  position: relative; z-index: 1; flex: 1 1 auto; display: grid; place-items: center;
+  min-height: 82px; margin: 2px 0 6px;
+}
+.colecao-palco .set-logo-background {
+  position: static !important; width: 100% !important; max-width: 158px; height: 74px !important;
+  object-fit: contain !important; opacity: 1 !important; background: none !important;
+  filter: var(--cc-filtro-logo, drop-shadow(0 3px 7px rgba(0,0,0,.5))) !important;
+}
+.colecao-palco .set-logo-fallback {
+  display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; font-size: 30px;
+  background: hsla(var(--cc-h-uso), var(--cc-s-uso), var(--cc-l-brilho, 54%), .28);
+  color: hsl(var(--cc-h-uso), 72%, var(--cc-l-era, 82%)) !important;
+}
+.colecao-palco .set-logo-fallback[hidden] { display: none !important; }
+
+.colecao-info { position: relative; z-index: 2; display: flex; flex-direction: column; gap: 3px; width: 100%; }
+.colecao-cartao .colecao-nome {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  font-size: var(--fs-p) !important; font-weight: 800; line-height: 1.22;
+  color: var(--vision-text) !important; text-shadow: none !important;
+}
+.colecao-meta { display: flex; justify-content: space-between; gap: 6px; }
+.colecao-meta small { font-size: 11px !important; color: var(--vision-muted) !important; text-shadow: none !important; }
+.colecao-progresso { display: flex; align-items: center; gap: 6px; margin-top: 5px; }
+.colecao-barra { position: relative; flex: 1 1 auto; height: 6px; border-radius: 999px; overflow: hidden; background: var(--cc-trilho, rgba(0,0,0,.34)); }
+.colecao-barra i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--cor-tenho), var(--cor-tenho-2)); }
+.colecao-progresso b { font-size: 11px; font-weight: 800; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--vision-text) !important; }
+.colecao-cartao .pokebola-progresso { width: 16px; height: 16px; color: var(--cor-tenho) !important; }
+.colecao-cartao.completa .colecao-barra i { background: linear-gradient(90deg, var(--cor-completa), var(--cor-completa-2)); }
+.colecao-cartao.completa .pokebola-progresso { color: var(--cor-completa) !important; }
+.set-card.timeline-set-card.colecao-cartao.completa {
+  border-color: var(--cor-completa) !important;
+  box-shadow: var(--elev-sombra), 0 0 0 1px var(--cor-completa-borda) inset, 0 12px 28px -12px var(--cor-completa-brilho) !important;
+}
+.top-sets-completas {
+  border-color: var(--cor-completa-borda) !important; background: var(--cor-completa-fundo) !important;
+  color: var(--cor-completa-texto) !important;
+}
+
+/* Halo de luz atrás do logo: logo de letra escura não some no fundo escuro. */
+.colecao-palco::before {
+  content: ''; position: absolute; z-index: -1; inset: 4px 6% 4px;
+  background: radial-gradient(closest-side, var(--cc-halo, rgba(255,255,255,.24)), transparent 92%);
+  pointer-events: none;
+}
+/* Coleção sem logo próprio: entra a arte genérica de coleção, que é uma
+   imagem larga com fundo — vira uma faixa com canto arredondado. */
+.colecao-palco .set-logo-background[src*="collection-images/"] {
+  max-width: none; height: 78px !important; object-fit: cover !important;
+  border-radius: calc(var(--raio-p) + 2px); filter: none !important;
+  box-shadow: 0 4px 12px -4px rgba(0,0,0,.55);
+}
+.colecao-palco:has(.set-logo-background[src*="collection-images/"])::before { display: none; }
+
+/* ---------- 2. Números do Início: cada um com a cor do que significa ---------- */
+.collection-summary-grid button {
+  background: var(--elev-luz), var(--vision-surface-soft, var(--vision-surface)) !important;
+  box-shadow: var(--elev-sombra) !important;
+}
+.collection-summary-grid button.resumo-total span { background: var(--vision-primary-glow) !important; color: var(--vision-primary) !important; }
+.collection-summary-grid button.resumo-total strong { color: var(--vision-text) !important; }
+.collection-summary-grid button.resumo-versoes span { background: var(--vision-primary-leve, rgba(180,140,255,.25)) !important; color: var(--vision-primary) !important; }
+.collection-summary-grid button.resumo-versoes strong { color: var(--vision-primary) !important; }
+.collection-summary-grid button.resumo-tenho { border-color: var(--cor-tenho-borda) !important; background: linear-gradient(155deg, var(--cor-tenho-fundo), transparent 62%), var(--elev-luz), var(--vision-surface-soft, var(--vision-surface)) !important; }
+.collection-summary-grid button.resumo-tenho span { background: var(--cor-tenho-fundo) !important; color: var(--cor-tenho) !important; box-shadow: 0 0 0 1px var(--cor-tenho-borda) inset; }
+.collection-summary-grid button.resumo-tenho strong { color: var(--cor-tenho-texto) !important; }
+.collection-summary-grid button.resumo-troca { border-color: var(--cor-troca-borda) !important; background: linear-gradient(155deg, var(--cor-troca-fundo), transparent 62%), var(--elev-luz), var(--vision-surface-soft, var(--vision-surface)) !important; }
+.collection-summary-grid button.resumo-troca span { background: var(--cor-troca-fundo) !important; color: var(--cor-troca) !important; box-shadow: 0 0 0 1px var(--cor-troca-borda) inset; }
+.collection-summary-grid button.resumo-troca strong { color: var(--cor-troca-texto) !important; }
+.collection-summary-grid button.resumo-completa { border-color: var(--cor-completa-borda) !important; background: linear-gradient(155deg, var(--cor-completa-fundo), transparent 62%), var(--elev-luz), var(--vision-surface-soft, var(--vision-surface)) !important; }
+.collection-summary-grid button.resumo-completa span { background: var(--cor-completa-fundo) !important; color: var(--cor-completa) !important; box-shadow: 0 0 0 1px var(--cor-completa-borda) inset; }
+.collection-summary-grid button.resumo-completa strong { color: var(--cor-completa-texto) !important; }
+.collection-summary-grid button.resumo-desejo { border-color: var(--cor-desejo-borda) !important; background: linear-gradient(155deg, var(--cor-desejo-fundo), transparent 62%), var(--elev-luz), var(--vision-surface-soft, var(--vision-surface)) !important; }
+.collection-summary-grid button.resumo-desejo span { background: var(--cor-desejo-fundo) !important; color: var(--cor-desejo) !important; box-shadow: 0 0 0 1px var(--cor-desejo-borda) inset; }
+.collection-summary-grid button.resumo-desejo strong { color: var(--cor-desejo-texto) !important; }
+
+/* Progresso é "o que você tem": verde, e dourado quando completa. */
+.pokedex-ring { background: conic-gradient(var(--cor-tenho), var(--cor-tenho-2) var(--progress), var(--vision-surface-3) 0) !important; }
+.pokedex-progress-card strong { color: var(--cor-tenho-texto) !important; -webkit-text-fill-color: var(--cor-tenho-texto) !important; }
+.pokedex-progress-card i span { background: linear-gradient(90deg, var(--cor-tenho), var(--cor-tenho-2)) !important; }
+@keyframes pokedex-ring-respira {
+  0%, 100% { filter: drop-shadow(0 0 7px var(--cor-tenho-brilho, rgba(37,208,179,.5))); }
+  50% { filter: drop-shadow(0 0 13px var(--cor-tenho-brilho, rgba(37,208,179,.5))); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pokedex-ring { filter: drop-shadow(0 0 9px var(--cor-tenho-brilho, rgba(37,208,179,.5))); }
+}
+.top-set-barra span { background: linear-gradient(90deg, var(--cor-tenho), var(--cor-tenho-2)) !important; }
+.top-set-pct { color: var(--cor-tenho-texto) !important; }
+.arte-estendida-barra i { background: linear-gradient(90deg, var(--cor-tenho), var(--cor-tenho-2)) !important; }
+.arte-obra-cartao.completa .arte-estendida-barra i { background: linear-gradient(90deg, var(--cor-completa), var(--cor-completa-2)) !important; }
+
+/* Preços a conferir: laranja de "atenção"; em dia: verde. */
+.precos-selo { background: var(--cor-pendente-fundo) !important; color: var(--cor-pendente-texto) !important; }
+.precos-selo.ok { background: var(--cor-tenho-fundo) !important; color: var(--cor-tenho-texto) !important; }
+.precos-pendentes { color: var(--cor-pendente-texto) !important; font-weight: 800; }
+.precos-links button.precos-revisar {
+  padding: 0 11px; min-height: 32px; border-radius: 999px;
+  border: 1px solid var(--cor-pendente-borda); background: var(--cor-pendente-fundo);
+  color: var(--cor-pendente-texto) !important;
+}
+
+/* ---------- 3. Profundidade: a luz vem de cima ---------- */
+/* Painéis: fio claro no topo, sombra por baixo. */
+.valor-card, .precos-resumo, .explore-search-panel, .collection-toolbar, .catalog-update-card {
+  background: var(--elev-luz), var(--vision-surface) !important;
+  box-shadow: var(--elev-sombra) !important;
+}
+.pokedex-progress-card, .top-set {
+  background: var(--elev-luz), var(--vision-surface-soft, var(--vision-surface)) !important;
+  box-shadow: var(--elev-sombra) !important;
+}
+.portfolio-card { box-shadow: 0 1px 0 rgba(255,255,255,.14) inset, 0 18px 36px -14px var(--vision-primary-glow, rgba(37,208,179,.55)) !important; }
+/* Controles: só o fio claro, para parecerem em relevo. */
+.botao-filtros, .vision-search, .explore-filtro, .atualizar-catalogo-btn, .colecao-exportar,
+.consulta-atalho-inicio button, .portfolio-sale, .chip {
+  box-shadow: inset 0 1px 0 var(--elev-fio);
+}
+
+/* ---------- Filtros da Coleção: cada um com a cor do seu significado ---------- */
+.chip[data-filtro] { --chip-cor: var(--vision-primary); --chip-fundo: var(--vision-primary-tenue); --chip-brilho: var(--vision-primary-glow); }
+.chip[data-filtro="owned"] { --chip-cor: var(--cor-tenho); --chip-fundo: var(--cor-tenho-fundo); --chip-brilho: var(--cor-tenho-brilho); }
+.chip[data-filtro="missing"] { --chip-cor: var(--cor-falta); --chip-fundo: var(--cor-falta-fundo); --chip-brilho: var(--cor-falta-brilho); }
+.chip[data-filtro="wishlist"] { --chip-cor: var(--cor-desejo); --chip-fundo: var(--cor-desejo-fundo); --chip-brilho: var(--cor-desejo-brilho); }
+.chip[data-filtro="repeated"], .chip[data-filtro="trade"] { --chip-cor: var(--cor-troca); --chip-fundo: var(--cor-troca-fundo); --chip-brilho: var(--cor-troca-brilho); }
+.chip[data-filtro="price-review"] { --chip-cor: var(--cor-pendente); --chip-fundo: var(--cor-pendente-fundo); --chip-brilho: var(--cor-pendente-brilho); }
+.chip[data-filtro]:not([data-filtro="all"])::before {
+  content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%;
+  background: var(--chip-cor); vertical-align: 1px; box-shadow: 0 0 0 2px var(--chip-fundo);
+}
+.chip[data-filtro].active {
+  border-color: var(--chip-cor) !important; background: var(--chip-fundo) !important;
+  box-shadow: 0 0 0 1px var(--chip-cor) inset, 0 4px 14px var(--chip-brilho) !important;
+}
+
+/* "Você tem" em verde nas linhas de versão e energias (era a cor do tema). */
+.variant-quick-row.tenho { border-color: var(--cor-tenho-borda) !important; background: var(--cor-tenho-fundo) !important; }
+.energia-tiragem.tenho { border-color: var(--cor-tenho) !important; }
+.energia-versao.tenho .energia-versao-nome { color: var(--cor-tenho-texto) !important; }

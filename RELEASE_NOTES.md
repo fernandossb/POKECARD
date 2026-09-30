@@ -1,3 +1,15 @@
+# POKECARD Brasil 5.74.0 — Cores com significado, profundidade e Explorar colorido
+
+O app era quase todo de uma cor só (o roxo do tema). Agora o roxo fica para o "esqueleto" — botões, abas, cabeçalhos — e o conteúdo ganha cor com sentido:
+
+- **Cada número tem a cor do que significa.** Verde: o que você tem (Únicas, o anel e a barra da Pokédex, o progresso das coleções). Azul: repetidas e o que é para trocar. Dourado: especiais e coleção completa. Rosa: o que você quer e o que falta. Laranja: preço para conferir ("733 para revisar" e o botão "Revisar preços"). O significado é sempre o mesmo; o tom se ajusta ao tema — mais escuro no tema claro, mais vivo no escuro —, conferido nos 6 níveis de claridade e em 21 Pokémon favoritos diferentes.
+- **Filtros da Coleção com uma bolinha de cor** (Tenho verde, Faltantes vermelho, Desejo rosa, Duplicadas e Trocar/Vender azul, Preços pendentes laranja). O filtro ligado acende na cor dele. Na carta aberta, a versão que você tem também fica verde.
+- **Profundidade.** Os cartões ganharam um fio de luz no topo e sombra por baixo — a luz vem de cima, em vez de blocos chapados. No tema claro a sombra é azulada (a preta suja o claro). Campos de busca e seletores ficam levemente afundados.
+- **Explorar colorido.** Cada coleção veste a cor do próprio logo — medida nos 108 logos que já vêm no app; quem não tem cor no logo (Black & White, promos...) usa a cor da era. O logo ganha um halo de luz atrás, para o "Pitch Black" não sumir no fundo escuro. A coleção que você ainda não começou fica um pouco mais quieta, mas continua colorida; a que você tem ganha um brilho leve. Cada cartão mostra a era ("Escarlate e Violeta", "Mega Evolução"...) e a Pokébola de progresso em verde.
+- **Coleção completa** ganha borda, barra e Pokébola douradas, e o selo "✓ Completa" numa linha própria — ao lado da era o nome era cortado ("ESCARLATE E VIOLETA" não cabia).
+- **Níveis de claridade do meio** (fundo roxo médio): as cores de significado chegavam a quase preto para manter o contraste. Agora têm um piso de claridade — o dourado volta a ser dourado; o texto delas continua com contraste garantido.
+- Os produtos criados por você, no Explorar, usam o mesmo cartão colorido.
+
 # POKECARD Brasil 5.73.0 — Energias básicas: escolha pelo tipo e pela tiragem
 
 - **Novo seletor de Energias básicas** (menu Mais → "Energias básicas", ou o atalho que aparece quando você busca "energia" na Coleção). Energia básica era a carta mais difícil de cadastrar: as atuais não têm número impresso — o número que o app mostrava é só do catálogo — e a mesma energia aparece em várias coleções e reimpressões quase iguais, com preços diferentes. Agora você escolhe o tipo (Grama, Fogo, Água...) e vê todas as tiragens, da mais nova para a mais antiga, cada uma com o que a diferencia: coleção, **ano da tiragem**, raridade, se tem número impresso (e qual) — e o **preço de cada versão** (Comum, Holográfica, Reverse), com − / + ali mesmo, sem abrir a carta.

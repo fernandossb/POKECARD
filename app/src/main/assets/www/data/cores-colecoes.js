@@ -1,0 +1,10 @@
+/* Cor de cada coleção no Explorar: [matiz 0-360, saturação 0-100].
+
+   Medida nos logos que já vêm no app (set-logos/): para cada logo, o matiz
+   que mais pesa entre os pixels opacos e coloridos — cinza, branco e preto
+   ficam de fora, e quem é mais saturado pesa mais. Logo sem cor de verdade
+   (Black & White, Diamond & Pearl, promos, Forças Temporais, que só tem o
+   símbolo em cinza) não aparece aqui: o app usa a cor da era, em
+   corDaColecao(). Coleções novas, baixadas depois, também caem na cor da
+   era. */
+window.__CORES_COLECOES__ = {"A1":[296,90],"A1a":[181,79],"A2":[288,65],"A2a":[16,75],"A2b":[194,77],"A3":[273,90],"A4a":[202,85],"B2":[282,92],"P-A":[206,93],"base1":[45,80],"base2":[121,57],"base3":[35,40],"bw10":[199,70],"bw11":[45,52],"bw2":[355,82],"bw3":[29,59],"bw4":[45,70],"bw5":[358,82],"bw6":[16,85],"bw7":[201,73],"bw8":[196,79],"bw9":[204,73],"cel25":[45,74],"col1":[240,62],"dc1":[210,78],"det1":[51,85],"dp2":[1,60],"dp3":[150,61],"dv1":[41,48],"ex1":[22,64],"ex10":[200,84],"ex7":[26,73],"ex8":[4,66],"ex9":[67,66],"g1":[46,56],"hgss1":[40,73],"hgss2":[35,80],"hgss3":[197,75],"hgss4":[40,88],"me01":[46,73],"me02":[213,59],"me02.5":[45,70],"me03":[83,62],"me04":[197,81],"sm1":[203,49],"sm10":[52,78],"sm11":[319,76],"sm115":[47,62],"sm12":[183,66],"sm2":[335,83],"sm3":[335,91],"sm4":[355,80],"sm5":[55,91],"sm6":[306,75],"sm7":[211,82],"sm8":[47,89],"sm9":[341,71],"sma":[56,90],"sv01":[345,79],"sv02":[12,70],"sv03":[354,63],"sv03.5":[353,78],"sv04":[217,71],"sv04.5":[48,56],"sv06":[47,70],"sv06.5":[309,50],"sv07":[245,53],"sv08":[47,98],"sv08.5":[244,84],"sv09":[180,68],"sv10":[15,76],"sv10.5b":[195,94],"sv10.5w":[335,87],"swsh1":[335,66],"swsh10":[326,72],"swsh10.5":[50,90],"swsh11":[339,82],"swsh12":[200,78],"swsh12.5":[348,66],"swsh2":[335,56],"swsh3":[46,84],"swsh3.5":[48,75],"swsh4":[49,80],"swsh4.5":[240,76],"swsh5":[195,80],"swsh6":[273,66],"swsh7":[333,92],"swsh8":[195,95],"swsh9":[206,78],"xy0":[198,94],"xy1":[198,95],"xy10":[44,73],"xy11":[199,75],"xy12":[199,94],"xy2":[203,94],"xy3":[199,90],"xy4":[1,86],"xy5":[200,83],"xy6":[40,82],"xy7":[195,79],"xy8":[201,92],"xy9":[34,78]};

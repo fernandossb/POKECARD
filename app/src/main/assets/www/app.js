@@ -3476,13 +3476,13 @@ function pricingPanel() {
       <span class="precos-selo${latest ? ' ok' : ''}" aria-hidden="true">${latest ? '✓' : '!'}</span>
       <div>
         <strong>${priceUpdating ? 'Atualizando os preços…' : latest ? `Preços atualizados ${esc(quandoFoiAtualizado(latest))}` : 'Preços ainda não sincronizados'}</strong>
-        <small>${counts.priced} de ${counts.owned} ${counts.owned === 1 ? 'carta' : 'cartas'} com preço${counts.pending ? ` · ${counts.pending} para revisar` : ''}</small>
+        <small>${counts.priced} de ${counts.owned} ${counts.owned === 1 ? 'carta' : 'cartas'} com preço${counts.pending ? ` · <span class="precos-pendentes">${counts.pending} para revisar</span>` : ''}</small>
       </div>
     </div>
     ${priceUpdating ? `<div class="catalog-progress"><div class="progress"><span style="width:${progress}%"></span></div><small>${esc(priceUpdateMessage || 'Atualizando o banco de preços...')}</small></div>` : ''}
     ${priceUpdateFailures ? `<small class="precos-aviso">${priceUpdateFailures} ${priceUpdateFailures === 1 ? 'versão continua' : 'versões continuam'} sem preço no banco.</small>` : ''}
     <div class="precos-links">
-      ${counts.pending ? `<button type="button" onclick="ui.cardFilter='price-review';setTab('cards')">Revisar ${counts.pending} ${counts.pending === 1 ? 'preço' : 'preços'} ›</button>` : ''}
+      ${counts.pending ? `<button type="button" class="precos-revisar" onclick="ui.cardFilter='price-review';setTab('cards')">Revisar ${counts.pending} ${counts.pending === 1 ? 'preço' : 'preços'} ›</button>` : ''}
       <button type="button" onclick="abrirSobreOsPrecos()">Sobre os preços ›</button>
     </div>
   </section>`;
@@ -3679,12 +3679,14 @@ function renderDashboard() {
       <!-- Os números da coleção. O total ficava no cabeçalho antigo, que o
            visual atual não mostra: quem cadastrou mil cartas perdeu a conta. -->
       <div class="collection-summary-grid">
-        <button onclick="ui.cardFilter='owned';setTab('cards')"><span>${tabIcon('cards')}</span><strong>${summary.totalCopies.toLocaleString('pt-BR')}</strong><small>Total de cartas</small></button>
-        <button onclick="ui.cardFilter='owned';setTab('cards')"><span>${tabIcon('collections')}</span><strong>${summary.uniqueOwned.toLocaleString('pt-BR')}</strong><small>Únicas</small></button>
-        <button onclick="ui.cardFilter='repeated';setTab('cards')"><span>${tabIcon('repeated')}</span><strong>${summary.repeated.toLocaleString('pt-BR')}</strong><small>Repetidas</small></button>
-        <button onclick="ui.cardFilter='owned';setTab('cards')"><span>${tabIcon('collections')}</span><strong>${ownedVariants.toLocaleString('pt-BR')}</strong><small>Versões</small></button>
-        <button onclick="ui.cardFilter='owned';setTab('cards')"><span>${tabIcon('pokedex')}</span><strong>${specialCopies.toLocaleString('pt-BR')}</strong><small>Especiais</small></button>
-        <button onclick="setTab('wishlist')"><span>${tabIcon('wishlist')}</span><strong>${summary.wishlist.toLocaleString('pt-BR')}</strong><small>Quero</small></button>
+        <!-- Cada número tem a cor do que ele significa (verde: você tem;
+             azul: repetida, para trocar; dourado: especial; pink: quero). -->
+        <button class="resumo-total" onclick="ui.cardFilter='owned';setTab('cards')"><span>${tabIcon('cards')}</span><strong>${summary.totalCopies.toLocaleString('pt-BR')}</strong><small>Total de cartas</small></button>
+        <button class="resumo-tenho" onclick="ui.cardFilter='owned';setTab('cards')"><span>${tabIcon('collections')}</span><strong>${summary.uniqueOwned.toLocaleString('pt-BR')}</strong><small>Únicas</small></button>
+        <button class="resumo-troca" onclick="ui.cardFilter='repeated';setTab('cards')"><span>${tabIcon('repeated')}</span><strong>${summary.repeated.toLocaleString('pt-BR')}</strong><small>Repetidas</small></button>
+        <button class="resumo-versoes" onclick="ui.cardFilter='owned';setTab('cards')"><span>${tabIcon('collections')}</span><strong>${ownedVariants.toLocaleString('pt-BR')}</strong><small>Versões</small></button>
+        <button class="resumo-completa" onclick="ui.cardFilter='owned';setTab('cards')"><span>${tabIcon('pokedex')}</span><strong>${specialCopies.toLocaleString('pt-BR')}</strong><small>Especiais</small></button>
+        <button class="resumo-desejo" onclick="setTab('wishlist')"><span>${tabIcon('wishlist')}</span><strong>${summary.wishlist.toLocaleString('pt-BR')}</strong><small>Quero</small></button>
       </div>
       ${ultimasAdicionadasPanel()}
       ${graficoDeValor()}
@@ -4916,18 +4918,19 @@ function renderProdutos() {
 
   const cartaoProprio = produto => {
     const p = progressoDoProduto(produto);
-    return `<button class="set-card timeline-set-card ${p.tenho ? 'owned' : 'missing'}${p.total && p.tenho >= p.total ? ' completa' : ''}" onclick="abrirProduto('${esc(produto.id)}')">
-      <span class="set-logo-fallback">◧</span>
-      <span class="set-card-content">
-        <span class="set-base-row"><small>MEU · ${p.tenho}/${p.total}</small><b>${p.porcento}%</b></span>
-        <span class="progresso-linha">
-          <span class="pokebola-progresso${p.porcento >= 100 ? ' cheia' : ''}" aria-hidden="true"><i style="height:${p.porcento}%"></i></span>
-          <span class="progress"><span style="width:${p.porcento}%"></span></span>
-        </span>
-        <span class="set-name">${esc(produto.nome)}</span>
-        <span class="set-card-meta"><small>${p.total} cartas</small><small>${esc(produto.ano || 'sem ano')}</small></span>
-      </span>
-    </button>`;
+    // Sem logo: a cor sai do id, sempre a mesma para o mesmo produto.
+    let hash = 0;
+    for (const letra of String(produto.id)) hash = (hash * 31 + letra.charCodeAt(0)) % 360;
+    return cartaoDeColecaoHtml({
+      onclick: `abrirProduto('${esc(produto.id)}')`,
+      cor: { h: hash, s: 46 },
+      era: 'Meu produto',
+      logoHtml: '<span class="set-logo-fallback">◧</span>',
+      nome: produto.nome,
+      meta: `<small>${p.total} cartas</small><small>${esc(produto.ano || 'sem ano')}</small>`,
+      tenho: p.tenho, total: p.total, pct: p.porcento,
+      baseRotulo: `${p.tenho}/${p.total}`,
+    });
   };
 
   return `
@@ -5228,32 +5231,89 @@ function apagarProduto(produtoId) {
   render();
 }
 
+/* ---------- Cor de cada coleção (Explorar) ----------
+
+   Cada cartão de coleção veste a cor do próprio logo — medida nos logos que
+   já vêm no app (data/cores-colecoes.js). Sem medida (logo cinza, promo,
+   coleção baixada depois), vale a cor da ERA: Escarlate e Violeta carmim,
+   Espada e Escudo verde-água, Sol e Lua laranja... O matiz é daqui; a
+   claridade vem do tema (--cc-l-*), para o mesmo cartão ser escuro no tema
+   escuro e claro no claro. */
+const COR_DA_ERA = {           // [matiz, saturação]
+  base: [44, 60], gym: [28, 52], neo: [168, 48], ecard: [206, 40], ex: [150, 46],
+  dp: [226, 52], pl: [204, 40], hgss: [40, 58], col: [262, 46], bw: [214, 24],
+  xy: [212, 52], sm: [28, 62], swsh: [330, 50], sv: [350, 52], me: [272, 56],
+  pop: [150, 40], tk: [120, 40], other: [250, 28],
+};
+const COR_DE_PROMO = [44, 42];   // o logo das promos é só uma estrela preta
+// Galerias e cofres são parte de outra coleção e herdam a cor dela.
+const COR_HERDADA = {
+  'swsh9.5tg': 'swsh9', 'swsh10.5tg': 'swsh10', 'swsh11.5tg': 'swsh11', 'swsh12.5tg': 'swsh12',
+  'swsh12.5gg': 'swsh12.5', 'swsh4.5sv': 'swsh4.5', 'cel25cc': 'cel25',
+};
+
+function colecaoEhPromo(item) {
+  return /promo/i.test(String(item?.name || '')) || /^(basep|bwp|dpp|hgssp|np|smp|svp|swshp|xyp|mep)$/i.test(String(item?.id || ''));
+}
+
+// As coleções do Pokémon TCG Pocket (A1, B2, P-A...) não têm era no resto do
+// app ("outras"); aqui ganham a sua, sem mexer na ordem da linha do tempo.
+function eraDaColecao(item) {
+  if (/^(a\d+[a-z]?|b\d+[a-z]?|p-a)$/i.test(String(item?.id || ''))) return { chave: 'tcgp', rotulo: 'Pokémon TCG Pocket' };
+  return { chave: setEraKey(item), rotulo: setEraLabel(item) };
+}
+
+function corDaColecao(item) {
+  const id = String(item?.id || '');
+  const medidas = window.__CORES_COLECOES__ || {};
+  let cor = medidas[id] || medidas[COR_HERDADA[id]];
+  if (!cor && colecaoEhPromo(item)) cor = COR_DE_PROMO;
+  if (!cor) cor = COR_DA_ERA[eraDaColecao(item).chave] || COR_DA_ERA.other;
+  // Teto de saturação: cor viva demais cansa na tela cheia de cartões.
+  return { h: Math.round(cor[0]), s: Math.round(Math.min(62, Math.max(28, cor[1]))) };
+}
+
+// Mesma régua para coleção e produto: estilo, cor, era, logo, nome, barra.
+function cartaoDeColecaoHtml({ onclick, cor, era, logoHtml, nome, meta, tenho, total, pct, baseRotulo }) {
+  const completa = total > 0 && tenho >= total;
+  return `<button type="button" class="set-card timeline-set-card colecao-cartao ${tenho > 0 ? 'owned' : 'missing'}${completa ? ' completa' : ''}" style="--cc-h:${cor.h};--cc-s:${cor.s}%;--cc-sp:${Math.round(cor.s * 0.62)}%" onclick="${onclick}">
+    <span class="colecao-topo">
+      <span class="colecao-era">${esc(era)}</span>
+      ${completa ? '<span class="selo-colecao-completa">✓ Completa</span>' : ''}
+    </span>
+    <span class="colecao-palco">${logoHtml}</span>
+    <span class="colecao-info">
+      <span class="set-name colecao-nome">${esc(nome)}</span>
+      <span class="colecao-meta">${meta}</span>
+      <!-- A Pokébola enche junto com a barra: a barra dá a leitura exata, e a
+           bola a leitura de relance. -->
+      <span class="progresso-linha colecao-progresso">
+        <span class="pokebola-progresso${pct >= 100 ? ' cheia' : ''}" aria-hidden="true"><i style="height:${pct}%"></i></span>
+        <span class="colecao-barra"><i style="width:${pct}%"></i></span>
+        <b>${esc(baseRotulo)}</b>
+      </span>
+    </span>
+  </button>`;
+}
+
 function renderSetCard(item) {
   const total = item.officialCardCount || item.totalCardCount || 0;
-  const owned = item.ownedUnique > 0;
   const imageCandidates = setImageCandidates(item);
   const logo = imageCandidates[0] || '';
   const fallbacks = imageCandidates.slice(1).join('|');
-  const releaseYear = setReleaseYear(item);
-  const releaseDate = mesAnoDoLancamento(item) || releaseYear;
-  const completa = colecaoCompleta(item);
-  return `<button class="set-card timeline-set-card ${owned ? 'owned' : 'missing'}${completa ? ' completa' : ''}" onclick="openSet('${esc(item.id)}')">
-    ${completa ? '<span class="selo-colecao-completa">✓ Completa</span>' : ''}
-    ${logo
+  const releaseDate = mesAnoDoLancamento(item) || setReleaseYear(item);
+  return cartaoDeColecaoHtml({
+    onclick: `openSet('${esc(item.id)}')`,
+    cor: corDaColecao(item),
+    era: eraDaColecao(item).rotulo,
+    logoHtml: logo
       ? `<img class="set-logo-background" src="${esc(logo)}" loading="lazy" decoding="async" alt=""${fallbacks ? ` data-fallbacks="${esc(fallbacks)}"` : ''} onerror="loadNextSetImage(this)"><span class="set-logo-fallback" hidden>◓</span>`
-      : '<span class="set-logo-fallback">◓</span>'}
-    <span class="set-card-content">
-      <span class="set-base-row"><small>BASE ${item.ownedUnique}/${total}</small><b>${item.progress}%</b></span>
-      <!-- A Pokébola enche junto com a barra: a barra continua ali, dando a
-           leitura exata, e a bola dá a leitura de relance. -->
-      <span class="progresso-linha">
-        <span class="pokebola-progresso${item.progress >= 100 ? ' cheia' : ''}" aria-hidden="true"><i style="height:${item.progress}%"></i></span>
-        <span class="progress"><span style="width:${item.progress}%"></span></span>
-      </span>
-      <span class="set-name">${esc(item.name)}</span>
-      <span class="set-card-meta"><small>${total} cartas</small><small>${esc(releaseDate)}</small></span>
-    </span>
-  </button>`;
+      : '<span class="set-logo-fallback">◓</span>',
+    nome: item.name,
+    meta: `<small>${total} cartas</small><small>${esc(releaseDate)}</small>`,
+    tenho: item.ownedUnique, total, pct: item.progress,
+    baseRotulo: `${item.ownedUnique}/${total}`,
+  });
 }
 
 function openSet(setId) {
@@ -5707,8 +5767,10 @@ function filterChips() {
     ['trade', 'Trocar/Vender'],
     ['price-review', 'Preços pendentes'],
   ];
+  // data-filtro: cada filtro tem a cor do seu significado (um pontinho no
+  // botão; aceso, o botão inteiro).
   return chips.map(([value, label]) =>
-    `<button class="chip ${ui.cardFilter === value ? 'active' : ''}" onclick="aplicarFiltroCartas('${value}')">${esc(label)}</button>`
+    `<button class="chip ${ui.cardFilter === value ? 'active' : ''}" data-filtro="${value}" onclick="aplicarFiltroCartas('${value}')">${esc(label)}</button>`
   ).join('');
 }
 
