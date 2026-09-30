@@ -1,3 +1,10 @@
+# POKECARD Brasil 5.69.0 — Arte Estendida: lista que não perde o lugar e obras montadas do jeito certo
+
+- **A lista não volta mais para o topo.** Entrar numa obra e voltar — pelo ‹ da tela ou pelo Voltar do celular — devolve você exatamente onde estava, com a busca que tinha digitado. Vale também para carta aberta a partir de uma obra: agora ela ganha um ‹ ao lado do ×, que leva de volta à obra (e o Voltar do celular faz o mesmo), mesmo depois de mudar a quantidade ali dentro. Fechar tudo no × e reabrir pelo menu Mais também volta para o mesmo ponto da lista.
+- **Cada obra no sentido certo.** Horizontal numa fileira, vertical empilhada (a primeira carta em cima) e grade 3×2 / 3×3 em fileiras de três. A vertical, que antes aparecia como uma faixa vazia, agora aparece inteira. A obra nunca passa da altura da tela: em vez de achatar a arte, ela diminui a largura.
+- **Lista no estilo da Coleção.** Cada obra virou um cartão com a arte completa em cima, ocupando a largura toda, e uma descrição curta embaixo: nome, coleção, quantas você já tem (com a barra) e o tipo de encaixe. A carta que ainda falta aparece em cinza, como na Coleção — a obra vai "ganhando cor" conforme você completa.
+- A lista também ficou mais rápida para desenhar e para buscar: o vínculo de cada carta com o catálogo é calculado uma vez e reaproveitado.
+
 # POKECARD Brasil 5.68.0 — Mais rápido, sem mudar nada no uso
 
 Medido com uma coleção grande (2.500 cartas, 5 mil versões). Nada muda na tela nem no resultado — só o tempo que leva:

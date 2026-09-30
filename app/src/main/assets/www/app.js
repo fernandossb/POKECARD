@@ -11796,6 +11796,11 @@ window.handleAndroidBack = function() {
   // No seletor de coleção ou de artista, Voltar volta para a gaveta de filtros.
   if (document.querySelector('#modal-content .seletor-topo')) { atualizarGavetaDeFiltros(); return true; }
 
+  // Na Arte Estendida (e na carta aberta a partir de uma obra), Voltar faz o
+  // mesmo que o ‹ da tela: um passo atrás, sem perder o lugar na lista.
+  const voltarArte = document.querySelector('#modal-content .arte-estendida-voltar-carta, #modal-content .arte-estendida-voltar');
+  if (voltarArte) { voltarArte.click(); return true; }
+
   const modal = document.getElementById('modal');
   if (modal && !modal.classList.contains('hidden')) { closeModal(); return true; }
   if (ui.tab === 'pokedex' && ui.selectedPokemon) { ui.selectedPokemon = null; render(); return true; }

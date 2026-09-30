@@ -48,8 +48,22 @@ const ARTE_ESTENDIDA_NOME_PARA_SET = {
   'vivid voltage': 'swsh4', 'xy black star promos': 'xyp',
 };
 
-// Como as cartas se encaixam: nº de colunas do grid (0 = uma linha só).
-const ARTE_ESTENDIDA_COLUNAS = { 'Horizontal': 0, 'Vertical': 1, '3×2': 3, '3×3': 3 };
+/* Como as cartas se encaixam. "Horizontal" é uma fileira com todas, na
+   ordem do estudo; "Vertical", uma coluna, a primeira em cima; "3×2" e "3×3"
+   são largura × altura — 3 por fileira, preenchendo da esquerda para a
+   direita, de cima para baixo. `razao` é largura/altura da obra inteira
+   (cada carta tem 63 × 88 mm): é ela que deixa a arte do tamanho certo antes
+   de as imagens chegarem, sem a lista "pular" enquanto carrega. */
+function arteEstendidaGeometria(obra) {
+  const n = obra.cartas.length || 1;
+  const encaixe = String(obra.encaixe || 'Horizontal');
+  const grade = encaixe.match(/^(\d+)\s*[×x]\s*(\d+)$/);
+  let tipo = 'horizontal', colunas = n, rotulo = 'Horizontal';
+  if (grade) { tipo = 'grade'; colunas = Number(grade[1]) || 3; rotulo = `Grade ${grade[1]}×${grade[2]}`; }
+  else if (/vertical/i.test(encaixe)) { tipo = 'vertical'; colunas = 1; rotulo = 'Vertical'; }
+  const linhas = Math.ceil(n / colunas);
+  return { tipo, colunas, linhas, rotulo, razao: (colunas * 63) / (linhas * 88) };
+}
 
 function arteEstendidaNormalizarNomeSet(texto) {
   return String(texto || '').toLowerCase().trim()
@@ -117,7 +131,25 @@ function arteEstendidaSalvarVinculo(obraId, ordem, cardId) {
 /* A carta de um slot: o que foi vinculado à mão vale sempre; sem isso, tenta
    sozinho. `cardId` volta vazio quando nada resolve — a tela mostra o botão
    de vincular. */
+/* O casamento automático varre as coleções candidatas carta a carta — feito
+   para as 235 cartas a cada desenho da lista, custava ~50 ms num PC (bem
+   mais no celular), em cada letra digitada na busca e em cada volta à lista.
+   A resposta só muda com vínculo manual novo (que passa por saveState) ou
+   catálogo novo, então fica guardada até um dos dois acontecer. */
+let arteEstendidaSlotsCache = { carimbo: '', mapa: new Map() };
 function arteEstendidaCartaDoSlot(obra, slot) {
+  const carimbo = `${stateRevision}|${cards.length}|${cardMap.size}`;
+  if (arteEstendidaSlotsCache.carimbo !== carimbo) arteEstendidaSlotsCache = { carimbo, mapa: new Map() };
+  const chave = arteEstendidaChaveDoSlot(obra.id, slot[0]);
+  let resposta = arteEstendidaSlotsCache.mapa.get(chave);
+  if (!resposta) {
+    resposta = arteEstendidaResolverSlot(obra, slot);
+    arteEstendidaSlotsCache.mapa.set(chave, resposta);
+  }
+  return resposta;
+}
+
+function arteEstendidaResolverSlot(obra, slot) {
   const [ordem, nomeIngles, numeroBruto] = slot;
   const manual = arteEstendidaVinculoManual(obra.id, ordem);
   if (manual && cardMap.has(manual)) return { cardId: manual, manual: true };
@@ -153,15 +185,73 @@ function resumoArteEstendida() {
   return { totalObras: obras.length, tenho, ligadas, completas };
 }
 
-/* ---------- Tela: lista das 90 obras ---------- */
+/* ---------- A arte montada: as cartas no encaixe certo ----------
 
+   Uma grade só serve para os três encaixes: `colunas` diz quantas por
+   fileira (todas, uma, ou três), e a proporção da obra inteira fica
+   declarada no CSS. Assim a vertical deixa de sumir (antes era uma fileira
+   "deitada" com altura zero) e nada muda de tamanho quando a imagem chega —
+   é isso que permite a lista voltar exatamente para onde estava.
+
+   Na lista a arte é só imagem (o cartão inteiro abre a obra); dentro da obra
+   cada carta é um botão: abre a carta, ou abre o vínculo à mão. */
+function arteEstendidaImagemDaCarta(card, grande) {
+  const url = grande && card.imageUrl ? upgradeCardImageUrl(card.imageUrl) : cardGridImage(card, null);
+  // Imagem que o TCGdex não tem (acontece com tiragens em português): vira o
+  // mesmo quadro "TCG" da Coleção, em vez de ícone de imagem quebrada.
+  return url
+    ? `<img src="${esc(url)}" alt="${esc(card.name)}" loading="lazy" decoding="async" onerror="this.outerHTML='<span class=&quot;card-placeholder&quot;>TCG</span>'">`
+    : '<span class="card-placeholder">TCG</span>';
+}
+
+function arteEstendidaCelula(obra, slot, resolvido, interativa, grande) {
+  const [ordem, nomeIngles, numeroBruto] = slot;
+  const card = resolvido.cardId ? cardMap.get(resolvido.cardId) : null;
+  if (card) {
+    const tem = quantityFor(card.id) > 0;
+    // Na lista a arte fica limpa: o que falta já aparece em cinza, como na
+    // Coleção. Dentro da obra entram os selos ✓/✕ e a marca de vínculo manual.
+    const miolo = `${arteEstendidaImagemDaCarta(card, grande)}${interativa
+      ? `<span class="arte-estendida-selo ${tem ? 'ok' : ''}" aria-hidden="true">${tem ? '✓' : '✕'}</span>${resolvido.manual ? '<span class="arte-estendida-manual" title="Vinculada à mão">✎</span>' : ''}`
+      : ''}`;
+    return interativa
+      ? `<button type="button" class="arte-celula ${tem ? 'tem' : 'falta'}" onclick="abrirCartaDaObraArteEstendida(${obra.id},'${esc(card.id)}')" title="${esc(card.name)} · ${esc(card.setName)}" aria-label="${esc(card.name)}${tem ? ' (você tem)' : ' (falta)'}">${miolo}</button>`
+      : `<span class="arte-celula ${tem ? 'tem' : 'falta'}">${miolo}</span>`;
+  }
+  // Sem vínculo: a coleção pode nem estar catalogada ainda, ou o casamento
+  // automático não achou candidato único — os dois casos abrem o vínculo à
+  // mão, que também serve para digitar/buscar quando a coleção já existe.
+  if (!interativa) {
+    return `<span class="arte-celula vazio"><span class="arte-estendida-slot-nome">${esc(nomeIngles)}</span></span>`;
+  }
+  const semColecao = !resolvido.setIds || !resolvido.setIds.length;
+  return `<button type="button" class="arte-celula vazio" onclick="abrirVinculoArteEstendida(${obra.id},${ordem})">
+    <span class="arte-estendida-slot-nome">${esc(nomeIngles)}</span>
+    <span class="arte-estendida-slot-ajuda">${semColecao ? 'Coleção ainda não catalogada' : 'Toque para vincular'}</span>
+    ${numeroBruto ? `<span class="arte-estendida-slot-numero">${esc(numeroBruto)}</span>` : '<span class="arte-estendida-slot-numero fraco">nº não confirmado</span>'}
+  </button>`;
+}
+
+function arteEstendidaComposicao(obra, resolvidos, { interativa = false, grande = false } = {}) {
+  const g = arteEstendidaGeometria(obra);
+  const celulas = obra.cartas.map((slot, i) => arteEstendidaCelula(obra, slot, resolvidos[i], interativa, grande)).join('');
+  return `<div class="arte-composicao ${g.tipo}" style="--arte-colunas:${g.colunas};--arte-linhas:${g.linhas};--arte-razao:${g.razao.toFixed(4)}">${celulas}</div>`;
+}
+
+/* ---------- Tela: lista das 90 obras ----------
+
+   Cada obra vira um cartão no estilo da Coleção: a arte completa em cima,
+   ocupando a largura toda, e uma descrição curta embaixo.
+
+   A lista lembra a busca e o ponto da rolagem: entrar numa obra (ou numa
+   carta aberta a partir dela) e voltar devolve você exatamente onde estava.
+   Antes, voltar redesenhava a lista do zero — topo, busca apagada. */
 let arteEstendidaBusca = '';
+let arteEstendidaRolagemLista = 0;
+let arteEstendidaRolagemObra = { obraId: null, topo: 0 };
 
-function arteEstendidaMiniatura(cardId) {
-  const card = cardMap.get(cardId);
-  if (!card) return '<span class="card-placeholder">TCG</span>';
-  const arte = cardGridImage(card, null);
-  return arte ? `<img src="${esc(arte)}" alt="" loading="lazy">` : '<span class="card-placeholder">TCG</span>';
+function arteEstendidaFolha() {
+  return document.getElementById('modal-content');
 }
 
 function arteEstendidaListaFiltrada() {
@@ -171,25 +261,36 @@ function arteEstendidaListaFiltrada() {
   return obras.filter(obra => normalize(`${obra.nome} ${obra.colecao}`).includes(termo));
 }
 
-function renderArteEstendidaLista() {
-  const obras = arteEstendidaListaFiltrada();
-  const linhas = obras.map(obra => {
-    const progresso = arteEstendidaProgressoDaObra(obra);
-    const pct = progresso.total ? Math.round((progresso.tenho / progresso.total) * 100) : 0;
-    const primeiros = obra.cartas.slice(0, 3).map(slot => arteEstendidaCartaDoSlot(obra, slot).cardId).filter(Boolean);
-    return `<button type="button" class="arte-estendida-item${progresso.completa ? ' completa' : ''}" onclick="abrirObraArteEstendida(${obra.id})">
-      <span class="arte-estendida-item-tiras">${primeiros.length
-        ? primeiros.map(id => `<span class="arte-estendida-mini">${arteEstendidaMiniatura(id)}</span>`).join('')
-        : '<span class="arte-estendida-mini vazia">◈</span>'}</span>
-      <span class="arte-estendida-item-texto">
-        <strong>${esc(obra.nome)}</strong>
-        <small>${esc(obra.colecao)}</small>
+function arteEstendidaCartaoDaObra(obra) {
+  const resolvidos = obra.cartas.map(slot => arteEstendidaCartaDoSlot(obra, slot));
+  const ligadas = resolvidos.filter(r => r.cardId);
+  const tenho = ligadas.filter(r => quantityFor(r.cardId) > 0).length;
+  const total = obra.cartas.length;
+  const completa = ligadas.length === total && tenho === total;
+  const pct = total ? Math.round((tenho / total) * 100) : 0;
+  const g = arteEstendidaGeometria(obra);
+  return `<button type="button" class="arte-obra-cartao${completa ? ' completa' : ''}" data-obra-id="${obra.id}" onclick="abrirObraArteEstendida(${obra.id})">
+    <span class="arte-obra-cartao-arte">${arteEstendidaComposicao(obra, resolvidos)}</span>
+    <span class="arte-obra-cartao-texto">
+      <strong>${esc(obra.nome)}</strong>
+      <small>${esc(obra.colecao)}</small>
+      <span class="arte-obra-cartao-progresso">
         <span class="arte-estendida-barra"><i style="width:${pct}%"></i></span>
+        <b>${completa ? '✓ completa' : `${tenho}/${total}`}</b>
       </span>
-      <span class="arte-estendida-item-conta">${progresso.completa ? '✓' : `${progresso.tenho}/${progresso.total}`}</span>
-    </button>`;
-  }).join('');
+      <small class="arte-obra-cartao-encaixe">${esc(g.rotulo)} · ${total} cartas${ligadas.length < total ? ` · ${total - ligadas.length} sem vínculo` : ''}</small>
+    </span>
+  </button>`;
+}
 
+function arteEstendidaListaHtml() {
+  const obras = arteEstendidaListaFiltrada();
+  return obras.length
+    ? obras.map(arteEstendidaCartaoDaObra).join('')
+    : '<div class="empty">Nenhuma obra encontrada com esse nome.</div>';
+}
+
+function renderArteEstendidaLista() {
   const resumo = resumoArteEstendida();
   return `
     <button class="modal-close" onclick="closeModal()" aria-label="Fechar">×</button>
@@ -198,74 +299,124 @@ function renderArteEstendidaLista() {
     <label class="vision-search arte-estendida-busca"><span>${tabIcon('pokedex')}</span>
       <input value="${esc(arteEstendidaBusca)}" placeholder="Buscar obra ou coleção..." autocomplete="off"
         oninput="arteEstendidaBusca=this.value;atualizarArteEstendidaLista()"></label>
-    <div class="arte-estendida-lista">${linhas || '<div class="empty">Nenhuma obra encontrada com esse nome.</div>'}</div>
+    <div class="arte-estendida-lista">${arteEstendidaListaHtml()}</div>
     <p class="arte-estendida-fonte">Fonte: estudo "Artes conectadas Pokémon TCG" (levantamento Deck Certo). Cartas físicas em inglês; Pocket excluído. Números não confirmados na fonte não entram como certos — a carta é vinculada à mão quando isso acontece.</p>`;
 }
 
+// Guarda a rolagem da tela que está saindo, seja ela a lista ou uma obra.
+function arteEstendidaGuardarRolagem() {
+  const folha = arteEstendidaFolha();
+  if (!folha || document.getElementById('modal')?.classList.contains('hidden')) return;
+  if (folha.classList.contains('arte-estendida-lista-sheet')) arteEstendidaRolagemLista = folha.scrollTop;
+  else if (folha.classList.contains('arte-estendida-obra-sheet') && !folha.classList.contains('arte-estendida-vinculo-sheet') && folha.dataset.obraId) {
+    arteEstendidaRolagemObra = { obraId: Number(folha.dataset.obraId), topo: folha.scrollTop };
+  }
+}
+
+function arteEstendidaRolarPara(topo) {
+  const folha = arteEstendidaFolha();
+  if (!folha) return;
+  folha.scrollTop = topo;
+  // Segunda tentativa depois do desenho: o navegador pode ter ajustado o
+  // tamanho do painel no mesmo quadro.
+  requestAnimationFrame(() => { if (folha.scrollTop !== topo) folha.scrollTop = topo; });
+}
+
+// Entrada pelo menu "Mais": abre a lista onde ela ficou da última vez.
 function abrirArteEstendida() {
-  arteEstendidaBusca = '';
-  showModal(renderArteEstendidaLista(), 'arte-estendida-sheet');
+  arteEstendidaGuardarRolagem();
+  arteEstendidaCartaAberta = null;
+  showModal(renderArteEstendidaLista(), 'arte-estendida-sheet arte-estendida-lista-sheet');
+  arteEstendidaRolarPara(arteEstendidaRolagemLista);
 }
 
+// Só a lista é redesenhada: o campo de busca (e o teclado) ficam como estão.
 function atualizarArteEstendidaLista() {
-  const sheet = document.getElementById('modal-content');
-  if (!sheet || !sheet.classList.contains('arte-estendida-sheet')) return;
-  const foco = sheet.querySelector('.arte-estendida-busca input') === document.activeElement;
-  const posicaoCursor = foco ? sheet.querySelector('.arte-estendida-busca input').selectionStart : null;
-  sheet.innerHTML = renderArteEstendidaLista();
-  if (foco) {
-    const campo = sheet.querySelector('.arte-estendida-busca input');
-    campo?.focus();
-    if (campo && posicaoCursor != null) campo.setSelectionRange(posicaoCursor, posicaoCursor);
-  }
+  const folha = arteEstendidaFolha();
+  const lista = folha?.classList.contains('arte-estendida-lista-sheet') ? folha.querySelector('.arte-estendida-lista') : null;
+  if (!lista) return;
+  lista.innerHTML = arteEstendidaListaHtml();
 }
 
-/* ---------- Tela: uma obra, cartas lado a lado ---------- */
-
-function arteEstendidaSlotHtml(obra, slot) {
-  const [ordem, nomeIngles, numeroBruto] = slot;
-  const { cardId, manual, setIds } = arteEstendidaCartaDoSlot(obra, slot);
-  const card = cardId ? cardMap.get(cardId) : null;
-  if (card) {
-    const arte = card.imageUrl ? upgradeCardImageUrl(card.imageUrl) : cardGridImage(card, null);
-    const tem = quantityFor(card.id) > 0;
-    return `<button type="button" class="arte-estendida-slot ${tem ? 'tem' : 'falta'}"
-        onclick="openCard('${esc(card.id)}')" title="${esc(card.name)} · ${esc(card.setName)}">
-      ${arte ? `<img src="${esc(arte)}" alt="Arte de ${esc(card.name)}" loading="lazy">` : '<span class="card-placeholder">TCG</span>'}
-      <span class="arte-estendida-selo ${tem ? 'ok' : ''}" aria-hidden="true">${tem ? '✓' : '✕'}</span>
-      ${manual ? '<span class="arte-estendida-manual" title="Vinculada à mão">✎</span>' : ''}
-    </button>`;
-  }
-  // Sem vínculo: a coleção pode nem estar catalogada ainda, ou o casamento
-  // automático não achou candidato único — os dois casos abrem o vínculo à
-  // mão, que também serve para digitar/buscar quando a coleção já existe.
-  const semColecao = !setIds || !setIds.length;
-  return `<button type="button" class="arte-estendida-slot vazio" onclick="abrirVinculoArteEstendida(${obra.id},${ordem})">
-    <span class="arte-estendida-slot-nome">${esc(nomeIngles)}</span>
-    <span class="arte-estendida-slot-ajuda">${semColecao ? 'Coleção ainda não catalogada' : 'Toque para vincular'}</span>
-    ${numeroBruto ? `<span class="arte-estendida-slot-numero">${esc(numeroBruto)}</span>` : '<span class="arte-estendida-slot-numero fraco">nº não confirmado</span>'}
-  </button>`;
-}
+/* ---------- Tela: uma obra ---------- */
 
 function renderObraArteEstendida(obraId) {
   const obra = (window.__ARTE_ESTENDIDA__ || []).find(o => o.id === obraId);
   if (!obra) return '<button class="modal-close" onclick="closeModal()">×</button><h2>Obra não encontrada</h2>';
-  const colunas = ARTE_ESTENDIDA_COLUNAS[obra.encaixe] ?? 0;
-  const classeEncaixe = colunas === 1 ? 'coluna' : colunas ? 'grade' : 'linha';
+  const resolvidos = obra.cartas.map(slot => arteEstendidaCartaDoSlot(obra, slot));
   const progresso = arteEstendidaProgressoDaObra(obra);
-  const slots = obra.cartas.map(slot => arteEstendidaSlotHtml(obra, slot)).join('');
+  const g = arteEstendidaGeometria(obra);
 
   return `
-    <button type="button" class="gaveta-voltar arte-estendida-voltar" onclick="abrirArteEstendida()" aria-label="Voltar para a lista">‹</button>
+    <button type="button" class="gaveta-voltar arte-estendida-voltar" onclick="voltarParaListaArteEstendida()" aria-label="Voltar para a lista">‹</button>
     <button class="modal-close" onclick="closeModal()" aria-label="Fechar">×</button>
     <h2>${esc(obra.nome)}</h2>
-    <p class="screen-subtitle">${esc(obra.colecao)} · ${progresso.tenho} de ${progresso.total} cartas já na sua coleção${progresso.ligadas < progresso.total ? ` · ${progresso.total - progresso.ligadas} sem vínculo ainda` : ''}</p>
-    <div class="arte-estendida-obra ${classeEncaixe}" style="${colunas > 1 ? `--arte-colunas:${colunas};` : ''}">${slots}</div>
+    <p class="screen-subtitle">${esc(obra.colecao)} · ${esc(g.rotulo)} · ${progresso.tenho} de ${progresso.total} cartas já na sua coleção${progresso.ligadas < progresso.total ? ` · ${progresso.total - progresso.ligadas} sem vínculo ainda` : ''}</p>
+    <div class="arte-obra-detalhe">${arteEstendidaComposicao(obra, resolvidos, { interativa: true, grande: true })}</div>
     <p class="arte-estendida-dica">✓ verde = já está na sua coleção · ✕ = ainda falta · toque numa carta reconhecida para abri-la, ou num quadro vazio para vincular a carta certa.</p>`;
 }
 
 function abrirObraArteEstendida(obraId) {
+  arteEstendidaGuardarRolagem();
   showModal(renderObraArteEstendida(obraId), 'arte-estendida-sheet arte-estendida-obra-sheet');
+  const folha = arteEstendidaFolha();
+  if (folha) folha.dataset.obraId = String(obraId);
+  // Voltando de uma carta ou do vínculo desta mesma obra: onde estava. Obra
+  // aberta a partir da lista: do começo.
+  arteEstendidaRolarPara(arteEstendidaRolagemObra.obraId === obraId ? arteEstendidaRolagemObra.topo : 0);
+  arteEstendidaRolagemObra = { obraId: null, topo: 0 };
+}
+
+function voltarParaListaArteEstendida() {
+  arteEstendidaRolagemObra = { obraId: null, topo: 0 };
+  showModal(renderArteEstendidaLista(), 'arte-estendida-sheet arte-estendida-lista-sheet');
+  arteEstendidaRolarPara(arteEstendidaRolagemLista);
+}
+
+/* ---------- Carta aberta a partir de uma obra ----------
+
+   O cadastro da carta é o mesmo de sempre (openCard). O que muda é a volta:
+   um ‹ no canto leva de novo à obra, na mesma posição — e o Voltar do
+   celular faz o mesmo. O × continua fechando tudo, como em qualquer painel. */
+let arteEstendidaCartaAberta = null; // { obraId, cardId }
+
+function abrirCartaDaObraArteEstendida(obraId, cardId) {
+  arteEstendidaGuardarRolagem();
+  arteEstendidaCartaAberta = { obraId, cardId };
+  openCard(cardId);
+}
+
+function voltarDaCartaParaObraArteEstendida() {
+  const alvo = arteEstendidaCartaAberta;
+  arteEstendidaCartaAberta = null;
+  if (alvo) abrirObraArteEstendida(alvo.obraId);
+}
+
+function arteEstendidaPorBotaoVoltarNaCarta() {
+  const folha = arteEstendidaFolha();
+  if (!folha || folha.querySelector('.arte-estendida-voltar-carta')) return;
+  const botao = document.createElement('button');
+  botao.type = 'button';
+  botao.className = 'gaveta-voltar arte-estendida-voltar-carta';
+  botao.setAttribute('aria-label', 'Voltar para a obra');
+  botao.textContent = '‹';
+  botao.addEventListener('click', voltarDaCartaParaObraArteEstendida);
+  folha.prepend(botao);
+}
+
+/* O cadastro se redesenha sozinho a cada ação (salvar, +/−), chamando
+   openCard de novo — por isso o ‹ é recolocado aqui, depois de cada
+   abertura. Abrir a carta com o painel FECHADO (vindo da Coleção, por
+   exemplo) ou abrir outra carta encerra o caminho de volta. */
+if (typeof openCard === 'function') {
+  const abrirCartaAntes = openCard;
+  openCard = function (cardId, ...resto) {
+    const painelAberto = !document.getElementById('modal')?.classList.contains('hidden');
+    if (arteEstendidaCartaAberta && (!painelAberto || arteEstendidaCartaAberta.cardId !== cardId)) arteEstendidaCartaAberta = null;
+    const resultado = abrirCartaAntes.call(this, cardId, ...resto);
+    if (arteEstendidaCartaAberta) arteEstendidaPorBotaoVoltarNaCarta();
+    return resultado;
+  };
 }
 
 /* ---------- Vincular à mão ----------
@@ -277,6 +428,7 @@ function abrirVinculoArteEstendida(obraId, ordem) {
   const obra = (window.__ARTE_ESTENDIDA__ || []).find(o => o.id === obraId);
   const slot = obra?.cartas.find(s => s[0] === ordem);
   if (!obra || !slot) return;
+  arteEstendidaGuardarRolagem();
   arteEstendidaVinculoAlvo = { obraId, ordem };
   const [, nomeIngles, numeroBruto] = slot;
   const sheet = document.getElementById('modal-content');
@@ -289,8 +441,8 @@ function abrirVinculoArteEstendida(obraId, ordem) {
       <input id="arteEstendidaVinculoCampo" placeholder="Nome, número ou coleção..." autocomplete="off"
         value="${esc(nomeIngles)}" oninput="arteEstendidaBuscarVinculo(this.value)"></label>
     <div id="arteEstendidaVinculoLista" class="arte-estendida-vinculo-lista"></div>`;
-  if (sheet) { sheet.innerHTML = html; sheet.className = 'modal-sheet arte-estendida-sheet arte-estendida-obra-sheet'; }
-  else showModal(html, 'arte-estendida-sheet arte-estendida-obra-sheet');
+  if (sheet) { sheet.innerHTML = html; sheet.className = 'modal-sheet arte-estendida-sheet arte-estendida-obra-sheet arte-estendida-vinculo-sheet'; sheet.scrollTop = 0; }
+  else showModal(html, 'arte-estendida-sheet arte-estendida-obra-sheet arte-estendida-vinculo-sheet');
   arteEstendidaBuscarVinculo(nomeIngles);
   setTimeout(() => document.getElementById('arteEstendidaVinculoCampo')?.focus(), 100);
 }

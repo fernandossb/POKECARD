@@ -5996,53 +5996,76 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 .arte-estendida-sheet{ max-width: 720px; }
 .arte-estendida-busca{ margin: 14px 0 12px; }
 
-/* Lista das obras. */
-.arte-estendida-lista{ display: flex; flex-direction: column; gap: 8px; padding-bottom: 4px; }
-.arte-estendida-item{
-  display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 12px;
-  width: 100%; text-align: left; padding: 10px 12px; border-radius: var(--raio-m);
+/* Lista das obras: cartões no estilo da Coleção — a arte completa em cima,
+   na largura toda, e a descrição curta embaixo. */
+/* minmax(0, 1fr): sem isso a coluna da grade crescia até caber a arte na
+   altura máxima e o cartão passava da largura da tela. */
+.arte-estendida-lista{ display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; padding-bottom: 4px; }
+.arte-obra-cartao{
+  display: block; width: 100%; min-width: 0; padding: 8px; text-align: left; border-radius: var(--raio-m);
   border: 1px solid var(--vision-line); background: var(--vision-surface-2); color: var(--vision-text) !important;
 }
-.arte-estendida-item.completa{ border-color: var(--vision-primary); box-shadow: 0 0 0 1px var(--vision-primary) inset; }
-.arte-estendida-item-tiras{ display: flex; flex: 0 0 auto; }
-.arte-estendida-mini{
-  width: 34px; aspect-ratio: 63 / 88; border-radius: 4px; overflow: hidden; flex: 0 0 auto;
-  background: var(--vision-surface); box-shadow: 0 0 0 1px rgba(0,0,0,.35);
-  margin-left: -12px; display: grid; place-items: center;
-}
-.arte-estendida-mini:first-child{ margin-left: 0; }
-.arte-estendida-mini img{ width: 100%; height: 100%; object-fit: cover; display: block; }
-.arte-estendida-mini.vazia{ opacity: .5; font-size: var(--fs-m); margin-left: 0; }
-.arte-estendida-item-texto{ min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.arte-estendida-item-texto strong{ font-size: var(--fs-m); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.arte-estendida-item-texto small{ font-size: var(--fs-p); opacity: .7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.arte-obra-cartao.completa{ border-color: var(--vision-primary); box-shadow: 0 0 0 1px var(--vision-primary) inset; }
+.arte-obra-cartao:active{ transform: scale(.99); }
+.arte-obra-cartao-arte{ display: block; }
+.arte-obra-cartao-texto{ display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 9px 3px 2px; }
+.arte-obra-cartao-texto strong{ font-size: var(--fs-m); line-height: 1.25; }
+.arte-obra-cartao-texto small{ font-size: var(--fs-p); opacity: .72; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.arte-obra-cartao-progresso{ display: flex; align-items: center; gap: 9px; margin: 3px 0 1px; }
+.arte-obra-cartao-progresso .arte-estendida-barra{ flex: 1 1 auto; margin-top: 0; }
+.arte-obra-cartao-progresso b{ flex: 0 0 auto; font-size: var(--fs-p); }
+.arte-obra-cartao.completa .arte-obra-cartao-progresso b{ color: var(--vision-primary) !important; }
 .arte-estendida-barra{ display: block; height: 4px; margin-top: 3px; border-radius: 999px; background: rgba(255,255,255,.1); overflow: hidden; }
 .arte-estendida-barra i{ display: block; height: 100%; border-radius: inherit; background: var(--vision-primary); }
-.arte-estendida-item-conta{ font-weight: 700; font-size: var(--fs-p); opacity: .85; flex: 0 0 auto; }
-.arte-estendida-item.completa .arte-estendida-item-conta{ color: var(--vision-primary) !important; font-size: var(--fs-m); }
 .arte-estendida-fonte{ margin-top: 14px; font-size: var(--fs-p); opacity: .6; line-height: 1.4; }
 
 /* Botão de voltar da obra: par do × (modal-close), flutuando do outro lado. */
 .arte-estendida-voltar{ float: left; margin-right: 10px; }
-.arte-estendida-obra-sheet h2{ margin-left: 45px; }
+.arte-estendida-obra-sheet h2{ margin-left: 45px; margin-right: 45px; font-size: var(--fs-g); line-height: 1.2; }
+/* O ‹ de volta à obra, no cadastro da carta: ao lado do × fixo dele. */
+.card-detail-sheet .arte-estendida-voltar-carta{
+  position: fixed; z-index: 10;
+  top: calc(12px + env(safe-area-inset-top));
+  left: calc(max(14px, calc((100vw - 750px) / 2)) + 50px);
+}
 
-/* A obra: as cartas lado a lado, sem espaço entre elas — é isso que faz a
-   arte parecer uma peça só, não um álbum de figurinhas. */
-.arte-estendida-obra{
-  display: flex; margin: 16px 0; border-radius: var(--raio-m); overflow: hidden;
+/* A obra montada. Uma grade só para os três encaixes: `--arte-colunas`
+   cartas por fileira (todas = horizontal, uma = vertical, três = grade), e a
+   proporção da obra inteira declarada — as cartas medem 63 × 88 mm. A altura
+   máxima segura as verticais e as grades grandes dentro da tela: a largura
+   encolhe junto, nunca a arte achatada. O fio de 1px entre as cartas é a
+   emenda das cartas físicas lado a lado. */
+.arte-composicao{
+  --arte-altura-max: 52vh;
+  display: grid;
+  grid-template-columns: repeat(var(--arte-colunas, 2), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--arte-linhas, 1), minmax(0, 1fr));
+  aspect-ratio: var(--arte-razao, 1.43);
+  width: min(100%, calc(var(--arte-altura-max) * var(--arte-razao, 1.43)));
+  margin: 0 auto; gap: 1px;
+  border-radius: var(--raio-m); overflow: hidden;
+  background: rgba(0,0,0,.5);
+}
+.arte-obra-detalhe{ margin: 16px 0; }
+.arte-obra-detalhe .arte-composicao{
+  --arte-altura-max: 70vh;
   border: 1px solid var(--vision-line); box-shadow: 0 8px 24px rgba(0,0,0,.35);
-  background: var(--vision-surface-2);
 }
-.arte-estendida-obra.coluna{ flex-direction: column; }
-.arte-estendida-obra.grade{ display: grid; grid-template-columns: repeat(var(--arte-colunas, 3), 1fr); }
-.arte-estendida-slot{
-  position: relative; aspect-ratio: 63 / 88; border: 0; border-radius: 0; padding: 0;
-  background: var(--vision-surface-2); color: inherit; overflow: hidden; flex: 1 1 0; min-width: 0;
+.arte-celula{
+  position: relative; display: block; min-width: 0; min-height: 0; overflow: hidden;
+  padding: 0; border: 0; border-radius: 0; background: var(--vision-surface-2); color: inherit;
 }
-.arte-estendida-obra.linha .arte-estendida-slot + .arte-estendida-slot{ border-left: 1px solid rgba(0,0,0,.4); }
-.arte-estendida-obra.coluna .arte-estendida-slot + .arte-estendida-slot{ border-top: 1px solid rgba(0,0,0,.4); }
-.arte-estendida-obra.grade .arte-estendida-slot{ border: 1px solid rgba(0,0,0,.4); }
-.arte-estendida-slot img{ width: 100%; height: 100%; object-fit: cover; display: block; }
+.arte-celula img{ width: 100%; height: 100%; object-fit: cover; display: block; }
+.arte-celula .card-placeholder{ width: 100% !important; height: 100% !important; border-radius: 0 !important; }
+/* A carta que falta fica em cinza, como na Coleção: a obra vai "ganhando
+   cor" conforme você completa. */
+.arte-celula.falta img{ filter: grayscale(1) brightness(1.05) contrast(.85); opacity: .55; }
+.arte-celula.vazio{
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  padding: 6px; text-align: center;
+  background: repeating-linear-gradient(135deg, rgba(255,255,255,.05) 0 8px, transparent 8px 16px), var(--vision-surface-2);
+}
+.arte-obra-cartao .arte-celula.vazio .arte-estendida-slot-nome{ font-size: 11px; opacity: .8; overflow-wrap: anywhere; }
 .arte-estendida-selo{
   position: absolute; top: 5px; right: 5px; width: 22px; height: 22px; border-radius: 50%;
   display: grid; place-items: center; font-size: var(--fs-p); font-weight: 800; line-height: 1;
@@ -6053,11 +6076,6 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
   position: absolute; bottom: 5px; left: 5px; width: 20px; height: 20px; border-radius: 50%;
   display: grid; place-items: center; font-size: var(--fs-p); line-height: 1;
   background: rgba(0,0,0,.6); color: #fff;
-}
-.arte-estendida-slot.vazio{
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
-  padding: 8px; text-align: center;
-  background: repeating-linear-gradient(135deg, rgba(255,255,255,.05) 0 8px, transparent 8px 16px), var(--vision-surface-2);
 }
 .arte-estendida-slot-nome{ font-size: var(--fs-p); font-weight: 700; color: var(--vision-text) !important; }
 .arte-estendida-slot-ajuda{ font-size: var(--fs-p); opacity: .65; }
