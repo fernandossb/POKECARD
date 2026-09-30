@@ -139,6 +139,7 @@ let stateSaveDirty = false;
 // (armazenamento cheio, aba privada, etc.). Liga o aviso de topo até uma
 // gravação voltar a dar certo.
 let stateSaveFailed = false;
+let regravarEstadoAoAbrir = false;
 let stateRevision = 0;
 let collectionSummaryCache = { revision: -1, value: null };
 let pokemonStatsCache = { revision: -1, value: null };
@@ -2432,13 +2433,24 @@ async function init() {
       localStorage.setItem(PRICE_LOGIC_VERSION_KEY, String(PRICE_LOGIC_VERSION));
     }
     // Apenas caches produzidos pela lógica atual podem ser persistidos.
+    // (Sem a checagem prévia de "tem preço?": ela calculava o preço de novo
+    // para cada carta, e persistAutomaticPricesForCard já não mexe em nada
+    // quando nenhuma versão tem preço no banco.)
     let migratedCachedPrices = false;
     for (const cardId of Object.keys(state.entries)) {
-      if (variantsFor(cardId).some(variant => centralPriceQuote(cardId, variant))) migratedCachedPrices = persistAutomaticPricesForCard(cardId, false) || migratedCachedPrices;
+      migratedCachedPrices = persistAutomaticPricesForCard(cardId, false) || migratedCachedPrices;
     }
     if (migratedCachedPrices) saveState();
     renderTabs();
     render();
+    // A regravação "de higiene" do estado lido fica para depois da primeira
+    // tela — antes ela gravava a coleção inteira de novo em toda abertura,
+    // atrasando o app aparecer. Se já houver gravação agendada, ela cobre isto.
+    if (regravarEstadoAoAbrir) {
+      regravarEstadoAoAbrir = false;
+      stateSaveDirty = true;
+      if (!stateSaveTimer) stateSaveTimer = setTimeout(saveStateNow, 2500);
+    }
     document.getElementById('loading').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
     // As regras de deck saem da mesma pasta dos preços, uma vez por dia.
@@ -2576,15 +2588,11 @@ function loadState() {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
     const migrated = migrateState(saved);
     if (migrated) {
-      // Regravar a versão migrada é higiene, não obrigação. Se o armazenamento
-      // recusar, seguimos com o que já está em memória — descartar a coleção
-      // carregada por causa de uma falha de escrita seria o pior desfecho.
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
-      } catch (erro) {
-        console.error('POKECARD: não foi possível regravar o estado —', erro && erro.name);
-        stateSaveFailed = true;
-      }
+      // Regravar a versão migrada é higiene, não obrigação — e fica para
+      // depois da primeira tela (ver init). Se o armazenamento recusar,
+      // seguimos com o que já está em memória: saveStateNow avisa e faz o
+      // backup de emergência, como em qualquer outra gravação.
+      regravarEstadoAoAbrir = true;
       return migrated;
     }
   } catch (_) {}
@@ -2757,9 +2765,10 @@ function currentCardFilter() {
   return ui.tab === 'wishlist' ? 'wishlist' : ui.tab === 'repeated' ? 'repeated' : ui.cardFilter;
 }
 
+// Seletor direto em vez de listar TODAS as linhas e procurar uma a uma: a
+// atualização em segundo plano chama isto para dezenas de cartas seguidas.
 function findRenderedCardRow(cardId) {
-  return [...document.querySelectorAll('.card-row[data-card-id]')]
-    .find(node => node.dataset.cardId === String(cardId)) || null;
+  return document.querySelector(`.card-row[data-card-id="${CSS.escape(String(cardId))}"]`);
 }
 
 // true quando a grade atual mostra uma linha por CARTA (não por versão, como
@@ -3178,11 +3187,26 @@ function render() {
   labRecord('render_completo', performance.now() - labStart, { tab: ui.tab, htmlLength: content.innerHTML.length });
 }
 
+/* O cabeçalho só mostra duas contagens. Antes ele pedia o resumo completo
+   (collectionSummary: preço de cada versão, Pokédex...) — e como render() e
+   cada +/− chamam updateHeader, esse resumo inteiro era refeito a cada toque
+   na Coleção, onde ninguém olha para ele. As contagens saem de um laço leve;
+   o resumo caro fica para quando o Início realmente for desenhado. */
+let contagemDoCabecalhoCache = { revision: -1, unicas: 0, copias: 0 };
 function updateHeader() {
   const target = document.getElementById('header-status');
   if (!target || !state) return;
-  const summary = collectionSummary();
-  target.textContent = `${summary.uniqueOwned} cartas únicas · ${summary.totalCopies} cartas no total`;
+  if (contagemDoCabecalhoCache.revision !== stateRevision) {
+    let unicas = 0;
+    let copias = 0;
+    for (const cardId of Object.keys(state.entries)) {
+      const quantidade = quantityFor(cardId);
+      copias += quantidade;
+      if (quantidade > 0) unicas++;
+    }
+    contagemDoCabecalhoCache = { revision: stateRevision, unicas, copias };
+  }
+  target.textContent = `${contagemDoCabecalhoCache.unicas} cartas únicas · ${contagemDoCabecalhoCache.copias} cartas no total`;
 }
 
 function collectionSummary() {
@@ -3337,7 +3361,21 @@ function pokedexComFormas() {
 }
 
 
+/* Confere o preço de cada versão da coleção inteira — o trecho mais caro do
+   Início. Só muda quando a coleção muda, quando chega/troca lote do banco de
+   preços, ou com o passar do tempo (valor manual vencendo): voltar ao Início
+   sem nada disso ter acontecido reaproveita a última conta. */
+let pricedOwnedCountCache = { chave: '', value: null };
 function pricedOwnedCount() {
+  const chave = [stateRevision, centralPriceLoadedShards.size, centralPriceStatus?.generatedAt || '',
+    Math.floor(Date.now() / 3600000)].join('|');
+  if (pricedOwnedCountCache.chave === chave && pricedOwnedCountCache.value) return pricedOwnedCountCache.value;
+  const value = contarPrecosDaColecao();
+  pricedOwnedCountCache = { chave, value };
+  return value;
+}
+
+function contarPrecosDaColecao() {
   let priced = 0;
   let owned = 0;
   let pending = 0;
@@ -5901,28 +5939,55 @@ function verAdicionadasRecentemente() {
   window.scrollTo(0, 0);
 }
 
-function cardSorter(sort) {
-  if (sort === 'recent') {
-    // A data de cada carta é calculada uma vez por ordenação, não a cada
-    // comparação: com o catálogo inteiro são dezenas de milhares delas.
-    const tempos = new Map();
-    const tempo = id => {
-      if (!tempos.has(id)) tempos.set(id, momentoDeAdicao(id));
-      return tempos.get(id);
-    };
-    const collator = new Intl.Collator('pt-BR');
-    return (a, b) => tempo(b.id) - tempo(a.id) || collator.compare(a.name, b.name) || numericLocal(a) - numericLocal(b);
-  }
-  if (sort === 'name') return (a,b) => a.name.localeCompare(b.name,'pt-BR') || a.setName.localeCompare(b.setName,'pt-BR');
-  if (sort === 'quantity') return (a,b) => quantityFor(b.id)-quantityFor(a.id) || a.name.localeCompare(b.name,'pt-BR');
-  if (sort === 'price-desc') return (a,b) => sortablePriceForCard(b.id)-sortablePriceForCard(a.id) || a.name.localeCompare(b.name,'pt-BR');
-  if (sort === 'set') return (a,b) => a.setName.localeCompare(b.setName,'pt-BR') || numericLocal(a)-numericLocal(b);
-  return (a,b) => numericLocal(a)-numericLocal(b) || a.localId.localeCompare(b.localId,undefined,{numeric:true}) || a.name.localeCompare(b.name,'pt-BR');
+/* Ordenar o catálogo inteiro são ~190 mil comparações. `localeCompare` com
+   idioma cria (ou procura) um comparador a CADA chamada, e o número da carta
+   era extraído por expressão regular também a cada chamada — só a ordem por
+   número levava ~300 ms num PC, bem mais no celular, toda vez que a Coleção
+   abria. Comparadores fixos dão exatamente a mesma ordem (a especificação
+   define localeCompare como `new Intl.Collator(...).compare`), e o número de
+   cada carta é calculado uma vez só. */
+const COMPARADOR_PT = new Intl.Collator('pt-BR');
+const COMPARADOR_NUMERICO = new Intl.Collator(undefined, { numeric: true });
+
+// Memoriza uma função cara POR ORDENAÇÃO: o valor de cada carta é calculado
+// uma vez, não duas vezes a cada comparação em que ela aparece.
+function memoPorCarta(fn) {
+  const valores = new Map();
+  return id => {
+    if (!valores.has(id)) valores.set(id, fn(id));
+    return valores.get(id);
+  };
 }
 
+function cardSorter(sort) {
+  if (sort === 'recent') {
+    const tempo = memoPorCarta(momentoDeAdicao);
+    return (a, b) => tempo(b.id) - tempo(a.id) || COMPARADOR_PT.compare(a.name, b.name) || numericLocal(a) - numericLocal(b);
+  }
+  if (sort === 'name') return (a,b) => COMPARADOR_PT.compare(a.name, b.name) || COMPARADOR_PT.compare(a.setName, b.setName);
+  if (sort === 'quantity') {
+    const quantidade = memoPorCarta(quantityFor);
+    return (a,b) => quantidade(b.id)-quantidade(a.id) || COMPARADOR_PT.compare(a.name, b.name);
+  }
+  if (sort === 'price-desc') {
+    const preco = memoPorCarta(sortablePriceForCard);
+    return (a,b) => preco(b.id)-preco(a.id) || COMPARADOR_PT.compare(a.name, b.name);
+  }
+  if (sort === 'set') return (a,b) => COMPARADOR_PT.compare(a.setName, b.setName) || numericLocal(a)-numericLocal(b);
+  return (a,b) => numericLocal(a)-numericLocal(b) || COMPARADOR_NUMERICO.compare(a.localId, b.localId) || COMPARADOR_PT.compare(a.name, b.name);
+}
+
+// Guardado no próprio objeto da carta (sai junto quando o catálogo é trocado).
+const numeroLocalDaCarta = new WeakMap();
 function numericLocal(card) {
+  if (card && typeof card === 'object') {
+    const guardado = numeroLocalDaCarta.get(card);
+    if (guardado !== undefined && guardado.localId === card.localId) return guardado.numero;
+  }
   const match = String(card.localId).match(/\d+/);
-  return match ? Number(match[0]) : 999999;
+  const numero = match ? Number(match[0]) : 999999;
+  if (card && typeof card === 'object') numeroLocalDaCarta.set(card, { localId: card.localId, numero });
+  return numero;
 }
 
 function scannerFinishLabel(value) {
@@ -9674,8 +9739,9 @@ function renderPokemonDetail(id) {
   const pokemon = pokemonMap.get(Number(id));
   if (!pokemon) { ui.selectedPokemon = null; return renderPokedex(); }
   const stat = buildPokemonStats().get(pokemon.id);
+  const quantidade = memoPorCarta(quantityFor);
   const related = cards.filter(card => pokemonIdsForCard(card).includes(pokemon.id))
-    .sort((a,b) => quantityFor(b.id)-quantityFor(a.id) || a.setName.localeCompare(b.setName,'pt-BR') || numericLocal(a)-numericLocal(b));
+    .sort((a,b) => quantidade(b.id)-quantidade(a.id) || COMPARADOR_PT.compare(a.setName, b.setName) || numericLocal(a)-numericLocal(b));
 
   /* Um bloco por FORMA, cada um com o seu próprio retrato e a sua lista.
 

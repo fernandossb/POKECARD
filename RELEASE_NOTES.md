@@ -1,3 +1,12 @@
+# POKECARD Brasil 5.68.0 — Mais rápido, sem mudar nada no uso
+
+Medido com uma coleção grande (2.500 cartas, 5 mil versões). Nada muda na tela nem no resultado — só o tempo que leva:
+
+- **Ordenar a Coleção ficou de 10 a 17 vezes mais rápido.** Ordenar o catálogo inteiro por número levava cerca de 1/3 de segundo num computador (bem mais no celular), e isso acontecia toda vez que a Coleção abria; por preço, quase um segundo inteiro. A ordem continua exatamente a mesma — conferido carta a carta em todas as ordenações, no catálogo e na sua coleção —, só o jeito de comparar ficou mais leve.
+- **Cada toque em + / − ficou mais leve.** O cabeçalho do app refazia, a cada mudança, o resumo completo da coleção (preço de todas as versões, Pokédex...) só para mostrar duas contagens — num texto que o visual atual nem exibe. Agora ele faz só a conta das duas contagens; o resumo completo fica para quando o Início é aberto.
+- **Voltar ao Início reaproveita a conta dos preços** ("X de Y cartas com preço", "para revisar") enquanto nada mudou na coleção nem no banco de preços.
+- **O app abre mais rápido.** Toda abertura regravava a coleção inteira no aparelho antes de mostrar a primeira tela, e conferia o preço de cada carta duas vezes. A regravação agora acontece logo depois da tela aparecer, e a conferência é feita uma vez só.
+
 # POKECARD Brasil 5.67.0 — Quadradinho virou linha, com quantidade e preço no cadastro
 
 - No cadastro de cartas, os quadradinhos de versão (comum, holo, reverse, carimbo, edição, foil especial...) viraram uma lista de linhas: cada versão mostra o preço da unidade e um controle de − / + para ajustar a quantidade direto ali, sem precisar abrir o formulário "Cadastrar nova versão" para cada acabamento. A primeira cópia de uma versão nova é criada sozinha (português, Near Mint, Brasil — os mesmos padrões de sempre) assim que você toca em "+"; se a carta ainda não tem nenhuma cópia e o app não sabe que Pokémon ela representa, o "+" pede para escolher antes, do mesmo jeito que o formulário completo já pedia. Os quadradinhos da grade da Coleção continuam do jeito que estavam — a mudança é só na tela de cadastro.
