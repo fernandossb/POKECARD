@@ -6017,7 +6017,6 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 .arte-obra-cartao.completa .arte-obra-cartao-progresso b{ color: var(--vision-primary) !important; }
 .arte-estendida-barra{ display: block; height: 4px; margin-top: 3px; border-radius: 999px; background: rgba(255,255,255,.1); overflow: hidden; }
 .arte-estendida-barra i{ display: block; height: 100%; border-radius: inherit; background: var(--vision-primary); }
-.arte-estendida-fonte{ margin-top: 14px; font-size: var(--fs-p); opacity: .6; line-height: 1.4; }
 
 /* Botão de voltar da obra: par do × (modal-close), flutuando do outro lado. */
 .arte-estendida-voltar{ float: left; margin-right: 10px; }
@@ -6075,13 +6074,8 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 .arte-estendida-slot-nome{ font-size: var(--fs-p); font-weight: 700; color: var(--vision-text) !important; }
 .arte-estendida-dica{ margin-top: 4px; font-size: var(--fs-p); opacity: .65; line-height: 1.4; }
 
-/* Criar obra: o botão da lista e a etiqueta das obras suas. */
+/* Criar obra: o botão da lista. */
 .arte-estendida-criar{ width: 100%; margin: 12px 0 0; }
-.arte-obra-tag{
-  display: inline-block; margin-left: 6px; padding: 2px 7px; border-radius: 999px; vertical-align: 2px;
-  font-size: 11px; font-weight: 700; letter-spacing: .02em;
-  background: var(--vision-primary); color: var(--vision-bg, #10141a) !important;
-}
 
 /* Editor: campos, encaixes, prévia montada e a fila das cartas. */
 .arte-editor-campo{ margin-top: 12px; }

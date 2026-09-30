@@ -1,53 +1,14 @@
 /* Arte Estendida — obras que se completam entre duas ou mais cartas.
 
-   Duas origens, mostradas juntas:
-
-   · Obras do estudo (data/arte-estendida-data.js): só entram as que o app
-     consegue montar COM CERTEZA — toda carta com número impresso conhecido,
-     encontrada no catálogo deste aparelho por esse número, com imagem, e do
-     Pokémon que o estudo diz. Qualquer dúvida exclui a obra inteira: obra
-     montada pela metade, ou com a carta comum no lugar da ilustração
-     especial, era pior do que não mostrar. Quando o catálogo crescer
-     (Buscar cartas e coleções novas), mais obras passam nesse filtro sozinhas.
-
-   · Obras criadas por você: nome, encaixe e as cartas escolhidas na ordem.
-     Ficam no estado da coleção (state.artesEstendidasProprias) — gravadas no
-     aparelho e incluídas no backup, como decks e produtos.
+   Todas as obras são criadas por você: nome, encaixe e as cartas escolhidas
+   na ordem em que se encaixam. Ficam no estado da coleção
+   (state.artesEstendidasProprias) — gravadas no aparelho e incluídas no
+   backup, como decks e produtos. O app não traz mais obras prontas.
 
    O "tenho" de cada carta vem direto da coleção (quantityFor): não existe
    uma lista paralela de posse só para esta tela. */
 
-// Nome da coleção em INGLÊS (como o estudo cita) → id do TCGdex. Só indica
-// candidatos: se a coleção não tem cartas carregadas neste aparelho, ela
-// conta como "ainda não catalogada" mesmo estando aqui.
-const ARTE_ESTENDIDA_NOME_PARA_SET = {
-  'ancient origins': 'xy7', 'aquapolis': 'ecard2', 'arceus': 'pl4',
-  'breakpoint': 'xy9', 'breakthrough': 'xy8', 'bw black star promos': 'bwp',
-  'boundaries crossed': 'bw7', 'celebrations': 'cel25',
-  'celebrations classic collection': 'cel25cc', 'chilling reign': 'swsh6',
-  'cosmic eclipse': 'sm12', 'crimson invasion': 'sm4', 'crown zenith': 'swsh12.5',
-  'crown zenith galarian gallery': 'swsh12.5gg', 'crystal guardians': 'ex14',
-  'delta species': 'ex11', 'deoxys': 'ex8', 'destined rivals': 'sv10',
-  'dragons exalted': 'bw6', 'ex legend maker': 'ex12', 'evolving skies': 'swsh7',
-  'fates collide': 'xy10', 'forbidden light': 'sm6', 'fusion strike': 'swsh8',
-  'generations': 'g1', 'hgss black star promos': 'hgssp',
-  'hs undaunted': 'hgss3', 'hs unleashed': 'hgss2', 'legendary treasures': 'bw11',
-  'lost origin': 'swsh11', 'majestic dawn': 'dp5', 'neo discovery': 'neo2',
-  'neo revelation': 'neo3', 'obsidian flames': 'sv03', 'pop series 1': 'pop1',
-  'pop series 4': 'pop4', 'paldea evolved': 'sv02', 'paldean fates': 'sv04.5',
-  'paradox rift': 'sv04', 'plasma blast': 'bw10', 'plasma storm': 'bw8',
-  'rising rivals': 'pl2', 'roaring skies': 'xy6', 'sm black star promos': 'smp',
-  'swsh black star promos': 'swshp', 'scarlet and violet': 'sv01',
-  'scarlet and violet black star promos': 'svp', 'scarlet and violet promos': 'svp',
-  'shining fates': 'swsh4.5', 'shrouded fable': 'sv06.5', 'silver tempest': 'swsh12',
-  'skyridge': 'ecard3', 'southern islands': 'si1', 'stellar crown': 'sv07',
-  'supreme victors': 'pl3', 'surging sparks': 'sv08', 'sword and shield': 'swsh1',
-  'team rocket returns': 'ex7', 'temporal forces': 'sv05',
-  'twilight masquerade': 'sv06', 'ultra prism': 'sm5', 'unified minds': 'sm11',
-  'vivid voltage': 'swsh4', 'xy black star promos': 'xyp',
-};
-
-// Encaixes oferecidos na criação — o mesmo formato "largura × altura" do estudo.
+// Encaixes oferecidos na criação: "largura × altura" nas grades.
 const ARTE_ESTENDIDA_ENCAIXES = [
   ['Horizontal', 'Lado a lado'],
   ['Vertical', 'Uma sobre a outra'],
@@ -74,69 +35,6 @@ function arteEstendidaGeometria(obra) {
   return { tipo, colunas, linhas, rotulo, razao: (colunas * 63) / (linhas * 88) };
 }
 
-function arteEstendidaNormalizarNomeSet(texto) {
-  return String(texto || '').toLowerCase().trim()
-    .replace(/&/g, 'and').replace(/[^a-z0-9]+/g, ' ').trim();
-}
-
-/* Os candidatos de verdade: só contam as coleções que JÁ têm carta carregada
-   neste aparelho (`cardsBySet`, o mesmo índice do resto do app). */
-function arteEstendidaSetIdsCandidatos(colecaoTexto) {
-  const partes = String(colecaoTexto || '').split(' / ');
-  const ids = new Set();
-  for (const parte of partes) {
-    const id = ARTE_ESTENDIDA_NOME_PARA_SET[arteEstendidaNormalizarNomeSet(parte)];
-    if (id && cardsBySet.get(id)?.length) ids.add(id);
-  }
-  return [...ids];
-}
-
-/* Acha a carta SÓ pelo número impresso (fração "165/162" ou código de promo
-   "SWSH061"). Sem palpite por nome: era assim que a obra ganhava a versão
-   comum no lugar da ilustração especial. E o número tem de levar ao Pokémon
-   certo — conferido: "SWSH015" apontava para Cinderace V, não Scorbunny. */
-function arteEstendidaResolverPorNumero(setIds, nomeIngles, numeroBruto) {
-  const numero = String(numeroBruto || '').trim();
-  if (!setIds.length || !numero) return null;
-  const pool = setIds.flatMap(id => cardsBySet.get(id) || []);
-  let candidatos;
-  const fracao = numero.match(/^0*(\d+)\/\d+$/);
-  if (fracao) {
-    candidatos = pool.filter(c => String(Number(String(c.localId || '').match(/\d+/)?.[0] ?? -1)) === fracao[1]);
-    if (candidatos.length > 1) candidatos = candidatos.filter(c => normalize(c.name) === normalize(nomeIngles));
-  } else {
-    const alvo = normalize(numero).replace(/\s+/g, '');
-    candidatos = pool.filter(c => normalize(String(c.localId || '')).replace(/\s+/g, '') === alvo);
-  }
-  if (candidatos.length !== 1) return null;
-  const card = candidatos[0];
-  const esperado = inferPokemonIds(nomeIngles);
-  const achado = pokemonIdsForCard(card);
-  if (esperado.length && achado.length && !esperado.some(id => achado.includes(id))) return null;
-  return card;
-}
-
-/* As obras do estudo que passam no filtro, já com a carta de cada posição.
-   Só muda com catálogo novo — fica guardado até lá. */
-let arteEstendidaEstudoCache = { carimbo: '', obras: [] };
-function arteEstendidaObrasDoEstudo() {
-  const carimbo = `${cards.length}|${cardMap.size}`;
-  if (arteEstendidaEstudoCache.carimbo === carimbo) return arteEstendidaEstudoCache.obras;
-  const obras = [];
-  for (const obra of window.__ARTE_ESTENDIDA__ || []) {
-    const setIds = arteEstendidaSetIdsCandidatos(obra.colecao);
-    const cardIds = [];
-    for (const [, nomeIngles, numero] of obra.cartas) {
-      const card = arteEstendidaResolverPorNumero(setIds, nomeIngles, numero);
-      if (!card || !cardGridImage(card, null)) break;
-      cardIds.push(card.id);
-    }
-    if (cardIds.length === obra.cartas.length) obras.push({ ...obra, id: `e${obra.id}`, cardIds, propria: false });
-  }
-  arteEstendidaEstudoCache = { carimbo, obras };
-  return obras;
-}
-
 /* ---------- Obras criadas por você ---------- */
 
 function arteEstendidaListaPropria() {
@@ -144,7 +42,7 @@ function arteEstendidaListaPropria() {
   return state.artesEstendidasProprias;
 }
 
-// A obra salva, no mesmo formato das do estudo (as telas não distinguem).
+// A obra salva, com o nome e o número de cada carta tirados do catálogo.
 function arteEstendidaObraPropriaParaExibir(salva) {
   const cardIds = (Array.isArray(salva.cardIds) ? salva.cardIds : []).filter(Boolean);
   const colecoes = [...new Set(cardIds.map(id => cardMap.get(id)?.setName).filter(Boolean))];
@@ -156,10 +54,9 @@ function arteEstendidaObraPropriaParaExibir(salva) {
   };
 }
 
-// As suas primeiro, das mais novas para as mais antigas; depois as do estudo.
+// Das mais novas para as mais antigas.
 function arteEstendidaTodasAsObras() {
-  const proprias = arteEstendidaListaPropria().map(arteEstendidaObraPropriaParaExibir).reverse();
-  return [...proprias, ...arteEstendidaObrasDoEstudo()];
+  return arteEstendidaListaPropria().map(arteEstendidaObraPropriaParaExibir).reverse();
 }
 
 function arteEstendidaObraPorId(obraId) {
@@ -251,7 +148,7 @@ function arteEstendidaCartaoDaObra(obra) {
   return `<button type="button" class="arte-obra-cartao${p.completa ? ' completa' : ''}" data-obra-id="${esc(obra.id)}" onclick="abrirObraArteEstendida('${esc(obra.id)}')">
     <span class="arte-obra-cartao-arte">${arteEstendidaComposicao(obra)}</span>
     <span class="arte-obra-cartao-texto">
-      <strong>${esc(obra.nome)}${obra.propria ? ' <span class="arte-obra-tag">Sua obra</span>' : ''}</strong>
+      <strong>${esc(obra.nome)}</strong>
       <small>${esc(obra.colecao)}</small>
       <span class="arte-obra-cartao-progresso">
         <span class="arte-estendida-barra"><i style="width:${pct}%"></i></span>
@@ -263,11 +160,14 @@ function arteEstendidaCartaoDaObra(obra) {
 }
 
 function arteEstendidaListaHtml() {
+  if (!arteEstendidaListaPropria().length) {
+    arteEstendidaBusca = '';
+    return '<div class="empty">Nenhuma obra ainda. Toque em "Criar obra" para montar a primeira.</div>';
+  }
   const obras = arteEstendidaListaFiltrada();
-  if (obras.length) return obras.map(arteEstendidaCartaoDaObra).join('');
-  return arteEstendidaBusca
-    ? '<div class="empty">Nenhuma obra encontrada com esse nome.</div>'
-    : '<div class="empty">Nenhuma obra ainda. Toque em "Criar obra" para montar a primeira.</div>';
+  return obras.length
+    ? obras.map(arteEstendidaCartaoDaObra).join('')
+    : '<div class="empty">Nenhuma obra encontrada com esse nome.</div>';
 }
 
 function renderArteEstendidaLista() {
@@ -277,11 +177,10 @@ function renderArteEstendidaLista() {
     <h2>🖼 Arte Estendida</h2>
     <p class="screen-subtitle">Obras que só aparecem inteiras quando duas ou mais cartas ficam lado a lado.${resumo ? ` ${resumo.completas} de ${resumo.totalObras} obras completas na sua coleção.` : ''}</p>
     <button type="button" class="primary-btn arte-estendida-criar" onclick="criarObraArteEstendida()">＋ Criar obra</button>
-    <label class="vision-search arte-estendida-busca"><span>${tabIcon('pokedex')}</span>
+    ${resumo ? `<label class="vision-search arte-estendida-busca"><span>${tabIcon('pokedex')}</span>
       <input value="${esc(arteEstendidaBusca)}" placeholder="Buscar obra ou coleção..." autocomplete="off"
-        oninput="arteEstendidaBusca=this.value;atualizarArteEstendidaLista()"></label>
-    <div class="arte-estendida-lista">${arteEstendidaListaHtml()}</div>
-    <p class="arte-estendida-fonte">Além das suas, aparecem as obras do estudo "Artes conectadas Pokémon TCG" (levantamento Deck Certo) que o app consegue montar com certeza: toda carta com número confirmado, presente no catálogo deste aparelho, com imagem e do Pokémon certo. As demais não entram — crie a sua quando conhecer as cartas.</p>`;
+        oninput="arteEstendidaBusca=this.value;atualizarArteEstendidaLista()"></label>` : ''}
+    <div class="arte-estendida-lista">${arteEstendidaListaHtml()}</div>`;
 }
 
 // Guarda a rolagem da tela que está saindo: a lista ou uma obra.
@@ -336,10 +235,10 @@ function renderObraArteEstendida(obraId) {
     <button type="button" class="gaveta-voltar arte-estendida-voltar" onclick="voltarParaListaArteEstendida()" aria-label="Voltar para a lista">‹</button>
     <button class="modal-close" onclick="closeModal()" aria-label="Fechar">×</button>
     <h2>${esc(obra.nome)}</h2>
-    <p class="screen-subtitle">${obra.propria ? 'Sua obra · ' : ''}${esc(obra.colecao)} · ${esc(g.rotulo)} · ${p.tenho} de ${p.total} cartas já na sua coleção</p>
+    <p class="screen-subtitle">${esc(obra.colecao)} · ${esc(g.rotulo)} · ${p.tenho} de ${p.total} cartas já na sua coleção</p>
     <div class="arte-obra-detalhe">${arteEstendidaComposicao(obra, { interativa: true, grande: true })}</div>
     <p class="arte-estendida-dica">✓ verde = já está na sua coleção · ✕ = ainda falta · toque numa carta para abri-la.</p>
-    ${obra.propria ? `<div class="modal-actions"><button type="button" class="secondary-btn" onclick="editarObraArteEstendida('${esc(obra.id)}')">✎ Editar obra</button></div>` : ''}`;
+    <div class="modal-actions"><button type="button" class="secondary-btn" onclick="editarObraArteEstendida('${esc(obra.id)}')">✎ Editar obra</button></div>`;
 }
 
 function abrirObraArteEstendida(obraId) {

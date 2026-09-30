@@ -1,3 +1,7 @@
+# POKECARD Brasil 5.71.0 — Arte Estendida só com as suas obras
+
+- As obras prontas do estudo saíram do app por completo (o arquivo de dados também). A Arte Estendida agora começa vazia e mostra só as obras que você cria em "＋ Criar obra" — do zero, com as cartas que você escolher. As obras que você já criou continuam como estavam.
+
 # POKECARD Brasil 5.70.0 — Crie suas próprias Artes Estendidas
 
 - **Criar obra.** Na Arte Estendida, o botão "＋ Criar obra" abre um editor: nome, como as cartas se encaixam (lado a lado, uma sobre a outra, grade 2×2, 3×2 ou 3×3) e as cartas, escolhidas pela busca — por nome, coleção, raridade ("illustration rare" ajuda a achar a versão certa) ou número impresso completo ("165/162"). A obra aparece montada, colorida, enquanto você escolhe, e dá para mudar a ordem (↑ ↓) ou tirar uma carta (✕). As suas obras ficam no topo da lista, com a etiqueta "Sua obra", e podem ser editadas ou apagadas depois. Ficam gravadas no aparelho e vão junto no backup.
