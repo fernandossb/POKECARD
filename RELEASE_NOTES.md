@@ -1,3 +1,14 @@
+# POKECARD Brasil 5.77.0 — Coleção completa em três níveis, faixa de tipos e carta de destaque
+
+- **Correção importante: "coleção completa" agora é a Coleção Básica de verdade.** Antes o app comparava TODAS as cartas diferentes que você tem na coleção com a contagem oficial — então 20 secretas (166/165...) cadastradas contavam como 20 comuns, e a coleção "completava" faltando cartas da numeração oficial. Agora a Básica conta só as cartas da numeração impressa (1/165 até 165/165), de qualquer raridade, sem exigir reverse ou holo. As que passam da numeração (secretas, galerias) viram "Extras". Ex.: com as 56 extras de Forças Temporais e só 106 das 162 da numeração, o app dizia completa; agora mostra 106/162.
+- **Três níveis, como os colecionadores falam:**
+  - **Básica (Base Set):** uma cópia de cada carta da numeração oficial.
+  - **Master Set:** a coleção inteira — numeração oficial, secretas e galerias — com **todas as versões** de cada carta (normal, holo, reverse...). Só dá para conferir quando o app conhece as versões da carta, isto é, quando o preço da coleção já foi baixado.
+  - **Grand Master:** o Master da coleção mais o Master das coleções que nascem dela (Galeria do Treinador, Galeria de Galar, Cofre Brilhante, Classic Collection). Promos de pré-lançamento e de loja variam de colecionador para colecionador e não entram na conta.
+- **Onde aparece.** No Explorar, o selo do cartão diz o nível ("✓ Básica", "★ Master", "◇ Grand Master"; o Master e o Grand Master ganham brilho rosa), o tamanho vira "165 + 42 cartas" (oficiais + extras) e o progresso conta só a numeração oficial. O filtro ganhou "Completas (Básica)" e "Master Set". Ao abrir uma coleção na Coleção, um painel mostra os níveis com barra: Básica, Extras, Master e, quando existe, Grand Master. No Início, o aviso de coleções completas diz quantas são Master. A celebração ao completar diferencia o nível, e os Troféus ganharam a medalha "Mestre" (Master Sets).
+- **Faixa de tipos na Pokédex.** Os 18 tipos viram discos que rolam para o lado, com quantos Pokémon do tipo você já tem ("Fogo 38/81"). Um toque filtra a lista, outro tira o filtro; o seletor de tipos continua e acompanha.
+- **Carta mais valiosa no Início.** Um destaque no topo com a arte, o nome, a coleção, a raridade e o valor da versão de maior preço que você tem — com a moldura de brilho da raridade.
+
 # POKECARD Brasil 5.76.0 — Fonte própria, cor por aba, moldura de raridade e "Sua coleção em cores"
 
 - **Sua coleção em cores (Início).** Duas barras empilhadas contam a sua coleção: de que **tipo** são os Pokémon que você já tem (cada tipo na cor e com o símbolo da Pokédex) e de que **era** são as suas cartas (cada era na cor que ela tem no Explorar). Embaixo de cada barra, os seis maiores por extenso.

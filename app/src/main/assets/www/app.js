@@ -3295,6 +3295,8 @@ function collectionSummary() {
   // Uma cópia de cada versão × as que sobram, para o total poder sair sem elas.
   let valorUnicas = 0;
   let valorDuplicadas = 0;
+  // A versão de maior valor que você tem (uma cópia): vira o destaque do Início.
+  let cartaTopo = null;
   for (const [cardId, entry] of Object.entries(state.entries)) {
     const quantity = quantityFor(cardId);
     totalCopies += quantity;
@@ -3316,6 +3318,7 @@ function collectionSummary() {
           const quote = effectiveVariantPrice(cardId, variant);
           if (variantQuantity && quote?.brl != null) {
             const preco = Number(quote.brl);
+            if (!cartaTopo || preco > cartaTopo.brl) cartaTopo = { cardId, variantId: variant.id, brl: preco };
             estimatedValue += preco * variantQuantity;
             const chave = assinaturaVariante(variant);
             const contadas = jaContadas.get(chave) || 0;
@@ -3343,7 +3346,7 @@ function collectionSummary() {
   }
   const pokemonStats = buildPokemonStats();
   const pokemonOwned = [...pokemonStats.values()].filter(item => item.copies > 0).length;
-  const value = { totalCopies, uniqueOwned, repeated, wishlist, estimatedValue, pokemonOwned,
+  const value = { cartaTopo, totalCopies, uniqueOwned, repeated, wishlist, estimatedValue, pokemonOwned,
     totalPago, valorComCusto, copiasComCusto, valorUnicas, valorDuplicadas };
   collectionSummaryCache = { revision: stateRevision, value };
   return value;
@@ -3687,6 +3690,7 @@ function renderDashboard() {
         <span><small>POKÉDEX</small><strong>${speciesFound} <em>/ ${speciesTotal} espécies</em></strong><i><span style="width:${speciesProgress}%"></span></i><small>espécies registradas na sua coleção</small></span>
       </button>
 
+      ${cartaDeDestaquePanel(summary)}
       ${coresDaColecaoPanel(pokemonStats)}
 
       <div class="section-heading"><h3 class="section-title">Sua coleção</h3><button onclick="setTab('cards')">Ver todos</button></div>
@@ -3911,18 +3915,79 @@ function cartasQueMaisValorizaram() {
  * As 10 coleções em que você está mais perto de completar, da mais adiantada
  * para a menos. Só entram coleções com pelo menos uma carta cadastrada.
  */
-// Mesma régua do filtro "Completas" do Explorar: todas as cartas da contagem
-// oficial da coleção.
+/* Os três jeitos de "completar" uma coleção, como os colecionadores falam:
+   · Básica (Base Set)   uma cópia de cada carta da numeração oficial —
+     1/165 até 165/165 —, de qualquer raridade, sem exigir reverse ou holo;
+   · Master Set          a coleção INTEIRA — a numeração oficial, as secretas
+     e galerias que passam dela — com TODAS as versões de cada carta
+     (normal, holo, reverse...). Só dá para conferir quando o app conhece as
+     versões da carta (o preço da coleção já foi baixado);
+   · Grand Master        o Master da coleção mais o Master das coleções que
+     nascem dela (Galeria do Treinador, Galeria de Galar, Cofre Brilhante...).
+     Promos de pré-lançamento e de loja variam de colecionador para
+     colecionador e não são cobradas automaticamente. */
 function colecaoCompleta(set) {
-  const total = set.officialCardCount || set.totalCardCount || 0;
-  return total > 0 && set.ownedUnique >= total;
+  return (set.baseTotal || 0) > 0 && (set.ownedBase || 0) >= set.baseTotal;
 }
+
+const masterCache = { chave: '', mapa: new Map() };
+function colecaoMaster(set) {
+  const total = set.masterTotal || 0;
+  if (!(total > 0) || (set.ownedUnique || 0) < total || !colecaoCompleta(set)) return false;
+  const chave = `${stateRevision}|${centralPriceLoadedShards.size}`;
+  if (masterCache.chave !== chave) { masterCache.chave = chave; masterCache.mapa = new Map(); }
+  if (masterCache.mapa.has(set.id)) return masterCache.mapa.get(set.id);
+  const lista = cardsBySet.get(set.id) || [];
+  const ok = lista.length >= total && lista.every(card => quantityFor(card.id) > 0 && analiseDeVariantes(card).completa);
+  masterCache.mapa.set(set.id, ok);
+  return ok;
+}
+
+// Coleções que nascem de outra: galerias, cofres e afins (a mesma tabela que
+// faz o Explorar herdar a cor do logo da coleção-mãe).
+function subcolecoesDe(setId) {
+  return Object.keys(COR_HERDADA).filter(filho => COR_HERDADA[filho] === setId);
+}
+
+/** '' | 'basica' | 'master' | 'grand' */
+function nivelDaColecao(set, porId) {
+  if (!colecaoCompleta(set)) return '';
+  if (!colecaoMaster(set)) return 'basica';
+  const filhos = subcolecoesDe(set.id);
+  if (!filhos.length) return 'master';
+  const mapa = porId || new Map(buildSetStats().map(item => [item.id, item]));
+  return filhos.every(id => mapa.get(id) && colecaoMaster(mapa.get(id))) ? 'grand' : 'master';
+}
+
+const ROTULO_DO_NIVEL = { basica: 'Básica', master: 'Master', grand: 'Grand Master' };
+const ICONE_DO_NIVEL = { basica: 'check', master: 'estrela', grand: 'diamante' };
 
 /* A coleção contada em cores: de que tipo são os Pokémon que você já tem e
    de que era são as suas cartas. Duas barras empilhadas, na cor de cada tipo
    (a mesma da Pokédex) e de cada era (a mesma do Explorar), e os cinco
    maiores de cada uma por extenso. O tipo é o principal da espécie, então a
    barra soma as espécies registradas, sem contar duas vezes. */
+/* A carta mais valiosa da coleção, em destaque — com a moldura da raridade
+   dela. Só aparece quando existe ao menos uma versão com preço. */
+function cartaDeDestaquePanel(summary) {
+  const topo = summary?.cartaTopo;
+  const card = topo && cardMap.get(topo.cardId);
+  if (!card || !(topo.brl > 0)) return '';
+  const variant = variantsFor(card.id).find(item => item.id === topo.variantId) || variantsFor(card.id)[0];
+  const imagem = cardGridImage(card, variant);
+  const selo = seloDeRaridade(card);
+  const tipo = tipoPrincipalDaCarta(card);
+  return `<button type="button" class="destaque-carta" ${selo ? `data-raridade="${esc(selo)}"` : ''} ${tipo ? `data-tipo="${esc(tipo)}"` : ''} onclick="openCard('${esc(card.id)}')">
+    <span class="destaque-arte">${imagem ? `<img src="${esc(imagem)}" alt="" loading="lazy" decoding="async" onerror="this.remove()">` : ''}</span>
+    <span class="destaque-info">
+      <small>CARTA MAIS VALIOSA</small>
+      <strong>${esc(card.name)}</strong>
+      <span>${esc(card.setName)} · ${esc(card.number)}${card.rarity ? ` · ${esc(card.rarity)}` : ''}</span>
+      <b>${money(topo.brl)}</b>
+    </span>
+  </button>`;
+}
+
 function coresDaColecaoPanel(pokemonStats) {
   const porTipo = new Map();
   for (const item of pokedex) {
@@ -3970,20 +4035,30 @@ function coresDaColecaoPanel(pokemonStats) {
   </section>`;
 }
 
+/* " (2 Master)" / " (1 Master, 1 Grand Master)" — o que há além da Básica. */
+function resumoDosNiveis(completas, porId) {
+  const niveis = completas.map(set => nivelDaColecao(set, porId));
+  const masters = niveis.filter(nivel => nivel === 'master').length;
+  const grands = niveis.filter(nivel => nivel === 'grand').length;
+  const partes = [masters ? `${masters} Master` : '', grands ? `${grands} Grand Master` : ''].filter(Boolean);
+  return partes.length ? ` (${partes.join(', ')})` : '';
+}
+
 function topColecoesPanel() {
-  const comecadas = buildSetStats().filter(set => set.ownedUnique > 0);
+  const porId = new Map();
+  const comecadas = buildSetStats().filter(set => { porId.set(set.id, set); return set.ownedUnique > 0; });
   // As completas saem do ranking: já chegaram lá, e ganham selo no Explorar.
   const completas = comecadas.filter(colecaoCompleta);
   const lista = comecadas
     .filter(set => !colecaoCompleta(set))
     .map(set => {
-      const total = set.officialCardCount || set.totalCardCount || 0;
-      return { ...set, total, pct: total ? Math.min(100, (set.ownedUnique / total) * 100) : 0 };
+      const total = set.baseTotal || 0;
+      return { ...set, total, pct: total ? Math.min(100, (set.ownedBase / total) * 100) : 0 };
     })
-    .sort((a, b) => b.pct - a.pct || b.ownedUnique - a.ownedUnique)
+    .sort((a, b) => b.pct - a.pct || b.ownedBase - a.ownedBase)
     .slice(0, 10);
   const linkCompletas = completas.length
-    ? `<button type="button" class="top-sets-completas" onclick="ui.setStatus='completas';setTab('sets')">✓ ${completas.length} ${completas.length === 1 ? 'coleção completa' : 'coleções completas'} — ver no Explorar ›</button>`
+    ? `<button type="button" class="top-sets-completas" onclick="ui.setStatus='completas';setTab('sets')">✓ ${completas.length} ${completas.length === 1 ? 'coleção completa' : 'coleções completas'}${resumoDosNiveis(completas, porId)} — ver no Explorar ›</button>`
     : '';
 
   if (!lista.length) {
@@ -4005,7 +4080,7 @@ function topColecoesPanel() {
           <span class="top-set-pos">${i + 1}</span>
           <span class="top-set-info">
             <strong>${esc(set.name)}</strong>
-            <small>${set.ownedUnique}${set.total ? ` de ${set.total}` : ''} cartas</small>
+            <small>${set.ownedBase}${set.total ? ` de ${set.total}` : ''} cartas</small>
             <i class="top-set-barra"><span style="width:${set.pct.toFixed(1)}%"></span></i>
           </span>
           <b class="top-set-pct">${Math.round(set.pct)}%</b>
@@ -4027,9 +4102,25 @@ function statCard(value, label, wide = false) {
   return `<div class="stat-card ${wide ? 'wide' : ''}"><span class="stat-value">${esc(value)}</span><span class="stat-label">${esc(label)}</span></div>`;
 }
 
+/* A carta está na numeração impressa da coleção (1/165 ... 165/165)? As que
+   passam dela — secretas como 166/165, galerias (TG01), SV001 — não entram na
+   Coleção Básica. Sem a contagem oficial, vale tudo. */
+function naNumeracaoOficial(card, oficial) {
+  if (!(oficial > 0)) return true;
+  const local = String(card?.localId || '').trim();
+  return /^\d+$/.test(local) && Number(local) <= oficial;
+}
+
+/* Quatro números por coleção:
+   · ownedUnique  todas as cartas diferentes que você tem nela;
+   · ownedBase    as da numeração oficial — é o que mede a Coleção Básica;
+   · ownedExtra   as de fora da numeração (secretas, galerias...);
+   · baseTotal / extraTotal / masterTotal  quanto existe de cada.
+   Antes só havia ownedUnique contra a contagem oficial: com 165 cartas
+   cadastradas, 20 delas secretas, a coleção "completava" faltando 20 comuns. */
 function buildSetStats() {
   const stats = new Map(catalog.sets.map(set => [set.id, {
-    ...set, ownedUnique: 0, ownedCopies: 0, progress: 0,
+    ...set, ownedUnique: 0, ownedBase: 0, ownedExtra: 0, ownedCopies: 0, progress: 0,
   }]));
   for (const [cardId, entry] of Object.entries(state.entries)) {
     const quantity = quantityFor(cardId);
@@ -4037,15 +4128,19 @@ function buildSetStats() {
     const card = cardMap.get(cardId);
     if (!card) continue;
     if (!stats.has(card.setId)) {
-      stats.set(card.setId, { id: card.setId, name: card.setName, officialCardCount: 0, totalCardCount: 0, ownedUnique: 0, ownedCopies: 0, progress: 0 });
+      stats.set(card.setId, { id: card.setId, name: card.setName, officialCardCount: 0, totalCardCount: 0, ownedUnique: 0, ownedBase: 0, ownedExtra: 0, ownedCopies: 0, progress: 0 });
     }
     const item = stats.get(card.setId);
     item.ownedUnique++;
+    if (naNumeracaoOficial(card, item.officialCardCount)) item.ownedBase++;
+    else item.ownedExtra++;
     item.ownedCopies += quantity;
   }
   for (const item of stats.values()) {
-    const total = item.officialCardCount || item.totalCardCount || 1;
-    item.progress = Math.min(100, Math.round((item.ownedUnique / total) * 100));
+    item.baseTotal = item.officialCardCount || item.totalCardCount || 0;
+    item.masterTotal = Math.max(item.totalCardCount || 0, item.baseTotal);
+    item.extraTotal = Math.max(0, item.masterTotal - item.baseTotal);
+    item.progress = Math.min(100, Math.round((item.ownedBase / (item.baseTotal || 1)) * 100));
   }
   return [...stats.values()];
 }
@@ -4650,10 +4745,10 @@ function filteredSetRows() {
       && !normalize(item.id).includes(query)
       && !String(setReleaseYear(item) || '').includes(query)) return false;
 
-    const total = item.officialCardCount || item.totalCardCount || 0;
     switch (ui.setStatus) {
-      case 'comecei': return item.ownedUnique > 0 && (!total || item.ownedUnique < total);
-      case 'completas': return total > 0 && item.ownedUnique >= total;
+      case 'comecei': return item.ownedUnique > 0 && !colecaoCompleta(item);
+      case 'completas': return colecaoCompleta(item);
+      case 'master': return colecaoMaster(item);
       case 'faltando': return item.ownedUnique === 0;
       // Coleções que aparecem na lista mas não têm carta instalada: útil para
       // enxergar o que a atualização do catálogo ainda não trouxe.
@@ -4663,11 +4758,11 @@ function filteredSetRows() {
   });
 
   const porNome = (a, b) => a.name.localeCompare(b.name, 'pt-BR');
-  const tamanho = item => item.officialCardCount || item.totalCardCount || 0;
+  const tamanho = item => item.baseTotal || 0;
   switch (ui.setSort) {
     case 'antigas': return filtradas.sort((a, b) => compareSetsByTimeline(b, a));
     case 'nome': return filtradas.sort(porNome);
-    case 'completas': return filtradas.sort((a, b) => (b.progress - a.progress) || (b.ownedUnique - a.ownedUnique) || porNome(a, b));
+    case 'completas': return filtradas.sort((a, b) => (b.progress - a.progress) || (b.ownedBase - a.ownedBase) || porNome(a, b));
     case 'tamanho': return filtradas.sort((a, b) => (tamanho(b) - tamanho(a)) || porNome(a, b));
     default: return filtradas.sort(compareSetsByTimeline);
   }
@@ -4873,7 +4968,9 @@ function loadNextSetImage(image) {
 }
 
 function renderSetTimeline(rows) {
-  return `<div class="set-timeline">${rows.map(renderSetCard).join('')}</div>`;
+  // O mapa por id serve ao Grand Master (olha as coleções-filhas).
+  const porId = new Map(rows.map(item => [item.id, item]));
+  return `<div class="set-timeline">${rows.map(item => renderSetCard(item, porId)).join('')}</div>`;
 }
 
 function renderSetSearchResults() {
@@ -4897,7 +4994,7 @@ function renderSets() {
              No lugar deles, filtro e ordenação que respondem de verdade. -->
         <div class="explore-filter-row">
           <select class="explore-filtro" onchange="mudarFiltroSets('setStatus', this.value)">
-            ${[['all','Todas as coleções'],['comecei','Comecei'],['completas','Completas'],['faltando','Ainda não tenho'],['vazias','Sem cartas baixadas']]
+            ${[['all','Todas as coleções'],['comecei','Comecei'],['completas','Completas (Básica)'],['master','Master Set'],['faltando','Ainda não tenho'],['vazias','Sem cartas baixadas']]
               .map(([valor, rotulo]) => option(valor, rotulo, ui.setStatus)).join('')}
           </select>
           <select class="explore-filtro" onchange="mudarFiltroSets('setSort', this.value)">
@@ -5340,12 +5437,14 @@ function corDaColecao(item) {
 }
 
 // Mesma régua para coleção e produto: estilo, cor, era, logo, nome, barra.
-function cartaoDeColecaoHtml({ onclick, cor, era, logoHtml, nome, meta, tenho, total, pct, baseRotulo }) {
-  const completa = total > 0 && tenho >= total;
-  return `<button type="button" class="set-card timeline-set-card colecao-cartao ${tenho > 0 ? 'owned' : 'missing'}${completa ? ' completa' : ''}" style="--cc-h:${cor.h};--cc-s:${cor.s}%;--cc-sp:${Math.round(cor.s * 0.62)}%" onclick="${onclick}">
+function cartaoDeColecaoHtml({ onclick, cor, era, logoHtml, nome, meta, tenho, total, pct, baseRotulo, nivel }) {
+  // Produtos (kits, caixas) não têm Master: completo é completo.
+  if (nivel === undefined) nivel = total > 0 && tenho >= total ? 'basica' : '';
+  const completa = Boolean(nivel);
+  return `<button type="button" class="set-card timeline-set-card colecao-cartao ${tenho > 0 ? 'owned' : 'missing'}${completa ? ' completa' : ''}${nivel === 'master' || nivel === 'grand' ? ` nivel-${nivel}` : ''}" style="--cc-h:${cor.h};--cc-s:${cor.s}%;--cc-sp:${Math.round(cor.s * 0.62)}%" onclick="${onclick}">
     <span class="colecao-topo">
       <span class="colecao-era">${esc(era)}</span>
-      ${completa ? '<span class="selo-colecao-completa">✓ Completa</span>' : ''}
+      ${completa ? `<span class="selo-colecao-completa">${icone(ICONE_DO_NIVEL[nivel])} ${ROTULO_DO_NIVEL[nivel]}</span>` : ''}
     </span>
     <span class="colecao-palco">${logoHtml}</span>
     <span class="colecao-info">
@@ -5362,8 +5461,10 @@ function cartaoDeColecaoHtml({ onclick, cor, era, logoHtml, nome, meta, tenho, t
   </button>`;
 }
 
-function renderSetCard(item) {
-  const total = item.officialCardCount || item.totalCardCount || 0;
+function renderSetCard(item, porId) {
+  const total = item.baseTotal ?? (item.officialCardCount || item.totalCardCount || 0);
+  const tenhoBase = item.ownedBase ?? item.ownedUnique ?? 0;
+  const extras = item.extraTotal || 0;
   const imageCandidates = setImageCandidates(item);
   const logo = imageCandidates[0] || '';
   const fallbacks = imageCandidates.slice(1).join('|');
@@ -5376,9 +5477,10 @@ function renderSetCard(item) {
       ? `<img class="set-logo-background" src="${esc(logo)}" loading="lazy" decoding="async" alt=""${fallbacks ? ` data-fallbacks="${esc(fallbacks)}"` : ''} onerror="loadNextSetImage(this)"><span class="set-logo-fallback" hidden>◓</span>`
       : '<span class="set-logo-fallback">◓</span>',
     nome: item.name,
-    meta: `<small>${total} cartas</small><small>${esc(releaseDate)}</small>`,
-    tenho: item.ownedUnique, total, pct: item.progress,
-    baseRotulo: `${item.ownedUnique}/${total}`,
+    meta: `<small>${total}${extras ? ` + ${extras}` : ''} cartas</small><small>${esc(releaseDate)}</small>`,
+    tenho: tenhoBase, total, pct: item.progress,
+    baseRotulo: `${tenhoBase}/${total}`,
+    nivel: item.baseTotal === undefined ? undefined : nivelDaColecao(item, porId),
   });
 }
 
@@ -5631,12 +5733,43 @@ function renderCardSearchResults() {
       <strong>Procurando Energia básica?</strong>
       <small>Escolha pelo tipo e pela tiragem, com o preço de cada coleção — sem precisar do número. ›</small>
     </button>` : ''}
+    ${painelDaColecao()}
     <div class="card-results-bar">
       <p class="card-results-count">${result.length.toLocaleString('pt-BR')} ${result.length === 1 ? 'carta encontrada' : 'cartas encontradas'}</p>
       ${seletorDeLayout()}
     </div>
     <div class="${classeDeLayout()}">${!visible.length ? emptyCards() : visible.map(renderCardRow).join('')}</div>
     ${botaoMostrarMais(visible.length, result.length, ui.cardLimit, LIMITE_MAXIMO_DE_CARTAS_NA_TELA, 60, 'expandirLimiteDeCartas', 'cartas')}`;
+}
+
+/* Em que pé está a coleção aberta, nos três níveis (ver colecaoCompleta):
+   Básica (numeração oficial), Extras (o que passa da numeração: secretas,
+   galerias) e Master (todas as cartas com todas as versões). Coleções que têm
+   galerias ou cofres ligados ganham também o Grand Master. */
+function painelDaColecao() {
+  if (ui.tab !== 'cards' || !ui.cardSet || ui.cardSet === 'all') return '';
+  const stats = buildSetStats();
+  const porId = new Map(stats.map(item => [item.id, item]));
+  const set = porId.get(ui.cardSet);
+  if (!set || !(set.baseTotal > 0)) return '';
+  const nivel = nivelDaColecao(set, porId);
+  const lista = cardsBySet.get(set.id) || [];
+  const comTodasAsVersoes = lista.filter(card => quantityFor(card.id) > 0 && analiseDeVariantes(card).completa).length;
+  const filhos = subcolecoesDe(set.id).map(id => porId.get(id)).filter(Boolean);
+  const linhas = [
+    { rotulo: 'Básica', nota: 'numeração oficial', n: set.ownedBase, total: set.baseTotal, ok: colecaoCompleta(set) },
+    set.extraTotal ? { rotulo: 'Extras', nota: 'secretas e galerias', n: set.ownedExtra, total: set.extraTotal, ok: set.ownedExtra >= set.extraTotal } : null,
+    { rotulo: 'Master', nota: 'todas as cartas, em todas as versões', n: comTodasAsVersoes, total: set.masterTotal, ok: colecaoMaster(set) },
+    filhos.length ? { rotulo: 'Grand Master', nota: `com ${filhos.map(filho => filho.name).join(' e ')}`, n: [set, ...filhos].filter(colecaoMaster).length, total: 1 + filhos.length, ok: nivel === 'grand' } : null,
+  ].filter(Boolean);
+  return `<section class="nivel-colecao">
+    <div class="nivel-topo"><strong>${esc(set.name)}</strong>${nivel ? `<span class="selo-colecao-completa ${nivel}">${icone(ICONE_DO_NIVEL[nivel])} ${ROTULO_DO_NIVEL[nivel]}</span>` : ''}</div>
+    <ul class="nivel-lista">${linhas.map(linha => {
+      const pct = linha.total ? Math.min(100, Math.round((linha.n / linha.total) * 100)) : 0;
+      return `<li class="${linha.ok ? 'ok' : ''}"><span class="nivel-nome"><b>${linha.rotulo}</b><small>${esc(linha.nota)}</small></span><i class="nivel-barra"><span style="width:${pct}%"></span></i><em>${linha.n}/${linha.total}</em></li>`;
+    }).join('')}</ul>
+    <small class="nivel-aviso">As versões de cada carta vêm do preço da coleção. Promos de pré-lançamento e de loja variam de colecionador para colecionador, então não entram na conta.</small>
+  </section>`;
 }
 
 function renderCards() {
@@ -5952,14 +6085,14 @@ function linhasDoSeletor(tipo, busca) {
       titulo: 'Todas as coleções', detalhe: `${catalog.sets.length.toLocaleString('pt-BR')} coleções`,
     });
     const linhas = sets.map(set => {
-      const total = set.officialCardCount || set.totalCardCount || 0;
+      const total = set.baseTotal || 0;
       const quando = mesAnoDoLancamento(set) || setReleaseYear(set) || '';
       return linhaDoSeletor({
         ativo: ui.cardSet === set.id, onclick: `mudarNaGaveta('cardSet','${esc(set.id)}')`,
         icone: `<span class="seletor-logo">${logoDaColecaoHtml(set)}</span>`,
         titulo: set.name,
-        detalhe: [quando, total ? `${set.ownedUnique}/${total} cartas` : ''].filter(Boolean).join(' · '),
-        progresso: set.ownedUnique && total ? Math.min(100, Math.round((set.ownedUnique / total) * 100)) : null,
+        detalhe: [quando, total ? `${set.ownedBase}/${total} cartas` : ''].filter(Boolean).join(' · '),
+        progresso: set.ownedBase && total ? Math.min(100, Math.round((set.ownedBase / total) * 100)) : null,
       });
     }).join('');
     return todas + (linhas || '<div class="empty">Nenhuma coleção com esse nome.</div>');
@@ -8801,14 +8934,25 @@ function conferirColecaoCompleta() {
   let conhecidas = [];
   try { conhecidas = JSON.parse(localStorage.getItem(COLECOES_COMPLETAS_KEY) || '[]') || []; } catch (_) {}
   const antes = new Set(conhecidas);
-  const completas = buildSetStats().filter(item => {
-    const total = item.officialCardCount || item.totalCardCount || 0;
-    return total > 0 && item.ownedUnique >= total;
-  });
-  const novas = completas.filter(item => !antes.has(item.id));
-  try { localStorage.setItem(COLECOES_COMPLETAS_KEY, JSON.stringify(completas.map(item => item.id))); } catch (_) {}
+  const stats = buildSetStats();
+  const porId = new Map(stats.map(item => [item.id, item]));
+  // Cada conquista é uma chave: "id" (Básica), "id:master", "id:grand".
+  const conquistas = [];
+  for (const item of stats) {
+    const nivel = nivelDaColecao(item, porId);
+    if (!nivel) continue;
+    conquistas.push({ chave: item.id, nome: item.name, nivel: 'basica' });
+    if (nivel === 'master' || nivel === 'grand') conquistas.push({ chave: `${item.id}:master`, nome: item.name, nivel: 'master' });
+    if (nivel === 'grand') conquistas.push({ chave: `${item.id}:grand`, nome: item.name, nivel: 'grand' });
+  }
+  const novas = conquistas.filter(item => !antes.has(item.chave));
+  try { localStorage.setItem(COLECOES_COMPLETAS_KEY, JSON.stringify(conquistas.map(item => item.chave))); } catch (_) {}
   if (novas.length) {
-    comemorar(`Coleção completa: ${novas[0].name}`, novas.length > 1 ? `e mais ${novas.length - 1}` : 'Todas as cartas cadastradas');
+    // A maior conquista nova é a que se comemora.
+    const peso = { basica: 1, master: 2, grand: 3 };
+    novas.sort((a, b) => peso[b.nivel] - peso[a.nivel]);
+    const titulo = { basica: 'Coleção completa', master: 'Master Set completo', grand: 'Grand Master completo' }[novas[0].nivel];
+    comemorar(`${titulo}: ${novas[0].nome}`, novas.length > 1 ? `e mais ${novas.length - 1} conquista${novas.length > 2 ? 's' : ''}` : (novas[0].nivel === 'basica' ? 'Todas as cartas da numeração oficial' : 'Todas as cartas, em todas as versões'));
   }
 }
 
@@ -9892,6 +10036,7 @@ function renderPokedex() {
         oncompositionstart="this.dataset.composing='1'"
         oncompositionend="this.dataset.composing='';searchAndRender('dexQuery', this.value, 'dexSearchInput')"
         oninput="searchAndRender('dexQuery', this.value, 'dexSearchInput')">
+      ${faixaDeTiposDaDex(types, stats)}
       <div class="filter-grid">
         <select class="field" onchange="ui.dexRegion=this.value;ui.dexLimit=180;render()">
           <option value="all">Todas as regiões</option>${REGION_ORDER.slice(0,-1).map(region=>option(region,region,ui.dexRegion)).join('')}
@@ -9909,6 +10054,39 @@ function renderPokedex() {
     </div>
     <div id="dexSearchResults">${renderPokedexSearchResults()}</div>
   </section>`;
+}
+
+/* Os 18 tipos como discos que rolam para o lado: um toque filtra a Pokédex
+   por aquele tipo, outro toque tira o filtro. Embaixo de cada um, quantos
+   Pokémon do tipo (pelo tipo principal ou pelo segundo) você já tem. */
+function faixaDeTiposDaDex(tipos, stats) {
+  const contagem = new Map();
+  for (const item of pokedex) {
+    const tenho = (stats.get(item.id)?.copies || 0) > 0;
+    for (const tipo of item.types || []) {
+      const atual = contagem.get(tipo) || { tenho: 0, total: 0 };
+      atual.total++;
+      if (tenho) atual.tenho++;
+      contagem.set(tipo, atual);
+    }
+  }
+  return `<div class="faixa-de-tipos" role="group" aria-label="Filtrar por tipo">${tipos.filter(tipo => apelidoDoTipo(tipo)).map(tipo => {
+    const ativo = ui.dexType === tipo;
+    const n = contagem.get(tipo) || { tenho: 0, total: 0 };
+    return `<button type="button" class="tipo-chip tp-${apelidoDoTipo(tipo)}${ativo ? ' ativo' : ''}" aria-pressed="${ativo}"
+      onclick="escolherTipoDaDex('${esc(tipo)}')" aria-label="${esc(tipo)}: ${n.tenho} de ${n.total}">
+      ${simboloDoTipo(tipo, 30)}<span>${esc(tipo)}</span><small>${n.tenho}/${n.total}</small>
+    </button>`;
+  }).join('')}</div>`;
+}
+
+function escolherTipoDaDex(tipo) {
+  ui.dexType = ui.dexType === tipo ? 'all' : tipo;
+  ui.dexLimit = 180;
+  const rolagem = document.querySelector('.faixa-de-tipos')?.scrollLeft || 0;
+  render();
+  const faixa = document.querySelector('.faixa-de-tipos');
+  if (faixa) faixa.scrollLeft = rolagem;
 }
 
 function renderRegion(region, items, stats) {

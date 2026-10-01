@@ -19,7 +19,7 @@
       copias: 0, unicas: 0, valor: 0,
       porTipo: {}, porRegiao: {}, porRaridade: {},
       pokemonRegistrados: 0,
-      setsCompletos: 0, setsIniciados: 0,
+      setsCompletos: 0, setsMaster: 0, setsIniciados: 0,
       pokemonCompletos: 0, cartasComTodasVariantes: 0,
       decks: ((state && state.decks) || []).length,
       graduadas: 0, carimbadas: 0, idiomas: {}, noFichario: 0, paraNegociar: 0, desejadas: 0
@@ -99,6 +99,7 @@
       buildSetStats().forEach(function (s) {
         if (s.ownedUnique > 0) m.setsIniciados += 1;
         if (s.progress >= 100) m.setsCompletos += 1;
+        if (typeof colecaoMaster === 'function' && colecaoMaster(s)) m.setsMaster += 1;
       });
     }
     return m;
@@ -111,7 +112,8 @@
       { id:'colecionador', nome:'Colecionador', icone:icone('cartas'), desc:'Cartas cadastradas', valor:m.copias, metas:[10,250,2500,15000,50000,100000] },
       { id:'variedade',    nome:'Variedade',    icone:icone('carta'), desc:'Cartas diferentes', valor:m.unicas, metas:[10,150,1500,6000,15000,31000] },
       { id:'pokedex',      nome:'Pesquisador',  icone:icone('lupa'), desc:'Pokémon na sua Pokédex', valor:m.pokemonRegistrados, metas:[25,150,400,700,900,1025] },
-      { id:'sets',         nome:'Arquivista',   icone:icone('pastas'), desc:'Coleções completas', valor:m.setsCompletos, metas:[1,5,20,50,100,180] },
+      { id:'sets',         nome:'Arquivista',   icone:icone('pastas'), desc:'Coleções básicas completas (numeração oficial)', valor:m.setsCompletos, metas:[1,5,20,50,100,180] },
+      { id:'master',       nome:'Mestre',       icone:icone('estrela'), desc:'Master Sets completos (todas as cartas, em todas as versões)', valor:m.setsMaster, metas:[1,3,8,20,45,90] },
       { id:'explorador',   nome:'Explorador',   icone:icone('bussola'), desc:'Coleções iniciadas', valor:m.setsIniciados, metas:[3,15,60,150,280,390] },
       { id:'linhagem',     nome:'Linhagem',     icone:icone('dna'), desc:'Pokémon com todas as cartas', valor:m.pokemonCompletos, metas:[1,10,50,200,500,1025] },
       { id:'perfeccionista', nome:'Perfeccionista', icone:icone('brilho'), desc:'Cartas com todas as variantes', valor:m.cartasComTodasVariantes, metas:[1,25,250,1500,6000,15000] },
