@@ -6767,3 +6767,59 @@ body[data-aba]:not([data-aba="dashboard"]) .content {
 .section-heading > button, .vision-screen-head > button, .back-btn {
   color: var(--vision-primary-fundo) !important; -webkit-text-fill-color: var(--vision-primary-fundo) !important;
 }
+
+/* ============================================================
+   v5.82 — Grade da Coleção: carta de ponta a ponta
+   A carta ocupa toda a largura do cartão, com a moldura colorida (cor do
+   tipo; dourado/rosa/azul nas raras) grudada direto nela — sem a margem de
+   8px em volta nem a faixa colorida separada na lateral. O texto embaixo
+   ficou mais junto: menos altura por cartão, mais cartas na tela.
+   Vale nas grades de 2 e 3 colunas; a lista continua como estava.
+   ============================================================ */
+.card-list.layout-grade-3 .card-row.vision-card-tile,
+.card-list.layout-grade-2 .card-row.vision-card-tile {
+  display: flex !important; flex-direction: column !important; gap: 0 !important;
+  padding: 0 !important; overflow: hidden !important;
+  border: 0 !important; border-left: 0 !important;
+  border-radius: 12px !important;
+}
+.card-list.layout-grade-3 .card-row.vision-card-tile .vision-card-art,
+.card-list.layout-grade-2 .card-row.vision-card-tile .vision-card-art {
+  width: 100% !important; margin: 0 !important; flex: none;
+  border: 3px solid var(--cor-tipo, var(--vision-line)) !important;
+  border-radius: 12px !important;
+  box-shadow: none !important; outline-offset: -8px;
+}
+.card-list.layout-grade-3 .card-row.vision-card-tile .vision-card-art .card-thumb,
+.card-list.layout-grade-2 .card-row.vision-card-tile .vision-card-art .card-thumb,
+.card-list.layout-grade-3 .card-row.vision-card-tile .vision-card-art .card-placeholder,
+.card-list.layout-grade-2 .card-row.vision-card-tile .vision-card-art .card-placeholder {
+  width: 100% !important; height: 100% !important; border-radius: 8px !important; object-fit: cover;
+}
+/* Moldura das raras na cor da raridade (no lugar da do tipo) e da carta
+   com todas as versões em dourado. */
+.card-list .card-row.vision-card-tile[data-raridade="ultra"] .vision-card-art { border-color: #ffc43d !important; box-shadow: 0 0 12px -2px rgba(255,196,61,.6) !important; }
+.card-list .card-row.vision-card-tile[data-raridade="secreta"] .vision-card-art { border-color: #ff7ab8 !important; box-shadow: 0 0 12px -2px rgba(255,95,162,.6) !important; }
+.card-list .card-row.vision-card-tile[data-raridade="promo"] .vision-card-art { border-color: #55c9ff !important; }
+.card-list .card-row.vision-card-tile.completa .vision-card-art { border-color: #ffd166 !important; }
+.card-list .card-row.vision-card-tile.missing .vision-card-art { border-color: rgba(255,255,255,.22) !important; }
+
+/* Texto mais junto. */
+.card-list.layout-grade-3 .card-row.vision-card-tile .card-main,
+.card-list.layout-grade-2 .card-row.vision-card-tile .card-main {
+  padding: 5px 7px 6px !important;
+}
+.card-list.layout-grade-3 .card-row .card-name,
+.card-list.layout-grade-2 .card-row .card-name {
+  line-height: 1.15 !important; margin: 0 !important;
+}
+.card-list.layout-grade-3 .card-row .card-meta,
+.card-list.layout-grade-2 .card-row .card-meta {
+  line-height: 1.2 !important; margin-top: 1px !important;
+}
+.card-list.layout-grade-3 .card-row .tile-price-row,
+.card-list.layout-grade-2 .card-row .tile-price-row {
+  margin-top: 2px !important; line-height: 1.2 !important;
+}
+.card-list.layout-grade-3 { gap: 8px 7px !important; }
+.card-list.layout-grade-2 { gap: 10px 9px !important; }

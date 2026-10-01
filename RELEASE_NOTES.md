@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.82.0 — Cartas de ponta a ponta na Coleção
+
+- **A carta ocupa toda a largura do cartão** nas grades de 2 e 3 colunas da Coleção. Saíram a margem em volta da arte e a faixa colorida separada na lateral: ficou só a **moldura colorida, grudada direto na carta** — na cor do tipo do Pokémon, dourada nas raras (Double/Ultra/Illustration/Shiny), rosa nas secretas e hiper raras, azul nas promos, e dourada também na carta em que você tem todas as versões.
+- **Texto mais junto embaixo da carta**: nome, número · coleção e preço com menos espaço entre as linhas, e menos espaço entre um cartão e outro — os cartões ficaram mais baixos e cabem mais na tela.
+- A exibição em lista continua como estava.
+
 # POKECARD Brasil 5.81.0 — Excluir versões que o app puxou sozinho
 
 - **Excluir uma versão da carta.** O app monta sozinho a lista de versões de cada carta — do banco de preços (Comum, Holo, Reverse, os reverses de Poké Ball...) e do TCGdex (carimbos, foils especiais). Quando a fonte lista uma versão que você sabe que não existe, ou que não quer acompanhar, agora dá para tirá-la: no cadastro da carta, na linha de uma versão com **0 cópias**, o botão "−" vira um **×**. Tocando nele (e confirmando), a versão some da lista, dos botões do formulário "Adicionar", das etiquetas da grade e da conta do **Master Set** — só daquela carta.
