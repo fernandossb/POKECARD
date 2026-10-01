@@ -1,3 +1,11 @@
+# POKECARD Brasil 5.84.0 — Faxina no código
+
+- **Nada muda na tela.** Esta versão só tira o que o app carregava sem usar. Cada tela foi conferida antes e depois, elemento por elemento: cor, tamanho, espaçamento e posição ficaram iguais.
+- **Código morto removido**: 26 funções e 4 tabelas que nada chamava. A maior parte era da câmera antiga (escolha de candidato, idioma, acabamento e diagnóstico do OCR) e de cálculos de preço que o Price Database substituiu. Saíram também as ferramentas de diagnóstico que ficavam abertas no app.
+- **Estilos sem uso removidos**: cerca de 180 regras de telas e botões que não existem mais, como a câmera antiga, as bolinhas de energia, a barra de claridade e os controles antigos de quantidade. O arquivo de estilos ficou 24 KB menor.
+- **Sprites HD desligados de vez**: o código que procurava sprites em alta resolução estava desligado desde que se viu que eles deixavam a Pokédex lenta. Saíram esse código, o robô do GitHub que os gerava e os scripts dele. As artes 3D já guardadas no aparelho continuam valendo, sem baixar nada de novo.
+- **Documentos velhos removidos** do repositório: 20 guias de atualização e relatórios de teste das versões 3 a 9, e a configuração de um serviço de build que não é mais usado.
+
 # POKECARD Brasil 5.83.0 — Versão holo que na verdade é Cosmos
 
 - **Uma carta física não aparece mais duas vezes.** As duas fontes de versões nem sempre concordam: na Oddish 001/094 (Fogo Fantasmagórico), o TCGdex diz que a holográfica dessa carta só existe como **Cosmos Holo**, e o banco de preços chama a mesma carta de "Holo". O app mostrava as duas — "Holográfica" e "Cosmos Holo". Agora, quando o TCGdex conhece as versões da carta e diz que um acabamento (holo ou reverse) só existe em foil especial (Cosmos, Cracked Ice...), a versão "plana" do banco sai: some do cadastro, do formulário "Adicionar", das etiquetas da grade e da conta do Master Set.

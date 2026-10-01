@@ -900,15 +900,4 @@
   window.renderThemeGridResults=renderThemeGridResults;
   window.confirmThematicDeck=confirmThematicDeck;
   window.generateThematicDeck=generateThematicDeck;
-  window.deckBuilderDiagnostics=()=>lastCandidates.map(deck=>({
-    name:deck.name,
-    energyPlan:deck.energyPlan,
-    total:deckTotal(deck),
-    split:deckBreakdown(deck),
-    errors:validate(deck).errors,
-    cards:Object.entries(deck.cards||{}).map(([id,quantity])=>{
-      const card=cardMap.get(id);
-      return {id,name:card?.name,quantity,class:deckCardClass(card),pokemonIds:pokemonIdsForCard(card),energyKinds:energyKinds(card),setId:card?.setId};
-    })
-  }));
 })();

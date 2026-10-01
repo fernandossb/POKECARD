@@ -146,7 +146,6 @@ let pokemonStatsCache = { revision: -1, value: null };
 // mais quem leia: libera o espaço.
 try { localStorage.removeItem('fichario-pokemon-lab-report-v1'); } catch (_) {}
 
-
 function invalidateDerivedState() {
   stateRevision++;
   collectionSummaryCache.revision = -1;
@@ -208,7 +207,6 @@ const hasFiniteNumber = value => value !== null && value !== undefined && value 
 const money = value => hasFiniteNumber(value)
   ? Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
   : 'Sem preço';
-
 
 function loadStoredObject(key) {
   try {
@@ -311,8 +309,6 @@ function resetConditionMultipliers() {
   atualizarSobreOsPrecos();
   notify('Percentuais de condição restaurados para o padrão de mercado.');
 }
-const PRICE_PRINT_VARIATIONS = ['unlimited', 'firstEdition'];
-const PRICE_STAMPS = ['unstamped', 'stamped'];
 
 /* ---------- Taxonomia completa de variação (cadastro manual da carta) ----------
    Fonte: schema do TCGdex cards-database (VariantType, VariantStamps, foil,
@@ -408,7 +404,6 @@ const ALL_TCGDEX_STAMPS = [
   'player-rewards', 'chicago-2009', 'poketour-99', 'distributor-meeting', 'scrye', 'inquest-gamer',
 ];
 const SOURCE_VARIANT_META_KEYS = new Set(['updated', 'unit']);
-const SOURCE_PRICE_FIELDS = ['marketPrice', 'midPrice', 'lowPrice', 'highPrice', 'directLowPrice'];
 
 // Ordem de preferência dos mercados. O preço exibido vem de UM mercado só — o
 // primeiro desta lista que tiver valor para a versão escolhida —, não de uma
@@ -451,14 +446,6 @@ function finishKind(finish) {
   return PRICE_FINISHES.includes(value) ? value : value;
 }
 
-function marketBaseFinishKind(kind) {
-  return finishKind(kind);
-}
-
-function isSpecialPriceFinish() {
-  return false;
-}
-
 function finishPriceLabel(kind) {
   return exactSourceEnum(kind) || 'normal';
 }
@@ -469,24 +456,12 @@ const CARD_FINISH_DEFINITIONS = [
   ['reverse', 'reverse', 'reverse', 'Reverse holofoil'],
 ];
 
-function finishValueFromKind(kind) {
-  return finishKind(kind);
-}
-
-function inferCardArtVariant() {
-  return 'standard';
-}
-
 function uniqueValues(values, fallback = []) {
   return [...new Set([...(values || []), ...fallback].map(exactSourceEnum).filter(Boolean))];
 }
 
 function uniqueFinishValues(values, fallback = []) {
   return uniqueValues([...(values || []), ...fallback].map(finishKind));
-}
-
-function hasSourcePriceObject(value) {
-  return Boolean(value && typeof value === 'object' && SOURCE_PRICE_FIELDS.some(field => Number(value[field]) > 0));
 }
 
 function mergeSourceVariantDetails(...groups) {
@@ -1193,8 +1168,6 @@ async function ligaSetCode(setId) {
   if (code && localSet) localSet.tcgOnline = code;
   return code || null;
 }
-
-
 
 function openCentralPriceDatabase() {
   return new Promise((resolve, reject) => {
@@ -2608,12 +2581,6 @@ function pokemonIdsForCard(cardOrId) {
     : [];
 }
 
-function pokemonLinkLabel(card) {
-  const manualId = Number(state?.entries?.[card?.id]?.manualPokemonId);
-  if (manualId === 1026) return 'Energia / Ferramenta';
-  return pokemonIdsForCard(card).map(id => pokemonMap.get(id)?.name).filter(Boolean).join(' + ');
-}
-
 function primaryVariant(cardId, create = false) {
   let entry = state.entries[cardId];
   if (!entry && create) {
@@ -2694,45 +2661,6 @@ function refreshAfterEntryChange(cardId) {
   }
 }
 
-function setQuantity(cardId, nextQuantity) {
-  const target = Math.max(0, Math.trunc(Number(nextQuantity) || 0));
-  const current = quantityFor(cardId);
-  const linkId = Number(state?.entries?.[cardId]?.manualPokemonId);
-  if (target > current && !pokemonIdsForCard(cardId).length && linkId !== 1026) {
-    openCard(cardId);
-    notify('Escolha qual Pokémon esta carta representa antes de cadastrá-la.');
-    return;
-  }
-  let difference = target - current;
-  if (!current && target > 0) marcarAnimacaoDeCarta(cardId);
-  else if (target > current) marcarAnimacaoDeCarta(cardId, 'pulo');
-  if (difference > 0) vibrar();
-  if (difference > 0) {
-    const variant = primaryVariant(cardId, true);
-    variant.quantity += difference;
-    variant.updatedAt = new Date().toISOString();
-    variant.addedAt = variant.updatedAt;
-  } else if (difference < 0) {
-    let remaining = Math.abs(difference);
-    const variants = variantsFor(cardId);
-    for (const variant of variants) {
-      if (!remaining) break;
-      const removable = Math.min(remaining, Math.max(0, Number(variant.quantity) || 0));
-      variant.quantity -= removable;
-      remaining -= removable;
-      variant.updatedAt = new Date().toISOString();
-    }
-  }
-  syncEntry(cardId);
-  saveState();
-  refreshAfterEntryChange(cardId);
-}
-
-function changeQuantity(event, cardId, delta) {
-  event?.stopPropagation();
-  setQuantity(cardId, quantityFor(cardId) + delta);
-}
-
 /* Liga ou desliga a carta na Wishlist e devolve como ficou. Não mexe na tela:
    quem chama decide (o painel da carta fecha; a câmera da consulta, não). */
 function alternarWishlist(cardId) {
@@ -2764,22 +2692,6 @@ function parseCurrencyInput(value) {
 
 function formatInputNumber(value) {
   return value == null || !Number.isFinite(Number(value)) ? '' : String(Number(value)).replace('.', ',');
-}
-
-function variantLabel(variant) {
-  const details = [variant.pricingVariant, variant.finish, variant.edition, variant.distribution, variant.artVariant, variant.language, variant.condition]
-    .filter(value => value && !['unlimited', 'unstamped', 'standard'].includes(value));
-  return `${details.join(' · ') || variant.finish} · x${Math.max(0, Number(variant.quantity) || 0)}`;
-}
-
-function variantNeedsExactPricing(variant) {
-  if (!variant) return false;
-  return (variant.edition && variant.edition !== 'unlimited')
-    || (variant.distribution && variant.distribution !== 'unstamped')
-    || (variant.artVariant && variant.artVariant !== 'standard')
-    || (variant.region && variant.region !== 'Brasil')
-    || (variant.gradingCompany && variant.gradingCompany !== 'Não graduada')
-    || (Array.isArray(variant.variantTags) && variant.variantTags.length > 0);
 }
 
 function saveCardVariant(cardId, variantId) {
@@ -3229,7 +3141,6 @@ function pokedexComFormas() {
   }
   return lista;
 }
-
 
 /* Confere o preço de cada versão da coleção inteira — o trecho mais caro do
    Início. Só muda quando a coleção muda, quando chega/troca lote do banco de
@@ -4050,16 +3961,6 @@ function remoteSetCounts(remote) {
   };
 }
 
-function setNeedsCatalogRefresh(local, remote) {
-  if (!local) return true;
-  const counts = remoteSetCounts(remote);
-  return counts.total !== Number(local.totalCardCount || 0)
-    || counts.official !== Number(local.officialCardCount || 0)
-    || (remote.name != null && String(remote.name) !== String(local.name || ''))
-    || (remote.logo != null && String(remote.logo) !== String(local.logoUrl || ''))
-    || (remote.symbol != null && String(remote.symbol) !== String(local.symbolUrl || ''));
-}
-
 function cardImageUrl(value) {
   const source = String(value || '').trim();
   if (!source) return null;
@@ -4221,22 +4122,6 @@ function atualizarResumoVariante(card) {
   bloco.classList.toggle('hidden', visiveis.length <= 1);
   marcarPillAtiva(campo.value);
   if (resumo) resumo.textContent = friendlyVariantLabel(campo.value);
-}
-
-function showQuoteImageInRegistration(cardId, identity) {
-  const quote = automaticPriceQuote(cardId, identity);
-  if (!quote?.imageUrl) return false;
-  const card = cardMap.get(cardId);
-  const frame = document.querySelector('[data-registration-variant-image]');
-  if (!frame) return false;
-  frame.innerHTML = `<img class="registration-card-image" src="${esc(upgradeCardImageUrl(quote.imageUrl))}" alt="Arte de ${esc(card?.name || '')}"><span class="variant-image-badge">${esc(finishPriceLabel(finishKind(identity.finish)))}</span>`;
-  const urlField = document.getElementById('regVariantImageUrl');
-  const sourceField = document.getElementById('regVariantImageSource');
-  const sourceLabel = document.getElementById('regVariantImageLabel');
-  if (urlField) urlField.value = quote.imageUrl;
-  if (sourceField) sourceField.value = quote.imageSource || 'Pokémon Price Database Brasil';
-  if (sourceLabel) sourceLabel.textContent = `Imagem: ${quote.imageSource || 'Pokémon Price Database Brasil'} · correspondência do banco`;
-  return true;
 }
 
 function normalizeRemoteSet(detail, fallback) {
@@ -4751,14 +4636,6 @@ function setAssetSeries(item) {
   if (/^(dc1|g1)/.test(id)) return 'xy';
   if (/^(det1|sma)/.test(id)) return 'sm';
   return setEraKey(item);
-}
-
-function setLogoUrl(item) {
-  const series = setAssetSeries(item);
-  if (item.logoUrl) return item.logoUrl;
-  return series && series !== 'other'
-    ? `https://assets.tcgdex.net/en/${encodeURIComponent(series)}/${encodeURIComponent(item.id)}/logo`
-    : '';
 }
 
 function explicitSetAssetUrl(url) {
@@ -6289,12 +6166,6 @@ function scannerPreferences() {
   return { ...defaults, ...salvas, mode: 'continuous' };
 }
 
-function chooseScannerPreference(group, value, button) {
-  document.querySelectorAll(`[data-scanner-group="${group}"]`).forEach(item => item.classList.toggle('active', item === button));
-  const field = document.getElementById(`scannerPref-${group}`);
-  if (field) field.value = value;
-}
-
 /* Tocar no Scanner abre a câmera direto. Não há mais tela de escolha antes:
    o modo é um só, e idioma e coleção podem ser ajustados pelo ⚙ na própria
    câmera, sem parar a leitura. */
@@ -6451,12 +6322,6 @@ function scanNextCard() {
     : 'A câmera do scanner só funciona dentro do aplicativo Android.');
 }
 
-// O aparelho avisa que a câmera ao vivo foi encerrada pelo botão da tela.
-window.receiveLiveScannerClosed = function () {
-  scannerSession.live = false;
-  stopScannerSession();
-};
-
 function stopScannerSession() {
   const pendentes = totalLeituras();
   scannerSession.active = false;
@@ -6509,7 +6374,6 @@ function showScannerMessage(message, failed = false) {
    Agora um pedaço só é tratado como número se ele JÁ tiver ao menos um
    algarismo de verdade. "0O1" vira 001 (é numeração mal lida); "TO" continua
    sendo a palavra "to". */
-const LETRAS_CONFUNDIDAS = /[OQDILSZBGT|!]/g;
 function consertarAlgarismos(pedaco) {
   return String(pedaco).toUpperCase()
     .replace(/[OQD]/g, '0').replace(/[IL|!]/g, '1')
@@ -7070,11 +6934,6 @@ function comecarLeituraNova() {
   scannerSession.verTodasVersoes = false;
 }
 
-function languageFromMarketKey(value) { return PRICE_LANGUAGES.includes(value) ? value : ''; }
-function editionFromMarketKey(value) { return PRICE_PRINT_VARIATIONS.includes(value) ? value : ''; }
-function distributionFromMarketKey(value) { return PRICE_STAMPS.includes(value) ? value : ''; }
-function artVariantFromMarketKey() { return 'standard'; }
-
 function refreshCardSpecificVariationFields(card) {
   if (!card || document.getElementById('regVariationCardId')?.value !== String(card.id)) return;
   /* `regLanguage` ficou de fora de propósito: os três idiomas valem para
@@ -7206,20 +7065,6 @@ async function loadCardVariantAvailability(card) {
 
 function loadScannerVariantAvailability(card) {
   return loadCardVariantAvailability(card);
-}
-
-function selectScannerPricingVariant(value) {
-  scannerSession.pricingVariant = exactSourceEnum(value) || 'normal';
-  scannerSession.manualVariationOverride = false;
-  showScannerPrimaryCandidate();
-}
-
-function selectScannerLanguage(value) {
-  scannerSession.language = exactSourceEnum(value) || 'pt-br';
-  const card = scannerCandidateBuffer[0]?.card;
-  const exactVariants = card ? pricingVariantDetailsForCard(card, scannerSession.language) : [];
-  if (exactVariants.length) scannerSession.pricingVariant = exactVariants[0].value;
-  showScannerPrimaryCandidate();
 }
 
 /* Acabamentos padrão do jogo, usados só enquanto a lista real não chegou.
@@ -8451,55 +8296,6 @@ function encerrarLeitura() {
   }
 }
 
-function scannerFinishOption(value, label, description) {
-  const active = finishKind(scannerSession.finish) === finishKind(value);
-  return `<button type="button" class="${active ? 'active' : ''}" onclick="selectScannerFinish('${esc(value)}')">
-    <strong>${esc(label)}</strong><span>${esc(description)}</span>
-  </button>`;
-}
-
-function selectScannerFinish(finish) {
-  scannerSession.finish = finish;
-  scannerSession.manualVariationOverride = false;
-  showScannerPrimaryCandidate();
-}
-
-function selectScannerCandidate(cardId) {
-  const index = scannerCandidateBuffer.findIndex(item => item.card.id === cardId);
-  if (index > 0) scannerCandidateBuffer.unshift(scannerCandidateBuffer.splice(index, 1)[0]);
-  showScannerPrimaryCandidate();
-  loadScannerVariantAvailability(scannerCandidateBuffer[0]?.card);
-}
-
-function rejectScannedCandidate() {
-  showScannerCandidateList(scannerCandidateBuffer.slice(1).length ? scannerCandidateBuffer.slice(1) : scannerCandidateBuffer);
-}
-
-function showScannerCandidateList(candidates) {
-  showModal(`
-    <button class="modal-close" onclick="stopScannerSession()" aria-label="Fechar">×</button>
-    <h2>Escolha a carta correta</h2>
-    <p class="screen-subtitle">A primeira arte foi recusada. Selecione uma das possíveis correspondências.</p>
-    <div class="scanner-candidate-list">
-      ${candidates.map(({ card, score }) => `<button onclick="selectScannerCandidate('${esc(card.id)}')">
-        ${card.imageUrl ? `<img src="${esc(upgradeCardImageUrl(card.imageUrl))}" alt="">` : '<span class="card-placeholder">TCG</span>'}
-        <span><strong>${esc(card.name)}</strong><small>${esc(card.number)} · ${esc(card.setName)}</small><em>${Math.min(99, score)}% de correspondência</em></span>
-      </button>`).join('')}
-    </div>
-    ${scannerOcrDiagnosticHtml()}
-    <div class="modal-actions"><button class="secondary-btn" onclick="voltarParaCamera()">Tirar outra foto</button><button class="danger-btn" onclick="stopScannerSession()">Encerrar sessão</button></div>
-  `);
-}
-
-function scannerOcrDiagnosticHtml() {
-  const readable = scannerLastOcrText
-    .replace(/\[(?:FAIXA INFERIOR|CANTO INFERIOR|NUMERO)[^\]]*\]/g, '\n— leitura ampliada —\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-    .slice(0, 1400);
-  return `<details class="scanner-ocr-debug"><summary>Ver texto reconhecido</summary><pre>${esc(readable || 'Nenhum texto legível.')}</pre></details>`;
-}
-
 window.receiveScannerError = function receiveScannerError(message) {
   if (!scannerSession.active) return;
   // Erro com a câmera aberta vira aviso na própria tela; abrir um painel por
@@ -9456,7 +9252,6 @@ function emptyCards() {
   }
   return '<div class="empty"><strong>Nenhuma carta encontrada</strong>Tente mudar os filtros ou buscar outro nome.</div>';
 }
-
 
 function automaticPriceBox(cardId, finish = 'normal', variantId = '', identityOverride = null) {
   const variant = variantId
@@ -11403,7 +11198,6 @@ function openDeckCardPicker(deckId) {
       <span>${esc(item.card.number)} · ${esc(item.card.setName)} · ${item.owned ? `você tem ${item.owned}` : 'você não tem'} · ${deckCardClass(item.card)}</span>
     </button>`).join('') : '<div class="empty">Nenhuma carta encontrada.</div>'}</div>`);
 }
-
 
 /* 5. COLAR UMA LISTA PRONTA
    Quem joga copia lista do Pokémon TCG Live e do Limitless o tempo todo — e

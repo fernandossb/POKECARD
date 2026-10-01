@@ -399,8 +399,6 @@
 
   window.addEventListener('tema-aplicado', reavaliarTudo);
   window.addEventListener('resize', agendar);
-  // Exposto para o app pedir uma conferência depois de desenhos manuais.
-  window.conferirContraste = agendar;
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', iniciar);

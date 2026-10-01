@@ -8,64 +8,8 @@
 (function () {
   'use strict';
 
-  /* A arte animada continua sendo a principal — é a que dá vida à lista.
-
-     Ela existe numa resolução só: 60×60 pixels. Numa lista que mostra o
-     Pokémon a 82 pontos, num celular de densidade 3×, isso é uma ampliação de
-     quatro vezes. Não existe fonte animada maior: o Pokémon Showdown, de onde
-     ela vem, é a única que anima, e é pixel art por natureza.
-
-     O que estragava a imagem não era só o tamanho: era o navegador SUAVIZANDO
-     a ampliação. Suavizar pixel art borra as bordas e transforma pixels
-     nítidos em manchas. Desenhando com os pixels preservados, a mesma imagem
-     fica limpa e proposital, como num jogo antigo.
-
-     Quem preferir nitidez absoluta pode trocar pelo modelo 3D de 512×512 nos
-     ajustes do tema — mas aí ele fica parado. */
   var BASE = 'https://cdn.jsdelivr.net/gh/PokeAPI/sprites@master/sprites/pokemon/';
   var PREFERENCIA_KEY = 'pokecard-arte-pokedex-v1';
-
-  /* ---- Sprites melhorados (opcional) ----
-     Quando existir um repositório com as versões em alta, o app passa a
-     preferi-las. O manifesto diz quais Pokémon têm arquivo — sem ele o app
-     tentaria baixar 1.025 endereços inexistentes, um por vez, a cada rolagem.
-
-     Enquanto o endereço estiver vazio, nada muda: o app usa a fonte de
-     sempre. É só preencher para ligar. */
-  /* Branch separada do próprio repositório, servida pelo CDN. Enquanto o
-     serviço "Gerar sprites HD" não tiver rodado, o manifesto não existe, a
-     consulta falha em silêncio e o app segue usando a fonte de sempre. */
-  /* DESLIGADO de propósito.
-
-     Os 1.011 arquivos publicados nessa branch são WebP ANIMADOS de 126 KB cada
-     — foram gerados quando a Pokédex ainda animava, justamente para deixar a
-     animação mais nítida. Como eles têm preferência sobre qualquer outra fonte,
-     passaram a ser a arte de verdade da lista: 180 na tela davam 22 MB e 180
-     animações ao mesmo tempo, quatro vezes mais pesado que os GIFs originais.
-     Era essa a lentidão.
-
-     A branch continua no GitHub, intacta. Basta devolver o endereço aqui se um
-     dia forem gerados sprites HD PARADOS. */
-  var HD_BASE = '';
-  var hdDisponiveis = null;   // Set com os números que têm versão HD
-  var hdVersao = '';          // marca da geração, para renovar o que está guardado
-  var hdConsultado = false;
-
-  function carregarManifestoHD() {
-    if (hdConsultado) return Promise.resolve(hdDisponiveis);
-    hdConsultado = true;
-    if (!HD_BASE) { hdDisponiveis = null; return Promise.resolve(null); }
-    return fetch(HD_BASE + 'manifesto.json')
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (dados) {
-        if (!dados) { hdDisponiveis = null; return null; }
-        hdVersao = String(dados._versao || '');
-        var numeros = Object.keys(dados).filter(function (k) { return k.charAt(0) !== '_'; });
-        hdDisponiveis = new Set(numeros);
-        return hdDisponiveis;
-      })
-      .catch(function () { hdDisponiveis = null; return null; });
-  }
 
   /* ---- Por que a animação saiu ----
 
@@ -177,21 +121,7 @@
     }).catch(function () {});
   }
 
-  /** A versão melhorada, quando existir para este Pokémon. */
-  function buscarHD(id) {
-    return carregarManifestoHD().then(function (disponiveis) {
-      if (!disponiveis || !disponiveis.has(String(id))) return null;
-      return fetch(HD_BASE + id + '.webp').then(function (r) {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.blob();
-      }).then(comoDataUrl).then(function (dataUrl) {
-        // Arte reconstruída não é pixel art: desenhar suavizado fica melhor.
-        return { dataUrl: dataUrl, pixelada: false, hd: true };
-      }).catch(function () { return null; });
-    });
-  }
-
-  /** Tenta a arte animada e, se não existir para este Pokémon, a parada. */
+  /** Tenta a arte do HOME e, se não existir para este Pokémon, a oficial. */
   function buscarNasFontes(id, indice, forcado) {
     var lista = fontes(forcado);
     if (indice >= lista.length) return Promise.reject(new Error('sem arte'));
@@ -230,14 +160,11 @@
     img.classList.toggle('arte-pixelada', Boolean(arte.pixelada));
   }
 
-  /* A chave carrega o modo E a versão da geração HD.
-
-     Cada arte fica guardada no aparelho para sempre — é isso que faz a Pokédex
-     abrir sem baixar nada da segunda vez em diante. Só que "para sempre" tem
-     um custo: se a chave não mudasse ao gerar sprites novos, quem já tivesse
-     baixado continuaria vendo os antigos, sem jeito de atualizar. */
-  function chaveDaArte(id, temHD, forcado) {
-    return Number(id) + ':' + (forcado || modoAtual()) + (temHD ? ':hd' + hdVersao : '');
+  /* Cada arte fica guardada no aparelho para sempre — é isso que faz a
+     Pokédex abrir sem baixar nada da segunda vez em diante. A chave leva o
+     modo ("25:nitida"), o mesmo formato de antes, para nada ser baixado de novo. */
+  function chaveDaArte(id, forcado) {
+    return Number(id) + ':' + (forcado || modoAtual());
   }
 
   function carregar(img) {
@@ -247,37 +174,30 @@
     var forcado = img.getAttribute('data-arte3d-modo') || '';
     if (!CONJUNTOS[forcado]) forcado = '';
 
-    // O manifesto é consultado uma vez só; daí em diante responde na hora.
-    carregarManifestoHD().then(function (disponiveis) {
-      var temHD = Boolean(disponiveis && disponiveis.has(String(id)));
-      var chave = chaveDaArte(id, temHD, forcado);
-      if (falhou.has(chave)) return null;
-      if (memoria.has(chave)) { aplicar(img, memoria.get(chave)); return null; }
-      if (baixando.has(chave)) return null;
-      baixando.add(chave);
+    var chave = chaveDaArte(id, forcado);
+    if (falhou.has(chave)) return;
+    if (memoria.has(chave)) { aplicar(img, memoria.get(chave)); return; }
+    if (baixando.has(chave)) return;
+    baixando.add(chave);
 
-      return lerGuardada(chave).then(function (guardada) {
-        if (guardada && guardada.dataUrl) {
-          memoria.set(chave, guardada);
-          baixando.delete(chave);
-          aplicar(img, guardada);
-          return null;
-        }
-        // A versão melhorada tem preferência; sem ela, segue a fonte de sempre.
-        return (temHD ? buscarHD(id) : Promise.resolve(null)).then(function (hd) {
-          return hd || buscarNasFontes(id, 0, forcado);
-        }).then(function (arte) {
-          memoria.set(chave, arte);
-          guardar(chave, arte);
-          baixando.delete(chave);
-          aplicar(img, arte);
-          return null;
-        });
-      }).catch(function () {
-        // Sem internet ou arte inexistente: fica o sprite local, sem erro.
+    lerGuardada(chave).then(function (guardada) {
+      if (guardada && guardada.dataUrl) {
+        memoria.set(chave, guardada);
         baixando.delete(chave);
-        falhou.add(chave);
+        aplicar(img, guardada);
+        return null;
+      }
+      return buscarNasFontes(id, 0, forcado).then(function (arte) {
+        memoria.set(chave, arte);
+        guardar(chave, arte);
+        baixando.delete(chave);
+        aplicar(img, arte);
+        return null;
       });
+    }).catch(function () {
+      // Sem internet ou arte inexistente: fica o sprite local, sem erro.
+      baixando.delete(chave);
+      falhou.add(chave);
     });
   }
 
@@ -285,7 +205,6 @@
   window.limparArtesGuardadas = function () {
     memoria.clear();
     falhou.clear();
-    hdConsultado = false;
     return abrirBanco().then(function (db) {
       return new Promise(function (resolve) {
         var tx = db.transaction(LOJA, 'readwrite');
@@ -338,5 +257,4 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar);
   else iniciar();
 
-  window.registrarArtes3D = registrar;
 })();

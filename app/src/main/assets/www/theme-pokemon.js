@@ -14,7 +14,6 @@
 
   var STORAGE_KEY = 'fichario-pokemon-tema-favorito-v1';
   var DEFAULT_ID = 94;
-  var ART_BASE = 'https://cdn.jsdelivr.net/gh/PokeAPI/sprites@master/sprites/pokemon/other/home/';
 
   // bg = fundo geral · s1/s2/s3 = cartões · line = bordas
   // mut = texto secundário · pri = cor de destaque · soft = fundo do destaque
@@ -42,7 +41,6 @@
     'Fada':      ['#f588c8', '#7e2a5a'],
     'Normal':    ['#c8bda0', '#4f4a3b']
   };
-
 
   function pokedex() { return Array.isArray(window.__POKEDEX__) ? window.__POKEDEX__ : []; }
 
@@ -547,10 +545,6 @@
 
   function nomeAtual() {
     return window.__TEMA_ATUAL__ ? window.__TEMA_ATUAL__.nome : 'Gengar';
-  }
-
-  function tipoAtual() {
-    return window.__TEMA_ATUAL__ ? window.__TEMA_ATUAL__.tipo : 'Fantasma';
   }
 
   // ---- Tela de escolha ----
