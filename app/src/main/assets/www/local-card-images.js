@@ -220,7 +220,7 @@
     toolbar.className = 'local-card-image-toolbar';
     toolbar.innerHTML = `
       <button class="secondary-btn local-card-image-button" onclick="FicharioLocalImages.open('${activeCardId}')">
-        <span aria-hidden="true">📷</span>
+        <span aria-hidden="true">${icone('camera')}</span>
         <span>Adicionar ou trocar foto da carta</span>
       </button>`;
     header.insertAdjacentElement('afterend', toolbar);

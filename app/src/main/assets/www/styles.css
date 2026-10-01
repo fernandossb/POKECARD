@@ -6147,7 +6147,16 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
   padding: 12px; text-align: left; border-radius: var(--raio-m);
   border: 1px solid var(--vision-line); background: var(--vision-surface-2); color: var(--vision-text) !important;
 }
-.energia-tipo .energia-bolinha{ grid-row: span 2; width: 30px; height: 30px; }
+.energia-tipo .energia-bolinha, .energia-tipo .tp-disco{ grid-row: span 2; }
+.energia-tipo .energia-bolinha{ width: 30px; height: 30px; }
+/* v5.75: o botão de cada tipo ganha um clarão na cor dele, atrás do símbolo. */
+.energia-tipo[class*="tp-"]{
+  border-color: hsla(var(--tp-h), var(--tp-s), var(--tp-l-linha, 58%), .45) !important;
+  background:
+    radial-gradient(90% 120% at 0% 50%, hsla(var(--tp-h), var(--tp-s), var(--tp-l-brilho, 48%), .30), transparent 70%),
+    var(--vision-surface-2) !important;
+}
+.energias-tipo-sheet h2 .tp-disco{ flex: none; }
 .energia-tipo strong{ font-size: var(--fs-m); }
 .energia-tipo small{ font-size: 11px; opacity: .75; }
 .energia-bolinha{
@@ -6400,3 +6409,130 @@ img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 .variant-quick-row.tenho { border-color: var(--cor-tenho-borda) !important; background: var(--cor-tenho-fundo) !important; }
 .energia-tiragem.tenho { border-color: var(--cor-tenho) !important; }
 .energia-versao.tenho .energia-versao-nome { color: var(--cor-tenho-texto) !important; }
+
+/* ============================================================
+   v5.75 — Ícones próprios, símbolos dos tipos e Pokédex colorida
+
+   icones.js desenha o sprite; aqui ficam o tamanho dos ícones e as cores dos
+   18 tipos (+ Incolor, das Energias do jogo de cartas).
+   --tp-a / --tp-b  degradê do disco · --tp-tinta  cor do glifo no disco
+   --tp-h / --tp-s  matiz e saturação para tingir quadradinhos e cartões
+   ============================================================ */
+.ic {
+  display: inline-block; width: 1.15em; height: 1.15em; flex: none; vertical-align: -.2em;
+  fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; overflow: visible;
+}
+
+.tp-normal    { --tp-h: 48;  --tp-s: 20%; --tp-a: #c2bea5; --tp-b: #8a866d; --tp-tinta: #ffffff; }
+.tp-fogo      { --tp-h: 17;  --tp-s: 62%; --tp-a: #ff9b54; --tp-b: #e2501c; --tp-tinta: #ffffff; }
+.tp-agua      { --tp-h: 215; --tp-s: 62%; --tp-a: #62adff; --tp-b: #2c72e2; --tp-tinta: #ffffff; }
+.tp-eletrico  { --tp-h: 48;  --tp-s: 72%; --tp-a: #ffe35a; --tp-b: #f3b300; --tp-tinta: #4a3500; }
+.tp-planta    { --tp-h: 118; --tp-s: 42%; --tp-a: #73d35a; --tp-b: #34963a; --tp-tinta: #ffffff; }
+.tp-gelo      { --tp-h: 186; --tp-s: 54%; --tp-a: #90e8f0; --tp-b: #3fbad0; --tp-tinta: #0a4653; }
+.tp-lutador   { --tp-h: 8;   --tp-s: 58%; --tp-a: #f0705a; --tp-b: #b8311f; --tp-tinta: #ffffff; }
+.tp-venenoso  { --tp-h: 292; --tp-s: 42%; --tp-a: #cb72de; --tp-b: #8d3eac; --tp-tinta: #ffffff; }
+.tp-terrestre { --tp-h: 38;  --tp-s: 52%; --tp-a: #ebc677; --tp-b: #b98c30; --tp-tinta: #4a3208; }
+.tp-voador    { --tp-h: 228; --tp-s: 58%; --tp-a: #aabefa; --tp-b: #6a88e6; --tp-tinta: #1c2f74; }
+.tp-psiquico  { --tp-h: 338; --tp-s: 62%; --tp-a: #ff7fa6; --tp-b: #e0346e; --tp-tinta: #ffffff; }
+.tp-inseto    { --tp-h: 75;  --tp-s: 52%; --tp-a: #bcdc48; --tp-b: #7fa61c; --tp-tinta: #2f4300; }
+.tp-pedra     { --tp-h: 46;  --tp-s: 34%; --tp-a: #d2ba72; --tp-b: #9c8434; --tp-tinta: #3f3208; }
+.tp-fantasma  { --tp-h: 268; --tp-s: 38%; --tp-a: #a07fd9; --tp-b: #613f9f; --tp-tinta: #ffffff; }
+.tp-dragao    { --tp-h: 252; --tp-s: 62%; --tp-a: #8470ff; --tp-b: #4b34d8; --tp-tinta: #ffffff; }
+.tp-sombrio   { --tp-h: 22;  --tp-s: 24%; --tp-a: #907966; --tp-b: #4c3c31; --tp-tinta: #ffffff; }
+.tp-metalico  { --tp-h: 208; --tp-s: 24%; --tp-a: #b8c8d8; --tp-b: #8196ab; --tp-tinta: #1d2a38; }
+.tp-fada      { --tp-h: 322; --tp-s: 62%; --tp-a: #f784c8; --tp-b: #cb4291; --tp-tinta: #ffffff; }
+.tp-incolor   { --tp-h: 45;  --tp-s: 14%; --tp-a: #c2bead; --tp-b: #85816f; --tp-tinta: #ffffff; }
+
+.tp-disco {
+  --tp-tam: 20px;
+  display: inline-grid; place-items: center; flex: none; width: var(--tp-tam); height: var(--tp-tam);
+  border-radius: 50%; color: var(--tp-tinta, #fff);
+  background: linear-gradient(150deg, var(--tp-a), var(--tp-b));
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.30), inset 0 -2px 3px rgba(0,0,0,.16), 0 1px 3px rgba(0,0,0,.38);
+}
+.tp-disco svg { width: 68%; height: 68%; overflow: visible; }
+
+/* ---------- Pokédex: cada quadradinho com a cor do tipo ----------
+   Tipo principal = cor do quadradinho; o segundo tipo entra como um clarão no
+   canto de baixo. Os tons de claridade (--tp-l-*) vêm do tema, então vale nos
+   6 níveis: vinho escuro no tema escuro, pastel no claro. */
+.t2-normal    { --tp2-h: 48;  --tp2-s: 20%; --tp2-alfa: .26; }
+.t2-fogo      { --tp2-h: 17;  --tp2-s: 62%; --tp2-alfa: .26; }
+.t2-agua      { --tp2-h: 215; --tp2-s: 62%; --tp2-alfa: .26; }
+.t2-eletrico  { --tp2-h: 48;  --tp2-s: 72%; --tp2-alfa: .26; }
+.t2-planta    { --tp2-h: 118; --tp2-s: 42%; --tp2-alfa: .26; }
+.t2-gelo      { --tp2-h: 186; --tp2-s: 54%; --tp2-alfa: .26; }
+.t2-lutador   { --tp2-h: 8;   --tp2-s: 58%; --tp2-alfa: .26; }
+.t2-venenoso  { --tp2-h: 292; --tp2-s: 42%; --tp2-alfa: .26; }
+.t2-terrestre { --tp2-h: 38;  --tp2-s: 52%; --tp2-alfa: .26; }
+.t2-voador    { --tp2-h: 228; --tp2-s: 58%; --tp2-alfa: .26; }
+.t2-psiquico  { --tp2-h: 338; --tp2-s: 62%; --tp2-alfa: .26; }
+.t2-inseto    { --tp2-h: 75;  --tp2-s: 52%; --tp2-alfa: .26; }
+.t2-pedra     { --tp2-h: 46;  --tp2-s: 34%; --tp2-alfa: .26; }
+.t2-fantasma  { --tp2-h: 268; --tp2-s: 38%; --tp2-alfa: .26; }
+.t2-dragao    { --tp2-h: 252; --tp2-s: 62%; --tp2-alfa: .26; }
+.t2-sombrio   { --tp2-h: 22;  --tp2-s: 24%; --tp2-alfa: .26; }
+.t2-metalico  { --tp2-h: 208; --tp2-s: 24%; --tp2-alfa: .26; }
+.t2-fada      { --tp2-h: 322; --tp2-s: 62%; --tp2-alfa: .26; }
+
+.pokemon-grid .pokemon-tile.dex-tipo,
+.pokemon-hero.dex-tipo {
+  border: 1px solid hsla(var(--tp-h), var(--tp-s), var(--tp-l-linha, 58%), .42) !important;
+  background:
+    radial-gradient(88% 62% at 50% 34%, hsla(var(--tp-h), var(--tp-s), var(--tp-l-brilho, 48%), .32), transparent 74%),
+    radial-gradient(76% 52% at 100% 100%, hsla(var(--tp2-h, 0), var(--tp2-s, 0%), var(--tp-l-brilho, 48%), var(--tp2-alfa, 0)), transparent 72%),
+    linear-gradient(165deg, hsl(var(--tp-h), var(--tp-s), var(--tp-l-a, 24%)), hsl(var(--tp-h), var(--tp-s), var(--tp-l-b, 14%))) !important;
+  box-shadow: var(--elev-sombra) !important;
+}
+.pokemon-grid .pokemon-tile.dex-tipo:not(.missing) img { filter: drop-shadow(0 5px 5px rgba(0,0,0,.32)) !important; }
+.pokemon-grid .pokemon-tile.dex-tipo .pokemon-number,
+.pokemon-hero.dex-tipo .pokemon-number {
+  color: hsl(var(--tp-h), 52%, var(--tp-l-texto, 84%)) !important;
+  -webkit-text-fill-color: hsl(var(--tp-h), 52%, var(--tp-l-texto, 84%));
+}
+/* Os símbolos no canto do quadradinho. A regra antiga dos quadradinhos pinta
+   todo <span> com a cor do texto, com !important — o glifo precisa da dele. */
+.pokemon-grid .pokemon-tile.dex-tipo .dex-tipos {
+  position: absolute; top: 6px; left: 6px; z-index: 1; display: flex; flex-direction: column; gap: 3px;
+  pointer-events: none;
+}
+.pokemon-grid .pokemon-tile.dex-tipo .dex-tipos .tp-disco {
+  --tp-tam: 16px; color: var(--tp-tinta, #fff) !important; -webkit-text-fill-color: var(--tp-tinta, #fff);
+}
+
+/* ---------- Ícones nos lugares onde havia emoji ---------- */
+.trofeu .trofeu-medalha { box-shadow: inset 0 0 0 3px var(--tr-cor) !important; overflow: visible; }
+.trofeu .trofeu-medalha::after { border-radius: 50%; }
+.trofeu .trofeu-medalha > span { position: relative; z-index: 1; display: grid; place-items: center; }
+.trofeu-medalha .ic { width: 28px; height: 28px; color: var(--vision-text); }
+.trofeu-medalha .tp-disco { --tp-tam: 34px; }
+.trofeu.bloqueado .trofeu-medalha .ic,
+.trofeu.bloqueado .trofeu-medalha .tp-disco { opacity: .42; filter: grayscale(.5); }
+.auto-deck-hero > span {
+  display: grid; place-items: center; flex: none; width: 46px; height: 46px; border-radius: var(--raio-m);
+  background: var(--vision-primary-soft); color: var(--vision-primary);
+}
+.auto-deck-hero > span .ic { width: 24px; height: 24px; }
+.update-hero .ic { width: 34px; height: 34px; stroke-width: 2.2; }
+.card-image-eye .ic, .camera-icone .ic, .camera-atalho .ic { width: 1.2em; height: 1.2em; vertical-align: -.25em; }
+.badge .ic { width: 1.1em; height: 1.1em; margin-right: 4px; }
+.variante-icone .ic { width: 1.05em; height: 1.05em; vertical-align: -.15em; }
+.dex-formas .ic { width: 1.1em; height: 1.1em; }
+.secondary-btn .ic, .primary-btn .ic { vertical-align: -.22em; margin-right: 2px; }
+
+/* Tela do Pokémon: o cabeçalho vira um cartão na cor do tipo. */
+.pokemon-hero.dex-tipo { padding: 14px; border-radius: var(--raio-m); }
+.pokemon-hero.dex-tipo img {
+  border: 0 !important; border-radius: 50% !important;
+  background: radial-gradient(closest-side, hsla(var(--tp-h), var(--tp-s), var(--tp-l-brilho, 48%), .42), transparent 92%) !important;
+  filter: drop-shadow(0 6px 8px rgba(0,0,0,.35));
+}
+.pokemon-hero .badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.tipo-selo {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 12px 3px 4px; border-radius: 999px;
+  font-size: var(--fs-p); font-weight: 800; letter-spacing: .01em;
+  background: hsla(var(--tp-h), var(--tp-s), var(--tp-l-brilho, 48%), .20) !important;
+  border: 1px solid hsla(var(--tp-h), var(--tp-s), var(--tp-l-linha, 58%), .55) !important;
+  color: hsl(var(--tp-h), 60%, var(--tp-l-texto, 84%)) !important;
+  -webkit-text-fill-color: hsl(var(--tp-h), 60%, var(--tp-l-texto, 84%));
+}

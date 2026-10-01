@@ -881,32 +881,39 @@ function rotuloDaVariante(variant) {
 }
 
 // Cada acabamento tem sua própria cara, como as etiquetas da carta física.
+// Os ícones são do conjunto próprio (icones.js) — antes eram letras e formas
+// de texto (◻ ✦ ◧ ❶), que cada celular desenha de um jeito.
+const IC_COMUM = icone('v-normal');
+const IC_HOLO = icone('brilho');
+const IC_REVERSE = icone('v-reverse');
+const IC_PRIMEIRA = icone('v-primeira');
+const IC_BOLA = icone('pokebola');
 const VARIANT_ESTILO = {
-  'normal': { classe: 'v-comum', icone: '◻' },
-  'holo': { classe: 'v-holo', icone: '✦' },
-  'holofoil': { classe: 'v-holo', icone: '✦' },
-  'reverse': { classe: 'v-reverse', icone: '◧' },
-  'reverse-holofoil': { classe: 'v-reverse', icone: '◧' },
-  '1st-edition': { classe: 'v-primeira', icone: '❶' },
-  '1st-edition-holofoil': { classe: 'v-primeira', icone: '❶' },
-  'unlimited': { classe: 'v-comum', icone: '◻' },
-  'unlimited-holofoil': { classe: 'v-holo', icone: '✦' },
-  'firstEdition': { classe: 'v-primeira', icone: '❶' },
-  'pokeball-holofoil': { classe: 'v-pokebola', icone: '◉' },
-  'masterball-holofoil': { classe: 'v-masterball', icone: '◍' },
-  'greatball-holofoil': { classe: 'v-pokebola', icone: '◉' },
-  'ultraball-holofoil': { classe: 'v-pokebola', icone: '◉' },
-  'cosmos-holofoil': { classe: 'v-holo', icone: '✦' },
-  'cracked-ice-holofoil': { classe: 'v-holo', icone: '✦' },
-  'tinsel-holofoil': { classe: 'v-holo', icone: '✦' },
-  'mirror-holofoil': { classe: 'v-reverse', icone: '◧' },
-  'galaxy-holofoil': { classe: 'v-holo', icone: '✦' },
-  'gold-holofoil': { classe: 'v-primeira', icone: '❶' },
-  'rainbow-holofoil': { classe: 'v-holo', icone: '✦' },
+  'normal': { classe: 'v-comum', icone: IC_COMUM },
+  'holo': { classe: 'v-holo', icone: IC_HOLO },
+  'holofoil': { classe: 'v-holo', icone: IC_HOLO },
+  'reverse': { classe: 'v-reverse', icone: IC_REVERSE },
+  'reverse-holofoil': { classe: 'v-reverse', icone: IC_REVERSE },
+  '1st-edition': { classe: 'v-primeira', icone: IC_PRIMEIRA },
+  '1st-edition-holofoil': { classe: 'v-primeira', icone: IC_PRIMEIRA },
+  'unlimited': { classe: 'v-comum', icone: IC_COMUM },
+  'unlimited-holofoil': { classe: 'v-holo', icone: IC_HOLO },
+  'firstEdition': { classe: 'v-primeira', icone: IC_PRIMEIRA },
+  'pokeball-holofoil': { classe: 'v-pokebola', icone: IC_BOLA },
+  'masterball-holofoil': { classe: 'v-masterball', icone: IC_BOLA },
+  'greatball-holofoil': { classe: 'v-pokebola', icone: IC_BOLA },
+  'ultraball-holofoil': { classe: 'v-pokebola', icone: IC_BOLA },
+  'cosmos-holofoil': { classe: 'v-holo', icone: IC_HOLO },
+  'cracked-ice-holofoil': { classe: 'v-holo', icone: IC_HOLO },
+  'tinsel-holofoil': { classe: 'v-holo', icone: IC_HOLO },
+  'mirror-holofoil': { classe: 'v-reverse', icone: IC_REVERSE },
+  'galaxy-holofoil': { classe: 'v-holo', icone: IC_HOLO },
+  'gold-holofoil': { classe: 'v-primeira', icone: IC_PRIMEIRA },
+  'rainbow-holofoil': { classe: 'v-holo', icone: IC_HOLO },
 };
 
 function variantEstilo(value) {
-  return VARIANT_ESTILO[exactSourceEnum(value)] || { classe: 'v-outra', icone: '◈' };
+  return VARIANT_ESTILO[exactSourceEnum(value)] || { classe: 'v-outra', icone: icone('diamante') };
 }
 
 const STAMP_VALUES = new Set(STAMP_OPTIONS.map(o => o[0]));
@@ -3203,13 +3210,13 @@ function openMoreNavigation() {
   showModal(`<button class="modal-close" onclick="closeModal()" aria-label="Fechar">×</button>
     <h2>Mais opções</h2><p class="screen-subtitle">Acesse todas as áreas do seu fichário.</p>
     <div class="quick-action-list">
-      <button onclick="closeModal();abrirConsultaDePreco()"><span class="quick-action-icon icone-texto" aria-hidden="true">R$</span><span><strong>Consultar preço</strong><small>Aponte a câmera: o preço de cada versão, sem cadastrar</small></span></button>
+      <button onclick="closeModal();abrirConsultaDePreco()"><span class="quick-action-icon" aria-hidden="true">${icone('cifrao')}</span><span><strong>Consultar preço</strong><small>Aponte a câmera: o preço de cada versão, sem cadastrar</small></span></button>
       <button onclick="closeModal();setTab('wishlist')"><span class="quick-action-icon">${tabIcon('wishlist')}</span><span><strong>Wishlist</strong><small>Cartas que você procura</small></span></button>
       <button onclick="closeModal();setTab('repeated')"><span class="quick-action-icon">${tabIcon('repeated')}</span><span><strong>Repetidas</strong><small>Estoque para troca ou venda</small></span></button>
       <button onclick="closeModal();setTab('produtos')"><span class="quick-action-icon">${tabIcon('collections')}</span><span><strong>Produtos prontos</strong><small>Baralhos de batalha, kits e caixas</small></span></button>
-      <button onclick="closeModal();abrirTrofeus()"><span class="quick-action-icon">🏆</span><span><strong>Troféus</strong><small>${(() => { const r = typeof resumoTrofeus === 'function' ? resumoTrofeus() : null; return r ? `${r.conquistadas} de ${r.total} medalhas conquistadas` : 'Medalhas por coleção, tipo e região'; })()}</small></span></button>
-      <button onclick="closeModal();abrirEnergiasBasicas()"><span class="quick-action-icon icone-texto" aria-hidden="true">E</span><span><strong>Energias básicas</strong><small>Escolha pelo tipo e pela tiragem — sem precisar do número</small></span></button>
-      <button onclick="closeModal();abrirArteEstendida()"><span class="quick-action-icon">🖼</span><span><strong>Arte Estendida</strong><small>${(() => { const r = typeof resumoArteEstendida === 'function' ? resumoArteEstendida() : null; return r ? `${r.tenho} de ${r.ligadas} cartas já na coleção · ${r.totalObras} ${r.totalObras === 1 ? 'obra' : 'obras'}` : 'Cartas que se completam lado a lado'; })()}</small></span></button>
+      <button onclick="closeModal();abrirTrofeus()"><span class="quick-action-icon" aria-hidden="true">${icone('trofeu')}</span><span><strong>Troféus</strong><small>${(() => { const r = typeof resumoTrofeus === 'function' ? resumoTrofeus() : null; return r ? `${r.conquistadas} de ${r.total} medalhas conquistadas` : 'Medalhas por coleção, tipo e região'; })()}</small></span></button>
+      <button onclick="closeModal();abrirEnergiasBasicas()"><span class="quick-action-icon" aria-hidden="true">${icone('energia')}</span><span><strong>Energias básicas</strong><small>Escolha pelo tipo e pela tiragem — sem precisar do número</small></span></button>
+      <button onclick="closeModal();abrirArteEstendida()"><span class="quick-action-icon" aria-hidden="true">${icone('quadro')}</span><span><strong>Arte Estendida</strong><small>${(() => { const r = typeof resumoArteEstendida === 'function' ? resumoArteEstendida() : null; return r ? `${r.tenho} de ${r.ligadas} cartas já na coleção · ${r.totalObras} ${r.totalObras === 1 ? 'obra' : 'obras'}` : 'Cartas que se completam lado a lado'; })()}</small></span></button>
       <button onclick="closeModal();abrirTemaPokemon()"><span class="quick-action-icon">${tabIcon('pokedex')}</span><span><strong>Tema do aplicativo</strong><small>${esc(window.__TEMA_ATUAL__?.nome || 'Gengar')} · deixe o app com a cara do seu favorito</small></span></button>
     </div>`);
 }
@@ -3667,7 +3674,7 @@ function renderDashboard() {
       </section>
 
       <div class="quick-action-list consulta-atalho-inicio">
-        <button onclick="abrirConsultaDePreco()"><span class="quick-action-icon icone-texto" aria-hidden="true">R$</span><span><strong>Consultar preço</strong><small>Aponte a câmera para uma carta. Nada é cadastrado.</small></span></button>
+        <button onclick="abrirConsultaDePreco()"><span class="quick-action-icon" aria-hidden="true">${icone('cifrao')}</span><span><strong>Consultar preço</strong><small>Aponte a câmera para uma carta. Nada é cadastrado.</small></span></button>
       </div>
 
       <button class="pokedex-progress-card" onclick="setTab('pokedex')">
@@ -4160,7 +4167,7 @@ async function refreshRegistrationVariantImage(cardId) {
   const sourceField = document.getElementById('regVariantImageSource');
   const sourceLabel = document.getElementById('regVariantImageLabel');
   if (!frame || !image?.url) return;
-  frame.innerHTML = `<img class="registration-card-image" src="${esc(upgradeCardImageUrl(image.url))}" alt="Arte de ${esc(card?.name || '')}"><span class="variant-image-badge">${esc(finishPriceLabel(finishKind(variant.finish)))}</span><button type="button" class="card-image-eye" onclick="abrirCartaTamanhoReal(this)" aria-label="Ver carta em tamanho real">👁</button>`;
+  frame.innerHTML = `<img class="registration-card-image" src="${esc(upgradeCardImageUrl(image.url))}" alt="Arte de ${esc(card?.name || '')}"><span class="variant-image-badge">${esc(finishPriceLabel(finishKind(variant.finish)))}</span><button type="button" class="card-image-eye" onclick="abrirCartaTamanhoReal(this)" aria-label="Ver carta em tamanho real">${icone('olho')}</button>`;
   if (urlField) urlField.value = image.url;
   if (sourceField) sourceField.value = image.source || '';
   if (sourceLabel) sourceLabel.textContent = `Imagem: ${image.source || 'catálogo público'}${image.fallback ? ' (imagem-base)' : ''}`;
@@ -6311,7 +6318,7 @@ function abrirAjustesScanner() {
   const html = `
     <div class="leitura-painel-alca" aria-hidden="true"></div>
     <div class="busca-manual">
-      <strong>⚙ Ajustes da leitura</strong>
+      <strong>${icone('engrenagem')} Ajustes da leitura</strong>
       <label class="registration-field">
         <span>Idioma das cartas lidas</span>
         <select id="scannerAjusteIdioma" class="field">
@@ -7230,7 +7237,7 @@ function telaCameraAoVivo() {
           <button class="camera-atalho" onclick="abrirBuscaManual()">⌨ Digitar carta</button>
           <button class="camera-atalho camera-lote${(scannerSession.acabamentoLote || 'auto') === 'auto' ? '' : ' ligado'}" id="cameraLote"
             onclick="alternarAcabamentoDoLote()" aria-label="Acabamento das próximas cartas">${botaoDoLote()}</button>
-          <button class="camera-atalho" id="cameraDiagnostico" ${ultimaRecusa ? '' : 'hidden'} onclick="abrirDiagnosticoLeitura()">👁 O que a câmera leu</button>
+          <button class="camera-atalho" id="cameraDiagnostico" ${ultimaRecusa ? '' : 'hidden'} onclick="abrirDiagnosticoLeitura()">${icone('olho')} O que a câmera leu</button>
         </div>
         <div class="camera-acoes">
           <button class="camera-cancelar" onclick="encerrarLeitura()">Cancelar</button>
@@ -7246,7 +7253,7 @@ function telaCameraAoVivo() {
           <button type="button" role="tab" aria-selected="${consulta}" class="${consulta ? 'ativo' : ''}" onclick="mudarModoDoScanner('preco')">Preço</button>
         </div>
         <span class="camera-topo-acoes">
-          <button class="camera-icone" onclick="abrirAjustesScanner()" aria-label="Ajustes da leitura">⚙</button>
+          <button class="camera-icone" onclick="abrirAjustesScanner()" aria-label="Ajustes da leitura">${icone('engrenagem')}</button>
           <button class="camera-icone" onclick="comoEscanear()" aria-label="Como escanear">?</button>
         </span>
       </div>
@@ -7516,7 +7523,7 @@ function showScannerPrimaryCandidate() {
     const valor = linha.extra ? '—' : precoDaVariante(card, value, idioma);
     return `<div class="leitura-versao ${estilo.classe}${linha.extra ? ' variacao' : ''}${escolhida ? ' escolhida' : ''}${quantas ? ' tem' : ''}">
       <button type="button" class="leitura-versao-nome" onclick="escolherVarianteLeitura('${esc(value)}')">
-        <span class="variante-icone" aria-hidden="true">${linha.distribution !== 'unstamped' ? '🏷' : estilo.icone}</span>
+        <span class="variante-icone" aria-hidden="true">${linha.distribution !== 'unstamped' ? icone('etiqueta') : estilo.icone}</span>
         <span class="leitura-versao-rotulo">${esc(rotulo)}</span>
         <span class="leitura-versao-preco"${linha.extra ? ' title="Sem preço nas fontes — entra com valor manual"' : ''}>${esc(valor)}</span>
       </button>
@@ -7588,7 +7595,7 @@ function showScannerPrimaryCandidate() {
         : ''}
       <div class="leitura-outras-acoes">
         <button type="button" class="leitura-outra leitura-variacao-btn" onclick="abrirVariacaoDaLeitura()">
-          🏷 Carimbo, edição ou foil
+          ${icone('etiqueta')} Carimbo, edição ou foil
         </button>
         <button type="button" class="leitura-outra" onclick="recusarLeitura()">
           ⇄ Não é essa carta?${outras > 0 ? ` <em>(${outras} parecida${outras > 1 ? 's' : ''})</em>` : ''}
@@ -7824,7 +7831,7 @@ function abrirVariacaoDaLeitura() {
   montarPainelDaLeitura(`
     <div class="leitura-painel-alca" aria-hidden="true"></div>
     <div class="busca-manual leitura-variacao">
-      <strong>🏷 Carimbo, edição ou foil especial</strong>
+      <strong>${icone('etiqueta')} Carimbo, edição ou foil especial</strong>
       <small>${esc(card.name)} · ${esc(card.setName)} · ${esc(numero)}</small>
       ${conhecidas.length
         ? `<span class="leitura-variacao-titulo">Variações que existem desta carta</span>
@@ -8334,7 +8341,7 @@ function rodapeDaConsulta(pendentes) {
         </div>` : '<p class="camera-vazio">Aponte para uma carta e veja o preço. Nada é cadastrado.</p>'}
         <div class="camera-acoes consulta-acoes">
           <button class="camera-atalho" onclick="abrirBuscaManual()">⌨ Digitar carta</button>
-          <button class="camera-atalho consulta-diagnostico" id="cameraDiagnostico" ${ultimaRecusa ? '' : 'hidden'} onclick="abrirDiagnosticoLeitura()" aria-label="O que a câmera leu">👁</button>
+          <button class="camera-atalho consulta-diagnostico" id="cameraDiagnostico" ${ultimaRecusa ? '' : 'hidden'} onclick="abrirDiagnosticoLeitura()" aria-label="O que a câmera leu">${icone('olho')}</button>
           <button class="camera-cancelar" onclick="encerrarLeitura()">Sair</button>
         </div>
         ${pendentes ? `<button class="camera-revisar consulta-revisar" onclick="abrirRevisaoSessao()">✓ Revisar ${pendentes} para cadastrar</button>` : ''}`;
@@ -8828,9 +8835,10 @@ function siglaDaVariante(valor) {
    Carimbo vira o selo 🏷: os nomes de carimbo são longos e variados demais
    para caber em duas letras, mas o selo já diz "esta cópia é carimbada" de
    relance — a etiqueta inteira, com o nome certo, está no title. */
+const SIGLA_DE_CARIMBO = '🏷'; // etiquetasDeVariante() troca por icone('etiqueta')
 function siglaDaLinha(linha) {
   if (!VERSOES_PLANAS.has(linha.pricingVariant)) return siglaDaVariante(linha.pricingVariant);
-  if (linha.distribution && linha.distribution !== 'unstamped') return '🏷';
+  if (linha.distribution && linha.distribution !== 'unstamped') return SIGLA_DE_CARIMBO;
   if (linha.edition && linha.edition !== 'unlimited') return siglaDaVariante(linha.edition);
   if (linha.artVariant && linha.artVariant !== 'standard') return siglaDaVariante(linha.artVariant);
   return siglaDaVariante(linha.pricingVariant);
@@ -8924,7 +8932,7 @@ function etiquetasDeVariante(analise) {
   const sobra = lista.length - cabem.length;
 
   const etiquetas = cabem.map(item =>
-    `<span class="etiqueta-variante ${item.classe}${item.tenho ? ' tenho' : ''}" title="${esc(item.titulo)}${item.tenho ? ' · você tem' : ''}">${esc(item.texto)}</span>`
+    `<span class="etiqueta-variante ${item.classe}${item.tenho ? ' tenho' : ''}" title="${esc(item.titulo)}${item.tenho ? ' · você tem' : ''}">${item.texto === SIGLA_DE_CARIMBO ? icone('etiqueta') : esc(item.texto)}</span>`
   ).join('');
 
   return `<span class="etiquetas-variante">${etiquetas}${sobra ? `<span class="etiqueta-variante mais">+${sobra}</span>` : ''}</span>`;
@@ -9464,7 +9472,7 @@ function openCard(cardId, variantId = undefined) {
       <div class="registration-image-frame" data-fichario-card-image="${esc(card.id)}" data-registration-variant-image>
         ${draftImage ? `<img class="registration-card-image" src="${esc(draftImage)}" alt="Arte de ${esc(card.name)}">` : '<div class="registration-placeholder">TCG</div>'}
         <span class="variant-image-badge">${esc(finishPriceLabel(finishKind(draft.finish)))}</span>
-        ${draftImage ? `<button type="button" class="card-image-eye" onclick="abrirCartaTamanhoReal(this)" aria-label="Ver carta em tamanho real">👁</button>` : ''}
+        ${draftImage ? `<button type="button" class="card-image-eye" onclick="abrirCartaTamanhoReal(this)" aria-label="Ver carta em tamanho real">${icone('olho')}</button>` : ''}
       </div>
       <small id="regVariantImageLabel" class="variant-image-source">Imagem: ${esc(draftImageSource)}</small>
       <input type="hidden" id="regVariantImageUrl" value="${esc(draft.imageUrl || '')}">
@@ -9627,21 +9635,21 @@ function categoriaDaCarta(card) {
   if (!categoria) {
     const nome = normalize(card?.name);
     if (/^energia(?:\s|$)/.test(nome) || /\benergy$/.test(nome)) {
-      return { rotulo: 'Energia', classe: 'energia', icone: '⚡' };
+      return { rotulo: 'Energia', classe: 'energia', icone: icone('energia') };
     }
-    if (pokemonIdsForCard(card).length) return { rotulo: 'Pokémon', classe: 'pokemon', icone: '◓' };
+    if (pokemonIdsForCard(card).length) return { rotulo: 'Pokémon', classe: 'pokemon', icone: icone('pokebola') };
     return null;
   }
   if (categoria === 'Trainer') {
     const tipo = String(card?.trainerType || '');
-    return { rotulo: TREINADOR_ROTULOS[tipo] || 'Treinador', classe: 'treinador', icone: '🎒' };
+    return { rotulo: TREINADOR_ROTULOS[tipo] || 'Treinador', classe: 'treinador', icone: icone('mochila') };
   }
   if (categoria === 'Energy') {
     const tipo = String(card?.energyType || '');
-    return { rotulo: ENERGIA_ROTULOS[tipo] || 'Energia', classe: 'energia', icone: '⚡' };
+    return { rotulo: ENERGIA_ROTULOS[tipo] || 'Energia', classe: 'energia', icone: icone('energia') };
   }
-  if (categoria === 'Pokemon') return { rotulo: 'Pokémon', classe: 'pokemon', icone: '◓' };
-  return { rotulo: CATEGORIA_ROTULOS[categoria] || categoria, classe: 'outra', icone: '◈' };
+  if (categoria === 'Pokemon') return { rotulo: 'Pokémon', classe: 'pokemon', icone: icone('pokebola') };
+  return { rotulo: CATEGORIA_ROTULOS[categoria] || categoria, classe: 'outra', icone: icone('diamante') };
 }
 
 function identidadeDaCartaHtml(card, linked, manualPokemonId) {
@@ -9652,7 +9660,7 @@ function identidadeDaCartaHtml(card, linked, manualPokemonId) {
   const categoria = categoriaDaCarta(card);
   if (categoria) return `<span class="badge categoria-${categoria.classe}">${categoria.icone} ${esc(categoria.rotulo)}</span>`;
   // Marcação antiga, de antes de existir categoria vinda da fonte.
-  if (Number(manualPokemonId) === 1026) return '<span class="badge categoria-treinador">🎒 Energia / Ferramenta</span>';
+  if (Number(manualPokemonId) === 1026) return `<span class="badge categoria-treinador">${icone('mochila')} Energia / Ferramenta</span>`;
   return '<span class="badge">Sem categoria — atualize o catálogo</span>';
 }
 
@@ -9818,7 +9826,7 @@ function renderPokedex() {
     <div class="toolbar">
       <button type="button" class="dex-formas${ui.dexFormas ? ' ativo' : ''}" onclick="alternarFormasNaDex()"
         aria-pressed="${Boolean(ui.dexFormas)}">
-        <span aria-hidden="true">✦</span> Formas especiais
+        <span aria-hidden="true">${icone('brilho')}</span> Formas especiais
         <b>${quantasFormas}</b>
       </button>
       <input id="dexSearchInput" class="field search" value="${esc(ui.dexQuery)}" placeholder="Buscar Pokémon por nome ou número"
@@ -9861,9 +9869,16 @@ function renderPokemonTile(item, stat) {
   const abrir = item.forma
     ? `openPokemon(${item.id},'${esc(item.forma)}')`
     : `openPokemon(${item.id})`;
+  // O quadradinho veste a cor do tipo (dos dois, quando tem dois) e mostra o
+  // símbolo de cada um no canto — ver icones.js e o bloco v5.75 do CSS.
+  const tipos = (item.types || []).slice(0, 2);
+  const [tipo1, tipo2] = tipos.map(apelidoDoTipo);
+  const classesDeTipo = tipo1 ? ` dex-tipo tp-${tipo1}${tipo2 ? ` t2-${tipo2}` : ''}` : '';
+  const selosDeTipo = tipos.map(tipo => simboloDoTipo(tipo, 16)).join('');
   // Começa com o sprite local (instantâneo, funciona sem internet) e o
   // arte3d.js troca pela arte 3D quando o quadradinho entra na tela.
-  return `<button class="pokemon-tile ${owned ? '' : 'missing'}${item.forma ? ' e-forma' : ''}" onclick="${abrir}">
+  return `<button class="pokemon-tile ${owned ? '' : 'missing'}${item.forma ? ' e-forma' : ''}${classesDeTipo}" onclick="${abrir}" title="${esc(tipos.join(' · '))}">
+    ${selosDeTipo ? `<span class="dex-tipos" aria-hidden="true">${selosDeTipo}</span>` : ''}
     ${owned ? `<span class="pokemon-owned-count">${stat.copies}</span>` : ''}
     <img src="${esc(item.sprite)}" loading="lazy" alt="${esc(item.name)}" data-arte3d="${arte}">
     <span class="pokemon-number">Nº ${String(item.id).padStart(4,'0')}</span>
@@ -10009,6 +10024,8 @@ function renderPokemonDetail(id) {
   }
   // Forma sem nenhuma carta no catálogo não vira bloco vazio na tela.
   const comCartas = nomes.filter(nome => porForma.get(nome).length);
+  // O cabeçalho do Pokémon veste a cor do tipo, como o quadradinho da lista.
+  const [heroTipo1, heroTipo2] = (pokemon.types || []).slice(0, 2).map(apelidoDoTipo);
 
   const bloco = (rotulo, arteId, lista, principal, formaNome) => `
     <section class="forma-bloco${principal ? ' principal' : ''}"${formaNome ? ` data-forma="${esc(formaNome)}"` : ''}>
@@ -10026,11 +10043,13 @@ function renderPokemonDetail(id) {
 
   return `<section class="screen">
     <button class="back-btn" onclick="ui.selectedPokemon=null;render();window.scrollTo(0,0)">← Voltar à Pokédex</button>
-    <div class="pokemon-hero">
+    <div class="pokemon-hero${heroTipo1 ? ` dex-tipo tp-${heroTipo1}${heroTipo2 ? ` t2-${heroTipo2}` : ''}` : ''}">
       <!-- Faltava o data-arte3d aqui: a tela de detalhe era a única que ficava
            com o sprite embutido de 96px esticado, a maior ampliação do app. -->
       <img src="${esc(pokemon.sprite)}" alt="${esc(pokemon.name)}" data-arte3d="${Number(pokemon.id)}" data-arte3d-modo="nitida">
-      <div><span class="pokemon-number">Nº ${String(pokemon.id).padStart(4,'0')} · ${esc(pokemon.region)}</span><h2>${esc(pokemon.name)}</h2><div class="badges">${pokemon.types.map(type=>`<span class="badge">${esc(type)}</span>`).join('')}</div></div>
+      <div><span class="pokemon-number">Nº ${String(pokemon.id).padStart(4,'0')} · ${esc(pokemon.region)}</span><h2>${esc(pokemon.name)}</h2><div class="badges">${pokemon.types.map(type => apelidoDoTipo(type)
+        ? `<span class="tipo-selo tp-${apelidoDoTipo(type)}">${simboloDoTipo(type, 20)}${esc(type)}</span>`
+        : `<span class="badge">${esc(type)}</span>`).join('')}</div></div>
     </div>
     <div class="stats-grid">
       ${statCard(stat.copies,'Cartas no fichário')}
@@ -10984,8 +11003,8 @@ function renderDecks() {
   return `<section class="screen">
     <h2 class="screen-title">Decks</h2>
     <p class="screen-subtitle">Monte um baralho de 60 cartas usando apenas o que existe no seu fichário. O gerador prioriza Pokémon do tipo escolhido e cartas de suporte.</p>
-    <div class="deck-generator"><select id="deckPreferredType" class="field"><option value="">Melhor combinação geral</option>${types.map(([type,count])=>`<option value="${esc(type)}">Foco ${esc(type)} (${count} cópias)</option>`).join('')}</select><button class="primary-btn" onclick="generateStrongDeck()">⚔️ Montar deck forte</button></div>
-    <button class="primary-btn deck-auto-btn" onclick="openAutoBuilder()">🧠 Montador avançado — 3 opções analisadas</button>
+    <div class="deck-generator"><select id="deckPreferredType" class="field"><option value="">Melhor combinação geral</option>${types.map(([type,count])=>`<option value="${esc(type)}">Foco ${esc(type)} (${count} cópias)</option>`).join('')}</select><button class="primary-btn" onclick="generateStrongDeck()">${icone('espadas')} Montar deck forte</button></div>
+    <button class="primary-btn deck-auto-btn" onclick="openAutoBuilder()">${icone('brilho')} Montador avançado — 3 opções analisadas</button>
     <p class="deck-auto-note">O montador avançado simula milhares de mãos iniciais, completa linhas evolutivas, confere energia compatível e pontua legalidade, consistência e velocidade de setup, priorizando o que você já possui.</p>
     <div class="deck-row"><input id="deckName" class="field" placeholder="Nome do novo deck"><button class="primary-btn" onclick="addDeck()">Criar vazio</button></div>
     <div class="deck-lista">${decks.length ? decks.map(cartaoDeDeck).join('')
@@ -11663,7 +11682,7 @@ function openBackupPanel() {
       <button class="secondary-btn" onclick="importBackup()">Importar backup</button>
       <button class="secondary-btn" onclick="closeModal();openLigaExportPanel()">Exportar p/ Liga Pokémon</button>
       <button class="secondary-btn" onclick="checkForAppUpdate(true)">Verificar atualização</button>
-      <button class="secondary-btn lab-open-btn" onclick="openLaboratoryPanel()">⚗ Modo Laboratório</button>
+      <button class="secondary-btn lab-open-btn" onclick="openLaboratoryPanel()">${icone('frasco')} Modo Laboratório</button>
     </div>`);
 }
 
@@ -11982,7 +12001,7 @@ window.receiveUpdateInfo = function(raw) {
 function showUpdateModal(info) {
   showModal(`
     <button class="modal-close" onclick="closeModal()">×</button>
-    <div class="update-hero">⬆</div>
+    <div class="update-hero">${icone('seta-cima')}</div>
     <h2>${esc(info.latestVersion || 'Nova versão disponível')}</h2>
     <p class="screen-subtitle">Instalada: ${esc(info.currentVersion || '')} · atualização assinada e compatível.</p>
     <div class="panel update-notes"><strong>Novidades</strong><p>${markdownToSafeHtml(info.notes || 'Melhorias e correções.')}</p></div>

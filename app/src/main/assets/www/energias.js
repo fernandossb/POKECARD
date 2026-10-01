@@ -68,8 +68,8 @@ function renderEnergiasTipos() {
     const lista = energiasDoTipo(tipo);
     if (!lista.length) return '';
     const tenho = energiasQuantasTenho(lista);
-    return `<button type="button" class="energia-tipo" onclick="abrirEnergiasDoTipo('${tipo}')">
-      <span class="energia-bolinha energia-${tipo}" aria-hidden="true"></span>
+    return `<button type="button" class="energia-tipo tp-${apelidoDoTipo(tipo)}" onclick="abrirEnergiasDoTipo('${tipo}')">
+      ${simboloDoTipo(tipo, 36)}
       <strong>${esc(rotulo)}</strong>
       <small>${lista.length} ${lista.length === 1 ? 'tiragem' : 'tiragens'}${tenho ? ` · você tem ${tenho}` : ''}</small>
     </button>`;
@@ -114,7 +114,7 @@ function energiaTiragemHtml({ card, ano }) {
   const tem = quantityFor(card.id) > 0;
   // A fonte não tem imagem das energias mais novas (e as de reserva trazem a
   // arte de outra tiragem): no lugar, a cor do tipo — melhor que uma errada.
-  const semImagem = `<span class="energia-sem-imagem"><span class="energia-bolinha energia-${esc(tipoDaEnergiaBasica(card))}"></span>sem imagem na fonte</span>`;
+  const semImagem = `<span class="energia-sem-imagem">${simboloDoTipo(tipoDaEnergiaBasica(card), 44)}sem imagem na fonte</span>`;
   return `<article class="energia-tiragem${tem ? ' tenho' : ''}" data-energia-card="${esc(card.id)}">
     <button type="button" class="energia-tiragem-arte" onclick="abrirCartaDaEnergia('${esc(card.id)}')" aria-label="Abrir ${esc(card.name)} de ${esc(card.setName)}">
       ${imagem
@@ -138,7 +138,7 @@ function renderEnergiasDoTipo(tipo) {
   return `
     <button type="button" class="gaveta-voltar energias-voltar" onclick="abrirEnergiasBasicas()" aria-label="Voltar para os tipos">‹</button>
     <button class="modal-close" onclick="closeModal()" aria-label="Fechar">×</button>
-    <h2><span class="energia-bolinha energia-${tipo}" aria-hidden="true"></span> Energia de ${esc(rotulo)}</h2>
+    <h2>${simboloDoTipo(tipo, 30)} Energia de ${esc(rotulo)}</h2>
     <p class="screen-subtitle" id="energiasResumoTipo">${lista.length} ${lista.length === 1 ? 'tiragem' : 'tiragens'}, da mais nova para a mais antiga${tenho ? ` · você tem ${tenho}` : ''}.</p>
     <div class="energias-tiragens">${lista.map(energiaTiragemHtml).join('')}</div>`;
 }

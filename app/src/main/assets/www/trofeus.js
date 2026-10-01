@@ -108,52 +108,63 @@
   // valor: função que lê a medida · metas: os 6 degraus
   function catalogo(m) {
     var lista = [
-      { id:'colecionador', nome:'Colecionador', icone:'📇', desc:'Cartas cadastradas', valor:m.copias, metas:[10,250,2500,15000,50000,100000] },
-      { id:'variedade',    nome:'Variedade',    icone:'🃏', desc:'Cartas diferentes', valor:m.unicas, metas:[10,150,1500,6000,15000,31000] },
-      { id:'pokedex',      nome:'Pesquisador',  icone:'🔎', desc:'Pokémon na sua Pokédex', valor:m.pokemonRegistrados, metas:[25,150,400,700,900,1025] },
-      { id:'sets',         nome:'Arquivista',   icone:'🗂️', desc:'Coleções completas', valor:m.setsCompletos, metas:[1,5,20,50,100,180] },
-      { id:'explorador',   nome:'Explorador',   icone:'🧭', desc:'Coleções iniciadas', valor:m.setsIniciados, metas:[3,15,60,150,280,390] },
-      { id:'linhagem',     nome:'Linhagem',     icone:'🧬', desc:'Pokémon com todas as cartas', valor:m.pokemonCompletos, metas:[1,10,50,200,500,1025] },
-      { id:'perfeccionista', nome:'Perfeccionista', icone:'✨', desc:'Cartas com todas as variantes', valor:m.cartasComTodasVariantes, metas:[1,25,250,1500,6000,15000] },
-      { id:'tesouro',      nome:'Tesouro',      icone:'💎', desc:'Valor da coleção em reais', valor:Math.round(m.valor), metas:[100,2500,25000,150000,500000,1500000], moeda:true },
-      { id:'estrategista', nome:'Estrategista', icone:'⚔️', desc:'Decks montados', valor:m.decks, metas:[1,5,15,40,90,180] },
-      { id:'certificado',  nome:'Certificado',  icone:'🏅', desc:'Cartas graduadas', valor:m.graduadas, metas:[1,5,25,100,350,1000] },
-      { id:'carimbo',      nome:'Carimbada',    icone:'🖃', desc:'Cartas com carimbo', valor:m.carimbadas, metas:[1,10,50,250,900,2500] },
-      { id:'poliglota',    nome:'Poliglota',    icone:'🌐', desc:'Idiomas diferentes na coleção', valor:Object.keys(m.idiomas).length, metas:[1,2,3,3,3,3] },
-      { id:'guardiao',     nome:'Guardião',     icone:'🛡️', desc:'Cartas guardadas no fichário', valor:m.noFichario, metas:[10,250,2500,15000,50000,100000] },
-      { id:'negociante',   nome:'Negociante',   icone:'🤝', desc:'Cartas separadas para troca ou venda', valor:m.paraNegociar, metas:[1,25,250,1500,6000,20000] },
-      { id:'caçador',      nome:'Caçador',      icone:'🎯', desc:'Cartas na lista de desejos', valor:m.desejadas, metas:[1,20,100,500,1500,4000] },
-      { id:'veterano',     nome:'Veterano',     icone:'⏳', desc:'Coleções diferentes representadas', valor:m.setsIniciados, metas:[5,25,80,180,300,391] }
+      { id:'colecionador', nome:'Colecionador', icone:icone('cartas'), desc:'Cartas cadastradas', valor:m.copias, metas:[10,250,2500,15000,50000,100000] },
+      { id:'variedade',    nome:'Variedade',    icone:icone('carta'), desc:'Cartas diferentes', valor:m.unicas, metas:[10,150,1500,6000,15000,31000] },
+      { id:'pokedex',      nome:'Pesquisador',  icone:icone('lupa'), desc:'Pokémon na sua Pokédex', valor:m.pokemonRegistrados, metas:[25,150,400,700,900,1025] },
+      { id:'sets',         nome:'Arquivista',   icone:icone('pastas'), desc:'Coleções completas', valor:m.setsCompletos, metas:[1,5,20,50,100,180] },
+      { id:'explorador',   nome:'Explorador',   icone:icone('bussola'), desc:'Coleções iniciadas', valor:m.setsIniciados, metas:[3,15,60,150,280,390] },
+      { id:'linhagem',     nome:'Linhagem',     icone:icone('dna'), desc:'Pokémon com todas as cartas', valor:m.pokemonCompletos, metas:[1,10,50,200,500,1025] },
+      { id:'perfeccionista', nome:'Perfeccionista', icone:icone('brilho'), desc:'Cartas com todas as variantes', valor:m.cartasComTodasVariantes, metas:[1,25,250,1500,6000,15000] },
+      { id:'tesouro',      nome:'Tesouro',      icone:icone('diamante'), desc:'Valor da coleção em reais', valor:Math.round(m.valor), metas:[100,2500,25000,150000,500000,1500000], moeda:true },
+      { id:'estrategista', nome:'Estrategista', icone:icone('espadas'), desc:'Decks montados', valor:m.decks, metas:[1,5,15,40,90,180] },
+      { id:'certificado',  nome:'Certificado',  icone:icone('medalha'), desc:'Cartas graduadas', valor:m.graduadas, metas:[1,5,25,100,350,1000] },
+      { id:'carimbo',      nome:'Carimbada',    icone:icone('carimbo'), desc:'Cartas com carimbo', valor:m.carimbadas, metas:[1,10,50,250,900,2500] },
+      { id:'poliglota',    nome:'Poliglota',    icone:icone('globo'), desc:'Idiomas diferentes na coleção', valor:Object.keys(m.idiomas).length, metas:[1,2,3,3,3,3] },
+      { id:'guardiao',     nome:'Guardião',     icone:icone('escudo'), desc:'Cartas guardadas no fichário', valor:m.noFichario, metas:[10,250,2500,15000,50000,100000] },
+      { id:'negociante',   nome:'Negociante',   icone:icone('troca'), desc:'Cartas separadas para troca ou venda', valor:m.paraNegociar, metas:[1,25,250,1500,6000,20000] },
+      { id:'caçador',      nome:'Caçador',      icone:icone('alvo'), desc:'Cartas na lista de desejos', valor:m.desejadas, metas:[1,20,100,500,1500,4000] },
+      { id:'veterano',     nome:'Veterano',     icone:icone('ampulheta'), desc:'Coleções diferentes representadas', valor:m.setsIniciados, metas:[5,25,80,180,300,391] }
     ];
 
     // Uma medalha por raridade encontrada na coleção. A raridade vem do
     // catálogo enriquecido; sem ele, esta família simplesmente não aparece.
-    var ICONE_RARIDADE = {
-      'Comum':'⚪','Incomum':'🔵','Rara':'⭐','Rara Holo':'🌟','Ultra Rara':'💫',
-      'Promo':'🎁','Rara Secreta':'🔒','Rara Dupla':'✌️','Hiper Rara':'🌈',
-      'Rara Holo V':'🅥','Rara Holo VMAX':'🆚','Rara Arco-Íris':'🌈','Amazing Rare':'💠'
-    };
+    // Os ícones seguem os símbolos de raridade impressos nas cartas: círculo,
+    // losango e estrela.
+    // O catálogo traz o nome em inglês ("Holo Rare V", "Double rare"); os
+    // nomes em português ficam por garantia.
+    function iconeDaRaridade(nome) {
+      var r = String(nome || '').toLowerCase();
+      if (/ace spec/.test(r)) return 'raio';
+      if (/amazing|crown|coroa/.test(r)) return 'diamante';
+      if (/hyper|hiper|rainbow|arco/.test(r)) return 'arcoiris';
+      if (/secret|secreta/.test(r)) return 'cadeado';
+      if (/illustration|ilustra/.test(r)) return 'quadro';
+      if (/double|dupla|ultra/.test(r)) return 'estrelas2';
+      if (/holo|shiny|radiant|radiante|brilh/.test(r)) return 'brilho';
+      if (/promo/.test(r)) return 'presente';
+      if (/uncommon|incomum|diamond/.test(r)) return 'losango';
+      if (/common|comum/.test(r)) return 'circulo';
+      if (/rare|rara|star|estrela/.test(r)) return 'estrela';
+      return 'carta';
+    }
     Object.keys(m.porRaridade).sort().forEach(function (r) {
-      lista.push({ id:'rar-'+r, nome:r, icone:ICONE_RARIDADE[r] || '🎴',
+      lista.push({ id:'rar-'+r, nome:r, icone:icone(iconeDaRaridade(r)),
         desc:'Cartas de raridade '+r, valor:m.porRaridade[r],
         metas:[5,50,400,2000,8000,25000], familia:'Raridades' });
     });
 
-    // Uma medalha por tipo, como as do Pokémon GO.
+    // Uma medalha por tipo, como as do Pokémon GO — com o símbolo do tipo.
     var TIPOS = ['Planta','Fogo','Água','Elétrico','Psíquico','Lutador','Sombrio','Metálico',
                  'Fada','Dragão','Voador','Venenoso','Terrestre','Pedra','Inseto','Fantasma','Gelo','Normal'];
-    var ICONE_TIPO = { 'Planta':'🌿','Fogo':'🔥','Água':'💧','Elétrico':'⚡','Psíquico':'🔮','Lutador':'🥊',
-      'Sombrio':'🌑','Metálico':'⚙️','Fada':'🎀','Dragão':'🐉','Voador':'🕊️','Venenoso':'☠️',
-      'Terrestre':'⛰️','Pedra':'🪨','Inseto':'🐛','Fantasma':'👻','Gelo':'❄️','Normal':'⭐' };
     TIPOS.forEach(function (t) {
-      lista.push({ id:'tipo-'+t, nome:t, icone:ICONE_TIPO[t]||'⭐', desc:'Cartas do tipo '+t,
+      lista.push({ id:'tipo-'+t, nome:t, icone:simboloDoTipo(t, 34) || icone('estrela'), desc:'Cartas do tipo '+t,
         valor:m.porTipo[t]||0, metas:[10,100,600,3000,10000,30000], familia:'Tipos' });
     });
 
     // Uma medalha por região.
     var REGIOES = ['Kanto','Johto','Hoenn','Sinnoh','Unova','Kalos','Alola','Galar','Paldea'];
     REGIOES.forEach(function (r) {
-      lista.push({ id:'regiao-'+r, nome:r, icone:'🗺️', desc:'Cartas de '+r,
+      lista.push({ id:'regiao-'+r, nome:r, icone:icone('mapa'), desc:'Cartas de '+r,
         valor:m.porRegiao[r]||0, metas:[10,100,600,3000,9000,25000], familia:'Regiões' });
     });
 

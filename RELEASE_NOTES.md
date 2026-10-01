@@ -1,3 +1,11 @@
+# POKECARD Brasil 5.75.0 — Pokédex colorida pelos tipos e ícones próprios
+
+- **Pokédex colorida.** Cada quadradinho veste a cor do tipo do Pokémon: o Bulbasaur fica verde, o Charmander alaranjado, o Squirtle azul. Quando o Pokémon tem dois tipos, o segundo aparece como um clarão no canto de baixo (o Charizard é laranja com um toque de azul). No canto de cada quadradinho ficam os símbolos dos tipos. Os que você ainda não tem continuam transparentes, como antes. Vale nos 6 níveis de claridade — vinho escuro no tema escuro, pastel no claro.
+- **Tela do Pokémon.** O cabeçalho vira um cartão na cor do tipo, e os tipos ganham etiquetas com o símbolo (Fogo, Voador...).
+- **Símbolos dos tipos, desenhados para o app.** Os 18 tipos mais o Incolor, cada um num disco da cor dele: chama, gota, raio, folha, floco de neve, punho, caveira, ave, espiral, besouro, fantasma, olho de dragão, lua, engrenagem, brilho... Aparecem na Pokédex, nas **Energias básicas** (cada tipo com o seu símbolo e um clarão da cor dele) e nas **medalhas de tipo dos Troféus**.
+- **Ícones próprios no lugar dos emojis.** Os emojis cada fabricante de celular desenha de um jeito, e havia letras fazendo papel de ícone ("R$", "E"). Agora tudo vem do mesmo conjunto, no mesmo traço, e acompanha a cor do tema: menu Mais, as 62 medalhas dos Troféus (as de raridade usam círculo, losango e estrela, como nas cartas — antes quase todas caíam num ícone genérico, porque o catálogo traz os nomes em inglês), selos de categoria da carta (Pokémon, Treinador, Energia), acabamentos das versões (comum, holo, reverse, 1ª edição), carimbo, botões do Decks, "ver a carta em tamanho real", câmera e ajustes do scanner, foto da carta e Modo Laboratório.
+- **Troféus:** o nome do nível (Bronze, Prata...) aparecia cortado embaixo da medalha; agora aparece inteiro, e a marca d'água do Pokémon fica atrás do ícone.
+
 # POKECARD Brasil 5.74.0 — Cores com significado, profundidade e Explorar colorido
 
 O app era quase todo de uma cor só (o roxo do tema). Agora o roxo fica para o "esqueleto" — botões, abas, cabeçalhos — e o conteúdo ganha cor com sentido:

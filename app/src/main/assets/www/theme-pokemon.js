@@ -472,6 +472,13 @@
     root.style.setProperty('--cc-l-linha', p.claro ? '55%' : '64%');
     root.style.setProperty('--cc-l-brilho', p.claro ? '72%' : '54%');
     root.style.setProperty('--cc-l-era', p.claro ? '26%' : '82%');
+    /* Pokédex: o quadradinho e o cabeçalho do Pokémon vestem a cor do tipo.
+       Mais quietos que as capas do Explorar — são 180 por tela. */
+    root.style.setProperty('--tp-l-a', p.claro ? '92%' : '24%');
+    root.style.setProperty('--tp-l-b', p.claro ? '86%' : '14%');
+    root.style.setProperty('--tp-l-brilho', p.claro ? '66%' : '48%');
+    root.style.setProperty('--tp-l-linha', p.claro ? '56%' : '58%');
+    root.style.setProperty('--tp-l-texto', p.claro ? '26%' : '84%');
     // Logo com letra escura (Pitch Black, Black & White) some no fundo
     // escuro: um halo de luz atrás e um fio claro em volta dão contorno sem
     // incomodar os logos coloridos.

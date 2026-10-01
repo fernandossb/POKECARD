@@ -174,7 +174,7 @@ function renderArteEstendidaLista() {
   const resumo = resumoArteEstendida();
   return `
     <button class="modal-close" onclick="closeModal()" aria-label="Fechar">×</button>
-    <h2>🖼 Arte Estendida</h2>
+    <h2>${icone('quadro')} Arte Estendida</h2>
     <p class="screen-subtitle">Obras que só aparecem inteiras quando duas ou mais cartas ficam lado a lado.${resumo ? ` ${resumo.completas} de ${resumo.totalObras} obras completas na sua coleção.` : ''}</p>
     <button type="button" class="primary-btn arte-estendida-criar" onclick="criarObraArteEstendida()">＋ Criar obra</button>
     ${resumo ? `<label class="vision-search arte-estendida-busca"><span>${tabIcon('pokedex')}</span>
@@ -238,7 +238,7 @@ function renderObraArteEstendida(obraId) {
     <p class="screen-subtitle">${esc(obra.colecao)} · ${esc(g.rotulo)} · ${p.tenho} de ${p.total} cartas já na sua coleção</p>
     <div class="arte-obra-detalhe">${arteEstendidaComposicao(obra, { interativa: true, grande: true })}</div>
     <p class="arte-estendida-dica">✓ verde = já está na sua coleção · ✕ = ainda falta · toque numa carta para abri-la.</p>
-    <div class="modal-actions"><button type="button" class="secondary-btn" onclick="editarObraArteEstendida('${esc(obra.id)}')">✎ Editar obra</button></div>`;
+    <div class="modal-actions"><button type="button" class="secondary-btn" onclick="editarObraArteEstendida('${esc(obra.id)}')">${icone('lapis')} Editar obra</button></div>`;
 }
 
 function abrirObraArteEstendida(obraId) {

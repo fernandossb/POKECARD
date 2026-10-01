@@ -871,8 +871,8 @@
     const decks=safeDecks(), selected=decks.find(d=>d.id===selectedDeckId);
     if(selected)return renderDeckEditor(selected);
     const mineView = `<p class="screen-subtitle">Monte, valide, teste e exporte decks de 60 cartas usando sua coleção real.</p>
-      <button class="auto-deck-hero" onclick="openAutoBuilder()"><span>✨</span><div><strong>Montar deck automaticamente</strong><small>Escolha formato, objetivo e fonte das cartas</small></div></button>
-      <button class="auto-deck-hero theme-deck-hero" onclick="openThematicDeckBuilder()"><span>🎯</span><div><strong>Criar deck temático</strong><small>Escolha um Pokémon: ele e a linha evolutiva viram os atacantes</small></div></button>
+      <button class="auto-deck-hero" onclick="openAutoBuilder()"><span aria-hidden="true">${icone('brilho')}</span><div><strong>Montar deck automaticamente</strong><small>Escolha formato, objetivo e fonte das cartas</small></div></button>
+      <button class="auto-deck-hero theme-deck-hero" onclick="openThematicDeckBuilder()"><span aria-hidden="true">${icone('alvo')}</span><div><strong>Criar deck temático</strong><small>Escolha um Pokémon: ele e a linha evolutiva viram os atacantes</small></div></button>
       ${lastCandidates.length?`<h3 class="section-title">Melhores sugestões</h3><div class="candidate-list">${lastCandidates.map(candidateCard).join('')}</div>`:''}
       <div class="deck-row"><input id="deckName" class="field" placeholder="Nome do novo deck"><button class="primary-btn" onclick="addDeck()">Criar vazio</button></div>
       <h3 class="section-title">Decks salvos</h3><div class="deck-lista">${decks.length
