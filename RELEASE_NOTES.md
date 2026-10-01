@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.83.0 — Versão holo que na verdade é Cosmos
+
+- **Uma carta física não aparece mais duas vezes.** As duas fontes de versões nem sempre concordam: na Oddish 001/094 (Fogo Fantasmagórico), o TCGdex diz que a holográfica dessa carta só existe como **Cosmos Holo**, e o banco de preços chama a mesma carta de "Holo". O app mostrava as duas — "Holográfica" e "Cosmos Holo". Agora, quando o TCGdex conhece as versões da carta e diz que um acabamento (holo ou reverse) só existe em foil especial (Cosmos, Cracked Ice...), a versão "plana" do banco sai: some do cadastro, do formulário "Adicionar", das etiquetas da grade e da conta do Master Set.
+- **O preço vai junto.** O preço que o banco publicava como "Holo" é o da Cosmos Holo, então passa para ela — na Oddish, R$ 0,45 — inclusive no valor da coleção quando você cadastra a cópia.
+- Quando uma fonte lista uma versão que a outra nem menciona, o app não tem como saber quem está certo e mantém a versão; para esses casos, use o × da versão (com 0 cópias) no cadastro da carta.
+
 # POKECARD Brasil 5.82.0 — Cartas de ponta a ponta na Coleção
 
 - **A carta ocupa toda a largura do cartão** nas grades de 2 e 3 colunas da Coleção. Saíram a margem em volta da arte e a faixa colorida separada na lateral: ficou só a **moldura colorida, grudada direto na carta** — na cor do tipo do Pokémon, dourada nas raras (Double/Ultra/Illustration/Shiny), rosa nas secretas e hiper raras, azul nas promos, e dourada também na carta em que você tem todas as versões.

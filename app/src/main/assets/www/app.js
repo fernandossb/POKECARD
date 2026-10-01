@@ -863,10 +863,14 @@ function variantesVisiveis(cardId, valores, selecionada, language = '') {
   // roda fora do app, sem `state` nem versoesExcluidasDe: nada é filtrado.
   const excluidas = typeof versoesExcluidasDe === 'function' && typeof state !== 'undefined' && state
     ? versoesExcluidasDe(cardId) : null;
+  // A "Holo" do banco que na verdade é o foil especial (Cosmos...) da carta
+  // não vira botão próprio — ver foilEspecialUnico.
+  const soFoil = card && typeof foilEspecialUnico === 'function' ? foilEspecialUnico(card) : null;
 
   const porVersao = new Map();
   for (const value of lista) {
     if (excluidas?.size && value !== selecionada && excluidas.has(`s|${siglaDaVariante(value)}`)) continue;
+    if (soFoil?.size && value !== selecionada && planaSubstituidaPorFoil(value, soFoil)) continue;
     const chave = chaveDaVersao(value, acabamentoPadrao);
     if (!permitido(chave.split('|')[0]) && value !== selecionada) continue;
     const temPreco = Boolean(centralPriceResolveKey(cardId, idioma, value));
@@ -1732,7 +1736,12 @@ function centralPriceStatusPanel() {
 }
 
 function automaticPriceQuote(cardId, variant = 'normal') {
-  return centralPriceQuote(cardId, marketVariantIdentity(variant));
+  const direta = centralPriceQuote(cardId, marketVariantIdentity(variant));
+  if (direta) return direta;
+  // Foil especial que é a única versão holo da carta: o mercado vende essa
+  // mesma carta como "Holo" — vale o preço da holo do banco (precoComoPlana).
+  const plana = typeof precoComoPlana === 'function' ? precoComoPlana(cardId, variant) : null;
+  return plana ? centralPriceQuote(cardId, marketVariantIdentity(plana)) : null;
 }
 
 function legacyPriceQuote(cardId) {
@@ -7431,6 +7440,52 @@ function rotuloDaLinha(linha) {
   if (linha.edition !== 'unlimited') partes.push(friendlyVariantLabel(linha.edition));
   if (linha.artVariant !== 'standard') partes.push(friendlyVariantLabel(linha.artVariant));
   return partes.join(' · ');
+}
+
+/* ---------- Foil especial que é a ÚNICA versão de um acabamento ----------
+
+   As duas fontes nem sempre concordam. Na Oddish 001/094 (Fogo
+   Fantasmagórico), o TCGdex diz que a holo dessa carta só existe como Cosmos
+   Holo; o banco de preços chama a mesma carta de "Holo". O app mostrava as
+   duas — "Holográfica" e "Cosmos Holo" —, uma carta física contada duas vezes.
+
+   Quando o TCGdex conhece as versões da carta e, para um acabamento (holo ou
+   reverse), NÃO existe a versão plana, só foil especial, a plana do banco
+   sai (vira a mesma linha do foil especial) e o preço dela passa para o foil.
+   Devolve Map acabamento -> foil ('holo' -> 'cosmos-holofoil'); vazio enquanto
+   o TCGdex não foi consultado para a carta. */
+function foilEspecialUnico(card) {
+  const detalhadas = scannerVariantAvailability.get(card?.id || '')?.variacoesDetalhadas || [];
+  const resultado = new Map();
+  for (const acabamento of ['holo', 'reverse']) {
+    const simples = detalhadas.filter(item => item.finish === acabamento && !item.carimbos.length
+      && item.edition === 'unlimited' && item.artVariant === 'standard');
+    if (simples.length && simples.every(item => item.foil)) resultado.set(acabamento, simples[0].foil);
+  }
+  return resultado;
+}
+
+// A versão do banco é a plana de um acabamento que só existe em foil especial?
+function planaSubstituidaPorFoil(valor, soFoil) {
+  const exato = exactSourceEnum(valor);
+  if (SPECIAL_FOIL_VALUES.has(exato) || EDICAO_DO_ENUM[exato]) return false;
+  return soFoil.has(acabamentoDaVersao(valor));
+}
+
+// Para o preço: o foil especial único usa o preço da plana do banco.
+function precoComoPlana(cardId, variant) {
+  const valor = exactSourceEnum(typeof variant === 'string' ? variant : variant?.pricingVariant);
+  if (!SPECIAL_FOIL_VALUES.has(valor)) return null;
+  const card = cardMap.get(cardId);
+  if (!card) return null;
+  const idioma = (typeof variant === 'object' && variant?.language) || 'pt-br';
+  for (const [acabamento, foil] of foilEspecialUnico(card)) {
+    if (exactSourceEnum(foil) !== valor) continue;
+    const plana = centralVariantEntries(cardId, idioma).map(item => item.value)
+      .find(item => planaSubstituidaPorFoil(item, new Map([[acabamento, foil]])));
+    if (plana) return typeof variant === 'string' ? plana : { ...variant, pricingVariant: plana };
+  }
+  return null;
 }
 
 /* As variações do TCGdex que as versões de preço não cobrem. A plana
