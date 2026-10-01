@@ -2227,7 +2227,7 @@ async function init() {
     loadPricingState();
     loadConditionMultipliers();
     await loadCentralPriceCache();
-    state = loadState();
+    state = await loadState();
     if (clearNonDatabaseAutomaticPrices()) saveState();
     // Ao mudar para a média brasileira, removemos uma vez os valores internacionais antigos.
     const storedLogicVersion = Number(localStorage.getItem(PRICE_LOGIC_VERSION_KEY) || 0);
@@ -2421,54 +2421,238 @@ function migrateState(saved) {
   return migrated;
 }
 
-function loadState() {
+/* ---------- Onde a coleção fica guardada ----------
+   Até a 5.84 a coleção ficava só no localStorage: uns 5 MB por app,
+   divididos com os caches de imagem e de preço. Com ~1,4 KB por versão
+   cadastrada, perto de 3.500 versões o aparelho deixava de salvar.
+
+   Agora a cópia principal vai para o IndexedDB, que cresce com o espaço livre
+   do aparelho. O localStorage continua recebendo uma cópia enquanto ela
+   couber: a gravação dele é imediata (cobre o app fechado no meio de uma
+   gravação) e ele é o caminho de volta se o IndexedDB falhar. Quando a cópia
+   não cabe mais, ela é apagada — então uma cópia que exista no localStorage é
+   sempre a mais recente.
+
+   Cada gravação leva um número que só cresce; ao abrir, vale a cópia de
+   número maior. */
+const COLECAO_DB_NOME = 'pokecard-colecao';
+const COLECAO_DB_LOJA = 'estado';
+const COLECAO_DB_CHAVE = 'principal';
+// Marca que a coleção já foi gravada no IndexedDB pelo menos uma vez.
+const COLECAO_NO_BANCO_KEY = 'pokecard-colecao-no-banco';
+let ultimaGravacao = 0;
+let bancoDaColecao = null;
+// Tamanho da cópia que o localStorage já recusou nesta sessão: maior que
+// isso nem tenta de novo (a tentativa custa tempo e falha do mesmo jeito).
+let copiaLocalQueNaoCoube = Infinity;
+
+function abrirBancoDaColecao() {
+  if (bancoDaColecao) return bancoDaColecao;
+  bancoDaColecao = new Promise((resolve, reject) => {
+    if (!window.indexedDB) return reject(new Error('IndexedDB indisponível'));
+    const request = indexedDB.open(COLECAO_DB_NOME, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(COLECAO_DB_LOJA)) db.createObjectStore(COLECAO_DB_LOJA);
+    };
+    request.onsuccess = () => {
+      const db = request.result;
+      // Se o sistema fechar a conexão, a próxima gravação abre outra.
+      db.onclose = () => { bancoDaColecao = null; };
+      resolve(db);
+    };
+    request.onerror = () => reject(request.error || new Error('Falha ao abrir o banco da coleção'));
+  });
+  bancoDaColecao.catch(() => { bancoDaColecao = null; });
+  return bancoDaColecao;
+}
+
+/** O texto gravado no banco: string, null (nada gravado) ou undefined (não deu para ler). */
+function lerColecaoDoBanco(limiteMs) {
+  const leitura = abrirBancoDaColecao().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(COLECAO_DB_LOJA, 'readonly');
+    const pedido = tx.objectStore(COLECAO_DB_LOJA).get(COLECAO_DB_CHAVE);
+    tx.oncomplete = () => resolve(typeof pedido.result === 'string' ? pedido.result : null);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error('Leitura cancelada'));
+  })).catch(() => undefined);
+  // Um banco que não responde não pode prender o app na tela de abertura.
+  const limite = new Promise(resolve => setTimeout(() => resolve(undefined), limiteMs));
+  return Promise.race([leitura, limite]);
+}
+
+function gravarColecaoNoBanco(texto) {
+  return abrirBancoDaColecao().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(COLECAO_DB_LOJA, 'readwrite');
+    tx.objectStore(COLECAO_DB_LOJA).put(texto, COLECAO_DB_CHAVE);
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error('Gravação cancelada'));
+  }));
+}
+
+/* ---------- Gravação enxuta ----------
+   Cada versão cadastrada tem uns 50 campos, e quase todos ficam no padrão
+   (sem nota, sem preço pago, não graduada...). Gravar tudo repetia ~1,4 KB
+   por versão. Agora sai da gravação o que é igual ao padrão: ao abrir,
+   migrateState passa cada versão por defaultVariant, que devolve exatamente
+   esses valores. id, updatedAt e addedAt ficam sempre — o padrão deles
+   depende da hora ou de outro campo. */
+const CAMPOS_SEMPRE_GRAVADOS = new Set(['id', 'updatedAt', 'addedAt']);
+let versaoPadraoDeGravacao = null;
+
+function mesmoValorPadrao(valor, padrao) {
+  if (valor === padrao) return true;
+  return Array.isArray(valor) && Array.isArray(padrao) && !valor.length && !padrao.length;
+}
+
+function versaoEnxuta(variant) {
+  if (!versaoPadraoDeGravacao) versaoPadraoDeGravacao = defaultVariant(0, {});
+  const saida = {};
+  for (const [campo, valor] of Object.entries(variant || {})) {
+    const podeSair = !CAMPOS_SEMPRE_GRAVADOS.has(campo)
+      && Object.prototype.hasOwnProperty.call(versaoPadraoDeGravacao, campo)
+      // pricingVariant também pode vir de variantEnum: com ele presente, fica.
+      && !(campo === 'pricingVariant' && 'variantEnum' in variant)
+      && mesmoValorPadrao(valor, versaoPadraoDeGravacao[campo]);
+    if (!podeSair) saida[campo] = valor;
+  }
+  return saida;
+}
+
+/* Na carta, quantidade, troca e venda são recalculadas das versões por
+   syncEntry; preço antigo, Wishlist e Pokémon escolhido à mão têm padrão em
+   migrateState. Vazios, também não vão para a gravação. */
+function entradaEnxuta(entry) {
+  const { variants, quantity, forTrade: _troca, forSale: _venda, ...resto } = entry || {};
+  const versoes = Array.isArray(variants) ? variants : [];
+  const saida = {};
+  for (const [campo, valor] of Object.entries(resto)) {
+    if (campo === 'priceBrl' && valor == null) continue;
+    if (campo === 'manualPokemonId' && !(Number(valor) > 0)) continue;
+    if (campo === 'wishlist' && !valor) continue;
+    saida[campo] = valor;
+  }
+  // Sem versões, é a quantidade antiga que migrateState usa para recriá-las.
+  if (!versoes.length && quantity) saida.quantity = quantity;
+  saida.variants = versoes.map(versaoEnxuta);
+  return saida;
+}
+
+function textoParaGravar() {
+  const entries = {};
+  for (const [cardId, entry] of Object.entries(state.entries || {})) entries[cardId] = entradaEnxuta(entry);
+  ultimaGravacao += 1;
+  return JSON.stringify({ ...state, version: 2, entries, gravacao: ultimaGravacao });
+}
+
+function interpretarEstadoGravado(texto) {
+  if (typeof texto !== 'string' || !texto) return null;
   try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    const migrated = migrateState(saved);
+    const dados = JSON.parse(texto);
+    return dados && typeof dados === 'object' && dados.entries ? dados : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function loadState() {
+  let textoLocal = null;
+  try { textoLocal = localStorage.getItem(STORAGE_KEY); } catch (_) {}
+  const local = interpretarEstadoGravado(textoLocal);
+  /* Com cópia no localStorage, ela é a mais recente (ver acima) e o banco só
+     precisa responder a tempo de ser comparado. Sem ela, a coleção pode estar
+     só no banco: vale esperar mais antes de desistir. */
+  const textoBanco = await lerColecaoDoBanco(local ? 4000 : 20000);
+  const banco = interpretarEstadoGravado(textoBanco);
+  let jaGravouNoBanco = false;
+  try { jaGravouNoBanco = localStorage.getItem(COLECAO_NO_BANCO_KEY) === '1'; } catch (_) {}
+  if (!banco && !local && textoBanco === undefined && jaGravouNoBanco) {
+    // A coleção existe, mas o aparelho não liberou a leitura. Abrir vazio
+    // aqui seria gravar uma coleção vazia por cima dela.
+    throw new Error('Sua coleção está guardada no aparelho, mas a leitura não respondeu agora. Feche o app e abra de novo.');
+  }
+  const numero = dados => Number(dados?.gravacao) || 0;
+  ultimaGravacao = Math.max(numero(banco), numero(local));
+  const escolhido = banco && (!local || numero(banco) >= numero(local)) ? banco : local;
+  if (escolhido) {
+    delete escolhido.gravacao;
+    const migrated = migrateState(escolhido);
     if (migrated) {
       // Regravar a versão migrada é higiene, não obrigação — e fica para
-      // depois da primeira tela (ver init). Se o armazenamento recusar,
-      // seguimos com o que já está em memória: saveStateNow avisa e faz o
-      // backup de emergência, como em qualquer outra gravação.
+      // depois da primeira tela (ver init). É também o que leva uma coleção
+      // que só estava no localStorage para o banco.
       regravarEstadoAoAbrir = true;
       return migrated;
     }
-  } catch (_) {}
+  }
   // Instalações novas começam vazias. Dados pessoais nunca são distribuídos no APK.
-  const initial = { version: 2, entries: {}, decks: [], importedAt: null };
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(initial)); } catch (_) {}
-  return initial;
+  return { version: 2, entries: {}, decks: [], importedAt: null };
 }
 
 function saveStateNow() {
   if (!state || !stateSaveDirty) return;
   state.version = 2;
+  let texto;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    stateSaveDirty = false;
-    if (stateSaveFailed) {
-      // A gravação voltou a funcionar: tira o aviso da tela.
-      stateSaveFailed = false;
-      try { renderKeepingScroll(); } catch (_) {}
-    }
+    texto = textoParaGravar();
   } catch (erro) {
-    // localStorage cheio ou bloqueado (armazenamento do aparelho sob pressão,
-    // navegação privada...). Para um app cujo lema é "coleção protegida", a
-    // gravação falhar em silêncio é o pior caso — então avisa na tela e força
-    // um backup agora, por um caminho que não depende do localStorage.
-    console.error('POKECARD: não foi possível salvar a coleção —', erro && erro.name, erro && erro.message);
-    stateSaveDirty = true;
-    if (!stateSaveFailed) {
-      stateSaveFailed = true;
-      salvarBackupDeEmergencia();
-      // Aviso imediato mesmo fora da tela inicial; a faixa fixa fica no painel.
-      try { notify('O aparelho recusou salvar a coleção. Fizemos um backup de emergência na pasta Download.'); } catch (_) {}
-      try { renderKeepingScroll(); } catch (_) {}
+    falhaAoSalvar(erro);
+    return;
+  }
+  const numero = ultimaGravacao;
+  stateSaveDirty = false;
+  let copiaLocalOk = false;
+  if (texto.length < copiaLocalQueNaoCoube) {
+    try {
+      localStorage.setItem(STORAGE_KEY, texto);
+      copiaLocalOk = true;
+    } catch (_) {
+      copiaLocalQueNaoCoube = texto.length;
     }
+  }
+  if (!copiaLocalOk) {
+    // Não coube: a cópia velha sai, para nunca passar por mais nova.
+    try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+  } else {
+    gravacaoConfirmada();
+  }
+  gravarColecaoNoBanco(texto).then(() => {
+    try {
+      if (localStorage.getItem(COLECAO_NO_BANCO_KEY) !== '1') localStorage.setItem(COLECAO_NO_BANCO_KEY, '1');
+    } catch (_) {}
+    gravacaoConfirmada();
+  }).catch(erro => {
+    bancoDaColecao = null;
+    // Uma gravação mais nova já pode ter dado certo: só a última conta.
+    if (!copiaLocalOk && numero === ultimaGravacao) falhaAoSalvar(erro);
+  });
+}
+
+function gravacaoConfirmada() {
+  if (!stateSaveFailed) return;
+  // A gravação voltou a funcionar: tira o aviso da tela.
+  stateSaveFailed = false;
+  try { renderKeepingScroll(); } catch (_) {}
+}
+
+function falhaAoSalvar(erro) {
+  // Banco e localStorage recusaram (armazenamento do aparelho sob pressão,
+  // navegação privada...). Para um app cujo lema é "coleção protegida", a
+  // gravação falhar em silêncio é o pior caso — então avisa na tela e força
+  // um backup agora, por um caminho que não depende do armazenamento do app.
+  console.error('POKECARD: não foi possível salvar a coleção —', erro && erro.name, erro && erro.message);
+  stateSaveDirty = true;
+  if (!stateSaveFailed) {
+    stateSaveFailed = true;
+    salvarBackupDeEmergencia();
+    // Aviso imediato mesmo fora da tela inicial; a faixa fixa fica no painel.
+    try { notify('O aparelho recusou salvar a coleção. Fizemos um backup de emergência na pasta Download.'); } catch (_) {}
+    try { renderKeepingScroll(); } catch (_) {}
   }
 }
 
-/* Backup disparado fora do ciclo normal, quando o localStorage recusa a
+/* Backup disparado fora do ciclo normal, quando o armazenamento recusa a
    gravação. O arquivo vai para a pasta Download pública pela ponte do Android,
    que não depende do armazenamento que acabou de falhar. */
 function salvarBackupDeEmergencia() {

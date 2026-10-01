@@ -1,3 +1,11 @@
+# POKECARD Brasil 5.85.0 — Espaço para coleções grandes
+
+- **A coleção não tem mais teto de ~3.500 versões.** Até aqui ela ficava num espaço de uns 5 MB, dividido com os caches de imagem e preço, e cada versão cadastrada ocupava ~1,4 KB. Perto de 3.500 versões, o aparelho parava de salvar. Agora a cópia principal fica no banco do próprio aparelho, que cresce com o espaço livre do celular. Num teste com **9.013 versões**, tudo foi salvo e voltou inteiro ao reabrir.
+- **Cada versão ocupa 4 vezes menos.** Os campos que estão no valor padrão (sem nota, sem preço pago, não graduada...) deixam de ser gravados e voltam sozinhos ao abrir. Numa coleção com preço, a versão caiu de ~1,4 KB para ~0,3 a 0,5 KB.
+- **A mudança é automática.** Na primeira abertura depois de atualizar, a coleção é copiada para o lugar novo, sem você fazer nada. Foi conferido que o que volta é idêntico ao que existia: cartas, versões, preços, notas, Wishlist, decks e versões excluídas.
+- **Continua protegida.** Enquanto couber, o app também guarda uma cópia no lugar antigo, que é usada se o banco falhar. Ao abrir, o app sempre usa a cópia mais recente. Se o aparelho não liberar a leitura da coleção, o app avisa em vez de abrir vazio por cima dela. Se as duas gravações falharem, continua o aviso na tela e o backup de emergência na pasta Download.
+- Backups exportados continuam no mesmo formato de antes.
+
 # POKECARD Brasil 5.84.0 — Faxina no código
 
 - **Nada muda na tela.** Esta versão só tira o que o app carregava sem usar. Cada tela foi conferida antes e depois, elemento por elemento: cor, tamanho, espaçamento e posição ficaram iguais.
