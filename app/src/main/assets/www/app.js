@@ -882,38 +882,36 @@ function rotuloDaVariante(variant) {
 
 // Cada acabamento tem sua própria cara, como as etiquetas da carta física.
 // Os ícones são do conjunto próprio (icones.js) — antes eram letras e formas
-// de texto (◻ ✦ ◧ ❶), que cada celular desenha de um jeito.
-const IC_COMUM = icone('v-normal');
-const IC_HOLO = icone('brilho');
-const IC_REVERSE = icone('v-reverse');
-const IC_PRIMEIRA = icone('v-primeira');
-const IC_BOLA = icone('pokebola');
+// de texto (◻ ✦ ◧ ❶), que cada celular desenha de um jeito. A tabela guarda só
+// o NOME do ícone; o desenho é montado em variantEstilo(), na hora de usar —
+// os testes em Node carregam este trecho sem o icones.js.
 const VARIANT_ESTILO = {
-  'normal': { classe: 'v-comum', icone: IC_COMUM },
-  'holo': { classe: 'v-holo', icone: IC_HOLO },
-  'holofoil': { classe: 'v-holo', icone: IC_HOLO },
-  'reverse': { classe: 'v-reverse', icone: IC_REVERSE },
-  'reverse-holofoil': { classe: 'v-reverse', icone: IC_REVERSE },
-  '1st-edition': { classe: 'v-primeira', icone: IC_PRIMEIRA },
-  '1st-edition-holofoil': { classe: 'v-primeira', icone: IC_PRIMEIRA },
-  'unlimited': { classe: 'v-comum', icone: IC_COMUM },
-  'unlimited-holofoil': { classe: 'v-holo', icone: IC_HOLO },
-  'firstEdition': { classe: 'v-primeira', icone: IC_PRIMEIRA },
-  'pokeball-holofoil': { classe: 'v-pokebola', icone: IC_BOLA },
-  'masterball-holofoil': { classe: 'v-masterball', icone: IC_BOLA },
-  'greatball-holofoil': { classe: 'v-pokebola', icone: IC_BOLA },
-  'ultraball-holofoil': { classe: 'v-pokebola', icone: IC_BOLA },
-  'cosmos-holofoil': { classe: 'v-holo', icone: IC_HOLO },
-  'cracked-ice-holofoil': { classe: 'v-holo', icone: IC_HOLO },
-  'tinsel-holofoil': { classe: 'v-holo', icone: IC_HOLO },
-  'mirror-holofoil': { classe: 'v-reverse', icone: IC_REVERSE },
-  'galaxy-holofoil': { classe: 'v-holo', icone: IC_HOLO },
-  'gold-holofoil': { classe: 'v-primeira', icone: IC_PRIMEIRA },
-  'rainbow-holofoil': { classe: 'v-holo', icone: IC_HOLO },
+  'normal': { classe: 'v-comum', icone: 'v-normal' },
+  'holo': { classe: 'v-holo', icone: 'brilho' },
+  'holofoil': { classe: 'v-holo', icone: 'brilho' },
+  'reverse': { classe: 'v-reverse', icone: 'v-reverse' },
+  'reverse-holofoil': { classe: 'v-reverse', icone: 'v-reverse' },
+  '1st-edition': { classe: 'v-primeira', icone: 'v-primeira' },
+  '1st-edition-holofoil': { classe: 'v-primeira', icone: 'v-primeira' },
+  'unlimited': { classe: 'v-comum', icone: 'v-normal' },
+  'unlimited-holofoil': { classe: 'v-holo', icone: 'brilho' },
+  'firstEdition': { classe: 'v-primeira', icone: 'v-primeira' },
+  'pokeball-holofoil': { classe: 'v-pokebola', icone: 'pokebola' },
+  'masterball-holofoil': { classe: 'v-masterball', icone: 'pokebola' },
+  'greatball-holofoil': { classe: 'v-pokebola', icone: 'pokebola' },
+  'ultraball-holofoil': { classe: 'v-pokebola', icone: 'pokebola' },
+  'cosmos-holofoil': { classe: 'v-holo', icone: 'brilho' },
+  'cracked-ice-holofoil': { classe: 'v-holo', icone: 'brilho' },
+  'tinsel-holofoil': { classe: 'v-holo', icone: 'brilho' },
+  'mirror-holofoil': { classe: 'v-reverse', icone: 'v-reverse' },
+  'galaxy-holofoil': { classe: 'v-holo', icone: 'brilho' },
+  'gold-holofoil': { classe: 'v-primeira', icone: 'v-primeira' },
+  'rainbow-holofoil': { classe: 'v-holo', icone: 'brilho' },
 };
 
 function variantEstilo(value) {
-  return VARIANT_ESTILO[exactSourceEnum(value)] || { classe: 'v-outra', icone: icone('diamante') };
+  const estilo = VARIANT_ESTILO[exactSourceEnum(value)] || { classe: 'v-outra', icone: 'diamante' };
+  return { classe: estilo.classe, icone: icone(estilo.icone) };
 }
 
 const STAMP_VALUES = new Set(STAMP_OPTIONS.map(o => o[0]));
