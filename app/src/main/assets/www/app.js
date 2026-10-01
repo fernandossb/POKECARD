@@ -3219,12 +3219,17 @@ function openMoreNavigation() {
     </div>`);
 }
 
+let trocaDeAbaTimer = 0;
 function setTab(tab) {
   const labStart = performance.now();
   const previousTab = ui.tab;
   ui.tab = tab;
   ui.selectedPokemon = null;
   ui.cardLimit = 80;
+  // A tela só "entra" (animação do CSS) quando a aba muda — não a cada +/−.
+  document.body.classList.add('troca-de-aba');
+  clearTimeout(trocaDeAbaTimer);
+  trocaDeAbaTimer = setTimeout(() => document.body.classList.remove('troca-de-aba'), 800);
   renderTabs();
   render();
   window.scrollTo(0, 0);
@@ -3237,6 +3242,8 @@ function render() {
   updateHeader();
   const content = document.getElementById('content');
   if (!content) return;
+  // O CSS dá a cada aba a sua cor de apoio (body[data-aba]).
+  document.body.dataset.aba = ui.tab;
   if (ui.tab === 'dashboard') content.innerHTML = renderDashboard();
   else if (ui.tab === 'sets') content.innerHTML = renderSets();
   else if (ui.tab === 'pokedex') content.innerHTML = renderPokedex();
@@ -3680,6 +3687,8 @@ function renderDashboard() {
         <span><small>POKÉDEX</small><strong>${speciesFound} <em>/ ${speciesTotal} espécies</em></strong><i><span style="width:${speciesProgress}%"></span></i><small>espécies registradas na sua coleção</small></span>
       </button>
 
+      ${coresDaColecaoPanel(pokemonStats)}
+
       <div class="section-heading"><h3 class="section-title">Sua coleção</h3><button onclick="setTab('cards')">Ver todos</button></div>
       <!-- Os números da coleção. O total ficava no cabeçalho antigo, que o
            visual atual não mostra: quem cadastrou mil cartas perdeu a conta. -->
@@ -3907,6 +3916,58 @@ function cartasQueMaisValorizaram() {
 function colecaoCompleta(set) {
   const total = set.officialCardCount || set.totalCardCount || 0;
   return total > 0 && set.ownedUnique >= total;
+}
+
+/* A coleção contada em cores: de que tipo são os Pokémon que você já tem e
+   de que era são as suas cartas. Duas barras empilhadas, na cor de cada tipo
+   (a mesma da Pokédex) e de cada era (a mesma do Explorar), e os cinco
+   maiores de cada uma por extenso. O tipo é o principal da espécie, então a
+   barra soma as espécies registradas, sem contar duas vezes. */
+function coresDaColecaoPanel(pokemonStats) {
+  const porTipo = new Map();
+  for (const item of pokedex) {
+    if (!(pokemonStats.get(item.id)?.copies > 0)) continue;
+    const apelido = apelidoDoTipo(item.types?.[0]);
+    if (apelido) porTipo.set(apelido, (porTipo.get(apelido) || 0) + 1);
+  }
+  const porEra = new Map();
+  for (const set of buildSetStats()) {
+    if (!(set.ownedUnique > 0)) continue;
+    const era = eraDaColecao(set);
+    const atual = porEra.get(era.chave) || { chave: era.chave, rotulo: era.rotulo, n: 0 };
+    atual.n += set.ownedUnique;
+    porEra.set(era.chave, atual);
+  }
+  const tipos = [...porTipo].sort((a, b) => b[1] - a[1]);
+  const eras = [...porEra.values()].sort((a, b) => b.n - a.n);
+  if (!tipos.length && !eras.length) return '';
+  const totalTipos = tipos.reduce((soma, [, n]) => soma + n, 0);
+  const totalEras = eras.reduce((soma, era) => soma + era.n, 0);
+  const corDaEra = era => COR_DA_ERA[era.chave] || COR_DA_ERA.other;
+  const blocoDeTipos = tipos.length ? `
+    <div class="cores-bloco">
+      <div class="cores-titulo"><strong>Tipos dos seus Pokémon</strong><small>${totalTipos} ${totalTipos === 1 ? 'espécie' : 'espécies'}</small></div>
+      <div class="cores-barra" role="img" aria-label="${esc(tipos.slice(0, 5).map(([tipo, n]) => `${rotuloDoTipo(tipo)} ${n}`).join(', '))}">
+        ${tipos.map(([tipo, n]) => `<i class="tp-${tipo}" style="flex-grow:${n}" title="${esc(rotuloDoTipo(tipo))}: ${n}"></i>`).join('')}
+      </div>
+      <ul class="cores-legenda">
+        ${tipos.slice(0, 6).map(([tipo, n]) => `<li>${simboloDoTipo(tipo, 18)}<span>${esc(rotuloDoTipo(tipo))}</span><b>${n}</b></li>`).join('')}
+      </ul>
+    </div>` : '';
+  const blocoDeEras = eras.length ? `
+    <div class="cores-bloco">
+      <div class="cores-titulo"><strong>Eras das suas cartas</strong><small>${totalEras.toLocaleString('pt-BR')} ${totalEras === 1 ? 'carta única' : 'cartas únicas'}</small></div>
+      <div class="cores-barra" role="img" aria-label="${esc(eras.slice(0, 5).map(era => `${era.rotulo} ${era.n}`).join(', '))}">
+        ${eras.map(era => `<i class="era" style="--h:${corDaEra(era)[0]};--s:${corDaEra(era)[1]}%;flex-grow:${era.n}" title="${esc(era.rotulo)}: ${era.n}"></i>`).join('')}
+      </div>
+      <ul class="cores-legenda">
+        ${eras.slice(0, 6).map(era => `<li><i class="era-ponto" style="--h:${corDaEra(era)[0]};--s:${corDaEra(era)[1]}%"></i><span>${esc(era.rotulo)}</span><b>${era.n.toLocaleString('pt-BR')}</b></li>`).join('')}
+      </ul>
+    </div>` : '';
+  return `<section class="cores-colecao">
+    <div class="section-heading"><h3 class="section-title">Sua coleção em cores</h3></div>
+    ${blocoDeTipos}${blocoDeEras}
+  </section>`;
 }
 
 function topColecoesPanel() {

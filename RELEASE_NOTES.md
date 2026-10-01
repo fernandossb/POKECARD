@@ -1,3 +1,11 @@
+# POKECARD Brasil 5.76.0 — Fonte própria, cor por aba, moldura de raridade e "Sua coleção em cores"
+
+- **Sua coleção em cores (Início).** Duas barras empilhadas contam a sua coleção: de que **tipo** são os Pokémon que você já tem (cada tipo na cor e com o símbolo da Pokédex) e de que **era** são as suas cartas (cada era na cor que ela tem no Explorar). Embaixo de cada barra, os seis maiores por extenso.
+- **Cada aba com a sua cor.** A aba aberta acende na cor dela na barra de baixo, o título da tela ganha uma barrinha da mesma cor e o topo da tela um clarão suave. Coleção é verde (o "tenho"), Wishlist é pink (o "quero"), Repetidas é azul (a troca), Produtos prontos é dourado; Explorar é azul, Decks é laranja e a Pokédex é vermelha.
+- **Moldura de raridade nas cartas da Coleção.** O selo virou uma medalha redonda com o símbolo da raridade (estrela dourada para Double/Ultra/Illustration/Shiny, brilho rosa para Secret/Hyper, losango azul para promo) e a arte ganha uma moldura que brilha na cor dela. Carta que você ainda não tem fica com a moldura mais apagada.
+- **Fonte própria.** Os títulos, os números grandes e os nomes das cartas usam a Nunito (fonte livre, embutida no app: funciona sem internet), mais redonda e simpática que a fonte padrão do celular.
+- **Movimento discreto.** A tela "entra" com um leve deslizar quando você troca de aba (e as barras do Início crescem); os botões e cartões respondem ao toque. Nada fica se mexendo em listas, nada recomeça a cada + ou −, e quem pede menos movimento nas configurações do celular não vê animação nenhuma.
+
 # POKECARD Brasil 5.75.0 — Pokédex colorida pelos tipos e ícones próprios
 
 - **Pokédex colorida.** Cada quadradinho veste a cor do tipo do Pokémon: o Bulbasaur fica verde, o Charmander alaranjado, o Squirtle azul. Quando o Pokémon tem dois tipos, o segundo aparece como um clarão no canto de baixo (o Charizard é laranja com um toque de azul). No canto de cada quadradinho ficam os símbolos dos tipos. Os que você ainda não tem continuam transparentes, como antes. Vale nos 6 níveis de claridade — vinho escuro no tema escuro, pastel no claro.
