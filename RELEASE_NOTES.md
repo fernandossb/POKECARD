@@ -1,3 +1,8 @@
+# POKECARD Brasil 5.81.0 — Excluir versões que o app puxou sozinho
+
+- **Excluir uma versão da carta.** O app monta sozinho a lista de versões de cada carta — do banco de preços (Comum, Holo, Reverse, os reverses de Poké Ball...) e do TCGdex (carimbos, foils especiais). Quando a fonte lista uma versão que você sabe que não existe, ou que não quer acompanhar, agora dá para tirá-la: no cadastro da carta, na linha de uma versão com **0 cópias**, o botão "−" vira um **×**. Tocando nele (e confirmando), a versão some da lista, dos botões do formulário "Adicionar", das etiquetas da grade e da conta do **Master Set** — só daquela carta.
+- **Dá para desfazer.** Embaixo das linhas aparece "N versões excluídas · restaurar", que traz todas de volta. Versão com cópia sua não pode ser excluída (tire as cópias antes), e se você cadastrar de novo uma versão excluída, ela volta a aparecer. As exclusões ficam guardadas no aparelho e vão junto no backup.
+
 # POKECARD Brasil 5.80.0 — Fundo mais escuro, cartões mais claros
 
 - **Fundo da tela 50% mais escuro** (de 68% para 34% de luz) e **cartões 20% mais claros** (de 60% para 72%), nas duas cores de cada Pokémon. No Venusaur, o fundo passa a verde-escuro e os cartões a um rosado claro.

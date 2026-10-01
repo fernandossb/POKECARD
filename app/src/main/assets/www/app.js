@@ -858,8 +858,15 @@ function variantesVisiveis(cardId, valores, selecionada, language = '') {
     || doCatalogo.includes(acabamento)
     || !['comum', 'holo', 'reverse'].includes(acabamento);
 
+  // Versões que você excluiu desta carta (state.versoesExcluidas) não viram
+  // botão — menos a que está escolhida agora. No teste de build esta função
+  // roda fora do app, sem `state` nem versoesExcluidasDe: nada é filtrado.
+  const excluidas = typeof versoesExcluidasDe === 'function' && typeof state !== 'undefined' && state
+    ? versoesExcluidasDe(cardId) : null;
+
   const porVersao = new Map();
   for (const value of lista) {
+    if (excluidas?.size && value !== selecionada && excluidas.has(`s|${siglaDaVariante(value)}`)) continue;
     const chave = chaveDaVersao(value, acabamentoPadrao);
     if (!permitido(chave.split('|')[0]) && value !== selecionada) continue;
     const temPreco = Boolean(centralPriceResolveKey(cardId, idioma, value));
@@ -8928,7 +8935,9 @@ function analiseDeVariantes(card) {
      comuns acima — foil especial e carimbo não entram nessa conta: são raros
      demais para exigir a coleção inteira deles. */
   const porExtra = new Map();
+  const excluidas = versoesExcluidasDe(card.id);
   for (const linha of variacoesExtrasDaCarta(card, conhecidas)) {
+    if (excluidas.has(linha.chave)) continue;
     porExtra.set(linha.chave, { chave: linha.chave, linha, tenho: false });
   }
   for (const item of minhasVariantes) {
@@ -9009,7 +9018,8 @@ function linhasDeCadastro(card) {
   // Carta de que o app ainda não sabe versão nenhuma (banco de preços sem
   // ela, ou ainda não carregado): ganha ao menos a Comum, para dar para
   // cadastrar pelo + sem descer até o formulário.
-  if (!siglasConhecidas.size) siglasConhecidas.set(siglaDaVariante('normal'), 'normal');
+  const excluidas = versoesExcluidasDe(card.id);
+  if (!siglasConhecidas.size && !excluidas.has(`s|${siglaDaVariante('normal')}`)) siglasConhecidas.set(siglaDaVariante('normal'), 'normal');
   const linhasBasicas = [...siglasConhecidas.entries()].map(([sigla, valor]) => {
     const donos = planas.filter(v => siglaDaVariante(exactSourceEnum(v.pricingVariant) || finishKind(v.finish)) === sigla);
     return {
@@ -9025,7 +9035,9 @@ function linhasDeCadastro(card) {
     distribution: v.distribution || 'unstamped', edition: v.edition || 'unlimited', artVariant: v.artVariant || 'standard',
   });
   const porExtra = new Map();
-  for (const linha of variacoesExtrasDaCarta(card, conhecidas)) porExtra.set(linha.chave, linha);
+  for (const linha of variacoesExtrasDaCarta(card, conhecidas)) {
+    if (!excluidas.has(linha.chave)) porExtra.set(linha.chave, linha);
+  }
   for (const v of extras) {
     const identidade = identidadeDeExtra(v);
     const chave = chaveDaLinhaExtra(identidade);
@@ -9040,12 +9052,55 @@ function linhasDeCadastro(card) {
     };
   });
 
-  return [...linhasBasicas, ...linhasExtras].sort((a, b) => b.quantidade - a.quantidade);
+  // Versão excluída só volta a aparecer se você tiver cópia dela.
+  return [...linhasBasicas, ...linhasExtras]
+    .filter(linha => linha.quantidade > 0 || !excluidas.has(linha.id))
+    .sort((a, b) => b.quantidade - a.quantidade);
+}
+
+/* ---------- Versões que você exclui da carta ----------
+
+   O app monta a lista de versões de cada carta sozinho — do banco de preços
+   (Comum, Holo, Reverse, os reverses de Poké Ball...) e do TCGdex (carimbos,
+   foils especiais). Às vezes a fonte lista uma versão que você sabe que não
+   existe, ou que não quer acompanhar. Excluída, ela some das linhas do
+   cadastro, dos botões do formulário, das etiquetas da grade e da conta do
+   Master Set — só desta carta, e dá para restaurar. A chave é o id da linha
+   ("s|R" para a Reverse, a chave da variação para carimbos), guardada em
+   state.versoesExcluidas, que vai junto no backup. */
+function versoesExcluidasDe(cardId) {
+  const lista = state?.versoesExcluidas?.[cardId];
+  return new Set(Array.isArray(lista) ? lista : []);
+}
+
+function excluirVersaoDaLinha(cardId, linhaId) {
+  const card = cardMap.get(cardId);
+  const linha = card ? linhasDeCadastro(card).find(item => item.id === linhaId) : null;
+  if (!linha) return;
+  if (linha.quantidade > 0) return notify('Tire as cópias desta versão antes de excluí-la.');
+  if (!window.confirm(`Excluir a versão "${linha.titulo}" desta carta?\n\nEla some da lista, das etiquetas e da conta do Master Set. Dá para restaurar depois.`)) return;
+  if (!state.versoesExcluidas || typeof state.versoesExcluidas !== 'object') state.versoesExcluidas = {};
+  const lista = versoesExcluidasDe(cardId);
+  lista.add(linhaId);
+  state.versoesExcluidas[cardId] = [...lista];
+  saveState();
+  redesenharLinhasDoCadastro(cardId);
+  refreshAfterEntryChange(cardId);
+  notify(`Versão "${linha.titulo}" excluída desta carta.`);
+}
+
+function restaurarVersoesDaCarta(cardId) {
+  if (!state.versoesExcluidas?.[cardId]) return;
+  delete state.versoesExcluidas[cardId];
+  saveState();
+  redesenharLinhasDoCadastro(cardId);
+  refreshAfterEntryChange(cardId);
+  notify('Versões restauradas.');
 }
 
 function linhasDeCadastroHtml(card) {
   const linhas = linhasDeCadastro(card);
-  if (!linhas.length) return '';
+  if (!linhas.length && !versoesExcluidasDe(card.id).size) return '';
   const corpo = linhas.map(linha => {
     const dono = linha.donos.find(v => Number(v.quantity) > 0);
     const preco = dono ? effectiveVariantPrice(card.id, dono) : automaticPriceQuote(card.id, linha.identidade);
@@ -9058,13 +9113,22 @@ function linhasDeCadastroHtml(card) {
       <span class="variant-quick-nome">${esc(linha.titulo)}</span>
       <button type="button" class="variant-quick-preco${preco?.manual ? ' manual' : ''}" onclick="event.stopPropagation();editarPrecoDaLinha('${esc(card.id)}','${linhaIdEsc}',this)" aria-label="Alterar o preço de ${esc(linha.titulo)} (${esc(precoTexto)}${preco?.manual ? ', valor manual' : ''})">${esc(precoTexto)}<span class="variant-quick-lapis" aria-hidden="true">✎</span></button>
       <span class="variant-quick-stepper">
-        <button type="button" class="quantity-step-btn" ${linha.quantidade <= 0 ? 'disabled' : ''} onclick="event.stopPropagation();ajustarQuantidadeDeLinha('${esc(card.id)}','${linhaIdEsc}',-1)" aria-label="Diminuir ${esc(linha.titulo)}">−</button>
+        ${linha.quantidade > 0
+          ? `<button type="button" class="quantity-step-btn" onclick="event.stopPropagation();ajustarQuantidadeDeLinha('${esc(card.id)}','${linhaIdEsc}',-1)" aria-label="Diminuir ${esc(linha.titulo)}">−</button>`
+          /* Com zero cópias o − não teria o que tirar: vira o × que exclui
+             a versão desta carta (pede confirmação; dá para restaurar). */
+          : `<button type="button" class="quantity-step-btn excluir-versao" onclick="event.stopPropagation();excluirVersaoDaLinha('${esc(card.id)}','${linhaIdEsc}')" aria-label="Excluir a versão ${esc(linha.titulo)} desta carta" title="Excluir esta versão">${icone('fechar')}</button>`}
         <b>${linha.quantidade}</b>
         <button type="button" class="quantity-step-btn" onclick="event.stopPropagation();ajustarQuantidadeDeLinha('${esc(card.id)}','${linhaIdEsc}',1)" aria-label="Aumentar ${esc(linha.titulo)}">+</button>
       </span>
     </div>`;
   }).join('');
-  return `<div class="variant-quick-list">${corpo}</div>`;
+  // Versões excluídas que estão escondidas (sem cópia): dá para trazer de volta.
+  const escondidas = [...versoesExcluidasDe(card.id)].filter(id => !linhas.some(linha => linha.id === id)).length;
+  const restaurar = escondidas
+    ? `<button type="button" class="variant-quick-restaurar" onclick="event.stopPropagation();restaurarVersoesDaCarta('${esc(card.id)}')">${escondidas} ${escondidas === 1 ? 'versão excluída' : 'versões excluídas'} · restaurar</button>`
+    : '';
+  return `<div class="variant-quick-list">${corpo}${restaurar}</div>`;
 }
 
 /* ---------- Preço direto na linha ----------

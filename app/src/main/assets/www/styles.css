@@ -6754,6 +6754,16 @@ body[data-aba]:not([data-aba="dashboard"]) .content {
 .explore-contagem, .catalog-maintenance > summary {
   color: var(--vision-muted-fundo) !important; -webkit-text-fill-color: var(--vision-muted-fundo) !important;
 }
+/* ---------- v5.81 — excluir versão da carta ---------- */
+.quantity-step-btn.excluir-versao { opacity: .75; }
+.quantity-step-btn.excluir-versao .ic { width: 15px; height: 15px; stroke-width: 2.2; }
+.quantity-step-btn.excluir-versao:active { opacity: 1; }
+.variant-quick-restaurar {
+  display: block; width: 100%; margin-top: 6px; padding: 8px 10px; border-radius: var(--raio-p);
+  border: 1px dashed var(--vision-line); background: var(--vision-surface-2); text-align: center;
+  color: var(--vision-text) !important; -webkit-text-fill-color: var(--vision-text) !important; font-size: 12px; font-weight: 700;
+}
+
 .section-heading > button, .vision-screen-head > button, .back-btn {
   color: var(--vision-primary-fundo) !important; -webkit-text-fill-color: var(--vision-primary-fundo) !important;
 }
