@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.78.0 — Master Set contado por versão
+
+- **O Master agora soma as versões da coleção, não as cartas.** O total é a soma de todas as versões encontradas de cada carta da coleção — as que a fonte conhece (normal, holo, reverse, os reverses especiais de Poké Ball e Master Ball...) mais as que **você** cadastrou. Na 151, por exemplo, são 567 versões para 207 cartas; com uma cópia de cada carta, o painel mostra 207/567.
+- **Versão nova aumenta o total na hora.** Se você cadastra uma versão que o app ainda não conhecia (pelo "＋ Outra versão", um carimbo, uma 1ª edição...), ela entra no total e no que você tem: na 151, cadastrar uma 1ª edição no Bulbasaur levou o Master de 207/567 para 208/568. Carimbo, edição e foil especial que você **não** tem não são cobrados — a fonte só os conhece de algumas cartas, e eles são coisa de Grand Master.
+- **Master confirmado só com as versões em mãos.** As versões vêm dos lotes de preço; ao abrir uma coleção, o app baixa os lotes que faltam e o painel mostra "carregando as versões de N cartas…" até chegarem. Carta que não está no banco de preços conta a Comum e o que você cadastrar — o painel avisa quantas são.
+
 # POKECARD Brasil 5.77.0 — Coleção completa em três níveis, faixa de tipos e carta de destaque
 
 - **Correção importante: "coleção completa" agora é a Coleção Básica de verdade.** Antes o app comparava TODAS as cartas diferentes que você tem na coleção com a contagem oficial — então 20 secretas (166/165...) cadastradas contavam como 20 comuns, e a coleção "completava" faltando cartas da numeração oficial. Agora a Básica conta só as cartas da numeração impressa (1/165 até 165/165), de qualquer raridade, sem exigir reverse ou holo. As que passam da numeração (secretas, galerias) viram "Extras". Ex.: com as 56 extras de Forças Temporais e só 106 das 162 da numeração, o app dizia completa; agora mostra 106/162.

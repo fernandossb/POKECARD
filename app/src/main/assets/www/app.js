@@ -3920,8 +3920,9 @@ function cartasQueMaisValorizaram() {
      1/165 até 165/165 —, de qualquer raridade, sem exigir reverse ou holo;
    · Master Set          a coleção INTEIRA — a numeração oficial, as secretas
      e galerias que passam dela — com TODAS as versões de cada carta
-     (normal, holo, reverse...). Só dá para conferir quando o app conhece as
-     versões da carta (o preço da coleção já foi baixado);
+     (normal, holo, reverse...). A régua é a soma das versões conhecidas de
+     cada carta mais as que você cadastrou (versoesDaColecao); só é
+     confirmado depois que os lotes de preço da coleção foram baixados;
    · Grand Master        o Master da coleção mais o Master das coleções que
      nascem dela (Galeria do Treinador, Galeria de Galar, Cofre Brilhante...).
      Promos de pré-lançamento e de loja variam de colecionador para
@@ -3930,17 +3931,64 @@ function colecaoCompleta(set) {
   return (set.baseTotal || 0) > 0 && (set.ownedBase || 0) >= set.baseTotal;
 }
 
+/* As versões da coleção inteira, somadas carta por carta — é a régua do
+   Master Set. Cada carta entra com as mesmas linhas do cadastro dela
+   (linhasDeCadastro): as versões que a fonte conhece MAIS as que você mesmo
+   cadastrou (uma reverse que a fonte não listava, "Outra versão", um carimbo,
+   uma 1ª edição...). Então, quando você cadastra uma versão que o app ainda
+   não conhecia, o total do Master cresce junto, na hora. Carimbo, edição e
+   foil especial que você NÃO tem não são cobrados: a fonte só os conhece de
+   algumas cartas, e eles são coisa de Grand Master.
+   · pendentes  cartas cujo lote de preços (de onde vêm as versões) ainda
+                não foi baixado — enquanto houver, o Master não é confirmado;
+   · semFonte   cartas que o banco de preços não tem: contam a Comum e o que
+                você cadastrar. */
 const masterCache = { chave: '', mapa: new Map() };
-function colecaoMaster(set) {
-  const total = set.masterTotal || 0;
-  if (!(total > 0) || (set.ownedUnique || 0) < total || !colecaoCompleta(set)) return false;
+function versoesDaColecao(set) {
   const chave = `${stateRevision}|${centralPriceLoadedShards.size}`;
   if (masterCache.chave !== chave) { masterCache.chave = chave; masterCache.mapa = new Map(); }
   if (masterCache.mapa.has(set.id)) return masterCache.mapa.get(set.id);
-  const lista = cardsBySet.get(set.id) || [];
-  const ok = lista.length >= total && lista.every(card => quantityFor(card.id) > 0 && analiseDeVariantes(card).completa);
-  masterCache.mapa.set(set.id, ok);
-  return ok;
+  const resultado = { total: 0, tenho: 0, pendentes: [], semFonte: 0 };
+  for (const card of cardsBySet.get(set.id) || []) {
+    const lote = Number(centralPriceIndex?.cards?.[card.id]);
+    if (Number.isInteger(lote) && lote >= 0) {
+      if (!centralPriceLoadedShards.has(lote)) resultado.pendentes.push(card.id);
+    } else {
+      resultado.semFonte++;
+    }
+    for (const linha of linhasDeCadastro(card)) {
+      const tem = linha.quantidade > 0;
+      if (linha.extra && !tem) continue;
+      resultado.total++;
+      if (tem) resultado.tenho++;
+    }
+  }
+  masterCache.mapa.set(set.id, resultado);
+  return resultado;
+}
+
+function colecaoMaster(set) {
+  const cartas = set.masterTotal || 0;
+  // Atalhos baratos antes de olhar versão por versão.
+  if (!(cartas > 0) || (set.ownedUnique || 0) < cartas || !colecaoCompleta(set)) return false;
+  const versoes = versoesDaColecao(set);
+  return !versoes.pendentes.length && versoes.total > 0 && versoes.tenho >= versoes.total;
+}
+
+/* Baixa os lotes de preço que faltam para conhecer as versões da coleção
+   aberta e redesenha o painel quando chegam. Uma vez por coleção. */
+const lotesPedidosPorColecao = new Set();
+function buscarVersoesDaColecao(setId, cardIds) {
+  if (!cardIds.length || lotesPedidosPorColecao.has(setId) || typeof ensureCentralPriceShard !== 'function') return;
+  lotesPedidosPorColecao.add(setId);
+  const porLote = new Map();
+  for (const cardId of cardIds) {
+    const lote = Number(centralPriceIndex?.cards?.[cardId]);
+    if (!porLote.has(lote)) porLote.set(lote, cardId);
+  }
+  Promise.allSettled([...porLote.values()].map(cardId => ensureCentralPriceShard(cardId))).then(() => {
+    if (ui.tab === 'cards' && ui.cardSet === setId) renderKeepingScroll();
+  });
 }
 
 // Coleções que nascem de outra: galerias, cofres e afins (a mesma tabela que
@@ -5753,13 +5801,18 @@ function painelDaColecao() {
   const set = porId.get(ui.cardSet);
   if (!set || !(set.baseTotal > 0)) return '';
   const nivel = nivelDaColecao(set, porId);
-  const lista = cardsBySet.get(set.id) || [];
-  const comTodasAsVersoes = lista.filter(card => quantityFor(card.id) > 0 && analiseDeVariantes(card).completa).length;
+  // O Master conta VERSÕES: todas as conhecidas de cada carta, mais as que
+  // você cadastrou — e cresce quando você cadastra uma versão nova.
+  const versoes = versoesDaColecao(set);
+  buscarVersoesDaColecao(set.id, versoes.pendentes);
   const filhos = subcolecoesDe(set.id).map(id => porId.get(id)).filter(Boolean);
+  const notaDoMaster = versoes.pendentes.length
+    ? `carregando as versões de ${versoes.pendentes.length} ${versoes.pendentes.length === 1 ? 'carta' : 'cartas'}…`
+    : 'todas as versões de todas as cartas';
   const linhas = [
     { rotulo: 'Básica', nota: 'numeração oficial', n: set.ownedBase, total: set.baseTotal, ok: colecaoCompleta(set) },
     set.extraTotal ? { rotulo: 'Extras', nota: 'secretas e galerias', n: set.ownedExtra, total: set.extraTotal, ok: set.ownedExtra >= set.extraTotal } : null,
-    { rotulo: 'Master', nota: 'todas as cartas, em todas as versões', n: comTodasAsVersoes, total: set.masterTotal, ok: colecaoMaster(set) },
+    { rotulo: 'Master', nota: notaDoMaster, n: versoes.tenho, total: versoes.total, ok: colecaoMaster(set) },
     filhos.length ? { rotulo: 'Grand Master', nota: `com ${filhos.map(filho => filho.name).join(' e ')}`, n: [set, ...filhos].filter(colecaoMaster).length, total: 1 + filhos.length, ok: nivel === 'grand' } : null,
   ].filter(Boolean);
   return `<section class="nivel-colecao">
@@ -5768,7 +5821,7 @@ function painelDaColecao() {
       const pct = linha.total ? Math.min(100, Math.round((linha.n / linha.total) * 100)) : 0;
       return `<li class="${linha.ok ? 'ok' : ''}"><span class="nivel-nome"><b>${linha.rotulo}</b><small>${esc(linha.nota)}</small></span><i class="nivel-barra"><span style="width:${pct}%"></span></i><em>${linha.n}/${linha.total}</em></li>`;
     }).join('')}</ul>
-    <small class="nivel-aviso">As versões de cada carta vêm do preço da coleção. Promos de pré-lançamento e de loja variam de colecionador para colecionador, então não entram na conta.</small>
+    <small class="nivel-aviso">O Master soma as versões que a fonte conhece de cada carta (normal, holo, reverse...) e as que você cadastrou — cadastrar uma versão nova aumenta o total.${versoes.semFonte ? ` ${versoes.semFonte} ${versoes.semFonte === 1 ? 'carta não está' : 'cartas não estão'} no banco de preços: ${versoes.semFonte === 1 ? 'conta' : 'contam'} a Comum e o que você cadastrar.` : ''} Promos de pré-lançamento e de loja variam de colecionador para colecionador, então não entram na conta.</small>
   </section>`;
 }
 
