@@ -43,27 +43,6 @@
     'Normal':    ['#c8bda0', '#4f4a3b']
   };
 
-  var TYPES = {
-    'Fantasma':  { bg:'#1c1230', s1:'#2a1c45', s2:'#332352', s3:'#3d2b60', line:'#553a7a', mut:'#c9bcd9', pri:'#c78aff', soft:'#3b2861' },
-    'Elétrico':  { bg:'#241f0a', s1:'#352d10', s2:'#403716', s3:'#4b421c', line:'#665a27', mut:'#dbd0a6', pri:'#f7d040', soft:'#4a3f18' },
-    'Fogo':      { bg:'#2a150c', s1:'#3b2013', s2:'#472819', s3:'#54311f', line:'#71442c', mut:'#dcbcab', pri:'#ff8f4d', soft:'#50291a' },
-    'Água':      { bg:'#0d1e33', s1:'#152c49', s2:'#1a3557', s3:'#203f66', line:'#2d5688', mut:'#b4c8de', pri:'#5aabff', soft:'#1d3d63' },
-    'Planta':    { bg:'#10251a', s1:'#193526', s2:'#1e402e', s3:'#244b37', line:'#316648', mut:'#b6d0bd', pri:'#67d47a', soft:'#204431' },
-    'Gelo':      { bg:'#0d2429', s1:'#153439', s2:'#1a3f46', s3:'#204a53', line:'#2c6570', mut:'#b4d2d8', pri:'#78dfea', soft:'#1d4550' },
-    'Lutador':   { bg:'#2a1512', s1:'#3b201b', s2:'#472822', s3:'#543129', line:'#714438', mut:'#dbb8ae', pri:'#ee7a5b', soft:'#4f2a22' },
-    'Venenoso':  { bg:'#211230', s1:'#301c45', s2:'#3a2352', s3:'#452b60', line:'#5f3a7a', mut:'#d0bcd9', pri:'#d072e8', soft:'#432861' },
-    'Terrestre': { bg:'#241c0b', s1:'#352a12', s2:'#403318', s3:'#4b3d1e', line:'#66532a', mut:'#d7c9a6', pri:'#e8b95c', soft:'#4a3c1a' },
-    'Voador':    { bg:'#141a2b', s1:'#1e263c', s2:'#242e48', s3:'#2b3755', line:'#3c4b73', mut:'#bfc7dd', pri:'#a3bcf7', soft:'#293351' },
-    'Psíquico':  { bg:'#2b1119', s1:'#3d1b26', s2:'#4a222e', s3:'#572a38', line:'#743a4d', mut:'#e0b3c0', pri:'#ff7a9c', soft:'#522433' },
-    'Inseto':    { bg:'#1c220c', s1:'#2a3213', s2:'#333c19', s3:'#3d471f', line:'#53602b', mut:'#c9d3aa', pri:'#b6d84c', soft:'#3b451c' },
-    'Pedra':     { bg:'#231c0d', s1:'#332a15', s2:'#3e341b', s3:'#493e21', line:'#63552e', mut:'#d5c9a8', pri:'#d4b673', soft:'#473c1e' },
-    'Sombrio':   { bg:'#1a1613', s1:'#28221d', s2:'#312a24', s3:'#3a322b', line:'#50463c', mut:'#cec2b6', pri:'#b39c86', soft:'#382f28' },
-    'Dragão':    { bg:'#161230', s1:'#221c45', s2:'#2a2352', s3:'#322b60', line:'#463a7a', mut:'#c1b8dd', pri:'#a48eff', soft:'#302861' },
-    'Metálico':  { bg:'#141b21', s1:'#1e2731', s2:'#25303b', s3:'#2c3946', line:'#3e4e5e', mut:'#c3cdd6', pri:'#b0c8de', soft:'#2a3644' },
-    'Fada':      { bg:'#2b1322', s1:'#3d1d31', s2:'#4a243c', s3:'#572c47', line:'#743d60', mut:'#e2b6d0', pri:'#ff96d4', soft:'#522742' },
-    'Normal':    { bg:'#1b1913', s1:'#29251c', s2:'#322e23', s3:'#3b362a', line:'#514b3b', mut:'#cfc9b8', pri:'#d3c8a8', soft:'#383326' }
-  };
-  var FALLBACK = TYPES['Fantasma'];
 
   function pokedex() { return Array.isArray(window.__POKEDEX__) ? window.__POKEDEX__ : []; }
 
@@ -75,40 +54,45 @@
 
   function tipoPrincipal(pokemon) {
     var types = (pokemon && pokemon.types) || [];
-    for (var i = 0; i < types.length; i++) if (TYPES[types[i]]) return types[i];
+    for (var i = 0; i < types.length; i++) if (PLASTICO[types[i]]) return types[i];
     return 'Fantasma';
-  }
-
-  function paletteFor(pokemon) {
-    return TYPES[tipoPrincipal(pokemon)] || FALLBACK;
   }
 
   function spritePath(id) { return 'sprites/' + Number(id) + '.png'; }
 
-  /* ---- Nível de claridade escolhido pelo usuário ----
-     A cor de cada tipo continua vindo da tabela acima; o que muda aqui é o
-     quanto o fundo e os cartões são claros. Os tons são recalculados na hora
-     a partir do matiz da cor de destaque, então qualquer nível funciona para
-     os 18 tipos sem precisar de tabela nova. */
-  var CLARIDADE_KEY = 'fichario-pokemon-claridade-v1';
-  /* Os níveis pulam a faixa média de luminosidade de propósito. Fundo com
-     claridade entre 35% e 60% não dá contraste bom nem com letra clara nem
-     com escura — testando, o texto caía para 3,9:1 ali. Pulando essa faixa,
-     o pior caso das 18 cores × 6 níveis fica em 5,1:1. */
-  // O passo (delta de luminosidade entre fundo e cada camada de cartão) subiu
-  // em relação ao original: com 5-6 pontos só, cartão e fundo ficavam quase
-  // iguais e a tela virava uma mancha só de cor. tomLegivel() recalcula o
-  // contraste do texto sozinho a partir do tom final, então aumentar o passo
-  // não quebra legibilidade — só separa mais fundo de cartão.
+  /* ---- Claridade: uma só, a "Suave" ----
+     Até a 5.78 havia uma barra com seis níveis (do bem escuro ao bem claro).
+     Desde a 5.79 todos os temas usam o Suave: fundo a 68% de luz e os cartões
+     8 pontos mais escuros a cada camada. Os outros níveis saíram da tabela; a
+     preferência antiga, guardada no aparelho, é apagada. */
   var NIVEIS = [
-    { nome: 'Bem escuro', fundo: 5,  passo: 8,  sat: 46 },
-    { nome: 'Escuro',     fundo: 10, passo: 10, sat: 42 },
-    { nome: 'Médio',      fundo: 16, passo: 10, sat: 38 },
-    { nome: 'Suave',      fundo: 68, passo: -8, sat: 34 },
-    { nome: 'Claro',      fundo: 84, passo: -6, sat: 30 },
-    { nome: 'Bem claro',  fundo: 96, passo: -5, sat: 25 }
+    { nome: 'Suave', fundo: 68, passo: -8, sat: 34 }
   ];
-  var NIVEL_PADRAO = 2; // parecido com o que o app já mostrava
+  var NIVEL_PADRAO = 1;
+  try { localStorage.removeItem('fichario-pokemon-claridade-v1'); } catch (e) {}
+
+  /* ---- As duas cores do Pokémon ----
+     Medidas no sprite dele (data/cores-pokemon.js, gerado por
+     scripts/gerar-cores-pokemon.cjs): a cor 1, a que mais aparece no corpo,
+     vai no FUNDO da tela; a cor 2 vai nos CARTÕES e BOTÕES — o Venusaur fica
+     com fundo verde e botões vermelhos, da flor. Pokémon de uma cor só usa a
+     cor do tipo como segunda (ou um vizinho no círculo de cores, se o tipo
+     tiver a mesma cor do corpo). Sem a medida, as duas saem do tipo. */
+  function coresDoPokemon(pokemon) {
+    var medida = pokemon && (window.__CORES_POKEMON__ || {})[pokemon.id];
+    var tipos = (pokemon && pokemon.types) || [];
+    var doTipo = function (tipo) {
+      var c = PLASTICO[tipo] ? hexParaHsl(PLASTICO[tipo][0]) : null;
+      return c ? { h: Math.round(c.h), s: Math.round(c.s) } : null;
+    };
+    var tipo1 = doTipo(tipoPrincipal(pokemon)) || { h: 272, s: 70 };
+    if (!medida) return { fundo: tipo1, destaque: tipo1 };
+    var fundo = { h: medida[0], s: medida[1] };
+    if (medida[3] >= 0) return { fundo: fundo, destaque: { h: medida[3], s: medida[4] } };
+    var longe = function (c) { var d = Math.abs(c.h - fundo.h) % 360; return Math.min(d, 360 - d) >= 40; };
+    var candidatos = tipos.map(doTipo).filter(Boolean).filter(longe);
+    return { fundo: fundo, destaque: candidatos[0] || { h: (fundo.h + 40) % 360, s: Math.max(fundo.s, 40) } };
+  }
 
   function hexParaHsl(hex) {
     var r = parseInt(hex.substr(1, 2), 16) / 255;
@@ -162,13 +146,7 @@
     return tomLegivel(hh, 82, p.s1, 3, !p.claro, p.claro ? 40 : 64);
   }
 
-  function nivelSalvo() {
-    try {
-      var n = Number(localStorage.getItem(CLARIDADE_KEY));
-      if (n >= 1 && n <= NIVEIS.length) return n;
-    } catch (e) {}
-    return NIVEL_PADRAO;
-  }
+  function nivelSalvo() { return NIVEL_PADRAO; }
 
   function hexParaRgba(hex, alfa) {
     var r = parseInt(hex.substr(1, 2), 16);
@@ -209,23 +187,27 @@
     return claroSobreEscuro ? '#ffffff' : '#000000';
   }
 
-  /** Monta os tons do tema a partir da cor do tipo e do nível escolhido. */
-  function paletaComClaridade(base, nivelIndice) {
+  /** Monta os tons do tema: o fundo na cor 1 do Pokémon, os cartões (e o
+      destaque dos botões) na cor 2, sempre na claridade Suave. */
+  function paletaDuasCores(cores, nivelIndice) {
     var nivel = NIVEIS[nivelIndice - 1] || NIVEIS[NIVEL_PADRAO - 1];
-    var h = hexParaHsl(base.pri).h;
-    var s = nivel.sat;
     var f = nivel.fundo;
     var p = nivel.passo;
+    // A saturação acompanha a do corpo (um Pokémon cinza fica com fundo
+    // cinza), com teto para a tela não cansar.
+    var satDe = function (c) { return Math.max(8, Math.min(42, (c.s || 0) * 0.5)); };
+    var hf = cores.fundo.h, sf = satDe(cores.fundo);
+    var h = cores.destaque.h, s = satDe(cores.destaque);
 
-    var fundo = hslParaHex(h, s, f);
+    var fundo = hslParaHex(hf, sf, f);
     var s1 = hslParaHex(h, s, f + p);
     var s2 = hslParaHex(h, s, f + p * 1.7);
     var s3 = hslParaHex(h, s, f + p * 2.4);
     var linha = hslParaHex(h, s + 6, f + p * 3.4);
 
-    // Quem decide se a letra é clara ou escura é o próprio cartão, não o
-    // número do nível — assim os tons do meio também ficam legíveis.
-    var claro = luminanciaHex(s1) > 0.18;
+    // O Suave é um tema claro: letra escura sempre. (Com a régua antiga, um
+    // azul puro a 60% de luz ficava no limite e podia virar letra branca.)
+    var claro = true;
     // Tons desejados: texto quase branco (ou quase preto), secundário no
     // meio do caminho e destaque vivo na cor do tema.
     //
@@ -385,7 +367,8 @@
 
   function apply(id) {
     var pokemon = findPokemon(id);
-    var p = paletaComClaridade(paletteFor(pokemon), nivelSalvo());
+    var cores = coresDoPokemon(pokemon);
+    var p = paletaDuasCores(cores, nivelSalvo());
     var root = document.documentElement;
 
     root.style.setProperty('--vision-bg', p.bg);
@@ -518,8 +501,11 @@
       ? 'linear-gradient(180deg, rgba(255,255,255,.26), rgba(0,0,0,.08))'
       : 'linear-gradient(180deg, rgba(255,255,255,.16), rgba(0,0,0,.14))');
 
-    // Plástico da Pokédex: cabeçalho e barra de abas.
-    var plastico = PLASTICO[tipoPrincipal(pokemon)] || PLASTICO['Fantasma'];
+    // Plástico da Pokédex (cabeçalho e barra de abas): a cor 2, a dos botões.
+    var plastico = [
+      hslParaHex(cores.destaque.h, Math.max(50, Math.min(80, cores.destaque.s)), 52),
+      hslParaHex(cores.destaque.h, Math.max(50, Math.min(80, cores.destaque.s)), 26)
+    ];
     root.style.setProperty('--dex-body', plastico[0]);
     root.style.setProperty('--dex-body-dark', plastico[1]);
     root.style.setProperty('--dex-body-text', tintaSobre(plastico[0]));
@@ -531,6 +517,7 @@
     try { localStorage.setItem(STORAGE_KEY, String(id)); } catch (e) {}
     window.__TEMA_ATUAL__ = {
       id: id,
+      cores: [p.bg, p.s1],
       nome: pokemon ? pokemon.name : 'Gengar',
       tipo: (pokemon && pokemon.types && pokemon.types[0]) || 'Fantasma'
     };
@@ -575,44 +562,23 @@
       return '<button type="button" class="tema-item' + (Number(p.id) === Number(atual) ? ' ativo' : '') + '"'
         + ' onclick="escolherTemaPokemon(' + p.id + ')">'
         + '<img src="' + spritePath(p.id) + '" alt="" loading="lazy">'
-        + '<span>' + p.name + '</span></button>';
+        + '<span>' + p.name + '</span>' + amostras(coresDaAmostra(p)) + '</button>';
     }).join('') + '</div>';
   }
 
+  function amostras(cores) {
+    return '<span class="tema-cores" aria-hidden="true"><i style="background:' + cores[0] + '"></i><i style="background:' + cores[1] + '"></i></span>';
+  }
+
+  // As duas cores, já na claridade do tema, para a amostra da lista.
+  function coresDaAmostra(pokemon) {
+    var p = paletaDuasCores(coresDoPokemon(pokemon), nivelSalvo());
+    return [p.bg, p.s1];
+  }
+
   function cabecalho() {
-    return '<div class="tema-atual">Tema agora: <strong>' + nomeAtual() + '</strong> · tipo ' + tipoAtual() + '</div>';
-  }
-
-  function barraClaridade() {
-    var n = nivelSalvo();
-    return '<div class="claridade-caixa">'
-      + '<div class="claridade-topo"><span>Claridade do app</span><b id="claridadeNome">' + NIVEIS[n - 1].nome + '</b></div>'
-      + '<div class="claridade-linha">'
-      + '<span class="claridade-icone">🌑</span>'
-      + '<input type="range" id="claridadeBarra" min="1" max="' + NIVEIS.length + '" step="1" value="' + n + '"'
-      + ' oninput="ajustarClaridade(this.value)">'
-      + '<span class="claridade-icone">☀️</span>'
-      + '</div>'
-      + '<small>Vale para qualquer Pokémon escolhido. A mudança aparece na hora.</small>'
-      + '</div>';
-  }
-
-  /* A animação saiu: 180 GIFs na tela ao mesmo tempo engasgavam a rolagem por
-     mais que se limitasse o desenho. Sobraram duas artes paradas — uma leve e
-     uma bonita —, e a escolha agora é entre rolagem lisa e definição. */
-  function barraArtePokedex() {
-    var modo = (typeof window.arteDaPokedex === 'function') ? window.arteDaPokedex() : 'leve';
-    return '<div class="claridade-caixa">'
-      + '<div class="claridade-topo"><span>Arte da Pokédex</span></div>'
-      + '<div class="arte-opcoes">'
-      + '<button type="button" class="arte-opcao' + (modo === 'leve' ? ' ativo' : '') + '"'
-      + ' onclick="trocarArtePokedex(\'leve\')"><strong>Leve</strong><small>Sprite do Switch, 1 KB cada. Rolagem lisa até no aparelho fraco.</small></button>'
-      + '<button type="button" class="arte-opcao' + (modo === 'nitida' ? ' ativo' : '') + '"'
-      + ' onclick="trocarArtePokedex(\'nitida\')"><strong>Nítida</strong><small>Arte 3D do HOME, 512px. Bem mais bonita e 98 KB cada.</small></button>'
-      + '</div>'
-      + '<button type="button" class="arte-limpar" onclick="limparArtes()">Baixar as artes de novo</button>'
-      + '<small>As artes ficam guardadas no aparelho e não são baixadas de novo. Use isto se gerar sprites novos ou quiser liberar espaço.</small>'
-      + '</div>';
+    var cores = window.__TEMA_ATUAL__ && window.__TEMA_ATUAL__.cores;
+    return '<div class="tema-atual">' + (cores ? amostras(cores) : '') + 'Tema agora: <strong>' + nomeAtual() + '</strong></div>';
   }
 
   window.limparArtes = function () {
@@ -625,22 +591,14 @@
     });
   };
 
-  window.trocarArtePokedex = function (modo) {
-    if (typeof window.definirArtePokedex === 'function') window.definirArtePokedex(modo);
-    var caixa = document.querySelector('.arte-opcoes');
-    if (caixa) caixa.parentElement.outerHTML = barraArtePokedex();
-    if (typeof notify === 'function') notify(modo === 'nitida' ? 'Arte nítida do HOME.' : 'Sprite leve do Switch.');
-  };
-
   function corpo() {
     return '<button class="modal-close" onclick="closeModal()" aria-label="Fechar">×</button>'
       + '<h2>Tema do aplicativo</h2>'
-      + '<p class="screen-subtitle">Escolha seu Pokémon favorito. O app assume as cores do tipo dele e mostra a arte no topo e ao fundo.</p>'
+      + '<p class="screen-subtitle">Escolha seu Pokémon favorito. O app veste as duas cores do corpo dele — a primeira no fundo da tela, a segunda nos cartões e botões — e mostra a arte dele no topo e ao fundo.</p>'
       + cabecalho()
-      + barraClaridade()
-      + barraArtePokedex()
       + '<input class="field" placeholder="Buscar Pokémon por nome ou número" oninput="filtrarTemaPokemon(this.value)">'
-      + grade();
+      + grade()
+      + '<button type="button" class="arte-limpar" onclick="limparArtes()">Baixar as artes 3D de novo</button>';
   }
 
   function redesenhar() {
@@ -653,13 +611,6 @@
   window.abrirTemaPokemon = function () {
     busca = '';
     if (typeof showModal === 'function') showModal(corpo());
-  };
-  window.ajustarClaridade = function (valor) {
-    var n = Math.max(1, Math.min(NIVEIS.length, Number(valor) || NIVEL_PADRAO));
-    try { localStorage.setItem(CLARIDADE_KEY, String(n)); } catch (e) {}
-    var rotulo = document.getElementById('claridadeNome');
-    if (rotulo) rotulo.textContent = NIVEIS[n - 1].nome;
-    apply(savedId());
   };
   window.filtrarTemaPokemon = function (valor) { busca = valor; redesenhar(); };
   window.escolherTemaPokemon = function (id) {

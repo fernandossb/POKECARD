@@ -1695,14 +1695,6 @@ html.is-scrolling .header-gengar {
 }
 
 
-/* v2.2.1 — Modo Laboratório (diagnóstico local) */
-.lab-open-btn { border-color: #8f6fe8 !important; background: #efe9ff !important; color: #35155f !important; }
-.lab-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; margin:14px 0; }
-.lab-metric { min-width:0; border:1px solid rgba(96,56,151,.22); border-radius: var(--raio-m); padding:11px; background:linear-gradient(145deg,#fff,#f3ecff); }
-.lab-metric span { display:block; color:#665477; font-size: var(--fs-p); font-weight: 700; text-transform:uppercase; letter-spacing:.04em; }
-.lab-metric strong { display:block; margin-top:4px; color:#2b0d4d; font-size: var(--fs-m); overflow-wrap:anywhere; }
-.lab-report-text { max-height:60vh; overflow:auto; white-space:pre-wrap; font-size: var(--fs-p); color:#2b0d4d; background:#f7f2ff; padding:12px; border-radius: var(--raio-p); }
-@media(max-width:360px){.lab-grid{grid-template-columns:1fr}}
 
 /* v2.4.1 — ano sempre legível nos cartões compactos de coleção */
 .timeline-set-card .set-name {
@@ -4359,15 +4351,6 @@ h3 {
    borradas. E o que faz a arte de 60px parecer proposital e nao defeito. */
 img.arte-pixelada { image-rendering: pixelated; image-rendering: crisp-edges; }
 
-.arte-opcoes { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; margin-top: 8px; }
-.arte-opcao {
-  display: grid; gap: 3px; padding: 12px; text-align: left; cursor: pointer;
-  min-height: var(--toque-min); border-radius: var(--raio-md);
-  border: 1px solid var(--vision-line); background: var(--vision-surface-2); color: var(--vision-text);
-}
-.arte-opcao.ativo { border-color: var(--vision-primary); background: var(--vision-primary-soft); }
-.arte-opcao strong { font-size: var(--fs-sm); font-weight: var(--peso-forte); }
-.arte-opcao small { font-size: var(--fs-xs); color: var(--vision-muted); line-height: 1.35; }
 .arte-limpar {
   margin-top: 8px; width: 100%; min-height: var(--toque-min);
   padding: 10px 14px; border-radius: var(--raio-md); cursor: pointer;
@@ -6740,3 +6723,19 @@ body[data-aba]:not([data-aba="dashboard"]) .content {
 .destaque-info strong { font-size: var(--fs-g); line-height: 1.15; color: var(--vision-text) !important; }
 .destaque-info > span { font-size: var(--fs-p); color: var(--vision-muted) !important; }
 .destaque-info b { margin-top: 3px; font-size: var(--fs-xg); font-family: var(--fonte-titulo); font-weight: 800; color: var(--cor-completa-texto) !important; }
+
+/* ============================================================
+   v5.79 — Tema de duas cores (fundo = cor 1 do Pokémon, cartões e
+   botões = cor 2), claridade única "Suave", Pokédex só em 3D
+   ============================================================ */
+/* As duas cores, como amostra, na escolha do tema. */
+.tema-cores { display: inline-flex; gap: 3px; vertical-align: middle; }
+.tema-cores i {
+  display: block; width: 12px; height: 12px; border-radius: 50%;
+  box-shadow: 0 0 0 1.5px rgba(255,255,255,.85), 0 1px 3px rgba(0,0,0,.35);
+}
+.tema-atual .tema-cores { margin-right: 8px; }
+.tema-atual .tema-cores i { width: 16px; height: 16px; }
+.tema-item { display: grid; justify-items: center; gap: 3px; }
+.tema-item .tema-cores { margin-top: 1px; }
+.tema-item img { image-rendering: auto; }

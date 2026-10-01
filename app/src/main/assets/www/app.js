@@ -119,7 +119,6 @@ function limparCachesDeMemoria(nivel) {
     ligaSetCache = {};
     scannerVariantAvailability.clear();
   }
-  labRecord('memoria_liberada', 0, { nivel: Number(nivel) || 0, critico });
 }
 window.limparCachesDeMemoria = limparCachesDeMemoria;
 
@@ -143,217 +142,10 @@ let regravarEstadoAoAbrir = false;
 let stateRevision = 0;
 let collectionSummaryCache = { revision: -1, value: null };
 let pokemonStatsCache = { revision: -1, value: null };
+// O Modo Laboratório saiu (5.79). O último relatório que ele guardou não tem
+// mais quem leia: libera o espaço.
+try { localStorage.removeItem('fichario-pokemon-lab-report-v1'); } catch (_) {}
 
-
-// Modo Laboratório v2.2.1 — diagnóstico local de performance.
-// Não envia dados para servidores e mantém somente as últimas amostras no aparelho.
-const LAB_STORAGE_KEY = 'fichario-pokemon-lab-report-v1';
-const lab = {
-  enabled: false,
-  startedAt: Date.now(),
-  sessionId: `lab-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-  events: [],
-  counters: {},
-  fps: 0,
-  fpsMin: 60,
-  longTasks: 0,
-  lastFrameAt: performance.now(),
-  frames: 0,
-  lastFpsAt: performance.now(),
-};
-
-function labNowIso() { return new Date().toISOString(); }
-function labRound(value) { return Math.round(Number(value || 0) * 10) / 10; }
-function labCount(name, amount = 1) { lab.counters[name] = (lab.counters[name] || 0) + amount; }
-function labRecord(type, durationMs = null, detail = {}) {
-  if (!lab.enabled && type !== 'startup') return;
-  const event = { at: labNowIso(), type, ...detail };
-  if (durationMs != null) event.durationMs = labRound(durationMs);
-  lab.events.push(event);
-  if (lab.events.length > 500) lab.events.splice(0, lab.events.length - 500);
-  labCount(type);
-}
-function labMeasure(type, fn, detail = {}) {
-  const start = performance.now();
-  try { return fn(); }
-  finally { labRecord(type, performance.now() - start, detail); }
-}
-async function labMeasureAsync(type, fn, detail = {}) {
-  const start = performance.now();
-  try { return await fn(); }
-  finally { labRecord(type, performance.now() - start, detail); }
-}
-function labMemorySnapshot() {
-  const memory = performance.memory;
-  return memory ? {
-    usedMb: labRound(memory.usedJSHeapSize / 1048576),
-    totalMb: labRound(memory.totalJSHeapSize / 1048576),
-    limitMb: labRound(memory.jsHeapSizeLimit / 1048576),
-  } : null;
-}
-function labSnapshot() {
-  const durations = lab.events.filter(item => Number.isFinite(item.durationMs));
-  const byType = {};
-  for (const item of durations) {
-    const bucket = byType[item.type] ||= [];
-    bucket.push(item.durationMs);
-  }
-  const timings = Object.fromEntries(Object.entries(byType).map(([type, values]) => {
-    const sorted = values.slice().sort((a,b)=>a-b);
-    const avg = values.reduce((sum, value)=>sum+value, 0) / values.length;
-    return [type, {
-      count: values.length,
-      averageMs: labRound(avg),
-      maximumMs: labRound(Math.max(...values)),
-      p95Ms: labRound(sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * .95))]),
-    }];
-  }));
-  return {
-    format: 'fichario-pokemon-performance-report',
-    reportVersion: 1,
-    generatedAt: labNowIso(),
-    sessionId: lab.sessionId,
-    activeSeconds: Math.round((Date.now() - lab.startedAt) / 1000),
-    appVersion: '2.2.2-performance',
-    userAgent: navigator.userAgent,
-    viewport: { width: innerWidth, height: innerHeight, pixelRatio: devicePixelRatio },
-    connection: navigator.connection ? {
-      effectiveType: navigator.connection.effectiveType,
-      downlink: navigator.connection.downlink,
-      saveData: navigator.connection.saveData,
-    } : null,
-    catalogCards: cards?.length || 0,
-    ownedEntries: state?.entries ? Object.keys(state.entries).length : 0,
-    currentTab: ui?.tab || '',
-    visibleCardLimit: ui?.cardLimit || 0,
-    fpsCurrent: lab.fps,
-    fpsMinimum: lab.fpsMin === 60 && !lab.frames ? null : lab.fpsMin,
-    longTasks: lab.longTasks,
-    memory: labMemorySnapshot(),
-    counters: { ...lab.counters },
-    timings,
-    recentEvents: lab.events.slice(-150),
-  };
-}
-function labSaveReport() {
-  const report = labSnapshot();
-  try { localStorage.setItem(LAB_STORAGE_KEY, JSON.stringify(report)); } catch (_) {}
-  return report;
-}
-function labDownloadReport() {
-  const report = labSaveReport();
-  const text = JSON.stringify(report, null, 2);
-  const name = `fichario-performance-${new Date().toISOString().replace(/[:.]/g,'-')}.json`;
-  try {
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
-    link.download = name;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
-    notify('Relatório de performance gerado.');
-  } catch (_) {
-    if (navigator.clipboard) navigator.clipboard.writeText(text).then(()=>notify('Relatório copiado.'));
-    else showModal(`<button class="modal-close" onclick="closeModal()">×</button><h2>Relatório</h2><pre class="lab-report-text">${esc(text)}</pre>`);
-  }
-}
-function labClear() {
-  lab.events = [];
-  lab.counters = {};
-  lab.longTasks = 0;
-  lab.fpsMin = 60;
-  lab.startedAt = Date.now();
-  try { localStorage.removeItem(LAB_STORAGE_KEY); } catch (_) {}
-  renderLabPanel();
-}
-function labToggle() {
-  lab.enabled = !lab.enabled;
-  if (lab.enabled) {
-    lab.startedAt = Date.now();
-    labRecord('laboratorio_iniciado', 0);
-    iniciarLoopDeFps();
-  } else labSaveReport();
-  renderLabPanel();
-}
-function labMetricRows() {
-  const report = labSnapshot();
-  const memory = report.memory;
-  const last = report.recentEvents.slice().reverse().find(item => item.durationMs != null);
-  return `
-    <div class="lab-grid">
-      <div class="lab-metric"><span>Estado</span><strong>${lab.enabled ? 'MEDINDO' : 'PAUSADO'}</strong></div>
-      <div class="lab-metric"><span>FPS atual</span><strong>${report.fpsCurrent || '—'}</strong></div>
-      <div class="lab-metric"><span>FPS mínimo</span><strong>${report.fpsMinimum || '—'}</strong></div>
-      <div class="lab-metric"><span>RAM JavaScript</span><strong>${memory ? `${memory.usedMb} MB` : 'Indisponível'}</strong></div>
-      <div class="lab-metric"><span>Tarefas longas</span><strong>${report.longTasks}</strong></div>
-      <div class="lab-metric"><span>Última operação</span><strong>${last ? `${last.type}: ${last.durationMs} ms` : '—'}</strong></div>
-      <div class="lab-metric"><span>Catálogo</span><strong>${report.catalogCards.toLocaleString('pt-BR')}</strong></div>
-      <div class="lab-metric"><span>Eventos medidos</span><strong>${lab.events.length}</strong></div>
-    </div>`;
-}
-function renderLabPanel() {
-  const target = document.getElementById('lab-live-metrics');
-  if (target) target.innerHTML = labMetricRows();
-}
-function openLaboratoryPanel() {
-  showModal(`
-    <button class="modal-close" onclick="closeModal()">×</button>
-    <h2>Modo Laboratório</h2>
-    <p class="screen-subtitle">Mede desempenho somente neste aparelho. Nenhum dado é enviado automaticamente.</p>
-    <div id="lab-live-metrics">${labMetricRows()}</div>
-    <div class="notice"><strong>Teste recomendado</strong><br>Ative a medição, use todas as abas, pesquise cartas, abra cadastros, altere quantidades e consulte preços. Depois gere o relatório.</div>
-    <div class="backup-actions">
-      <button class="primary-btn" onclick="labToggle()">${lab.enabled ? 'Pausar medição' : 'Iniciar medição'}</button>
-      <button class="secondary-btn" onclick="labDownloadReport()">Gerar relatório</button>
-      <button class="secondary-btn" onclick="labClear()">Limpar medições</button>
-    </div>`);
-}
-
-/* O relógio de FPS só roda enquanto o Modo Laboratório está ligado.
-
-   Antes rodava para sempre, a cada quadro, do momento em que o aplicativo
-   abria até ser fechado — mesmo que ninguém jamais tivesse aberto o
-   laboratório. Uma função chamada 60 vezes por segundo, a vida inteira da
-   sessão, não vaza memória sozinha, mas mantém a aba de JavaScript sempre
-   ocupada: menos folga para o coletor de lixo rodar sem atrapalhar, e mais
-   uma fonte de trabalho constante numa sessão que já vai ficando pesada
-   pelos outros motivos. Como só serve para alimentar um painel que o
-   usuário quase nunca abre, passa a existir só enquanto ele está aberto. */
-let labFpsLoopAtivo = false;
-function labFrame(now) {
-  if (!lab.enabled) { labFpsLoopAtivo = false; return; }
-  lab.frames++;
-  if (now - lab.lastFpsAt >= 1000) {
-    lab.fps = Math.round((lab.frames * 1000) / (now - lab.lastFpsAt));
-    lab.fpsMin = Math.min(lab.fpsMin, lab.fps);
-    lab.frames = 0;
-    lab.lastFpsAt = now;
-    if (document.getElementById('lab-live-metrics')) renderLabPanel();
-  }
-  requestAnimationFrame(labFrame);
-}
-function iniciarLoopDeFps() {
-  if (labFpsLoopAtivo) return;
-  labFpsLoopAtivo = true;
-  lab.frames = 0;
-  lab.lastFpsAt = performance.now();
-  requestAnimationFrame(labFrame);
-}
-
-(function startLabObservers(){
-  // O relatório de "tarefa longa" é evento, não laço: não custa nada ficado
-  // ligado em silêncio (labRecord já não faz nada com o laboratório
-  // desligado), então continua sempre ativo.
-  try {
-    new PerformanceObserver(list => {
-      for (const entry of list.getEntries()) {
-        lab.longTasks++;
-        labRecord('tarefa_longa', entry.duration, { startMs: labRound(entry.startTime) });
-      }
-    }).observe({ entryTypes: ['longtask'] });
-  } catch (_) {}
-})();
 
 function invalidateDerivedState() {
   stateRevision++;
@@ -2430,7 +2222,6 @@ function rebuildCatalogIndexes() {
 }
 
 async function init() {
-  const labInitStart = performance.now();
   try {
     // Pede ao sistema para tratar o armazenamento local como persistente, para
     // o WebView não descartar a coleção quando o aparelho fica sem espaço.
@@ -2523,7 +2314,6 @@ async function init() {
        tela inteira 12s depois de QUALQUER abertura do app, mesmo com a
        pessoa navegando a Coleção, é a tela "piscando" sem necessidade. */
     setTimeout(() => { registrarValorDoDia(); if (ui.tab === 'dashboard') renderKeepingScroll(); }, 12000);
-    labRecord('startup', performance.now() - labInitStart, { cards: cards.length });
   } catch (error) {
     document.getElementById('loading').innerHTML = `
       <strong>Não consegui abrir o fichário</strong>
@@ -3221,8 +3011,6 @@ function openMoreNavigation() {
 
 let trocaDeAbaTimer = 0;
 function setTab(tab) {
-  const labStart = performance.now();
-  const previousTab = ui.tab;
   ui.tab = tab;
   ui.selectedPokemon = null;
   ui.cardLimit = 80;
@@ -3233,12 +3021,9 @@ function setTab(tab) {
   renderTabs();
   render();
   window.scrollTo(0, 0);
-  labRecord('troca_aba', performance.now() - labStart, { from: previousTab, to: tab });
 }
 
 function render() {
-  const labStart = performance.now();
-  labCount('render_chamadas');
   updateHeader();
   const content = document.getElementById('content');
   if (!content) return;
@@ -3251,7 +3036,6 @@ function render() {
   else if (ui.tab === 'produtos') content.innerHTML = renderProdutos();
   else { content.innerHTML = renderCards(); mostrarChipAtivo(content); }
   requestAnimationFrame(tocarAnimacoesDeCarta);
-  labRecord('render_completo', performance.now() - labStart, { tab: ui.tab, htmlLength: content.innerHTML.length });
 }
 
 /* O cabeçalho só mostra duas contagens. Antes ele pedia o resumo completo
@@ -5635,7 +5419,6 @@ function cachedStaticSort(source, sort, cacheKey) {
 }
 
 function filteredCardsForUi() {
-  const labStart = performance.now();
   const forcedFilter = ui.tab === 'wishlist' ? 'wishlist' : ui.tab === 'repeated' ? 'repeated' : null;
   const filter = forcedFilter || ui.cardFilter;
   const query = normalize(ui.cardQuery);
@@ -5667,7 +5450,6 @@ function filteredCardsForUi() {
   const limite = limiteDeCartasVisiveis();
   const visible = result.slice(0, limite);
   scheduleVisibleImagePreload(result.slice(limite, limite + IMAGE_PRELOAD_AHEAD));
-  labRecord('filtro_cartas', performance.now() - labStart, { results: result.length, visible: visible.length, queryLength: normalize(ui.cardQuery).length });
   return { result, visible, forcedFilter, filter };
 }
 
@@ -9647,7 +9429,6 @@ function confirmAutomaticPrice(cardId, variantId, finish) {
 }
 
 async function updateCardPrice(cardId, finish = 'normal', force = false, variantId = '') {
-  const labStart = performance.now();
   refreshAutomaticPriceField(cardId, finish);
   const savedVariant = variantId ? variantsFor(cardId).find(item => item.id === variantId) : null;
   const identity = document.getElementById('regFinish') ? registrationVariantFromForm(finish) : (savedVariant || { finish });
@@ -9673,7 +9454,6 @@ async function updateCardPrice(cardId, finish = 'normal', force = false, variant
     try { localStorage.setItem('fichario-price-last-diagnostic', message); } catch (_) {}
     notify(message.length > 180 ? `${message.slice(0, 177)}...` : message);
   } finally {
-    labRecord('consulta_preco', performance.now() - labStart, { cardId, finish: finishKind(finish), force, source: 'price-database' });
   }
 }
 
@@ -9692,7 +9472,6 @@ function ensureCardPriceLoaded(cardId, variant) {
 }
 
 function openCard(cardId, variantId = undefined) {
-  const labStart = performance.now();
   const card = cardMap.get(cardId);
   if (!card) return;
   const entry = entryFor(cardId);
@@ -9840,7 +9619,6 @@ function openCard(cardId, variantId = undefined) {
         ${existingId ? `<button class="danger-btn" onclick="deleteCardVariant('${esc(card.id)}','${esc(existingId)}')">Excluir esta variante</button>` : ''}
       </div>
     </section></details>`, 'card-detail-sheet');
-  labRecord('abrir_cadastro', performance.now() - labStart, { cardId, variants: variants.length });
   if (!draft.imageUrl) refreshRegistrationVariantImage(card.id);
   refreshCardSpecificVariationFields(card);
   loadCardVariantAvailability(card);
@@ -11902,7 +11680,6 @@ function searchResultsTarget(field) {
 }
 
 function refreshSearchResults(field, keepScroll = false) {
-  const labStart = performance.now();
   const [targetId, renderer] = searchResultsTarget(field);
   const target = targetId ? document.getElementById(targetId) : null;
   if (!target || typeof renderer !== 'function') return;
@@ -11912,7 +11689,6 @@ function refreshSearchResults(field, keepScroll = false) {
     target.innerHTML = html;
     if (keepScroll) window.scrollTo(0, y);
     tocarAnimacoesDeCarta();
-    labRecord('atualizar_busca', performance.now() - labStart, { field, htmlLength: html.length });
   });
 }
 
@@ -11972,7 +11748,6 @@ function openBackupPanel() {
       <button class="secondary-btn" onclick="importBackup()">Importar backup</button>
       <button class="secondary-btn" onclick="closeModal();openLigaExportPanel()">Exportar p/ Liga Pokémon</button>
       <button class="secondary-btn" onclick="checkForAppUpdate(true)">Verificar atualização</button>
-      <button class="secondary-btn lab-open-btn" onclick="openLaboratoryPanel()">${icone('frasco')} Modo Laboratório</button>
     </div>`);
 }
 

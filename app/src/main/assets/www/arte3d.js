@@ -80,43 +80,44 @@
        HOME 3D (512×512)                   98,0 KB   → 17,2 MB   parado
        Ícone Switch (68×56)                 1,0 KB   →  0,2 MB   parado
 
-     Daí os dois modos de hoje, ambos SEM animação:
-
-       "leve"   — ícone Switch na lista. 27 vezes mais leve que o GIF e não
-                  gasta nada para se manter na tela. É o padrão.
-       "nitida" — arte 3D do HOME. Muito mais bonita, mas 98 KB cada: pesada
-                  para a lista inteira, perfeita para a tela de um Pokémon só.
-
-     A tela de detalhe usa sempre a arte grande, independentemente do modo:
-     ali é UM Pokémon, e 98 KB não custam nada. */
+     Desde a 5.79 a lista usa só a arte 3D do HOME (a "nítida"): o modo
+     "leve", com o ícone pixelado do Switch, saiu — uma escolha a menos para
+     quem usa. Se o HOME não tiver a arte, vale a arte oficial (também lisa).
+     Sem internet, continua o sprite local que já vem no app. */
   var CONJUNTOS = {
-    leve: [
-      { caminho: 'versions/generation-viii/icons/', ext: '.png', pixelada: true },  // 68×56
-      { caminho: 'other/home/', ext: '.png', pixelada: false },                     // 512×512
-      { caminho: '', ext: '.png', pixelada: true }                                  // 96×96
-    ],
     nitida: [
       { caminho: 'other/home/', ext: '.png', pixelada: false },              // 512×512
-      { caminho: 'other/official-artwork/', ext: '.png', pixelada: false },  // 475×475
-      { caminho: 'versions/generation-viii/icons/', ext: '.png', pixelada: true }
+      { caminho: 'other/official-artwork/', ext: '.png', pixelada: false }   // 475×475
     ]
   };
 
-  function modoAtual() {
-    try {
-      var v = localStorage.getItem(PREFERENCIA_KEY);
-      if (v === 'nitida') return 'nitida';
-      // "animada" era o padrão antigo. Quem tinha essa preferência guardada
-      // cairia num modo que não existe mais e ficaria sem arte nenhuma.
-      if (v === 'animada') return 'leve';
-    } catch (e) {}
-    return 'leve';
-  }
+  function modoAtual() { return 'nitida'; }
 
-  /* `forcado` existe para a tela de um Pokémon só: ali sempre vale a arte
-     grande, mesmo com o modo leve escolhido para a lista. Um Pokémon na tela
-     custa 98 KB uma vez; a lista inteira custaria 17 MB. */
-  function fontes(forcado) { return CONJUNTOS[forcado] || CONJUNTOS[modoAtual()] || CONJUNTOS.leve; }
+  // A preferência antiga (leve/nítida) não existe mais, e as artes leves
+  // guardadas no aparelho ("25:leve") não têm mais uso: libera o espaço uma vez.
+  try {
+    if (!localStorage.getItem('pokecard-arte-leve-limpa')) {
+      localStorage.setItem('pokecard-arte-leve-limpa', '1');
+      localStorage.removeItem(PREFERENCIA_KEY);
+      setTimeout(function () {
+        abrirBanco().then(function (db) {
+          var loja = db.transaction(LOJA, 'readwrite').objectStore(LOJA);
+          var cursor = loja.openCursor();
+          cursor.onsuccess = function () {
+            var c = cursor.result;
+            if (!c) return;
+            if (/:(leve|animada)/.test(String(c.key))) c.delete();
+            c.continue();
+          };
+        }).catch(function () {});
+      }, 4000);
+    }
+  } catch (e) {}
+
+  /* `forcado` vinha da tela de um Pokémon só (data-arte3d-modo="nitida"),
+     quando a lista podia estar no modo leve. Hoje tudo é 3D; fica aceito
+     para as telas que ainda mandam o atributo. */
+  function fontes(forcado) { return CONJUNTOS[forcado] || CONJUNTOS[modoAtual()] || CONJUNTOS.nitida; }
 
   var DB_NOME = 'fichario-pokemon-arte3d';
   var LOJA = 'imagens';
@@ -302,20 +303,6 @@
       return ok;
     }).catch(function () { return false; });
   };
-
-  /* Trocar entre leve e nítida: limpa o que está na tela e redesenha. */
-  window.definirArtePokedex = function (modo) {
-    try { localStorage.setItem(PREFERENCIA_KEY, modo === 'nitida' ? 'nitida' : 'leve'); } catch (e) {}
-    memoria.clear();
-    falhou.clear();
-    var alvos = document.querySelectorAll('img[data-arte3d]');
-    for (var i = 0; i < alvos.length; i++) {
-      alvos[i].removeAttribute('data-arte3d-visto');
-      alvos[i].classList.remove('arte3d-carregada');
-    }
-    registrar();
-  };
-  window.arteDaPokedex = modoAtual;
 
   var observador = ('IntersectionObserver' in window)
     ? new IntersectionObserver(function (entradas) {

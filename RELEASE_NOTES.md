@@ -1,3 +1,10 @@
+# POKECARD Brasil 5.79.0 — Tema com as duas cores do Pokémon
+
+- **Cada Pokémon dá duas cores ao app.** O app mediu o sprite de cada um dos 1.025 Pokémon e tirou as duas cores que mais aparecem no corpo: a primeira vai no **fundo da tela**, a segunda nos **cartões, botões e barra de abas**. O Venusaur fica com fundo verde e cartões e botões vermelhos (da flor); o Pikachu, amarelo com o vermelho das bochechas; o Charizard, laranja com o azul das asas; o Gengar, roxo com o vermelho dos olhos. Pokémon de uma cor só usa a cor do tipo como segunda. Na tela de escolha do tema, cada Pokémon mostra as duas cores dele.
+- **Sem barra de claridade.** Todos os temas usam a claridade Suave; a barra saiu da tela do tema.
+- **Pokédex só com a arte 3D.** A opção "Leve" (ícone pixelado) saiu: a lista usa a arte 3D do Pokémon HOME, e a arte oficial quando o HOME não tem. Sem internet, continua aparecendo o sprite que já vem no app. As artes leves que estavam guardadas no aparelho são apagadas uma vez, para liberar espaço.
+- **Modo Laboratório removido**, junto com as medições de desempenho que ele fazia e o último relatório guardado.
+
 # POKECARD Brasil 5.78.0 — Master Set contado por versão
 
 - **O Master agora soma as versões da coleção, não as cartas.** O total é a soma de todas as versões encontradas de cada carta da coleção — as que a fonte conhece (normal, holo, reverse, os reverses especiais de Poké Ball e Master Ball...) mais as que **você** cadastrou. Na 151, por exemplo, são 567 versões para 207 cartas; com uma cópia de cada carta, o painel mostra 207/567.
