@@ -199,11 +199,15 @@
     var hf = cores.fundo.h, sf = satDe(cores.fundo);
     var h = cores.destaque.h, s = satDe(cores.destaque);
 
-    var fundo = hslParaHex(hf, sf, f);
-    var s1 = hslParaHex(h, s, f + p);
-    var s2 = hslParaHex(h, s, f + p * 1.7);
-    var s3 = hslParaHex(h, s, f + p * 2.4);
-    var linha = hslParaHex(h, s + 6, f + p * 3.4);
+    // 5.80, a pedido: fundo 50% mais escuro e cartões 20% mais claros que o
+    // Suave original (fundo 68% -> 34% de luz; cartão 60% -> 72%).
+    var ESCURECE_FUNDO = 0.5, CLAREIA_CARTAO = 1.2;
+    var luzCartao = function (k) { return Math.min(94, (f + p * k) * CLAREIA_CARTAO); };
+    var fundo = hslParaHex(hf, sf, f * ESCURECE_FUNDO);
+    var s1 = hslParaHex(h, s, luzCartao(1));
+    var s2 = hslParaHex(h, s, luzCartao(1.7));
+    var s3 = hslParaHex(h, s, luzCartao(2.4));
+    var linha = hslParaHex(h, s + 6, luzCartao(3.4));
 
     // O Suave é um tema claro: letra escura sempre. (Com a régua antiga, um
     // azul puro a 60% de luz ficava no limite e podia virar letra branca.)
@@ -221,11 +225,18 @@
     // 4,5:1 e não 3:1: o destaque também vira texto pequeno ("Ver todos",
     // "Atualizar", o filtro ligado).
     var pri = tomLegivel(h, 70, s1, 4.5, !claro, claro ? 38 : 66);
-    var soft = hslParaHex(h, s + 10, claro ? Math.min(95, f + p * 2.6) : f + p * 2);
+    var soft = hslParaHex(h, s + 10, Math.min(95, luzCartao(2.6)));
+    // O fundo agora é escuro e os cartões claros: o que fica DIRETO no fundo
+    // (títulos de tela e de seção, "Ver todos", subtítulos) precisa de letra
+    // clara, com as próprias cores.
+    var textoFundo = tomLegivel(hf, 12, fundo, 7, true, 94);
+    var mutFundo = tomLegivel(hf, 18, fundo, 4.6, true, 78);
+    var priFundo = tomLegivel(h, 75, fundo, 4.5, true, 72);
 
     return {
       bg: fundo, s1: s1, s2: s2, s3: s3, line: linha,
-      mut: mut, pri: pri, soft: soft, texto: texto, claro: claro
+      mut: mut, pri: pri, soft: soft, texto: texto, claro: claro,
+      textoFundo: textoFundo, mutFundo: mutFundo, priFundo: priFundo
     };
   }
 
@@ -491,6 +502,9 @@
     // No nível bem claro a letra vira escura e o visor deixa de ser um poço
     // preto — senão o texto sumiria e os cartões ficariam manchados.
     root.style.setProperty('--vision-text', p.texto);
+    root.style.setProperty('--vision-text-fundo', p.textoFundo);
+    root.style.setProperty('--vision-muted-fundo', p.mutFundo);
+    root.style.setProperty('--vision-primary-fundo', p.priFundo);
     // Guardado para a marca d'água saber se o fundo está claro ou escuro.
     window.__TEMA_CLARO__ = p.claro === true;
     root.style.setProperty('--dex-visor', p.claro ? 'rgba(0,0,0,.07)' : 'rgba(0,0,0,.42)');

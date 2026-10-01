@@ -1,3 +1,8 @@
+# POKECARD Brasil 5.80.0 — Fundo mais escuro, cartões mais claros
+
+- **Fundo da tela 50% mais escuro** (de 68% para 34% de luz) e **cartões 20% mais claros** (de 60% para 72%), nas duas cores de cada Pokémon. No Venusaur, o fundo passa a verde-escuro e os cartões a um rosado claro.
+- Com o fundo escuro, o que fica direto sobre ele — títulos das telas e das seções, "Ver todos", subtítulos, contagens, nome das regiões na Pokédex — ganhou letra clara, calculada para cada tema. Dentro dos cartões a letra continua escura.
+
 # POKECARD Brasil 5.79.0 — Tema com as duas cores do Pokémon
 
 - **Cada Pokémon dá duas cores ao app.** O app mediu o sprite de cada um dos 1.025 Pokémon e tirou as duas cores que mais aparecem no corpo: a primeira vai no **fundo da tela**, a segunda nos **cartões, botões e barra de abas**. O Venusaur fica com fundo verde e cartões e botões vermelhos (da flor); o Pikachu, amarelo com o vermelho das bochechas; o Charizard, laranja com o azul das asas; o Gengar, roxo com o vermelho dos olhos. Pokémon de uma cor só usa a cor do tipo como segunda. Na tela de escolha do tema, cada Pokémon mostra as duas cores dele.

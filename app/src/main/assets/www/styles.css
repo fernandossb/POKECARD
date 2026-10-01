@@ -6739,3 +6739,21 @@ body[data-aba]:not([data-aba="dashboard"]) .content {
 .tema-item { display: grid; justify-items: center; gap: 3px; }
 .tema-item .tema-cores { margin-top: 1px; }
 .tema-item img { image-rendering: auto; }
+
+/* ---------- v5.80 — fundo escuro, cartões claros ----------
+   O fundo ficou 50% mais escuro e os cartões 20% mais claros. O que fica
+   DIRETO no fundo — títulos das telas e das seções, "Ver todos", subtítulos,
+   contagens — ganha letra clara (--vision-*-fundo); dentro dos cartões tudo
+   continua com a letra escura de sempre. */
+.vision-home-head h2, .vision-screen-head h2, .collection-head h2,
+.screen > .screen-title, .screen > h2, .section-heading .section-title, .screen > .section-title,
+.region-heading h3, .card-results-count, .forma-cabecalho strong {
+  color: var(--vision-text-fundo) !important; -webkit-text-fill-color: var(--vision-text-fundo) !important;
+}
+.vision-home-head span, .screen > .screen-subtitle, .region-heading span, .forma-cabecalho small,
+.explore-contagem, .catalog-maintenance > summary {
+  color: var(--vision-muted-fundo) !important; -webkit-text-fill-color: var(--vision-muted-fundo) !important;
+}
+.section-heading > button, .vision-screen-head > button, .back-btn {
+  color: var(--vision-primary-fundo) !important; -webkit-text-fill-color: var(--vision-primary-fundo) !important;
+}
