@@ -1,3 +1,12 @@
+# POKECARD Brasil 5.86.0 — Fichário virtual
+
+- **Tocar numa coleção no Explorar abre um fichário de verdade**, e não mais a aba Coleção. Não há filtro, borda nem informação nas cartas: só a foto de cada uma, em páginas de **9 bolsos (3×3)** com plástico e reflexo, numa folha escura presa por **argolas**.
+- **A página vira com o dedo**: arraste para o lado e ela gira presa nas argolas, com sombra caindo na de baixo. Um peteleco rápido também vira, e um arrasto curto desiste e volta. Há setas embaixo, e a régua leva direto a qualquer página (a coleção 151 tem 63).
+- **Cada versão ocupa o seu bolso**, lado a lado (Comum, Holo, Reverse...), mesmo com a foto repetida. A lista é a mesma do cadastro da carta e da conta do Master Set. As versões que você excluiu da carta não aparecem.
+- **A carta que falta fica como na Coleção**: em cinza, apagada, com contorno tracejado. As holo e reverse que você tem ganham um brilho leve.
+- **A capa** tem a cor da coleção, o logo e quantas versões você tem. Ela abre sozinha ao entrar, e reabrir a mesma coleção volta à página em que você parou.
+- **Tocar numa carta tira ela do bolso** e mostra grande, com nome, número, versão e quantas cópias você tem. "Abrir carta" leva ao cadastro. Ao fechar, o bolso já mostra o que mudou. O Voltar do celular guarda a carta no bolso e, de novo, fecha o fichário.
+
 # POKECARD Brasil 5.85.0 — Espaço para coleções grandes
 
 - **A coleção não tem mais teto de ~3.500 versões.** Até aqui ela ficava num espaço de uns 5 MB, dividido com os caches de imagem e preço, e cada versão cadastrada ocupava ~1,4 KB. Perto de 3.500 versões, o aparelho parava de salvar. Agora a cópia principal fica no banco do próprio aparelho, que cresce com o espaço livre do celular. Num teste com **9.013 versões**, tudo foi salvo e voltou inteiro ao reabrir.

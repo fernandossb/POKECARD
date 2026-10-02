@@ -3871,19 +3871,22 @@ function colecaoMaster(set) {
 }
 
 /* Baixa os lotes de preço que faltam para conhecer as versões da coleção
-   aberta e redesenha o painel quando chegam. Uma vez por coleção. */
-const lotesPedidosPorColecao = new Set();
+   aberta e redesenha o painel quando chegam. Uma vez por coleção; quem pedir
+   de novo (o Fichário, por exemplo) recebe a mesma busca para esperar. */
+const lotesPedidosPorColecao = new Map();
 function buscarVersoesDaColecao(setId, cardIds) {
-  if (!cardIds.length || lotesPedidosPorColecao.has(setId) || typeof ensureCentralPriceShard !== 'function') return;
-  lotesPedidosPorColecao.add(setId);
+  if (lotesPedidosPorColecao.has(setId)) return lotesPedidosPorColecao.get(setId);
+  if (!cardIds.length || typeof ensureCentralPriceShard !== 'function') return Promise.resolve();
   const porLote = new Map();
   for (const cardId of cardIds) {
     const lote = Number(centralPriceIndex?.cards?.[cardId]);
     if (!porLote.has(lote)) porLote.set(lote, cardId);
   }
-  Promise.allSettled([...porLote.values()].map(cardId => ensureCentralPriceShard(cardId))).then(() => {
+  const busca = Promise.allSettled([...porLote.values()].map(cardId => ensureCentralPriceShard(cardId))).then(() => {
     if (ui.tab === 'cards' && ui.cardSet === setId) renderKeepingScroll();
   });
+  lotesPedidosPorColecao.set(setId, busca);
+  return busca;
 }
 
 // Coleções que nascem de outra: galerias, cofres e afins (a mesma tabela que
@@ -5379,7 +5382,8 @@ function renderSetCard(item, porId) {
   const fallbacks = imageCandidates.slice(1).join('|');
   const releaseDate = mesAnoDoLancamento(item) || setReleaseYear(item);
   return cartaoDeColecaoHtml({
-    onclick: `openSet('${esc(item.id)}')`,
+    // Coleção tocada no Explorar abre como fichário (fichario.js), não na aba Coleção.
+    onclick: `abrirFichario('${esc(item.id)}')`,
     cor: corDaColecao(item),
     era: eraDaColecao(item).rotulo,
     logoHtml: logo
@@ -5391,13 +5395,6 @@ function renderSetCard(item, porId) {
     baseRotulo: `${tenhoBase}/${total}`,
     nivel: item.baseTotal === undefined ? undefined : nivelDaColecao(item, porId),
   });
-}
-
-function openSet(setId) {
-  ui.cardSet = setId;
-  ui.cardFilter = 'all';
-  ui.cardQuery = '';
-  setTab('cards');
 }
 
 // Um valor manual só vale por um tempo: sem reconferência, a etiqueta do
@@ -9030,7 +9027,7 @@ function etiquetasDeVariante(analise) {
    "tenho" de analiseDeVariantes, que conta uma cópia carimbada tanto na
    etiqueta comum quanto na etiqueta de carimbo, de propósito, para o
    quadradinho). Os quadradinhos da grade da Coleção continuam como estavam. */
-function linhasDeCadastro(card) {
+function linhasDeCadastro(card, ordenarPorQuantidade = true) {
   const idioma = 'pt-br';
   const daFonte = centralVariantEntries(card.id, idioma).map(item => item.value).filter(Boolean);
   const conhecidas = daFonte.length ? variantesVisiveis(card.id, daFonte, '', idioma) : [];
@@ -9088,9 +9085,10 @@ function linhasDeCadastro(card) {
   });
 
   // Versão excluída só volta a aparecer se você tiver cópia dela.
-  return [...linhasBasicas, ...linhasExtras]
-    .filter(linha => linha.quantidade > 0 || !excluidas.has(linha.id))
-    .sort((a, b) => b.quantidade - a.quantidade);
+  const linhas = [...linhasBasicas, ...linhasExtras]
+    .filter(linha => linha.quantidade > 0 || !excluidas.has(linha.id));
+  // O cadastro põe primeiro as que você tem; o Fichário quer a ordem da fonte.
+  return ordenarPorQuantidade ? linhas.sort((a, b) => b.quantidade - a.quantidade) : linhas;
 }
 
 /* ---------- Versões que você exclui da carta ----------
@@ -11831,6 +11829,8 @@ function closeModal() {
   requestAnimationFrame(tocarAnimacoesDeCarta);
   // Fechar o scanner sem adicionar deixa leituras esperando: a Pokébola avisa.
   atualizarPokebolaDoScanner();
+  // Carta aberta de dentro do Fichário: o bolso dela reflete o que mudou.
+  if (typeof atualizarFicharioAberto === 'function') atualizarFicharioAberto();
 }
 
 function openBackupPanel() {
@@ -12229,6 +12229,8 @@ window.handleAndroidBack = function() {
 
   const modal = document.getElementById('modal');
   if (modal && !modal.classList.contains('hidden')) { closeModal(); return true; }
+  // Fichário aberto: guarda a carta que está fora do bolso, depois fecha.
+  if (typeof ficharioVoltar === 'function' && ficharioVoltar()) return true;
   if (ui.tab === 'pokedex' && ui.selectedPokemon) { ui.selectedPokemon = null; render(); return true; }
   if (ui.tab !== 'dashboard') { setTab('dashboard'); return true; }
   return false;

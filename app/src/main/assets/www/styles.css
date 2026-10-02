@@ -6313,3 +6313,367 @@ body[data-aba]:not([data-aba="dashboard"]) .content {
 }
 .card-list.layout-grade-3 { gap: 8px 7px !important; }
 .card-list.layout-grade-2 { gap: 10px 9px !important; }
+
+/* ==========================================================================
+   5.86 — Fichário virtual (fichario.js)
+   A coleção tocada no Explorar abre por cima de tudo como um fichário:
+   capa na cor da coleção, folhas escuras com 3×3 bolsos de plástico e as
+   argolas à esquerda. Fica fora de #app, então nenhuma regra antiga da tela
+   alcança — e o contraste automático também não mexe aqui.
+   ========================================================================== */
+html.fichario-aberto, html.fichario-aberto body { overflow: hidden !important; }
+/* A carta aberta de dentro do fichário aparece por cima dele. */
+html.fichario-aberto .modal { z-index: 130 !important; }
+
+#fichario {
+  position: fixed; inset: 0; z-index: 120;
+  display: flex; flex-direction: column;
+  color: #fff;
+  background:
+    radial-gradient(130% 75% at 50% 8%, var(--fc-fundo-1) 0%, var(--fc-fundo-2) 72%),
+    #07080b;
+  opacity: 0; transition: opacity .22s ease;
+  -webkit-user-select: none; user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: contain;
+}
+#fichario.visivel { opacity: 1; }
+#fichario button { font: inherit; -webkit-tap-highlight-color: transparent; }
+#fichario svg { display: block; }
+
+/* ---- Topo ---- */
+#fichario .fichario-topo {
+  display: flex; align-items: center; gap: 12px;
+  padding: calc(var(--safe-top, 0px) + 10px) 14px 6px;
+}
+#fichario .fichario-fechar {
+  flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%;
+  display: grid; place-items: center; padding: 0;
+  background: rgba(255,255,255,.1) !important; color: #fff !important;
+  border: 1px solid rgba(255,255,255,.14) !important; box-shadow: none !important;
+}
+#fichario .fichario-fechar svg { width: 20px; height: 20px; }
+#fichario .fichario-titulo { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.15; }
+#fichario .fichario-titulo strong {
+  font-family: var(--fonte-titulo); font-size: 17px; font-weight: 800;
+  color: #fff !important; -webkit-text-fill-color: #fff !important;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#fichario .fichario-titulo small {
+  font-size: 12px; font-weight: 600;
+  color: rgba(255,255,255,.62) !important; -webkit-text-fill-color: rgba(255,255,255,.62) !important;
+}
+#fichario .fichario-carregando { flex: 0 0 auto; color: rgba(255,255,255,.7); animation: fichario-pulsa 1.1s ease-in-out infinite; }
+#fichario .fichario-carregando svg { width: 20px; height: 20px; }
+#fichario .fichario-carregando[hidden] { display: none; }
+@keyframes fichario-pulsa { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+
+/* ---- Palco e livro ---- */
+#fichario .fichario-palco {
+  flex: 1; min-height: 0;
+  display: flex; align-items: center; justify-content: center;
+  touch-action: none;
+}
+#fichario .fichario-livro {
+  position: relative; width: var(--livro-l); height: var(--livro-a);
+  perspective: 1900px; perspective-origin: 50% 50%;
+}
+#fichario .fichario-camada { position: absolute; inset: 0; }
+#fichario .fichario-baixo { z-index: 1; }
+#fichario .fichario-sombra {
+  position: absolute; inset: 0; z-index: 2; pointer-events: none; opacity: 0;
+  border-radius: 5px 12px 12px 5px;
+  background: linear-gradient(90deg, rgba(0,0,0,.5) 0, rgba(0,0,0,.5) var(--borda, 0%), rgba(0,0,0,0) calc(var(--borda, 0%) + 30%));
+}
+#fichario .fichario-atual { z-index: 3; }
+#fichario .fichario-virando {
+  position: absolute; inset: 0; z-index: 4;
+  transform-origin: 0 50%; transform-style: preserve-3d;
+  will-change: transform;
+}
+#fichario .fichario-virando[hidden] { display: none; }
+#fichario .fichario-face {
+  position: absolute; inset: 0;
+  -webkit-backface-visibility: hidden; backface-visibility: hidden;
+}
+#fichario .fichario-verso { transform: rotateY(180deg); }
+/* Luz da folha que gira: escurece ao se afastar, clareia ao deitar. */
+#fichario .fichario-face::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 5;
+  border-radius: 5px 12px 12px 5px;
+  background: linear-gradient(90deg, rgba(0,0,0,.25), rgba(0,0,0,.6));
+}
+#fichario .fichario-frente::after { opacity: var(--luz-frente, 0); }
+#fichario .fichario-verso::after { opacity: var(--luz-verso, 0); }
+
+/* ---- Folha ---- */
+#fichario .fichario-pagina {
+  position: absolute; inset: 0; overflow: hidden;
+  border-radius: 5px 12px 12px 5px;
+}
+#fichario .fichario-folha {
+  padding: 9px 9px 9px 26px;
+  background:
+    linear-gradient(90deg, rgba(255,255,255,.035) 0, rgba(255,255,255,0) 26px),
+    linear-gradient(180deg, #1c1e24 0%, #15171c 100%);
+  box-shadow: 0 22px 46px -10px rgba(0,0,0,.75), 0 4px 10px rgba(0,0,0,.45),
+    inset 0 0 0 1px rgba(255,255,255,.06), inset 1px 0 0 rgba(255,255,255,.08);
+}
+#fichario .folha-furos {
+  position: absolute; top: 9px; bottom: 9px; left: 8px; width: 11px;
+  display: flex; flex-direction: column; justify-content: space-around; align-items: center;
+}
+#fichario .folha-furos i {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: #050608;
+  box-shadow: inset 0 2px 3px rgba(0,0,0,.9), 0 1px 0 rgba(255,255,255,.08);
+}
+#fichario .fichario-costas { padding: 9px 26px 9px 9px; }
+#fichario .fichario-costas .folha-furos { left: auto; right: 8px; }
+#fichario .bolsos {
+  display: grid;
+  grid-template-columns: repeat(3, var(--bolso-l));
+  grid-auto-rows: var(--bolso-a);
+  gap: 6px;
+}
+
+/* ---- Bolso de plástico ---- */
+#fichario .bolso {
+  position: relative; display: block; overflow: hidden;
+  width: var(--bolso-l); height: var(--bolso-a);
+  margin: 0; padding: 0; border: 0 !important; border-radius: 6px;
+  background: linear-gradient(160deg, #101217, #0b0c10) !important;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.05), inset 0 2px 6px rgba(0,0,0,.6) !important;
+  cursor: pointer;
+}
+#fichario .bolso.vazio { cursor: default; }
+#fichario .bolso img {
+  position: absolute; z-index: 1; top: 3px; left: 3px;
+  width: calc(100% - 6px); height: calc(100% - 6px);
+  object-fit: cover; border-radius: 5px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.65);
+  pointer-events: none;
+}
+#fichario .bolso img:not([src]) { visibility: hidden; }
+#fichario .bolso.fora-do-bolso img,
+#fichario .bolso.fora-do-bolso .bolso-sem-arte { visibility: hidden; }
+/* Reflexo do plástico, por cima da carta. */
+#fichario .bolso-plastico {
+  position: absolute; inset: 0; z-index: 3; pointer-events: none;
+  border-radius: 6px;
+  background:
+    linear-gradient(118deg, rgba(255,255,255,.17) 0%, rgba(255,255,255,.05) 20%, rgba(255,255,255,0) 38%, rgba(255,255,255,0) 74%, rgba(255,255,255,.07) 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.14), inset 0 0 0 1px rgba(255,255,255,.06);
+}
+/* Carta que falta: o mesmo aspecto da grade da Coleção. */
+#fichario .bolso.falta {
+  background:
+    linear-gradient(125deg, rgba(255,255,255,.13), rgba(255,255,255,.03) 38%, rgba(255,255,255,.01) 62%, rgba(255,255,255,.09)),
+    #10141a !important;
+}
+#fichario .bolso.falta img {
+  opacity: .42;
+  filter: grayscale(1) brightness(1.08) contrast(.82);
+  box-shadow: none;
+}
+#fichario .bolso.falta .bolso-plastico {
+  outline: 1.5px dashed rgba(255,255,255,.3);
+  outline-offset: -5px;
+}
+/* Holo e reverse que você tem: um brilho leve, como a carta de verdade. */
+#fichario .bolso.tem.foil-holo::before,
+#fichario .bolso.tem.foil-reverse::before {
+  content: ''; position: absolute; z-index: 2; top: 3px; left: 3px;
+  width: calc(100% - 6px); height: calc(100% - 6px); border-radius: 5px;
+  pointer-events: none; mix-blend-mode: color-dodge;
+  background: linear-gradient(125deg,
+    rgba(255,255,255,0) 18%, rgba(255,90,170,.55) 32%, rgba(255,226,90,.5) 42%,
+    rgba(110,255,190,.5) 52%, rgba(90,170,255,.55) 62%, rgba(255,255,255,0) 78%);
+}
+#fichario .bolso.tem.foil-holo::before { opacity: .3; }
+#fichario .bolso.tem.foil-reverse::before { opacity: .22; }
+#fichario .bolso:active .bolso-plastico { background-color: rgba(255,255,255,.06); }
+/* Arte que nenhuma fonte tem: o verso da carta. */
+#fichario .bolso-sem-arte {
+  position: absolute; z-index: 1; top: 3px; left: 3px;
+  width: calc(100% - 6px); height: calc(100% - 6px); border-radius: 5px;
+  display: grid; place-items: center;
+  color: rgba(255,255,255,.78);
+  background: radial-gradient(circle at 50% 50%, #3d63b8 0%, #213a7c 48%, #142554 100%);
+  box-shadow: inset 0 0 0 3px rgba(255,255,255,.12);
+}
+#fichario .bolso-sem-arte svg { width: 42%; height: auto; }
+
+/* ---- Capa e contracapa ---- */
+#fichario .fichario-capa,
+#fichario .fichario-contracapa {
+  background:
+    radial-gradient(120% 80% at 28% 18%, rgba(255,255,255,.16), rgba(255,255,255,0) 58%),
+    linear-gradient(160deg, var(--fc-capa) 0%, var(--fc-capa-escura) 100%);
+  box-shadow: 0 24px 50px -10px rgba(0,0,0,.8), 0 4px 12px rgba(0,0,0,.5),
+    inset 0 0 0 1px rgba(255,255,255,.1), inset 14px 0 18px -12px rgba(0,0,0,.65);
+}
+#fichario .fichario-contracapa { filter: brightness(.82); }
+#fichario .capa-costura {
+  position: absolute; inset: 11px 11px 11px 17px; border-radius: 8px;
+  border: 1.5px dashed rgba(255,255,255,.24);
+  pointer-events: none;
+}
+#fichario .capa-conteudo {
+  position: absolute; inset: 0; padding: 26px 26px 26px 32px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; text-align: center;
+}
+#fichario .capa-rotulo {
+  font-size: 11px; font-weight: 800; letter-spacing: .28em; text-transform: uppercase;
+  color: rgba(255,255,255,.7) !important; -webkit-text-fill-color: rgba(255,255,255,.7) !important;
+}
+#fichario .capa-placa {
+  width: 78%; height: 32%; flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center; padding: 14px 16px; overflow: hidden;
+  border-radius: 14px;
+  background: rgba(255,255,255,.9);
+  box-shadow: 0 10px 24px rgba(0,0,0,.35), inset 0 0 0 1px rgba(0,0,0,.06);
+}
+#fichario .capa-logo { display: block; width: 100%; height: 100%; object-fit: contain; }
+#fichario .capa-logo-falha { color: var(--fc-capa-escura); }
+#fichario .capa-logo-falha svg { width: 44px; height: 44px; }
+#fichario .capa-logo-falha[hidden] { display: none; }
+#fichario .capa-nome {
+  margin-top: 6px;
+  font-family: var(--fonte-titulo); font-size: 24px; font-weight: 900; line-height: 1.1;
+  color: #fff !important; -webkit-text-fill-color: #fff !important;
+  text-shadow: 0 2px 10px rgba(0,0,0,.35);
+}
+#fichario .capa-conta {
+  font-size: 13px; font-weight: 700;
+  color: rgba(255,255,255,.82) !important; -webkit-text-fill-color: rgba(255,255,255,.82) !important;
+}
+#fichario .capa-barra {
+  width: 62%; height: 6px; border-radius: 6px; overflow: hidden;
+  background: rgba(0,0,0,.3); box-shadow: inset 0 1px 2px rgba(0,0,0,.4);
+}
+#fichario .capa-barra i { display: block; height: 100%; border-radius: inherit; background: var(--fc-detalhe); }
+
+/* ---- Argolas ---- */
+#fichario .fichario-argolas {
+  position: absolute; z-index: 6; top: 9px; bottom: 9px; left: -7px; width: 22px;
+  display: flex; flex-direction: column; justify-content: space-around; align-items: center;
+  pointer-events: none;
+}
+#fichario .fichario-argolas i {
+  width: 22px; height: 8px; border-radius: 6px;
+  background: linear-gradient(180deg, #f3f5f9 0%, #c3c8d0 30%, #7d838d 58%, #b6bbc4 82%, #e3e6eb 100%);
+  box-shadow: 0 2px 4px rgba(0,0,0,.55), inset 0 0 0 1px rgba(0,0,0,.18);
+}
+
+/* ---- Folha vazia (coleção sem cartas instaladas) ---- */
+#fichario .fichario-vazio {
+  position: absolute; inset: 26px 18px 26px 34px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  text-align: center;
+}
+#fichario .fichario-vazio strong { font-size: 16px; color: #fff !important; -webkit-text-fill-color: #fff !important; }
+#fichario .fichario-vazio span { font-size: 13px; line-height: 1.4; color: rgba(255,255,255,.7) !important; -webkit-text-fill-color: rgba(255,255,255,.7) !important; }
+#fichario .fichario-buscar {
+  margin-top: 6px; padding: 10px 18px; border-radius: 999px;
+  border: 0 !important; background: #fff !important; color: #14161b !important; -webkit-text-fill-color: #14161b !important;
+  font-weight: 800;
+}
+
+/* ---- Rodapé ---- */
+#fichario .fichario-rodape {
+  display: flex; align-items: center; gap: 12px;
+  padding: 6px 14px calc(var(--safe-bottom, 0px) + 14px);
+}
+#fichario .fichario-seta {
+  flex: 0 0 auto; width: 46px; height: 46px; border-radius: 50%;
+  display: grid; place-items: center; padding: 0;
+  background: rgba(255,255,255,.1) !important; color: #fff !important;
+  border: 1px solid rgba(255,255,255,.14) !important; box-shadow: none !important;
+  transition: opacity .15s ease, transform .12s ease;
+}
+#fichario .fichario-seta svg { width: 24px; height: 24px; }
+#fichario .fichario-seta:active { transform: scale(.94); }
+#fichario .fichario-seta:disabled { opacity: .28; }
+#fichario .fichario-paginacao { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+#fichario .fichario-pagina-texto {
+  font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums;
+  color: rgba(255,255,255,.82) !important; -webkit-text-fill-color: rgba(255,255,255,.82) !important;
+}
+#fichario .fichario-regua {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 22px; margin: 0; padding: 0;
+  background: transparent !important; border: 0 !important; box-shadow: none !important; outline: none;
+}
+#fichario .fichario-regua::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 4px;
+  background: linear-gradient(90deg, var(--fc-detalhe) 0, var(--fc-detalhe) var(--pct, 0%), rgba(255,255,255,.18) var(--pct, 0%));
+}
+#fichario .fichario-regua::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 18px; height: 18px; margin-top: -7px; border-radius: 50%;
+  background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.55);
+}
+
+/* ---- A carta fora do bolso ---- */
+#fichario .fichario-zoom {
+  position: absolute; inset: 0; z-index: 20;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: calc(var(--safe-top, 0px) + 20px) 22px calc(var(--safe-bottom, 0px) + 20px);
+}
+#fichario .fichario-zoom[hidden] { display: none; }
+#fichario .zoom-fundo {
+  position: absolute; inset: 0;
+  background: rgba(4,5,8,.88);
+  opacity: 0; transition: opacity .3s ease;
+}
+#fichario .fichario-zoom.aberto .zoom-fundo { opacity: 1; }
+#fichario .zoom-palco { position: relative; z-index: 1; width: min(80vw, calc((100vh - 250px) * .716), 420px); }
+#fichario .zoom-carta {
+  position: relative; width: 100%; padding-top: 139.7%;
+  border-radius: 4.6% / 3.3%; overflow: hidden;
+  box-shadow: 0 30px 60px -10px rgba(0,0,0,.85), 0 0 0 1px rgba(255,255,255,.08);
+  will-change: transform;
+}
+#fichario .zoom-carta img,
+#fichario .zoom-carta .bolso-sem-arte {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 0;
+}
+#fichario .zoom-reflexo {
+  position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(118deg, rgba(255,255,255,.14) 0%, rgba(255,255,255,0) 32%);
+}
+#fichario .zoom-carta.foil-holo .zoom-reflexo,
+#fichario .zoom-carta.foil-reverse .zoom-reflexo {
+  mix-blend-mode: color-dodge; opacity: .5;
+  background: linear-gradient(125deg,
+    rgba(255,255,255,0) 18%, rgba(255,90,170,.5) 32%, rgba(255,226,90,.45) 42%,
+    rgba(110,255,190,.45) 52%, rgba(90,170,255,.5) 62%, rgba(255,255,255,0) 78%);
+}
+#fichario .zoom-legenda {
+  position: relative; z-index: 1; margin-top: 18px;
+  display: flex; flex-direction: column; align-items: center; gap: 3px; text-align: center;
+  opacity: 0; transform: translateY(8px);
+  transition: opacity .25s ease .1s, transform .25s ease .1s;
+}
+#fichario .fichario-zoom.aberto .zoom-legenda { opacity: 1; transform: none; }
+#fichario .fichario-zoom.fechando .zoom-legenda { transition-delay: 0s; }
+#fichario .zoom-legenda strong {
+  font-family: var(--fonte-titulo); font-size: 19px; font-weight: 800;
+  color: #fff !important; -webkit-text-fill-color: #fff !important;
+}
+#fichario .zoom-legenda span {
+  font-size: 13px; font-weight: 600;
+  color: rgba(255,255,255,.72) !important; -webkit-text-fill-color: rgba(255,255,255,.72) !important;
+}
+#fichario .zoom-legenda .zoom-posse.tem { color: #7ee2a8 !important; -webkit-text-fill-color: #7ee2a8 !important; }
+#fichario .zoom-abrir {
+  margin-top: 12px; padding: 11px 22px; border-radius: 999px;
+  border: 0 !important; background: #fff !important; color: #14161b !important; -webkit-text-fill-color: #14161b !important;
+  font-weight: 800; font-size: 14px; box-shadow: 0 8px 20px rgba(0,0,0,.4) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #fichario, #fichario .zoom-fundo, #fichario .zoom-legenda { transition: none; }
+}
