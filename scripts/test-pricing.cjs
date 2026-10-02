@@ -174,6 +174,12 @@ Object.assign(context.centralPriceData.variantCatalog, {
   // 5.90 — o TCGplayer decide as versões. Full art que o TCGdex marca como
   // "comum" (Colress bw8-135): o TCGplayer só vende holo.
   'x-colress': [entrada('normal', ['cardmarket', 'tcgdex'], ['market-variant', 'tcgdex-flag']), entrada('holofoil', ['tcgplayer'])],
+  // 5.91 — foil especial que o banco liga à carta, com preço do produto:
+  // fica fora das versões básicas (é variação à parte), mas tem o preço dela.
+  'x-promo-cosmos': [
+    marcacao('holo'), entrada('normal', ['cardmarket']),
+    { language: 'en', value: 'cosmos-holofoil', sources: ['tcgdex'], kinds: ['special-foil'], priced: true },
+  ],
   // Reverse que o TCGdex esquece (Snivy bw1-2): o TCGplayer vende.
   'x-snivy': [
     entrada('normal', ['cardmarket', 'tcgdex', 'tcgplayer'], ['market-variant', 'tcgdex-flag']),
@@ -190,6 +196,7 @@ Object.assign(context.centralPriceData.prices, {
   'x-holo-rara::en::normal': preco(14.36, 'cardmarket'), 'x-holo-rara::en::reverse-holofoil': preco(25.84, 'tcgplayer'),
   'x-vileplume::en::holo': preco(0.47, 'cardmarket'), 'x-vileplume::en::holofoil': preco(0.49, 'tcgplayer'),
   'x-vileplume::en::normal': preco(0.26, 'cardmarket'), 'x-vileplume::en::reverse-holofoil': preco(0.88, 'tcgplayer'),
+  'x-promo-cosmos::en::cosmos-holofoil': preco(1.28, 'tcgplayer'),
 });
 const precoDe = (cardId, pricingVariant) => context.automaticPriceQuote(cardId, { ...exactVariant, pricingVariant, finish: pricingVariant })?.brl ?? null;
 
@@ -206,6 +213,9 @@ assert.strictEqual(visiveis('x-vileplume', ['holo', 'holofoil', 'normal', 'rever
 assert.strictEqual(precoDe('x-vileplume', 'holo'), 0.49, 'Vileplume: a holo usa a holofoil, não o reverse do Cardmarket');
 assert.strictEqual(visiveis('x-colress', ['holofoil', 'normal'], ''), 'holofoil', 'Full art: a "comum" do TCGdex não vira versão');
 assert.strictEqual(visiveis('x-snivy', ['holo', 'normal', 'reverse-holofoil'], ''), 'normal|reverse-holofoil', 'Snivy: o reverse que o TCGdex esquece aparece');
+assert.strictEqual(visiveis('x-promo-cosmos', ['cosmos-holofoil', 'holo', 'normal'], ''), 'holo', 'Foil especial do banco não vira versão básica');
+assert.strictEqual(visiveis('x-promo-cosmos', ['cosmos-holofoil', 'holo', 'normal'], 'cosmos-holofoil'), 'cosmos-holofoil|holo', 'A cópia já cadastrada nela continua aparecendo');
+assert.strictEqual(precoDe('x-promo-cosmos', 'cosmos-holofoil'), 1.28, 'Foil especial usa o preço do próprio produto');
 assert.strictEqual(precoDe('x-holo-rara', 'holo'), 18.01, 'Holo rara: a holo não pode usar o preço do reverse (20,91)');
 assert.strictEqual(precoDe('x-holo-rara', 'reverse-holofoil'), 25.84);
 // Cópia já cadastrada com o nome antigo continua aparecendo para poder mudar.

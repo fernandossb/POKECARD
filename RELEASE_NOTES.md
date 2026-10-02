@@ -1,3 +1,11 @@
+# POKECARD Brasil 5.91.0 — Foils especiais com preço na carta certa
+
+- **Cosmos Holo, Poké Ball, Master Ball e os outros foils especiais agora têm preço**, cada um na carta certa. O TCGplayer vende essas versões como produtos à parte (as Cosmos ficam em "Miscellaneous Cards & Products"), e o TCGdex liga cada uma ao produto exato. O banco de preços passou a usar essa ligação: a **Cosmos Holo da Vileplume 003/094** sai a R$ 1,28 e a **da Oddish 001/094** a R$ 1,23 (TCGplayer), a **Poké Ball e a Master Ball da Exeggcute** (Evoluções Prismáticas) a R$ 1,39 e R$ 6,17. Quando o TCGplayer não vende a versão, vale o preço daquele produto no Cardmarket — nunca o da carta comum.
+- São mais de 2.200 versões especiais com preço no banco: Cosmos, Poké Ball, Master Ball, Quick Ball, Dusk Ball, Love Ball, Friend Ball, Cracked Ice, Galaxy, Equipe Rocket, Gold, Rainbow e outras.
+- Elas continuam à parte das versões básicas, como variação especial: não mudam a conta do Master Set (a 151 continua com 360 versões).
+- A linha de fonte no cadastro diz isso: "foil especial e carimbo, pelo TCGdex, com o preço do produto no TCGplayer".
+- Carimbos ainda usam o preço da carta sem carimbo (com o aviso de sempre): nenhuma fonte separa esse preço ainda.
+
 # POKECARD Brasil 5.90.0 — Uma fonte só para as versões
 
 - **As versões de cada carta agora vêm de uma fonte só: o TCGplayer.** Ele vende cada versão como um produto separado (Comum, Holo, Reverse Holo), então o que ele lista é o que existe. Antes o app juntava três fontes que se contradizem: o TCGdex discordava do TCGplayer em 40% das cartas (esquecia o reverse de 3.887 e a holo de 1.540, e marcava "Comum" em 1.601 holo raras e full arts), e o Cardmarket nem separa as versões. Era isso que fazia os fichários e o Master Set errarem.

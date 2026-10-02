@@ -865,6 +865,15 @@ function sentidoDoCardmarket(cardId, idioma) {
    dela são as dele, e só as dele. Os outros 6% (promos, Cofre Brilhante,
    Galeria de Galar, energias) continuam pelo TCGdex. Foil especial e carimbo
    (Cosmos Holo...) seguem vindo do detalhe do TCGdex, à parte. */
+// Versões com foil especial que o banco liga à carta (kinds "special-foil").
+function versoesEspeciaisDoBanco(cardId, idioma) {
+  const entradas = typeof centralVariantEntries === 'function' ? centralVariantEntries(cardId, idioma || 'pt-br') : [];
+  return new Set(entradas
+    .filter(entrada => (entrada?.kinds || []).includes('special-foil'))
+    .map(entrada => exactSourceEnum(entrada.value))
+    .filter(Boolean));
+}
+
 function versoesDoTcgplayer(cardId, idioma) {
   const entradas = typeof centralVariantEntries === 'function' ? centralVariantEntries(cardId, idioma || 'pt-br') : [];
   return new Set(entradas
@@ -961,7 +970,12 @@ function variantesVisiveis(cardId, valores, selecionada, language = '') {
   // Carta que o TCGplayer conhece: só as versões dele (versoesDoTcgplayer).
   // A escolhida fica, para a cópia que você já cadastrou poder mudar.
   const doTcgplayer = versoesDoTcgplayer(cardId, idioma);
-  const daFonte = doTcgplayer.size ? lista.filter(value => doTcgplayer.has(value) || value === selecionada) : lista;
+  /* Foil especial (Cosmos Holo, Poké Ball...) vem do banco com preço próprio,
+     marcado "special-foil": é variação à parte (variacoesExtrasDaCarta), não
+     versão básica — não entra aqui, nem conta no Master Set. */
+  const especiais = versoesEspeciaisDoBanco(cardId, idioma);
+  const daFonte = lista.filter(value => value === selecionada
+    || (!especiais.has(value) && (!doTcgplayer.size || doTcgplayer.has(value))));
   // Os nomes do Cardmarket que são outra versão entram por último: não mudam
   // a ordem dos botões, só preenchem a vaga que ninguém ocupou.
   const ordem = [...daFonte.filter(value => !realDe(value)), ...daFonte.filter(value => realDe(value))];
@@ -9461,7 +9475,7 @@ function fonteDasVersoesHtml(card, temExtra = false) {
   const entradas = centralVariantEntries(card.id, 'pt-br');
   if (!entradas.length) return '';
   const texto = versoesDoTcgplayer(card.id, 'pt-br').size
-    ? `Versões conforme o TCGplayer, que vende cada uma separada${temExtra ? '; foil especial e carimbo, pelo TCGdex' : ''}.`
+    ? `Versões conforme o TCGplayer, que vende cada uma separada${temExtra ? '; foil especial e carimbo, pelo TCGdex, com o preço do produto no TCGplayer' : ''}.`
     : 'Versões conforme o TCGdex — o TCGplayer não vende esta carta.';
   return `<p class="variant-quick-fonte">${texto}</p>`;
 }
