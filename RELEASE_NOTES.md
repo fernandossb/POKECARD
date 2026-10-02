@@ -1,3 +1,12 @@
+# POKECARD Brasil 5.90.0 — Uma fonte só para as versões
+
+- **As versões de cada carta agora vêm de uma fonte só: o TCGplayer.** Ele vende cada versão como um produto separado (Comum, Holo, Reverse Holo), então o que ele lista é o que existe. Antes o app juntava três fontes que se contradizem: o TCGdex discordava do TCGplayer em 40% das cartas (esquecia o reverse de 3.887 e a holo de 1.540, e marcava "Comum" em 1.601 holo raras e full arts), e o Cardmarket nem separa as versões. Era isso que fazia os fichários e o Master Set errarem.
+- **O TCGplayer cobre 94% das cartas do app.** Os outros 6% (promos SVP e MEP, Cofre Brilhante, Galeria de Galar, energias) continuam pelo TCGdex. Foil especial e carimbo (Cosmos Holo, carimbo de coleção...) continuam vindo do TCGdex, porque o TCGplayer os vende como produtos à parte.
+- **Cada carta diz de onde vêm as versões**, numa linha embaixo delas no cadastro ("Versões conforme o TCGplayer…" ou "Versões conforme o TCGdex — o TCGplayer não vende esta carta").
+- **Vileplume 003/094: Holográfica, Reverse Holo e Cosmos Holo**, sem Comum. A Comum que a 5.89 tinha devolvido sai de novo.
+- **Suas cópias vão sozinhas para a versão certa**, uma vez, na primeira abertura: a Comum de uma carta que o TCGplayer só vende holo vai para a Holográfica (Vileplume, Dragonite V, full arts...), e a Holográfica de uma carta sem holo vai para o Reverse (Bulbasaur 151...). Quantidade, condição, anotação e o resto ficam iguais. Na dúvida a cópia fica onde está, à vista: a "Holográfica" da Oddish 001/094 pode ser a Cosmos Holo, então não é mexida.
+- Master Set conferido: 151 com 360 versões, Pokémon GO com 145.
+
 # POKECARD Brasil 5.89.0 — Fotos da Clássica de 30 Anos e a Comum da Vileplume
 
 - **A Coleção Clássica de 30 Anos voltou a ter fotos.** O TCGdex não publica foto nenhuma dessa coleção, e a outra fonte (Pokémon TCG API) não a conhece: ela devolvia a carta de mesmo nome e número de OUTRA coleção, quando respondia. Como são reimpressões de cartas clássicas com a mesma arte, o app agora usa a foto da **carta original**: mesmo nome, mesmo ilustrador, mesmo PS e mesmos ataques (a Charizard é a do Base Set, a Pikachu também, a Gengar é a Prime de Triumphant...). Acha 28 das 30; o Darkrai & Cresselia LEGEND não tem original com foto. Vale para qualquer reimpressão sem foto, inclusive em outras coleções.

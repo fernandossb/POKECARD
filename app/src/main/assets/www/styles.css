@@ -6677,3 +6677,6 @@ html.fichario-aberto .modal { z-index: 130 !important; }
 @media (prefers-reduced-motion: reduce) {
   #fichario, #fichario .zoom-fundo, #fichario .zoom-legenda { transition: none; }
 }
+
+/* 5.90 — de onde vêm as versões da carta (fonteDasVersoesHtml). */
+.variant-quick-fonte { margin: 8px 4px 0; font-size: 11.5px; line-height: 1.35; opacity: .72; }

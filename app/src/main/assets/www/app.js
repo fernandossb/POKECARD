@@ -840,23 +840,37 @@ function sentidoDoCardmarket(cardId, idioma) {
     return Boolean(de && de.size && [...de].every(fonte => fonte === 'cardmarket'));
   };
   const holoDeVerdade = marcacoes.has('holo') || fontes.has('holofoil') || fontes.has('unlimited-holofoil');
-  const reverseDoCardmarket = Boolean(fontes.get('holo')?.has('cardmarket'));
-  // O Cardmarket só publica o preço "-holo" (reverse) quando a carta tem reverse.
-  const temReverse = marcacoes.has('reverse') || fontes.has('reverse-holofoil') || reverseDoCardmarket;
-  // "normal" só do Cardmarket numa carta que o TCGdex diz holo e não diz comum.
-  const normalSoNoCardmarket = marcacoes.size > 0 && marcacoes.has('holo') && !marcacoes.has('normal') && soDoCardmarket('normal');
   return {
     holoDeVerdade,
     // Há preço de reverse vindo do Cardmarket (gravado como "holo").
-    reverseDoCardmarket,
+    reverseDoCardmarket: Boolean(fontes.get('holo')?.has('cardmarket')),
     // "holo" que é o reverse: carta sem holo de verdade.
     holoEhReverse: fontes.has('holo') && !holoDeVerdade && soDoCardmarket('holo'),
-    /* "normal" que é a holo: só em carta impressa só holo, SEM reverse
-       (Dragonite V, Venusaur ex...). Holo rara que também tem reverse
-       (Vileplume 003/094) tem a comum de verdade, mesmo o TCGdex não marcando. */
-    normalEhHolo: normalSoNoCardmarket && !temReverse,
-    comumDeHoloComReverse: normalSoNoCardmarket && temReverse,
+    // "normal" que é a holo: o TCGdex diz holo e não diz comum. (A 5.89 tinha
+    // aberto exceção para holo rara com reverse por causa da Vileplume
+    // 003/094 — que não tem comum mesmo; a exceção saiu.)
+    normalEhHolo: marcacoes.size > 0 && marcacoes.has('holo') && !marcacoes.has('normal') && soDoCardmarket('normal'),
   };
+}
+
+/* ---------- Uma fonte só para as versões (5.90) ----------
+
+   Juntar fontes era o que fazia o fichário errar: o TCGdex e o TCGplayer
+   discordam em 40% das cartas (o TCGdex esquece o reverse de 3.887 e a holo
+   de 1.540, e marca "comum" em 1.601 holo raras e full arts), e o Cardmarket
+   nem separa as versões.
+
+   O TCGplayer vende cada versão como um produto (Normal, Holofoil, Reverse
+   Holofoil): se ele conhece a carta — 94% das cartas do app —, as versões
+   dela são as dele, e só as dele. Os outros 6% (promos, Cofre Brilhante,
+   Galeria de Galar, energias) continuam pelo TCGdex. Foil especial e carimbo
+   (Cosmos Holo...) seguem vindo do detalhe do TCGdex, à parte. */
+function versoesDoTcgplayer(cardId, idioma) {
+  const entradas = typeof centralVariantEntries === 'function' ? centralVariantEntries(cardId, idioma || 'pt-br') : [];
+  return new Set(entradas
+    .filter(entrada => (entrada?.sources || []).includes('tcgplayer'))
+    .map(entrada => exactSourceEnum(entrada.value))
+    .filter(Boolean));
 }
 
 /* O nome cujo preço vale para esta versão:
@@ -944,9 +958,13 @@ function variantesVisiveis(cardId, valores, selecionada, language = '') {
   // Cardmarket que é outra versão: é a cópia que você já cadastrou assim, e
   // ela precisa aparecer para dar para mudar.
   const realDe = value => (value === selecionada ? '' : acabamentoRealDoMercado(sentido, value));
+  // Carta que o TCGplayer conhece: só as versões dele (versoesDoTcgplayer).
+  // A escolhida fica, para a cópia que você já cadastrou poder mudar.
+  const doTcgplayer = versoesDoTcgplayer(cardId, idioma);
+  const daFonte = doTcgplayer.size ? lista.filter(value => doTcgplayer.has(value) || value === selecionada) : lista;
   // Os nomes do Cardmarket que são outra versão entram por último: não mudam
   // a ordem dos botões, só preenchem a vaga que ninguém ocupou.
-  const ordem = [...lista.filter(value => !realDe(value)), ...lista.filter(value => realDe(value))];
+  const ordem = [...daFonte.filter(value => !realDe(value)), ...daFonte.filter(value => realDe(value))];
 
   const porVersao = new Map();
   for (const value of ordem) {
@@ -1942,19 +1960,30 @@ function versaoCertaDaVaga(cardId, idioma, acabamento) {
   return certa || (acabamento === 'reverse' ? 'reverse-holofoil' : 'holo');
 }
 
-/* A 5.88 também levou para a holo a Comum de holo raras que têm reverse
-   (Vileplume 003/094), quando a regra ainda não separava esse caso. Essas
-   cópias voltam para a Comum. Só as que a passada da 5.88 mexeu: alteradas
-   até 15 minutos antes de ela terminar ('pokecard-versoes-corrigidas-v1'
-   guarda a hora). Uma holo cadastrada por você não cai nessa janela. */
-const JANELA_DA_PASSADA_588 = 15 * 60 * 1000;
-function comumMovidaPorEngano(variant, sentido) {
-  if (!sentido?.comumDeHoloComReverse || exactSourceEnum(variant.finish) !== 'holo') return false;
-  if (!['holo', 'holofoil'].includes(exactSourceEnum(variant.pricingVariant))) return false;
-  let fim = 0;
-  try { fim = Number(localStorage.getItem('pokecard-versoes-corrigidas-v1')) || 0; } catch (_) {}
-  const quando = Date.parse(variant.updatedAt || '');
-  return Boolean(fim) && Number.isFinite(quando) && quando <= fim + 1000 && quando >= fim - JANELA_DA_PASSADA_588;
+/* Em que versão esta cópia está de verdade ('' = onde já está).
+
+   Carta que o TCGplayer conhece: a cópia numa versão que ele não vende vai
+   para a que ele vende. A "Comum" de uma carta que ele só vende holo
+   (Dragonite V, Vileplume 003/094...) é a holo — era o preço geral do
+   Cardmarket com nome de comum. A "Holográfica" de uma carta em que ele não
+   tem holo, mas tem reverse (Bulbasaur 151...), é o reverse — era o preço
+   "-holo" do Cardmarket. Carta que ele não conhece segue o que o Cardmarket
+   quer dizer (sentidoDoCardmarket). */
+function acabamentoCertoDaCopia(cardId, variant) {
+  const idioma = variant.language || 'pt-br';
+  const valor = exactSourceEnum(variant.pricingVariant);
+  const doTcgplayer = versoesDoTcgplayer(cardId, idioma);
+  if (!doTcgplayer.size) return acabamentoRealDoMercado(sentidoDoCardmarket(cardId, idioma), valor);
+  const vendeHolo = doTcgplayer.has('holofoil') || doTcgplayer.has('unlimited-holofoil');
+  if (valor === 'normal' && !doTcgplayer.has('normal') && vendeHolo) return 'holo';
+  // Holográfica → Reverse só quando o TCGdex também diz que não há holo
+  // nenhuma. A Oddish 001/094 tem a Cosmos Holo, que o TCGplayer vende à
+  // parte: a "Holográfica" cadastrada nela pode ser a Cosmos — fica onde está,
+  // à vista, para você decidir.
+  const tcgdexDizHolo = centralVariantEntries(cardId, idioma)
+    .some(entrada => (entrada.kinds || []).includes('tcgdex-flag') && exactSourceEnum(entrada.value) === 'holo');
+  if (valor === 'holo' && !vendeHolo && !tcgdexDizHolo && doTcgplayer.has('reverse-holofoil')) return 'reverse';
+  return '';
 }
 
 function moverCopiasParaVersaoCerta(cardId) {
@@ -1962,20 +1991,10 @@ function moverCopiasParaVersaoCerta(cardId) {
   if (!entry || !Array.isArray(entry.variants)) return [];
   const movidas = [];
   for (const variant of entry.variants) {
-    const idioma = variant.language || 'pt-br';
-    const sentido = sentidoDoCardmarket(cardId, idioma);
-    if (comumMovidaPorEngano(variant, sentido)) {
-      const de = friendlyVariantLabel(variant.pricingVariant);
-      variant.pricingVariant = 'normal';
-      variant.finish = 'normal';
-      variant.updatedAt = new Date().toISOString();
-      movidas.push({ cardId, de, para: friendlyVariantLabel('normal'), copias: Math.max(0, Number(variant.quantity) || 0) });
-      continue;
-    }
-    const acabamento = acabamentoRealDoMercado(sentido, variant.pricingVariant);
+    const acabamento = acabamentoCertoDaCopia(cardId, variant);
     if (!acabamento) continue;
     const de = friendlyVariantLabel(variant.pricingVariant);
-    variant.pricingVariant = versaoCertaDaVaga(cardId, idioma, acabamento);
+    variant.pricingVariant = versaoCertaDaVaga(cardId, variant.language || 'pt-br', acabamento);
     variant.finish = acabamento;
     variant.updatedAt = new Date().toISOString();
     movidas.push({ cardId, de, para: friendlyVariantLabel(variant.pricingVariant), copias: Math.max(0, Number(variant.quantity) || 0) });
@@ -2025,9 +2044,8 @@ function aoChegarLoteDePrecos(indice) {
 /* Uma passada completa, uma vez: carrega os lotes de todas as cartas da
    coleção para corrigir tudo de uma vez, sem esperar cada carta ser aberta.
    Só fica marcada como feita quando todos os lotes chegaram. */
-// v2 (5.89): a passada roda de novo, para devolver a Comum das holo raras com
-// reverse que a passada v1 (5.88) levou para a holo.
-const VERSOES_CORRIGIDAS_KEY = 'pokecard-versoes-corrigidas-v2';
+// v3 (5.90): a passada roda de novo com o TCGplayer como fonte das versões.
+const VERSOES_CORRIGIDAS_KEY = 'pokecard-versoes-corrigidas-v3';
 async function corrigirVersoesDaColecao() {
   try { if (localStorage.getItem(VERSOES_CORRIGIDAS_KEY)) return; } catch (_) { return; }
   if (!state?.entries || !centralPriceIndex?.cards) return;
@@ -9434,7 +9452,18 @@ function linhasDeCadastroHtml(card) {
   const restaurar = escondidas
     ? `<button type="button" class="variant-quick-restaurar" onclick="event.stopPropagation();restaurarVersoesDaCarta('${esc(card.id)}')">${escondidas} ${escondidas === 1 ? 'versão excluída' : 'versões excluídas'} · restaurar</button>`
     : '';
-  return `<div class="variant-quick-list">${corpo}${restaurar}</div>`;
+  return `<div class="variant-quick-list">${corpo}${restaurar}${fonteDasVersoesHtml(card, linhas.some(linha => linha.extra))}</div>`;
+}
+
+/* De onde vêm as versões desta carta (versoesDoTcgplayer). Dizer a fonte é o
+   que dá para confiar na lista — e saber a quem recorrer quando ela erra. */
+function fonteDasVersoesHtml(card, temExtra = false) {
+  const entradas = centralVariantEntries(card.id, 'pt-br');
+  if (!entradas.length) return '';
+  const texto = versoesDoTcgplayer(card.id, 'pt-br').size
+    ? `Versões conforme o TCGplayer, que vende cada uma separada${temExtra ? '; foil especial e carimbo, pelo TCGdex' : ''}.`
+    : 'Versões conforme o TCGdex — o TCGplayer não vende esta carta.';
+  return `<p class="variant-quick-fonte">${texto}</p>`;
 }
 
 /* ---------- Preço direto na linha ----------
