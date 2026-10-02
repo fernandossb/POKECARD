@@ -840,14 +840,22 @@ function sentidoDoCardmarket(cardId, idioma) {
     return Boolean(de && de.size && [...de].every(fonte => fonte === 'cardmarket'));
   };
   const holoDeVerdade = marcacoes.has('holo') || fontes.has('holofoil') || fontes.has('unlimited-holofoil');
+  const reverseDoCardmarket = Boolean(fontes.get('holo')?.has('cardmarket'));
+  // O Cardmarket só publica o preço "-holo" (reverse) quando a carta tem reverse.
+  const temReverse = marcacoes.has('reverse') || fontes.has('reverse-holofoil') || reverseDoCardmarket;
+  // "normal" só do Cardmarket numa carta que o TCGdex diz holo e não diz comum.
+  const normalSoNoCardmarket = marcacoes.size > 0 && marcacoes.has('holo') && !marcacoes.has('normal') && soDoCardmarket('normal');
   return {
     holoDeVerdade,
     // Há preço de reverse vindo do Cardmarket (gravado como "holo").
-    reverseDoCardmarket: Boolean(fontes.get('holo')?.has('cardmarket')),
+    reverseDoCardmarket,
     // "holo" que é o reverse: carta sem holo de verdade.
     holoEhReverse: fontes.has('holo') && !holoDeVerdade && soDoCardmarket('holo'),
-    // "normal" que é a holo: o TCGdex diz holo e não diz comum.
-    normalEhHolo: marcacoes.size > 0 && marcacoes.has('holo') && !marcacoes.has('normal') && soDoCardmarket('normal'),
+    /* "normal" que é a holo: só em carta impressa só holo, SEM reverse
+       (Dragonite V, Venusaur ex...). Holo rara que também tem reverse
+       (Vileplume 003/094) tem a comum de verdade, mesmo o TCGdex não marcando. */
+    normalEhHolo: normalSoNoCardmarket && !temReverse,
+    comumDeHoloComReverse: normalSoNoCardmarket && temReverse,
   };
 }
 
@@ -1934,13 +1942,37 @@ function versaoCertaDaVaga(cardId, idioma, acabamento) {
   return certa || (acabamento === 'reverse' ? 'reverse-holofoil' : 'holo');
 }
 
+/* A 5.88 também levou para a holo a Comum de holo raras que têm reverse
+   (Vileplume 003/094), quando a regra ainda não separava esse caso. Essas
+   cópias voltam para a Comum. Só as que a passada da 5.88 mexeu: alteradas
+   até 15 minutos antes de ela terminar ('pokecard-versoes-corrigidas-v1'
+   guarda a hora). Uma holo cadastrada por você não cai nessa janela. */
+const JANELA_DA_PASSADA_588 = 15 * 60 * 1000;
+function comumMovidaPorEngano(variant, sentido) {
+  if (!sentido?.comumDeHoloComReverse || exactSourceEnum(variant.finish) !== 'holo') return false;
+  if (!['holo', 'holofoil'].includes(exactSourceEnum(variant.pricingVariant))) return false;
+  let fim = 0;
+  try { fim = Number(localStorage.getItem('pokecard-versoes-corrigidas-v1')) || 0; } catch (_) {}
+  const quando = Date.parse(variant.updatedAt || '');
+  return Boolean(fim) && Number.isFinite(quando) && quando <= fim + 1000 && quando >= fim - JANELA_DA_PASSADA_588;
+}
+
 function moverCopiasParaVersaoCerta(cardId) {
   const entry = state?.entries?.[cardId];
   if (!entry || !Array.isArray(entry.variants)) return [];
   const movidas = [];
   for (const variant of entry.variants) {
     const idioma = variant.language || 'pt-br';
-    const acabamento = acabamentoRealDoMercado(sentidoDoCardmarket(cardId, idioma), variant.pricingVariant);
+    const sentido = sentidoDoCardmarket(cardId, idioma);
+    if (comumMovidaPorEngano(variant, sentido)) {
+      const de = friendlyVariantLabel(variant.pricingVariant);
+      variant.pricingVariant = 'normal';
+      variant.finish = 'normal';
+      variant.updatedAt = new Date().toISOString();
+      movidas.push({ cardId, de, para: friendlyVariantLabel('normal'), copias: Math.max(0, Number(variant.quantity) || 0) });
+      continue;
+    }
+    const acabamento = acabamentoRealDoMercado(sentido, variant.pricingVariant);
     if (!acabamento) continue;
     const de = friendlyVariantLabel(variant.pricingVariant);
     variant.pricingVariant = versaoCertaDaVaga(cardId, idioma, acabamento);
@@ -1993,7 +2025,9 @@ function aoChegarLoteDePrecos(indice) {
 /* Uma passada completa, uma vez: carrega os lotes de todas as cartas da
    coleção para corrigir tudo de uma vez, sem esperar cada carta ser aberta.
    Só fica marcada como feita quando todos os lotes chegaram. */
-const VERSOES_CORRIGIDAS_KEY = 'pokecard-versoes-corrigidas-v1';
+// v2 (5.89): a passada roda de novo, para devolver a Comum das holo raras com
+// reverse que a passada v1 (5.88) levou para a holo.
+const VERSOES_CORRIGIDAS_KEY = 'pokecard-versoes-corrigidas-v2';
 async function corrigirVersoesDaColecao() {
   try { if (localStorage.getItem(VERSOES_CORRIGIDAS_KEY)) return; } catch (_) { return; }
   if (!state?.entries || !centralPriceIndex?.cards) return;

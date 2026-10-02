@@ -1,3 +1,10 @@
+# POKECARD Brasil 5.89.0 — Fotos da Clássica de 30 Anos e a Comum da Vileplume
+
+- **A Coleção Clássica de 30 Anos voltou a ter fotos.** O TCGdex não publica foto nenhuma dessa coleção, e a outra fonte (Pokémon TCG API) não a conhece: ela devolvia a carta de mesmo nome e número de OUTRA coleção, quando respondia. Como são reimpressões de cartas clássicas com a mesma arte, o app agora usa a foto da **carta original**: mesmo nome, mesmo ilustrador, mesmo PS e mesmos ataques (a Charizard é a do Base Set, a Pikachu também, a Gengar é a Prime de Triumphant...). Acha 28 das 30; o Darkrai & Cresselia LEGEND não tem original com foto. Vale para qualquer reimpressão sem foto, inclusive em outras coleções.
+- **A Vileplume 003/094 voltou a ter Comum** — com Holográfica, Reverse Holo e Cosmos Holo, as 4 versões. A regra da 5.87 tratava o preço geral do Cardmarket como a holo sempre que o TCGdex não marcava comum. Agora isso só vale para carta impressa só em holo, **sem reverse** (Dragonite V, Venusaur ex...): holo rara que também tem reverse mantém a Comum.
+- **Comum devolvida.** Se a 5.88 levou para a Holográfica uma Comum de carta assim (como a Vileplume), a cópia volta sozinha para a Comum, com um aviso. Só voltam as cópias que aquela correção mexeu; uma holo que você cadastrou continua holo.
+- Fotos antigas do Pokémon TCG API guardadas para cartas sem foto no catálogo são conferidas de novo uma vez, para não ficar uma foto de outra carta.
+
 # POKECARD Brasil 5.88.0 — Cópias vão sozinhas para a versão certa
 
 - **As cópias cadastradas numa versão que não existe mudam sozinhas para a certa.** Até a 5.86 o cadastro oferecia as versões fantasmas do Cardmarket (corrigidas na 5.87), e quem cadastrou nelas tem a carta de verdade na outra versão:

@@ -160,8 +160,15 @@ Object.assign(context.centralPriceData.variantCatalog, {
   ],
   // Comum com reverse que só o Cardmarket precifica.
   'x-reverse-cm': [entrada('normal', ['cardmarket', 'tcgdex'], ['market-variant', 'tcgdex-flag']), entrada('holo', ['cardmarket'])],
-  // Holo rara com reverse: a holo não pode ficar com o preço do reverse.
+  // Holo rara com reverse: a holo não pode ficar com o preço do reverse — e a
+  // comum existe (5.89: o "normal" do Cardmarket só é a holo em carta SEM reverse).
   'x-holo-rara': [
+    entrada('holo', ['cardmarket', 'tcgdex'], ['market-variant', 'tcgdex-flag']), entrada('holofoil', ['tcgplayer']),
+    entrada('normal', ['cardmarket']), marcacao('reverse'), entrada('reverse-holofoil', ['tcgplayer']),
+  ],
+  // Vileplume 003/094 (Fogo Fantasmagórico), como está no banco: holo rara com
+  // reverse; a comum existe.
+  'x-vileplume': [
     entrada('holo', ['cardmarket', 'tcgdex'], ['market-variant', 'tcgdex-flag']), entrada('holofoil', ['tcgplayer']),
     entrada('normal', ['cardmarket']), marcacao('reverse'), entrada('reverse-holofoil', ['tcgplayer']),
   ],
@@ -174,6 +181,8 @@ Object.assign(context.centralPriceData.prices, {
   'x-reverse-cm::en::normal': preco(1, 'cardmarket'), 'x-reverse-cm::en::holo': preco(2, 'cardmarket'),
   'x-holo-rara::en::holo': preco(20.91, 'cardmarket'), 'x-holo-rara::en::holofoil': preco(18.01, 'tcgplayer'),
   'x-holo-rara::en::normal': preco(14.36, 'cardmarket'), 'x-holo-rara::en::reverse-holofoil': preco(25.84, 'tcgplayer'),
+  'x-vileplume::en::holo': preco(0.47, 'cardmarket'), 'x-vileplume::en::holofoil': preco(0.49, 'tcgplayer'),
+  'x-vileplume::en::normal': preco(0.26, 'cardmarket'), 'x-vileplume::en::reverse-holofoil': preco(0.88, 'tcgplayer'),
 });
 const precoDe = (cardId, pricingVariant) => context.automaticPriceQuote(cardId, { ...exactVariant, pricingVariant, finish: pricingVariant })?.brl ?? null;
 
@@ -185,7 +194,10 @@ assert.strictEqual(visiveis('x-bulbasaur', ['holo', 'normal', 'reverse', 'revers
 assert.strictEqual(precoDe('x-bulbasaur', 'reverse-holofoil'), 1.53);
 assert.strictEqual(visiveis('x-reverse-cm', ['holo', 'normal'], ''), 'normal|reverse-holofoil', 'Reverse só no Cardmarket: aparece como Reverse');
 assert.strictEqual(precoDe('x-reverse-cm', 'reverse-holofoil'), 2, 'Reverse só no Cardmarket: usa o preço "holo" dele');
-assert.strictEqual(visiveis('x-holo-rara', ['holo', 'holofoil', 'normal', 'reverse', 'reverse-holofoil'], ''), 'holofoil|reverse-holofoil', 'Holo rara: uma holo e um reverse');
+assert.strictEqual(visiveis('x-holo-rara', ['holo', 'holofoil', 'normal', 'reverse', 'reverse-holofoil'], ''), 'holofoil|normal|reverse-holofoil', 'Holo rara com reverse: holo, comum e reverse');
+assert.strictEqual(visiveis('x-vileplume', ['holo', 'holofoil', 'normal', 'reverse', 'reverse-holofoil'], ''), 'holofoil|normal|reverse-holofoil', 'Vileplume 003/094: a Comum tem de aparecer');
+assert.strictEqual(precoDe('x-vileplume', 'normal'), 0.26, 'Vileplume: a Comum usa o preço da carta no Cardmarket');
+assert.strictEqual(precoDe('x-vileplume', 'holo'), 0.49, 'Vileplume: a holo usa a holofoil, não o reverse do Cardmarket');
 assert.strictEqual(precoDe('x-holo-rara', 'holo'), 18.01, 'Holo rara: a holo não pode usar o preço do reverse (20,91)');
 assert.strictEqual(precoDe('x-holo-rara', 'reverse-holofoil'), 25.84);
 // Cópia já cadastrada com o nome antigo continua aparecendo para poder mudar.

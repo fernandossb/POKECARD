@@ -219,6 +219,24 @@
     return [...new Set(urls)];
   }
 
+  /* Foto guardada antes da 5.89 que veio do Pokémon TCG API para uma carta
+     sem foto no catálogo: podia ser a busca só por nome e número, que devolve
+     outra carta (ver tcgdexOriginalImages). É conferida de novo uma vez — a
+     cascata acha a original ou a mesma foto, e o que achar fica guardado. */
+  // "Antes" = antes da primeira abertura desta versão, guardada no aparelho.
+  let conferirPalpitesAntesDe = 0;
+  try {
+    conferirPalpitesAntesDe = Number(localStorage.getItem('pokecard-palpites-conferidos-desde')) || 0;
+    if (!conferirPalpitesAntesDe) {
+      conferirPalpitesAntesDe = Date.now();
+      localStorage.setItem('pokecard-palpites-conferidos-desde', String(conferirPalpitesAntesDe));
+    }
+  } catch (_) {}
+  function palpiteAntigo(card, entry) {
+    return entry?.source === 'pokemontcg-api' && Number(entry.savedAt || 0) < conferirPalpitesAntesDe
+      && !String(card?.imageUrl || card?.image || '').trim();
+  }
+
   function remember(cardId, url, source) {
     if (!cardId || !url) return;
     const previous = cache[cardId];
@@ -290,6 +308,43 @@
       if (detail?.image) urls.push(...imageCandidates(detail.image));
     }
     return [...new Set(urls)];
+  }
+
+  /* Reimpressão sem foto própria — a Coleção Clássica de 30 Anos (e a
+     Celebrações Coleção Clássica) reimprime cartas antigas com a mesma arte,
+     mas o TCGdex não publica foto delas, e o Pokémon TCG API (que achava essas
+     fotos) parou de responder. A foto passa a ser a da carta ORIGINAL:
+     · mesmo nome (sem contar hífen e espaço: "Genesect EX" = "Genesect-EX")
+       e mesmo ilustrador;
+     · mesmo PS e os mesmos ataques — a reimpressão perde a habilidade e o texto
+       do treinador no TCGdex, então só PS e ataques entram na conta;
+     · entre impressões iguais, a de arte comum vem antes da full art/dourada.
+     Nenhuma confere: fica sem foto, não chuta. Na Clássica de 30 Anos acha 28
+     das 30 (o Darkrai & Cresselia LEGEND não tem original com foto). */
+  const ORIGINAIS_CONFERIDAS = 10;
+  async function tcgdexOriginalImages(card) {
+    const provider = 'tcgdex-original';
+    const detalhe = await fetchJson(`${TCGDEX_ROOT}/en/cards/${encodeURIComponent(card.id)}`, provider, card.id);
+    if (!detalhe?.name || !detalhe.illustrator || detalhe.image) return [];
+    const compacto = valor => normalize(valor).replace(/ /g, '');
+    const ataques = item => [String(item?.hp || ''), ...(item?.attacks || []).map(ataque => normalize(ataque.name))].join('|');
+    const especial = raridade => /secret|ultra|full|gold|rainbow|illustration|hyper|shiny/i.test(raridade || '');
+    const primeira = String(detalhe.name).split(/[\s\-&]+/)[0];
+    const busca = `${TCGDEX_ROOT}/en/cards?name=${encodeURIComponent(primeira)}&illustrator=eq:${encodeURIComponent(detalhe.illustrator)}`;
+    const lista = await fetchJson(busca, provider, card.id);
+    const mesmas = (Array.isArray(lista) ? lista : [])
+      .filter(item => item?.image && item.id !== detalhe.id && compacto(item.name) === compacto(detalhe.name))
+      .slice(0, ORIGINAIS_CONFERIDAS);
+    const certas = [];
+    for (const item of mesmas) {
+      const original = await fetchJson(`${TCGDEX_ROOT}/en/cards/${encodeURIComponent(item.id)}`, provider, card.id);
+      if (!original?.image) continue;
+      // Treinador: sem PS nem ataque para conferir, vale nome + ilustrador.
+      if ((detalhe.attacks || []).length && ataques(original) !== ataques(detalhe)) continue;
+      certas.push(original);
+    }
+    certas.sort((a, b) => Number(especial(a.rarity)) - Number(especial(b.rarity)));
+    return [...new Set(certas.slice(0, 2).flatMap(original => imageCandidates(original.image)))];
   }
 
   function escapeLucene(value) {
@@ -581,7 +636,7 @@
     for (const url of imageCandidates(englishTwin(local))) list.push({ url, source: 'catalogo-en' });
 
     const cached = cache[card.id];
-    if (!force && cached?.url && Date.now() - Number(cached.savedAt || 0) < CACHE_TTL) {
+    if (!force && cached?.url && Date.now() - Number(cached.savedAt || 0) < CACHE_TTL && !palpiteAntigo(card, cached)) {
       // O cache online vem depois da imagem local e da foto do usuário.
       list.push({ url: cached.url, source: cached.source || 'cache' });
     }
@@ -592,10 +647,19 @@
       list.push({ url, source: 'tcgdex-cdn-direto' });
     }
 
+    let fotoNoTcgdex = false;
     for (const language of ['pt-br', 'pt', 'en']) {
       const urls = await tcgdexImages(card, language);
       for (const url of urls) list.push({ url, source: `tcgdex-${language}` });
-      if (urls.length) break;
+      if (urls.length) { fotoNoTcgdex = true; break; }
+    }
+
+    // Sem foto no catálogo nem no TCGdex: se for reimpressão, vale a da carta
+    // original. Ela vem ANTES do Pokémon TCG API: para coleção que ele não
+    // tem, o API cai na busca só por nome e número e devolve outra carta
+    // (na Clássica de 30 Anos, a Charizard nº 1 vinha de outra coleção).
+    if (!local && !fotoNoTcgdex) {
+      for (const url of await tcgdexOriginalImages(card)) list.push({ url, source: 'tcgdex-original' });
     }
 
     const energyUrls = await pokemonTcgEnergyImages(card);
@@ -799,6 +863,7 @@
       const entry = cache[String(cardId || '')];
       if (!entry?.url) return '';
       if (Date.now() - Number(entry.savedAt || 0) >= CACHE_TTL) return '';
+      if (palpiteAntigo(cardFor(String(cardId || '')), entry)) return '';
       return entry.url;
     },
     // Todas as fontes de arte desta carta, na ordem da cascata (imagem que a
