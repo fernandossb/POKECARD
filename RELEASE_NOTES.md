@@ -1,3 +1,12 @@
+# POKECARD Brasil 5.92.0 — Página do fichário virando lisa
+
+- **A virada de página do fichário não trava mais.** Antes, cada virada tirava as folhas de um lugar e punha em outro no começo e no fim — o celular redesenhava 18 cartas em alta resolução justamente nesses quadros — e a luz e a sombra da folha mudavam de um jeito que obrigava a redesenhar as duas folhas inteiras a cada quadro.
+- Agora **cada folha é uma camada pronta que só gira**: virar a página é trabalho da placa de vídeo, sem redesenhar carta nenhuma durante a animação. A luz da folha e a sombra que ela joga na de baixo mudam só por transparência e posição.
+- **A próxima folha já fica pronta embaixo** (e a anterior, virada, pronta para voltar), com as fotos decodificadas antes de aparecer: a de baixo não "pisca" carregando.
+- O movimento do dedo é aplicado uma vez por quadro da tela (o celular manda até 120 toques por segundo).
+- Com o fichário aberto, **o app de trás para de desenhar e de animar** (o Gengar flutuando, a névoa...), o que liberava processamento à toa.
+- Ficam montadas só três folhas por vez (antes eram até cinco), o que também economiza memória.
+
 # POKECARD Brasil 5.91.0 — Foils especiais com preço na carta certa
 
 - **Cosmos Holo, Poké Ball, Master Ball e os outros foils especiais agora têm preço**, cada um na carta certa. O TCGplayer vende essas versões como produtos à parte (as Cosmos ficam em "Miscellaneous Cards & Products"), e o TCGdex liga cada uma ao produto exato. O banco de preços passou a usar essa ligação: a **Cosmos Holo da Vileplume 003/094** sai a R$ 1,28 e a **da Oddish 001/094** a R$ 1,23 (TCGplayer), a **Poké Ball e a Master Ball da Exeggcute** (Evoluções Prismáticas) a R$ 1,39 e R$ 6,17. Quando o TCGplayer não vende a versão, vale o preço daquele produto no Cardmarket — nunca o da carta comum.

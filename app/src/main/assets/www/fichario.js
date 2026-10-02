@@ -20,7 +20,7 @@ const FICHARIO_FOLGA = { esquerda: 26, direita: 9, topo: 9, base: 9, vao: 6 };
 const ficharioEstado = {
   el: null, set: null, bolsos: [], atual: 0, total: 2,
   paginas: new Map(), giro: null, quadro: 0, toque: null, zoom: null,
-  medidas: null, partes: null, abertura: 0, arrastouEm: 0,
+  medidas: null, partes: null, abertura: 0, arrastouEm: 0, quadroDoDedo: 0, vizinhas: 0,
 };
 // Página em que você parou em cada coleção, enquanto o app está aberto.
 const ficharioPaginaDaSessao = new Map();
@@ -110,9 +110,27 @@ function ficharioVazioHtml() {
   </div>`;
 }
 
-function paginaDoFichario(indice) {
+/* ---------- Páginas ----------
+
+   Cada folha é uma camada própria dentro do livro, presa às argolas
+   (transform-origin na borda esquerda). Virar a página só GIRA uma camada já
+   desenhada — trabalho da placa de vídeo, sem redesenhar carta nenhuma.
+
+   Antes (5.86–5.91) a virada tirava as folhas de um lugar e punha em outro
+   no começo e no fim — o celular redesenhava 18 cartas em alta resolução
+   nesses quadros —, e a luz e a sombra mudavam por variável de CSS, o que
+   redesenhava as duas folhas a cada quadro. Era isso que travava.
+
+   Ficam montadas a folha da vez e as duas vizinhas: a anterior já virada (de
+   costas, invisível), a próxima embaixo da da vez — prontas antes de o dedo
+   chegar. A luz da folha que gira e a sombra que ela joga na de baixo mudam
+   só por opacidade e deslocamento, que também não pedem redesenho. */
+
+// Folha de número menor fica por cima, como num fichário fechado.
+const zDaPagina = indice => 2000 - 2 * indice;
+
+function montarPaginaDoFichario(indice) {
   const E = ficharioEstado;
-  if (E.paginas.has(indice)) return E.paginas.get(indice);
   const pagina = document.createElement('div');
   if (indice === 0) {
     pagina.className = 'fichario-pagina fichario-capa';
@@ -132,22 +150,36 @@ function paginaDoFichario(indice) {
     // Carta sem endereço de arte no catálogo: vai direto para a cascata.
     pagina.querySelectorAll('img[data-carta]:not([src])').forEach(trocarArteDoFichario);
   }
-  E.paginas.set(indice, pagina);
+  const luz = document.createElement('i');
+  luz.className = 'pagina-luz';
+  luz.setAttribute('aria-hidden', 'true');
+  pagina.appendChild(luz);
+  pagina.dataset.indice = String(indice);
+  // Imagem decodificada antes de aparecer: a folha de baixo não "pisca"
+  // carregando quando a de cima sai da frente.
+  pagina.querySelectorAll('img[src]').forEach(img => { if (img.decode) img.decode().catch(() => {}); });
   return pagina;
 }
 
-// Verso da folha que está virando: a mesma folha vista por trás, furos do
-// outro lado, bolsos vazios.
-function costasDaFolhaHtml() {
-  let bolsos = '';
-  for (let i = 0; i < FICHARIO_BOLSOS; i++) bolsos += '<span class="bolso vazio"><i class="bolso-plastico"></i></span>';
-  return `<div class="fichario-pagina fichario-folha fichario-costas"><span class="folha-furos" aria-hidden="true"><i></i><i></i><i></i></span><div class="bolsos">${bolsos}</div></div>`;
+// A folha deste número, montada e no livro (sem mudar se está virada ou não).
+function paginaDoFichario(indice) {
+  const E = ficharioEstado;
+  let pagina = E.paginas.get(indice);
+  if (!pagina) {
+    pagina = montarPaginaDoFichario(indice);
+    E.paginas.set(indice, pagina);
+  }
+  const partes = partesDoFichario();
+  if (pagina.parentNode !== partes.livro) {
+    pagina.classList.toggle('virada', indice < E.atual);
+    pagina.style.zIndex = String(zDaPagina(indice));
+    partes.livro.insertBefore(pagina, partes.argolas);
+  }
+  return pagina;
 }
 
-function colocarNaCamada(camada, pagina) {
-  if (pagina && pagina.parentNode === camada && camada.childNodes.length === 1) return;
-  camada.textContent = '';
-  if (pagina) camada.appendChild(pagina);
+function luzDaPagina(pagina) {
+  return pagina.querySelector(':scope > .pagina-luz');
 }
 
 // Lidas uma vez por abertura: a virada mexe nelas a cada quadro.
@@ -155,16 +187,12 @@ function partesDoFichario() {
   const E = ficharioEstado;
   if (!E.partes || E.partes.el !== E.el) {
     const el = E.el;
-    const contracapa = document.createElement('div');
-    contracapa.className = 'fichario-pagina fichario-contracapa';
     E.partes = {
       el,
-      atual: el.querySelector('.fichario-atual'),
-      baixo: el.querySelector('.fichario-baixo'),
+      livro: el.querySelector('.fichario-livro'),
+      argolas: el.querySelector('.fichario-argolas'),
+      sombraCaixa: el.querySelector('.fichario-sombra-caixa'),
       sombra: el.querySelector('.fichario-sombra'),
-      virando: el.querySelector('.fichario-virando'),
-      frente: el.querySelector('.fichario-frente'),
-      contracapa,
     };
   }
   return E.partes;
@@ -173,22 +201,34 @@ function partesDoFichario() {
 function mostrarPaginaDoFichario(indice) {
   const E = ficharioEstado;
   E.atual = Math.max(0, Math.min(E.total - 1, indice));
-  const partes = partesDoFichario();
-  colocarNaCamada(partes.atual, paginaDoFichario(E.atual));
-  colocarNaCamada(partes.baixo, null);
-  colocarNaCamada(partes.frente, null);
-  partes.virando.hidden = true;
-  partes.sombra.style.opacity = '0';
+  // Fora as folhas que não são vizinhas (libera a memória das imagens).
+  for (const [numero, pagina] of [...E.paginas]) {
+    if (Math.abs(numero - E.atual) > 1) { pagina.remove(); E.paginas.delete(numero); }
+  }
+  for (const [numero, pagina] of E.paginas) {
+    pagina.classList.toggle('virada', numero < E.atual);
+    pagina.style.transform = '';
+    pagina.style.zIndex = String(zDaPagina(numero));
+  }
+  paginaDoFichario(E.atual);
+  partesDoFichario().sombra.style.opacity = '0';
   if (E.atual > 0) ficharioPaginaDaSessao.set(E.set.id, E.atual);
   atualizarRodapeDoFichario(E.atual);
-  // Ficam montadas só a página da vez e as vizinhas — as próximas já vão
-  // baixando as imagens antes de a página virar.
-  for (const guardada of [...E.paginas.keys()]) {
-    if (Math.abs(guardada - E.atual) > 2) E.paginas.delete(guardada);
-  }
-  [E.atual + 1, E.atual - 1].forEach(vizinha => {
-    if (vizinha >= 0 && vizinha < E.total) paginaDoFichario(vizinha);
-  });
+  agendarVizinhasDoFichario();
+}
+
+/* As vizinhas entram logo depois, não no mesmo quadro em que a virada
+   termina: assim o último quadro da animação sai liso. Se o dedo já voltar a
+   virar antes disso, comecarGiroDoFichario monta a que precisar na hora. */
+function agendarVizinhasDoFichario() {
+  const E = ficharioEstado;
+  clearTimeout(E.vizinhas);
+  E.vizinhas = setTimeout(() => {
+    if (!E.el || E.giro) return;
+    [E.atual + 1, E.atual - 1].forEach(numero => {
+      if (numero >= 0 && numero < E.total) paginaDoFichario(numero);
+    });
+  }, 90);
 }
 
 function atualizarRodapeDoFichario(indice) {
@@ -216,27 +256,35 @@ function atualizarTituloDoFichario() {
 
    A folha gira em torno das argolas (borda esquerda), como num fichário de
    verdade. `p` vai de 0 a 1: 0 é a folha deitada à direita, 1 é a virada
-   completa. Para frente, a folha da vez sai por cima da próxima; para trás,
-   a anterior volta por cima da da vez. */
+   completa. Para frente, a folha da vez gira e mostra a de baixo; para trás,
+   a anterior (já virada, de costas) volta por cima da da vez. */
 
 function comecarGiroDoFichario(para) {
   const E = ficharioEstado;
   const de = E.atual;
-  const partes = partesDoFichario();
+  clearTimeout(E.vizinhas);
+  let pagina;
+  let dir = 1;
   if (para === null) {
-    // Última página: a folha só levanta um pouco e volta — embaixo dela,
-    // só a contracapa.
-    colocarNaCamada(partes.frente, paginaDoFichario(de));
-    colocarNaCamada(partes.baixo, partes.contracapa);
-    E.giro = { de, para: null, dir: 1, p: 0, elastico: true };
+    // Última página: a folha só levanta um pouco e volta — embaixo dela, só
+    // a contracapa (que fica sempre no fundo do livro).
+    pagina = paginaDoFichario(de);
   } else {
-    const dir = para > de ? 1 : -1;
-    colocarNaCamada(partes.frente, paginaDoFichario(dir === 1 ? de : para));
-    colocarNaCamada(partes.baixo, paginaDoFichario(dir === 1 ? para : de));
-    E.giro = { de, para, dir, p: 0, elastico: false };
+    dir = para > de ? 1 : -1;
+    // Salto (régua, capa abrindo na página em que você parou): as folhas do
+    // meio saem, para a de destino ser a que aparece.
+    if (Math.abs(para - de) > 1) {
+      for (const [numero, folha] of [...E.paginas]) {
+        if ((numero - de) * (numero - para) < 0) { folha.remove(); E.paginas.delete(numero); }
+      }
+    }
+    const destino = paginaDoFichario(para);
+    destino.classList.toggle('virada', dir === -1);
+    pagina = dir === 1 ? paginaDoFichario(de) : destino;
   }
-  colocarNaCamada(partes.atual, null);
-  partes.virando.hidden = false;
+  E.giro = { de, para, dir, p: 0, elastico: para === null, pagina, luz: luzDaPagina(pagina) };
+  // A sombra fica logo abaixo da folha que gira, em cima da de baixo.
+  partesDoFichario().sombraCaixa.style.zIndex = String(zDaPagina(Number(pagina.dataset.indice)) - 1);
   aplicarGiroDoFichario(0);
 }
 
@@ -247,14 +295,13 @@ function aplicarGiroDoFichario(p) {
   giro.p = p;
   // "lado": 0 = folha deitada à direita, 1 = deitada à esquerda (virada).
   const lado = giro.dir === 1 ? p : 1 - p;
-  const partes = partesDoFichario();
-  partes.virando.style.transform = `rotateY(${(-180 * lado).toFixed(2)}deg)`;
-  partes.virando.style.setProperty('--luz-frente', (lado * 0.62).toFixed(3));
-  partes.virando.style.setProperty('--luz-verso', ((1 - lado) * 0.62).toFixed(3));
+  giro.pagina.style.transform = `rotateY(${(-180 * lado).toFixed(2)}deg)`;
+  if (giro.luz) giro.luz.style.opacity = (lado * 0.62).toFixed(3);
   // A sombra da folha cai sobre a de baixo, logo depois da borda que gira.
-  const borda = Math.max(0, Math.cos(lado * Math.PI)) * 100;
-  partes.sombra.style.setProperty('--borda', `${borda.toFixed(1)}%`);
-  partes.sombra.style.opacity = (Math.sin(lado * Math.PI) * 0.85).toFixed(3);
+  const sombra = partesDoFichario().sombra;
+  const borda = Math.max(0, Math.cos(lado * Math.PI)) * (E.medidas?.livroL || 320);
+  sombra.style.transform = `translate3d(${borda.toFixed(1)}px, 0, 0)`;
+  sombra.style.opacity = (Math.sin(lado * Math.PI) * 0.85).toFixed(3);
 }
 
 const ficharioCurvas = {
@@ -285,10 +332,11 @@ function terminarGiroDoFichario(completou) {
   const giro = E.giro;
   if (!giro) return;
   cancelAnimationFrame(E.quadro);
+  cancelAnimationFrame(E.quadroDoDedo);
   E.quadro = 0;
+  E.quadroDoDedo = 0;
   E.giro = null;
-  const partes = partesDoFichario();
-  partes.virando.style.transform = '';
+  if (giro.luz) giro.luz.style.opacity = '0';
   mostrarPaginaDoFichario(completou && giro.para !== null ? giro.para : giro.de);
 }
 
@@ -350,7 +398,15 @@ function ficharioDedoMove(evento) {
   const largura = E.medidas?.livroL || 320;
   let p = Math.max(0, Math.min(1, ((toque.dir === 1 ? -dx : dx)) / (largura * 0.9)));
   if (E.giro.elastico) p = 0.12 * (1 - Math.exp(-p * 4));
-  aplicarGiroDoFichario(p);
+  /* O celular manda até 120 toques por segundo; a tela desenha 60. A folha
+     muda uma vez por quadro, com a última posição do dedo. */
+  toque.p = p;
+  if (!E.quadroDoDedo) {
+    E.quadroDoDedo = requestAnimationFrame(() => {
+      E.quadroDoDedo = 0;
+      if (E.toque && E.giro && E.toque.p != null) aplicarGiroDoFichario(E.toque.p);
+    });
+  }
 }
 
 function ficharioDedoSobe(evento) {
@@ -365,6 +421,11 @@ function ficharioDedoSobe(evento) {
   E.arrastouEm = performance.now();
   const giro = E.giro;
   if (toque.ignorar || !giro) return;
+  // O quadro que ainda ia desenhar a posição do dedo: aplica já, para a
+  // animação partir exatamente dali.
+  cancelAnimationFrame(E.quadroDoDedo);
+  E.quadroDoDedo = 0;
+  if (toque.p != null) aplicarGiroDoFichario(toque.p);
   if (giro.elastico) {
     animarGiroDoFichario(0, 240, () => terminarGiroDoFichario(false));
     return;
@@ -595,13 +656,8 @@ function abrirFichario(setId) {
     </header>
     <div class="fichario-palco">
       <div class="fichario-livro">
-        <div class="fichario-camada fichario-baixo"></div>
-        <div class="fichario-sombra" aria-hidden="true"></div>
-        <div class="fichario-camada fichario-atual"></div>
-        <div class="fichario-virando" hidden>
-          <div class="fichario-face fichario-frente"></div>
-          <div class="fichario-face fichario-verso">${costasDaFolhaHtml()}</div>
-        </div>
+        <div class="fichario-pagina fichario-contracapa" aria-hidden="true"></div>
+        <div class="fichario-sombra-caixa" aria-hidden="true"><div class="fichario-sombra"></div></div>
         <span class="fichario-argolas" aria-hidden="true"><i></i><i></i><i></i></span>
       </div>
     </div>
@@ -679,6 +735,8 @@ function atualizarFicharioAberto() {
   fecharZoomDoFichario(true);
   E.bolsos = bolsosDoFichario(E.set.id);
   E.total = 1 + Math.max(1, Math.ceil(E.bolsos.length / FICHARIO_BOLSOS));
+  // As folhas são remontadas com os bolsos novos.
+  for (const pagina of E.paginas.values()) pagina.remove();
   E.paginas = new Map();
   atualizarTituloDoFichario();
   mostrarPaginaDoFichario(Math.min(E.atual, E.total - 1));
@@ -689,7 +747,10 @@ function fecharFichario(imediato = false) {
   const el = E.el;
   if (!el) return;
   clearTimeout(E.abertura);
+  clearTimeout(E.vizinhas);
   cancelAnimationFrame(E.quadro);
+  cancelAnimationFrame(E.quadroDoDedo);
+  E.quadroDoDedo = 0;
   document.removeEventListener('keydown', ficharioTecla);
   window.removeEventListener('resize', ficharioRedimensionar);
   document.documentElement.classList.remove('fichario-aberto');

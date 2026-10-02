@@ -6324,6 +6324,10 @@ body[data-aba]:not([data-aba="dashboard"]) .content {
 html.fichario-aberto, html.fichario-aberto body { overflow: hidden !important; }
 /* A carta aberta de dentro do fichário aparece por cima dele. */
 html.fichario-aberto .modal { z-index: 130 !important; }
+/* Com o fichário aberto, o app de trás não precisa ser desenhado nem animar
+   (Gengar flutuando, névoa...): era trabalho jogado fora durante a virada. */
+html.fichario-aberto #app { visibility: hidden; }
+html.fichario-aberto #app * { animation-play-state: paused !important; }
 
 #fichario {
   position: fixed; inset: 0; z-index: 120;
@@ -6378,38 +6382,34 @@ html.fichario-aberto .modal { z-index: 130 !important; }
   position: relative; width: var(--livro-l); height: var(--livro-a);
   perspective: 1900px; perspective-origin: 50% 50%;
 }
-#fichario .fichario-camada { position: absolute; inset: 0; }
-#fichario .fichario-baixo { z-index: 1; }
+/* 5.92 — cada folha é uma camada fixa que só GIRA (fichario.js). Durante a
+   virada nada muda por variável de CSS: só a rotação da folha, a opacidade
+   da luz dela e o deslocamento da sombra — trabalho da placa de vídeo. */
+#fichario .fichario-sombra-caixa {
+  position: absolute; inset: 0; overflow: hidden; pointer-events: none;
+  border-radius: 5px 12px 12px 5px;
+}
 #fichario .fichario-sombra {
-  position: absolute; inset: 0; z-index: 2; pointer-events: none; opacity: 0;
-  border-radius: 5px 12px 12px 5px;
-  background: linear-gradient(90deg, rgba(0,0,0,.5) 0, rgba(0,0,0,.5) var(--borda, 0%), rgba(0,0,0,0) calc(var(--borda, 0%) + 30%));
+  position: absolute; top: 0; bottom: 0; left: 0; width: 100%;
+  opacity: 0; will-change: transform, opacity;
+  background: linear-gradient(90deg, rgba(0,0,0,.55) 0, rgba(0,0,0,.26) 16%, rgba(0,0,0,0) 42%);
 }
-#fichario .fichario-atual { z-index: 3; }
-#fichario .fichario-virando {
-  position: absolute; inset: 0; z-index: 4;
-  transform-origin: 0 50%; transform-style: preserve-3d;
-  will-change: transform;
-}
-#fichario .fichario-virando[hidden] { display: none; }
-#fichario .fichario-face {
-  position: absolute; inset: 0;
-  -webkit-backface-visibility: hidden; backface-visibility: hidden;
-}
-#fichario .fichario-verso { transform: rotateY(180deg); }
-/* Luz da folha que gira: escurece ao se afastar, clareia ao deitar. */
-#fichario .fichario-face::after {
-  content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 5;
-  border-radius: 5px 12px 12px 5px;
-  background: linear-gradient(90deg, rgba(0,0,0,.25), rgba(0,0,0,.6));
-}
-#fichario .fichario-frente::after { opacity: var(--luz-frente, 0); }
-#fichario .fichario-verso::after { opacity: var(--luz-verso, 0); }
 
 /* ---- Folha ---- */
 #fichario .fichario-pagina {
   position: absolute; inset: 0; overflow: hidden;
   border-radius: 5px 12px 12px 5px;
+  transform-origin: 0 50%; transform: rotateY(0deg);
+  -webkit-backface-visibility: hidden; backface-visibility: hidden;
+  will-change: transform;
+}
+/* Virada: deitada à esquerda, de costas — invisível, pronta para voltar. */
+#fichario .fichario-pagina.virada { transform: rotateY(-180deg); pointer-events: none; }
+/* Luz da folha que gira: escurece ao se afastar. Camada própria. */
+#fichario .pagina-luz {
+  position: absolute; inset: 0; z-index: 8; pointer-events: none;
+  opacity: 0; will-change: opacity;
+  background: linear-gradient(90deg, rgba(0,0,0,.22), rgba(0,0,0,.62));
 }
 #fichario .fichario-folha {
   padding: 9px 9px 9px 26px;
@@ -6428,8 +6428,6 @@ html.fichario-aberto .modal { z-index: 130 !important; }
   background: #050608;
   box-shadow: inset 0 2px 3px rgba(0,0,0,.9), 0 1px 0 rgba(255,255,255,.08);
 }
-#fichario .fichario-costas { padding: 9px 26px 9px 9px; }
-#fichario .fichario-costas .folha-furos { left: auto; right: 8px; }
 #fichario .bolsos {
   display: grid;
   grid-template-columns: repeat(3, var(--bolso-l));
@@ -6557,7 +6555,7 @@ html.fichario-aberto .modal { z-index: 130 !important; }
 
 /* ---- Argolas ---- */
 #fichario .fichario-argolas {
-  position: absolute; z-index: 6; top: 9px; bottom: 9px; left: -7px; width: 22px;
+  position: absolute; z-index: 3000; top: 9px; bottom: 9px; left: -7px; width: 22px;
   display: flex; flex-direction: column; justify-content: space-around; align-items: center;
   pointer-events: none;
 }
