@@ -507,7 +507,7 @@ function mostrarArquivoPronto() {
       ${noCelular
         ? `<button type="button" class="primary-btn" onclick="salvarArquivoExportado()">Salvar no celular</button>
            <button type="button" class="secondary-btn" onclick="compartilharArquivoExportado()">Compartilhar</button>`
-        : '<button type="button" class="primary-btn" onclick="salvarArquivoExportado()">Baixar arquivo</button>'}
+        : `<button type="button" class="primary-btn" onclick="salvarArquivoExportado()">${typeof navigator.canShare === 'function' ? 'Salvar ou compartilhar' : 'Baixar arquivo'}</button>`}
       <button type="button" class="secondary-btn" onclick="desenharExportacao()">Voltar à seleção</button>
     </div>`);
 }
@@ -1170,6 +1170,12 @@ function compartilharArquivoExportado() {
 }
 
 function baixarArquivoNoNavegador(arquivo) {
+  // Compartilhar do iPhone (Arquivos, iCloud, WhatsApp) quando o navegador tem;
+  // senão, download comum. O toque é este mesmo: o arquivo já está pronto.
+  if (typeof entregarArquivo === 'function') {
+    entregarArquivo(arquivo.nome, arquivo.mime, arquivo.bytes, () => { arquivo.salvo = true; mostrarArquivoPronto(); });
+    return;
+  }
   const link = document.createElement('a');
   link.href = URL.createObjectURL(new Blob([arquivo.bytes], { type: arquivo.mime }));
   link.download = arquivo.nome;

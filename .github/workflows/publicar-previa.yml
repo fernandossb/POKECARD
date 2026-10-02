@@ -42,6 +42,20 @@ jobs:
           echo "Arquivos a publicar: $(find "$PASTA" -type f | wc -l)"
           du -sh "$PASTA"
 
+      # O service worker (sw.js) guarda o app para abrir sem internet. Cada
+      # publicação carimba nele a versão do app + o código do commit: o arquivo
+      # muda, o navegador instala o novo e apaga o cache da versão anterior.
+      - name: Carimbar a versão no service worker
+        shell: bash
+        run: |
+          PASTA="app/src/main/assets/www"
+          NOME="$(sed -n "s/.*versionName '\([^']*\)'.*/\1/p" app/build.gradle | head -1)"
+          if [ -z "$NOME" ]; then echo "versionName não encontrado em app/build.gradle"; exit 1; fi
+          VERSAO="${NOME}-${GITHUB_SHA::7}"
+          sed -i "s/__VERSAO__/$VERSAO/" "$PASTA/sw.js"
+          grep -n "^const VERSAO" "$PASTA/sw.js"
+          if grep -q "__VERSAO__" "$PASTA/sw.js"; then echo "versão não carimbada"; exit 1; fi
+
       - name: Configurar Pages
         uses: actions/configure-pages@v5
         with:

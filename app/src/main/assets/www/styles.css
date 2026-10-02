@@ -6678,3 +6678,60 @@ html.fichario-aberto #app * { animation-play-state: paused !important; }
 
 /* 5.90 — de onde vêm as versões da carta (fonteDasVersoesHtml). */
 .variant-quick-fonte { margin: 8px 4px 0; font-size: 11.5px; line-height: 1.35; opacity: .72; }
+
+/* ==========================================================================
+   5.93 — app no navegador (iPhone, pela Tela de Início). Ver pwa.js.
+   ========================================================================== */
+/* Sem a ponte do Android, as margens (notch no topo, barra de gestos embaixo)
+   vêm do sistema; a faixa do topo é pintada por body::before. */
+html.sem-android {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  background-color: var(--navy-deep);
+}
+/* A barra de abas já carrega a margem de baixo; não somar de novo no corpo. */
+html.sem-android body { padding-bottom: 0; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; touch-action: manipulation; }
+/* O iPhone dá zoom na tela ao tocar num campo com letra menor que 16 px. */
+@supports (-webkit-touch-callout: none) {
+  input, select, textarea { font-size: 16px !important; }
+}
+
+/* Aviso na tela, no lugar do toast do Android. */
+#aviso-na-tela {
+  position: fixed; left: 50%; bottom: calc(116px + var(--safe-bottom, 0px)); z-index: 9000;
+  width: max-content; max-width: min(92vw, 420px); padding: 11px 18px; border-radius: 999px;
+  background: rgba(12, 14, 18, .95); color: #fff; text-align: center;
+  font: 600 14px/1.3 var(--fonte-titulo, system-ui, -apple-system, sans-serif);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .45), 0 0 0 1px rgba(255, 255, 255, .08);
+  opacity: 0; transform: translate(-50%, 14px); pointer-events: none;
+  transition: opacity .2s ease, transform .22s ease;
+}
+#aviso-na-tela.visivel { opacity: 1; transform: translate(-50%, 0); }
+@media (prefers-reduced-motion: reduce) { #aviso-na-tela { transition: none; } }
+
+/* Convite para instalar no iPhone (Início). */
+.aviso-instalar {
+  margin: 10px 0 14px; padding: 14px 16px 12px; border-radius: var(--raio-m);
+  background: var(--vision-surface) !important; border: 1px solid var(--vision-line) !important;
+  box-shadow: 0 8px 22px -12px rgba(0, 0, 0, .4);
+}
+.aviso-instalar, .aviso-instalar * { color: var(--vision-text) !important; -webkit-text-fill-color: var(--vision-text) !important; }
+.aviso-instalar strong { display: block; margin-bottom: 6px; font-family: var(--fonte-titulo); font-size: var(--fs-m, 16px); }
+.aviso-instalar ol { margin: 0 0 8px; padding-left: 20px; font-size: var(--fs-p, 14px); line-height: 1.55; }
+.aviso-instalar .instalar-icone { display: inline-block; width: 1.15em; height: 1.15em; vertical-align: -.22em; }
+.aviso-instalar small { display: block; font-size: var(--fs-menor, 12px); line-height: 1.4; opacity: .88; }
+.aviso-instalar button {
+  margin-top: 10px; min-height: 40px; padding: 8px 20px; border-radius: 999px; font-weight: 800;
+  border: 1px solid var(--vision-line) !important; background: var(--vision-primary) !important;
+  color: var(--vision-bg) !important; -webkit-text-fill-color: var(--vision-bg) !important;
+}
+.backup-nota { margin: 0 0 12px; line-height: 1.45; }
+/* O conteúdo começa abaixo do relógio/ilha da câmera do iPhone (as regras
+   antigas de .content zeram o topo), e uma faixa fixa na cor do fundo cobre a
+   barra de status — o que rola por baixo some ali, sem colidir com o relógio. */
+html.sem-android .content { padding-top: var(--safe-top, 0px) !important; }
+html.sem-android::before {
+  content: ''; position: fixed; top: 0; left: 0; right: 0; height: var(--safe-top, 0px);
+  background: var(--vision-bg); z-index: 90; pointer-events: none;
+}

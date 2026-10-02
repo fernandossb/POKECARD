@@ -86,6 +86,7 @@ jobs:
           node scripts/test-price-shards.cjs
           node scripts/test-deck-coherence.js
           node scripts/test-liga-export.cjs
+          node scripts/test-pwa.cjs
 
       - name: Compilar APK direto e AAB Google Play assinados
         env:

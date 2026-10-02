@@ -7,6 +7,11 @@ try {
   }
 } catch (_) {}
 
+/* Sem a ponte do Android o app roda num navegador — o iPhone, pela Tela de
+   Início (pwa.js). Aí avisos, arquivos, importação e atualização usam o que o
+   navegador oferece, e a câmera do scanner (que é do Android) fica de fora. */
+const NO_NAVEGADOR = !window.Android;
+
 const STORAGE_KEY = 'fichario-pokemon-br-plus-state-v1';
 const CATALOG_DB_NAME = 'fichario-pokemon-catalog-v1';
 const CATALOG_DB_STORE = 'catalog';
@@ -2224,6 +2229,7 @@ async function fetchCardPricing(cardId, force = false, variant = 'normal') {
 
 function notify(message) {
   if (window.Android?.toast) window.Android.toast(message);
+  else if (typeof mostrarAvisoNaTela === 'function') mostrarAvisoNaTela(message);
 }
 
 /* Os dados embutidos chegam como variável global, posta por um <script> do
@@ -2952,7 +2958,11 @@ function falhaAoSalvar(erro) {
     stateSaveFailed = true;
     salvarBackupDeEmergencia();
     // Aviso imediato mesmo fora da tela inicial; a faixa fixa fica no painel.
-    try { notify('O aparelho recusou salvar a coleção. Fizemos um backup de emergência na pasta Download.'); } catch (_) {}
+    try {
+      notify(NO_NAVEGADOR
+        ? 'O aparelho recusou salvar a coleção. Exporte um backup agora (botão PB).'
+        : 'O aparelho recusou salvar a coleção. Fizemos um backup de emergência na pasta Download.');
+    } catch (_) {}
     try { renderKeepingScroll(); } catch (_) {}
   }
 }
@@ -3365,7 +3375,7 @@ function renderTabs() {
       <span class="tab-icon">${tabIcon(icon)}</span><span class="tab-label">${label}</span>
     </button>
   `).join('') + `
-    <button class="tab scanner-tab" onclick="openScannerSetup()" aria-label="Escanear carta">
+    <button class="tab scanner-tab" onclick="${NO_NAVEGADOR ? 'abrirBuscaDeCartas()' : 'openScannerSetup()'}" aria-label="${NO_NAVEGADOR ? 'Buscar carta' : 'Escanear carta'}">
       <img class="tab-icon scanner-pokebola" src="pokebola-scanner.webp" alt="">
     </button>` + primary.slice(2).map(([value, label, icon]) => `
     <button class="tab ${ui.tab === value ? 'active' : ''}" onclick="setTab('${value}')" aria-label="${label}">
@@ -3392,9 +3402,10 @@ function atualizarPokebolaDoScanner() {
   if (!botao) return;
   const quantas = leiturasEsperando();
   botao.classList.toggle('tem-leituras', quantas > 0);
+  const rotulo = NO_NAVEGADOR ? 'Buscar carta' : 'Escanear carta';
   botao.setAttribute('aria-label', quantas
-    ? `Escanear carta (${quantas} ${quantas === 1 ? 'leitura esperando' : 'leituras esperando'})`
-    : 'Escanear carta');
+    ? `${rotulo} (${quantas} ${quantas === 1 ? 'leitura esperando' : 'leituras esperando'})`
+    : rotulo);
   let contador = botao.querySelector('.scanner-contador');
   if (quantas && !contador) {
     contador = document.createElement('b');
@@ -3415,7 +3426,7 @@ function openMoreNavigation() {
   showModal(`<button class="modal-close" onclick="closeModal()" aria-label="Fechar">×</button>
     <h2>Mais opções</h2><p class="screen-subtitle">Acesse todas as áreas do seu fichário.</p>
     <div class="quick-action-list">
-      <button onclick="closeModal();abrirConsultaDePreco()"><span class="quick-action-icon" aria-hidden="true">${icone('cifrao')}</span><span><strong>Consultar preço</strong><small>Aponte a câmera: o preço de cada versão, sem cadastrar</small></span></button>
+      ${NO_NAVEGADOR ? '' : `<button onclick="closeModal();abrirConsultaDePreco()"><span class="quick-action-icon" aria-hidden="true">${icone('cifrao')}</span><span><strong>Consultar preço</strong><small>Aponte a câmera: o preço de cada versão, sem cadastrar</small></span></button>`}
       <button onclick="closeModal();setTab('wishlist')"><span class="quick-action-icon">${tabIcon('wishlist')}</span><span><strong>Wishlist</strong><small>Cartas que você procura</small></span></button>
       <button onclick="closeModal();setTab('repeated')"><span class="quick-action-icon">${tabIcon('repeated')}</span><span><strong>Repetidas</strong><small>Estoque para troca ou venda</small></span></button>
       <button onclick="closeModal();setTab('produtos')"><span class="quick-action-icon">${tabIcon('collections')}</span><span><strong>Produtos prontos</strong><small>Baralhos de batalha, kits e caixas</small></span></button>
@@ -3854,6 +3865,7 @@ function renderDashboard() {
         <div><span>${dashboardGreeting()}</span><h2>POKECARD Brasil</h2></div>
         <button class="vision-profile-button" onclick="openBackupPanel()" aria-label="Abrir perfil e backup${precisaDeBackup() ? ' (backup pendente)' : ''}">PB${precisaDeBackup() ? '<i class="ponto-alerta" aria-hidden="true"></i>' : ''}</button>
       </div>
+      ${typeof avisoDeInstalarHtml === 'function' ? avisoDeInstalarHtml() : ''}
       ${avisoDeGravacao()}
       ${avisoDeBackup()}
 
@@ -3882,7 +3894,7 @@ function renderDashboard() {
       </section>
 
       <div class="quick-action-list consulta-atalho-inicio">
-        <button onclick="abrirConsultaDePreco()"><span class="quick-action-icon" aria-hidden="true">${icone('cifrao')}</span><span><strong>Consultar preço</strong><small>Aponte a câmera para uma carta. Nada é cadastrado.</small></span></button>
+        ${NO_NAVEGADOR ? '' : `<button onclick="abrirConsultaDePreco()"><span class="quick-action-icon" aria-hidden="true">${icone('cifrao')}</span><span><strong>Consultar preço</strong><small>Aponte a câmera para uma carta. Nada é cadastrado.</small></span></button>`}
       </div>
 
       <button class="pokedex-progress-card" onclick="setTab('pokedex')">
@@ -12156,11 +12168,14 @@ function openBackupPanel() {
     <h2>Backup da coleção</h2>
     <p class="screen-subtitle">Salve uma cópia para não depender da assinatura ou da instalação do aplicativo.</p>
     <div class="panel"><strong>${summary.uniqueOwned} cartas únicas · ${summary.totalCopies} cartas no total</strong><p class="card-meta">Inclui quantidades, wishlist e decks desta nova versão.</p></div>
+    ${NO_NAVEGADOR ? `<p class="card-meta backup-nota">Aqui o backup não é automático: exporte uma cópia de tempos em tempos e guarde em <b>Arquivos</b>, no iCloud Drive ou mande para você no WhatsApp. É também assim que a coleção passa para outro aparelho.</p>` : ''}
     <div class="backup-actions">
       <button class="primary-btn" onclick="exportBackup()">Exportar backup</button>
       <button class="secondary-btn" onclick="importBackup()">Importar backup</button>
       <button class="secondary-btn" onclick="closeModal();openLigaExportPanel()">Exportar p/ Liga Pokémon</button>
-      <button class="secondary-btn" onclick="checkForAppUpdate(true)">Verificar atualização</button>
+      ${NO_NAVEGADOR
+        ? '<button class="secondary-btn" onclick="atualizarAppInstalado()">Atualizar o app</button>'
+        : '<button class="secondary-btn" onclick="checkForAppUpdate(true)">Verificar atualização</button>'}
     </div>`);
 }
 
@@ -12177,10 +12192,19 @@ async function exportBackup() {
     }, null, 2);
     if (window.Android?.exportBackup) window.Android.exportBackup(payload);
     else {
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(new Blob([payload], {type:'application/json'}));
-      link.download = 'fichario-pokemon-backup.json';
-      link.click();
+      // Compartilhar do iPhone (Arquivos, iCloud...) ou download. A marca de
+      // "backup feito" só vale quando o arquivo de fato saiu daqui.
+      const data = new Date().toISOString().slice(0, 10);
+      const nome = `pokecard-backup-${data}.json`;
+      const aoConcluir = () => { gravarMarcaDeBackup({ em: Date.now(), arquivo: nome }); renderKeepingScroll(); };
+      if (typeof entregarArquivo === 'function') entregarArquivo(nome, 'application/json', payload, aoConcluir);
+      else {
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(new Blob([payload], {type:'application/json'}));
+        link.download = nome;
+        link.click();
+        aoConcluir();
+      }
     }
   } catch (_) {
     notify('Não foi possível preparar o backup');
@@ -12189,6 +12213,7 @@ async function exportBackup() {
 
 function importBackup() {
   if (window.Android?.importBackup) window.Android.importBackup();
+  else if (typeof escolherBackupNoNavegador === 'function') escolherBackupNoNavegador();
 }
 
 /* ---------- Backup automático ----------
@@ -12256,17 +12281,27 @@ function avisoDeGravacao() {
   if (!stateSaveFailed) return '';
   return `<button type="button" class="aviso-backup aviso-gravacao" onclick="openBackupPanel()">
     <span aria-hidden="true">⚠</span>
-    <span><strong>O aparelho recusou salvar sua coleção.</strong><small>O armazenamento pode estar cheio. Salvamos um backup de emergência na pasta Download — toque para exportar outro e libere espaço no aparelho.</small></span>
+    <span><strong>O aparelho recusou salvar sua coleção.</strong><small>O armazenamento pode estar cheio. ${NO_NAVEGADOR ? 'Toque para exportar um backup agora' : 'Salvamos um backup de emergência na pasta Download — toque para exportar outro'} e libere espaço no aparelho.</small></span>
     <span aria-hidden="true">›</span>
   </button>`;
 }
 
 /* Faixa de aviso quando a cópia está velha demais — ou quando nunca houve
    uma. Some sozinha assim que o backup acontece. */
+/* Quanto tempo sem backup antes de avisar. No Android o backup automático
+   mantém a cópia perto de 7 dias. No navegador não há automático: o app
+   instalado avisa a cada 14 dias; o Safari sem instalar, a cada 5 — ele pode
+   apagar os dados do site depois de 7 dias sem abrir. */
+function diasParaAvisarDoBackup() {
+  if (!NO_NAVEGADOR) return BACKUP_AVISO_DIAS;
+  const instalado = typeof appInstalado === 'function' && appInstalado();
+  return instalado ? 14 : 5;
+}
+
 function precisaDeBackup() {
   if (!collectionSummary().uniqueOwned) return false;
   const dias = diasDesdeOBackup();
-  return dias === null || dias >= BACKUP_AVISO_DIAS;
+  return dias === null || dias >= diasParaAvisarDoBackup();
 }
 
 /* O aviso continua lá enquanto faltar backup, mas numa faixa de uma linha:
@@ -12423,6 +12458,7 @@ async function exportLigaPokemonCsv() {
   const fileName = `pokecard-liga-pokemon-${new Date().toISOString().slice(0, 10)}.csv`;
   try {
     if (window.Android?.exportCsv) window.Android.exportCsv(csv, fileName);
+    else if (typeof entregarArquivo === 'function') entregarArquivo(fileName, 'text/csv;charset=utf-8', csv);
     else {
       const link = document.createElement('a');
       link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
@@ -12447,7 +12483,9 @@ function markdownToSafeHtml(text) {
 function checkForAppUpdate(manual = true) {
   if (updateCheckInProgress) return;
   if (!window.Android?.checkForUpdate) {
-    if (manual) notify('Verificação disponível apenas no aplicativo Android.');
+    // No navegador o app se atualiza sozinho (service worker): o botão força.
+    if (manual && NO_NAVEGADOR && typeof atualizarAppInstalado === 'function') atualizarAppInstalado();
+    else if (manual) notify('Verificação disponível apenas no aplicativo Android.');
     return;
   }
   updateCheckInProgress = true;

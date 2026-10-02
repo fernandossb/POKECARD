@@ -1,3 +1,14 @@
+# POKECARD Brasil 5.93.0 — Funciona no iPhone
+
+- **O app agora se instala no iPhone.** Abra **https://fernandossb.github.io/POKECARD/** no Safari, toque em Compartilhar → **Adicionar à Tela de Início** e abra pelo ícone novo: ele vira um app, em tela cheia, com ícone do fichário, e abre mesmo sem internet depois da primeira vez. Dentro do app, no Início, um aviso explica o passo a passo (e que é melhor instalar **antes** de cadastrar cartas: o app instalado guarda a coleção separado do Safari, e o Safari apaga os dados de um site que fica 7 dias sem abrir). O guia completo está em `PREVIA-NO-CELULAR.md`.
+- **O app respeita a tela do iPhone**: o conteúdo começa abaixo do relógio e da ilha da câmera, os campos de texto não dão mais zoom ao serem tocados e a barra de baixo respeita a barra de gestos.
+- **Avisos na tela** ("carta adicionada", "backup importado"...) no lugar dos avisos do Android, que no iPhone não existem.
+- **Backup e exportações pelo Compartilhar do iPhone**: Salvar em Arquivos, iCloud Drive, AirDrop ou WhatsApp. Vale para o backup, o PDF, o Excel e o arquivo da Liga Pokémon. **Importar backup** abre o seletor de arquivos. Não existe backup automático no iPhone: o app avisa depois de 14 dias sem backup (5 dias se estiver aberto no Safari sem instalar) e o botão **PB → Exportar backup** guarda a cópia. É também assim que a coleção passa de um aparelho para o outro.
+- **Atualização sozinha**: a cada abertura o app confere se há versão nova; **PB → Atualizar o app** força.
+- **A câmera do scanner é só do Android.** No iPhone, a Pokébola do meio da barra vira **Buscar carta** e "Consultar preço" por câmera sai das telas.
+- **No Android nada muda.** Os avisos, a câmera, o backup automático e a atualização continuam pela ponte do aplicativo, como antes.
+- Por baixo: service worker (abrir sem internet e rápido), manifesto, ícones, e um novo teste automático (`scripts/test-pwa.cjs`) que confere os endereços do `index.html`, o manifesto e os ícones. A publicação do site carimba a versão no service worker.
+
 # POKECARD Brasil 5.92.0 — Página do fichário virando lisa
 
 - **A virada de página do fichário não trava mais.** Antes, cada virada tirava as folhas de um lugar e punha em outro no começo e no fim — o celular redesenhava 18 cartas em alta resolução justamente nesses quadros — e a luz e a sombra da folha mudavam de um jeito que obrigava a redesenhar as duas folhas inteiras a cada quadro.
