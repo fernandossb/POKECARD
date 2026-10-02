@@ -1,3 +1,12 @@
+# POKECARD Brasil 5.88.0 — Cópias vão sozinhas para a versão certa
+
+- **As cópias cadastradas numa versão que não existe mudam sozinhas para a certa.** Até a 5.86 o cadastro oferecia as versões fantasmas do Cardmarket (corrigidas na 5.87), e quem cadastrou nelas tem a carta de verdade na outra versão:
+  - a **Comum** de uma carta que só existe holo vai para a **Holográfica** (Dragonite V 076/078, Venusaur ex da 151...);
+  - a **Holográfica** de uma carta comum vai para o **Reverse Holo** (Bulbasaur da 151, Snivy...).
+- **Nada mais muda na cópia**: quantidade, idioma, condição, carimbo, anotação, foto, Wishlist, troca e venda ficam iguais. Só o preço é refeito para a versão certa. Por exemplo, a Dragonite V em Lightly Played passa de R$ 51,03 para R$ 70,71.
+- **Acontece uma vez, na primeira abertura depois de atualizar**: o app carrega os preços de todas as cartas da sua coleção e corrige tudo de uma vez, com um aviso de quantas cópias mudaram. Sem internet, a correção espera a próxima abertura.
+- **O preço guardado acompanha o banco**: quando os preços de um lote de cartas chegam, o valor guardado nas suas cópias é atualizado na hora. Um preço que era de outra versão (como o do reverse guardado numa holo) sai.
+
 # POKECARD Brasil 5.87.0 — Versões que não existem
 
 - **Sumiram a Comum e a Holográfica que não existem.** O banco de preços recebe do Cardmarket dois preços por carta e dá a eles nomes de versão que confundiam o app:

@@ -1433,6 +1433,9 @@ function aplicarLoteDePrecos(indice, lote, substituir = false) {
   Object.assign(centralPriceData.variantCatalog, lote.versoes);
   Object.assign(centralPriceCards, lote.cartas);
   centralPriceLoadedShards.add(indice);
+  // Com as versões deste lote conhecidas, as cópias cadastradas numa versão
+  // que não existe vão para a certa (moverCopiasParaVersaoCerta).
+  if (typeof aoChegarLoteDePrecos === 'function') aoChegarLoteDePrecos(indice);
   /* O resumo da coleção fica guardado e só é refeito quando o ESTADO muda.
      Só que baixar preço não muda estado nenhum: o valor total continuava sendo
      o que foi calculado antes de os preços existirem — normalmente baixo
@@ -1914,6 +1917,104 @@ function clearNonDatabaseAutomaticPrices() {
    versão — o "holo" do Cardmarket (preço do reverse) guardado numa holo ou no
    foil especial dela. Sai, para a carta não continuar mostrando o preço do
    reverse até a próxima mudança no banco. */
+/* ---------- Cópias cadastradas numa versão que não existe ----------
+
+   Até a 5.86 o cadastro oferecia as versões fantasmas do Cardmarket (ver
+   sentidoDoCardmarket): a "Comum" de uma carta que só existe holo e a
+   "Holográfica" que era o reverse. Quem cadastrou nelas tem a carta de
+   verdade na outra versão — a Comum da Dragonite V é a holo, a Holográfica
+   da Bulbasaur 151 é o reverse. Quando o lote de preços da carta chega, a
+   cópia muda de versão sozinha, e o preço é refeito para a versão certa.
+   O resto da cópia (idioma, condição, carimbo, notas, foto...) fica igual. */
+function versaoCertaDaVaga(cardId, idioma, acabamento) {
+  const daFonte = centralVariantEntries(cardId, idioma).map(item => item.value).filter(Boolean);
+  const visiveis = daFonte.length ? variantesVisiveis(cardId, daFonte, '', idioma) : [];
+  const certa = visiveis.find(valor => chaveDaVersao(valor, 'comum') === `${acabamento}|normal`);
+  // Vaga excluída por você: a cópia é real, então volta com o nome padrão.
+  return certa || (acabamento === 'reverse' ? 'reverse-holofoil' : 'holo');
+}
+
+function moverCopiasParaVersaoCerta(cardId) {
+  const entry = state?.entries?.[cardId];
+  if (!entry || !Array.isArray(entry.variants)) return [];
+  const movidas = [];
+  for (const variant of entry.variants) {
+    const idioma = variant.language || 'pt-br';
+    const acabamento = acabamentoRealDoMercado(sentidoDoCardmarket(cardId, idioma), variant.pricingVariant);
+    if (!acabamento) continue;
+    const de = friendlyVariantLabel(variant.pricingVariant);
+    variant.pricingVariant = versaoCertaDaVaga(cardId, idioma, acabamento);
+    variant.finish = acabamento;
+    variant.updatedAt = new Date().toISOString();
+    movidas.push({ cardId, de, para: friendlyVariantLabel(variant.pricingVariant), copias: Math.max(0, Number(variant.quantity) || 0) });
+  }
+  if (movidas.length) {
+    syncEntry(cardId);
+    persistAutomaticPricesForCard(cardId, false);
+  }
+  return movidas;
+}
+
+let copiasMovidasParaAvisar = [];
+let avisoDeCopiasMovidas = null;
+function aoChegarLoteDePrecos(indice) {
+  if (!state?.entries || !centralPriceIndex?.cards) return;
+  const movidas = [];
+  let precoMudou = false;
+  for (const cardId of Object.keys(state.entries)) {
+    if (Number(centralPriceIndex.cards[cardId]) !== indice) continue;
+    const daCarta = moverCopiasParaVersaoCerta(cardId);
+    movidas.push(...daCarta);
+    // O preço guardado nas cópias acompanha o lote que acabou de chegar — e o
+    // que era de outra versão (limparPrecoDeOutraVersao) sai.
+    if (!daCarta.length) precoMudou = persistAutomaticPricesForCard(cardId, false) || precoMudou;
+  }
+  if (!movidas.length) {
+    // Só preço: grava, sem redesenhar a tela — a grade já troca as linhas
+    // visíveis quando o lote chega (adiantarLotesDaLista).
+    if (precoMudou) saveState();
+    return;
+  }
+  saveState();
+  if (typeof atualizarFicharioAberto === 'function') atualizarFicharioAberto();
+  agendarRenderKeepingScroll();
+  // Vários lotes chegam em sequência: um aviso só, com tudo o que mudou.
+  copiasMovidasParaAvisar.push(...movidas);
+  clearTimeout(avisoDeCopiasMovidas);
+  avisoDeCopiasMovidas = setTimeout(() => {
+    const lista = copiasMovidasParaAvisar;
+    copiasMovidasParaAvisar = [];
+    const copias = lista.reduce((soma, item) => soma + item.copias, 0) || lista.length;
+    const exemplos = lista.slice(0, 2).map(item => `${cardMap.get(item.cardId)?.name || item.cardId}: ${item.de} → ${item.para}`).join('; ');
+    notify(`${copias} ${copias === 1 ? 'cópia foi' : 'cópias foram'} para a versão certa (${exemplos}${lista.length > 2 ? '…' : ''}).`);
+  }, 1500);
+}
+
+/* Uma passada completa, uma vez: carrega os lotes de todas as cartas da
+   coleção para corrigir tudo de uma vez, sem esperar cada carta ser aberta.
+   Só fica marcada como feita quando todos os lotes chegaram. */
+const VERSOES_CORRIGIDAS_KEY = 'pokecard-versoes-corrigidas-v1';
+async function corrigirVersoesDaColecao() {
+  try { if (localStorage.getItem(VERSOES_CORRIGIDAS_KEY)) return; } catch (_) { return; }
+  if (!state?.entries || !centralPriceIndex?.cards) return;
+  const umaCartaPorLote = new Map();
+  for (const cardId of Object.keys(state.entries)) {
+    const indice = Number(centralPriceIndex.cards[cardId]);
+    if (Number.isInteger(indice) && indice >= 0 && !umaCartaPorLote.has(indice)) umaCartaPorLote.set(indice, cardId);
+  }
+  let todos = true;
+  for (const cardId of umaCartaPorLote.values()) {
+    try { await ensureCentralPriceShard(cardId); } catch (_) { todos = false; }
+  }
+  // Lotes que já estavam na memória chegaram antes desta passada e já foram
+  // conferidos; conferir de novo não custa e cobre carta cadastrada depois.
+  for (const indice of new Set(umaCartaPorLote.keys())) {
+    if (centralPriceLoadedShards.has(indice)) aoChegarLoteDePrecos(indice);
+    else todos = false;
+  }
+  if (todos) { try { localStorage.setItem(VERSOES_CORRIGIDAS_KEY, String(Date.now())); } catch (_) {} }
+}
+
 function limparPrecoDeOutraVersao(cardId, variant) {
   if (!hasFiniteNumber(variant.automaticEstimatedValue)) return false;
   const idioma = variant.language || 'pt-br';
@@ -2425,7 +2526,10 @@ async function init() {
     // As regras de deck saem da mesma pasta dos preços, uma vez por dia.
     carregarRegrasGuardadas();
     setTimeout(() => { sincronizarRegrasDeDeck().then(mudou => { if (mudou) renderKeepingScroll(); }); }, 4000);
-    const scheduleCentralSync = () => syncCentralPrices(false, true).catch(() => false);
+    // Com o índice do banco em mãos, as cópias em versões que não existem vão
+    // para a versão certa (uma passada só — corrigirVersoesDaColecao).
+    const scheduleCentralSync = () => syncCentralPrices(false, true).catch(() => false)
+      .then(() => corrigirVersoesDaColecao()).catch(() => {});
     if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(scheduleCentralSync, { timeout: 8000 });
     else setTimeout(scheduleCentralSync, 3500);
     setTimeout(() => checkForAppUpdate(false), 1800);
