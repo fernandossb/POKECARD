@@ -534,7 +534,7 @@ function pricingVariantDetailsForCard(card, language = '') {
     value: item.pricingVariant,
     sources: ['fichario'],
     kinds: ['saved'],
-    priced: Boolean(centralPriceResolveKey(card?.id || '', item.language || language || 'pt-br', item.pricingVariant)),
+    priced: Boolean(chaveDePrecoDaVersao(card?.id || '', item.language || language || 'pt-br', item.pricingVariant)),
     language: item.language || '',
   }));
   const localFlags = Object.entries(card?.variants || {})
@@ -801,6 +801,94 @@ function acabamentosDoCatalogo(card) {
   return lista;
 }
 
+/* ---------- O que o Cardmarket quer dizer ----------
+
+   O Cardmarket não separa as versões como o TCGplayer. Ele tem UM preço da
+   carta (o da tiragem padrão) e um preço "holo", que é o da versão REVERSE.
+   O banco de preços grava o primeiro como "normal" e o segundo como "holo".
+   Conferido no banco inteiro (out/2026): todo preço "holo" vem só dos campos
+   "-holo" do Cardmarket.
+
+   O app levava os nomes ao pé da letra:
+   · a Dragonite V 076/078 (Pokémon GO), que só existe holo, aparecia também
+     como Comum — era o preço da própria holo no Cardmarket;
+   · a Bulbasaur 151, que é comum + reverse, aparecia também como Holográfica
+     — era o preço do reverse;
+   · numa holo rara, a holo podia ficar com o preço do reverse.
+
+   O TCGdex diz que acabamentos a carta tem (marcação "tcgdex-flag" no banco),
+   e o TCGplayer chama a holo de "holofoil". Com isso:
+   · "holo" só do Cardmarket, numa carta sem holo de verdade, é o REVERSE;
+   · "normal" só do Cardmarket, numa carta que o TCGdex diz não ter comum mas
+     ter holo, é a HOLO;
+   · e o preço gravado como "holo" nunca vale para a holo: é o do reverse.
+   Sem nada disso no banco (carta que ele ainda não conhece), nada muda. */
+function sentidoDoCardmarket(cardId, idioma) {
+  const entradas = typeof centralVariantEntries === 'function' ? centralVariantEntries(cardId, idioma || 'pt-br') : [];
+  if (!entradas.length) return null;
+  const marcacoes = new Set();
+  const fontes = new Map();
+  for (const entrada of entradas) {
+    const valor = exactSourceEnum(entrada?.value);
+    if (!valor) continue;
+    if ((entrada.kinds || []).includes('tcgdex-flag')) marcacoes.add(valor);
+    if (!fontes.has(valor)) fontes.set(valor, new Set());
+    (entrada.sources || []).forEach(fonte => fontes.get(valor).add(fonte));
+  }
+  const soDoCardmarket = valor => {
+    const de = fontes.get(valor);
+    return Boolean(de && de.size && [...de].every(fonte => fonte === 'cardmarket'));
+  };
+  const holoDeVerdade = marcacoes.has('holo') || fontes.has('holofoil') || fontes.has('unlimited-holofoil');
+  return {
+    holoDeVerdade,
+    // Há preço de reverse vindo do Cardmarket (gravado como "holo").
+    reverseDoCardmarket: Boolean(fontes.get('holo')?.has('cardmarket')),
+    // "holo" que é o reverse: carta sem holo de verdade.
+    holoEhReverse: fontes.has('holo') && !holoDeVerdade && soDoCardmarket('holo'),
+    // "normal" que é a holo: o TCGdex diz holo e não diz comum.
+    normalEhHolo: marcacoes.size > 0 && marcacoes.has('holo') && !marcacoes.has('normal') && soDoCardmarket('normal'),
+  };
+}
+
+/* O nome cujo preço vale para esta versão:
+   undefined → o da própria versão (nada muda);
+   string    → o de outro nome (o preço certo está gravado com ele);
+   null      → o banco não tem preço confiável para esta versão. */
+function versaoQueTemOPreco(cardId, valor, idioma) {
+  const exato = exactSourceEnum(valor);
+  if (!['holo', 'reverse', 'reverse-holofoil'].includes(exato)) return undefined;
+  const sentido = sentidoDoCardmarket(cardId, idioma);
+  if (!sentido) return undefined;
+  const tem = nome => Boolean(centralPriceResolveKey(cardId, idioma || 'pt-br', nome));
+  if (exato === 'holo') {
+    // Carta sem holo: este "holo" é o reverse e o preço dele é o do reverse.
+    if (!sentido.holoDeVerdade) return undefined;
+    return ['holofoil', 'unlimited-holofoil', sentido.normalEhHolo ? 'normal' : '']
+      .find(nome => nome && tem(nome)) || null;
+  }
+  if (tem(exato)) return undefined;
+  if (exato === 'reverse' && tem('reverse-holofoil')) return 'reverse-holofoil';
+  return sentido.reverseDoCardmarket && tem('holo') ? 'holo' : undefined;
+}
+
+/** A chave de preço que vale para esta versão (ver versaoQueTemOPreco). */
+function chaveDePrecoDaVersao(cardId, idioma, valor) {
+  const outra = versaoQueTemOPreco(cardId, valor, idioma);
+  if (outra === null) return null;
+  return centralPriceResolveKey(cardId, idioma, outra || valor);
+}
+
+/* Em que lugar da carta este nome do mercado entra: '' quando é o que o nome
+   diz; 'reverse' ou 'holo' quando é o Cardmarket falando de outra versão. */
+function acabamentoRealDoMercado(sentido, valor) {
+  if (!sentido) return '';
+  const exato = exactSourceEnum(valor);
+  if (exato === 'holo' && sentido.holoEhReverse) return 'reverse';
+  if (exato === 'normal' && sentido.normalEhHolo) return 'holo';
+  return '';
+}
+
 function chaveDaVersao(value, acabamentoPadrao) {
   const enumero = exactSourceEnum(value);
   const edicao = EDICAO_DO_ENUM[enumero] || 'normal';
@@ -841,25 +929,43 @@ function variantesVisiveis(cardId, valores, selecionada, language = '') {
   // A "Holo" do banco que na verdade é o foil especial (Cosmos...) da carta
   // não vira botão próprio — ver foilEspecialUnico.
   const soFoil = card && typeof foilEspecialUnico === 'function' ? foilEspecialUnico(card) : null;
+  // "holo"/"normal" do Cardmarket que são outra versão — ver sentidoDoCardmarket.
+  const sentido = typeof sentidoDoCardmarket === 'function' ? sentidoDoCardmarket(cardId, idioma) : null;
+
+  // A versão escolhida fica com o próprio nome, mesmo sendo um nome do
+  // Cardmarket que é outra versão: é a cópia que você já cadastrou assim, e
+  // ela precisa aparecer para dar para mudar.
+  const realDe = value => (value === selecionada ? '' : acabamentoRealDoMercado(sentido, value));
+  // Os nomes do Cardmarket que são outra versão entram por último: não mudam
+  // a ordem dos botões, só preenchem a vaga que ninguém ocupou.
+  const ordem = [...lista.filter(value => !realDe(value)), ...lista.filter(value => realDe(value))];
 
   const porVersao = new Map();
-  for (const value of lista) {
+  for (const value of ordem) {
     if (excluidas?.size && value !== selecionada && excluidas.has(`s|${siglaDaVariante(value)}`)) continue;
     if (soFoil?.size && value !== selecionada && planaSubstituidaPorFoil(value, soFoil)) continue;
-    const chave = chaveDaVersao(value, acabamentoPadrao);
+    const real = realDe(value);
+    const chave = real ? `${real}|normal` : chaveDaVersao(value, acabamentoPadrao);
     if (!permitido(chave.split('|')[0]) && value !== selecionada) continue;
-    const temPreco = Boolean(centralPriceResolveKey(cardId, idioma, value));
+    const outra = versaoQueTemOPreco(cardId, value, idioma);
+    const precoProprio = outra === undefined && Boolean(centralPriceResolveKey(cardId, idioma, value));
+    const precoEmprestado = typeof outra === 'string' && Boolean(centralPriceResolveKey(cardId, idioma, outra));
+    /* Entre nomes da mesma carta: a versão escolhida; depois o nome que tem
+       preço próprio; depois o que usa o preço gravado com outro nome; depois
+       o que não tem preço; por último o nome do Cardmarket que fala de outra
+       versão. Empatou, fica o primeiro. */
+    const peso = value === selecionada ? 5 : real ? 1 : precoProprio ? 4 : precoEmprestado ? 3 : 2;
     const atual = porVersao.get(chave);
-    // Entre nomes da mesma carta, fica o que tem preço; empatou, fica o
-    // primeiro. A versão escolhida sempre garante a própria vaga.
-    if (!atual || value === selecionada || (temPreco && !atual.temPreco)) {
-      porVersao.set(chave, { value, temPreco, travado: value === selecionada });
-    }
+    if (!atual || peso > atual.peso) porVersao.set(chave, { value, peso, real });
   }
   if (selecionada && ![...porVersao.values()].some(item => item.value === selecionada) && lista.includes(selecionada)) {
-    porVersao.set(chaveDaVersao(selecionada, acabamentoPadrao), { value: selecionada, temPreco: false, travado: true });
+    porVersao.set(chaveDaVersao(selecionada, acabamentoPadrao), { value: selecionada, peso: 5, real: '' });
   }
-  return [...porVersao.values()].map(item => item.value);
+  /* Vaga ocupada só pelo nome do Cardmarket: a versão existe (é o reverse ou a
+     holo dele), mas aparece com o nome certo. O preço vem do nome do
+     Cardmarket (versaoQueTemOPreco). */
+  const NOME_DA_VAGA = { reverse: 'reverse-holofoil', holo: 'holo' };
+  return [...porVersao.values()].map(item => (item.real ? NOME_DA_VAGA[item.real] : item.value));
 }
 
 function pillHtml(cardId, value, ativo, semPreco) {
@@ -876,7 +982,7 @@ function pillHtml(cardId, value, ativo, semPreco) {
 
 function pillsHtml(cardId, valores, valorAtual, idioma) {
   return valores
-    .map(value => pillHtml(cardId, value, value === valorAtual, !centralPriceResolveKey(cardId, idioma, value)))
+    .map(value => pillHtml(cardId, value, value === valorAtual, !chaveDePrecoDaVersao(cardId, idioma, value)))
     .join('');
 }
 
@@ -1023,7 +1129,7 @@ function derivePricingVariant(card, { finish, edition, language, current } = {})
     else score += v.includes('1st') ? -4 : 2;
 
     // Entre empates, vale mais a opção que realmente tem preço publicado.
-    if (centralPriceResolveKey(card?.id || '', language || 'pt-br', value)) score += 3;
+    if (chaveDePrecoDaVersao(card?.id || '', language || 'pt-br', value)) score += 3;
     // Mantém a escolha atual quando ela continua sendo válida.
     if (exactSourceEnum(current) === value) score += 1;
 
@@ -1393,7 +1499,11 @@ function centralPriceCompatibility(cardId, value = {}) {
   const identity = marketVariantIdentity(value);
   if (!cardId || !identity.language || !identity.pricingVariant) return null;
   if (identity.gradingCompany !== 'nao-graduada' || identity.tags.length) return null;
-  const resolved = centralPriceResolveKey(cardId, identity.language, identity.pricingVariant);
+  // O preço gravado com outro nome quando o do próprio nome é de outra versão
+  // (o "holo" do Cardmarket é o reverse) — ver versaoQueTemOPreco.
+  const outra = typeof versaoQueTemOPreco === 'function' ? versaoQueTemOPreco(cardId, identity.pricingVariant, identity.language) : undefined;
+  if (outra === null) return null;
+  const resolved = centralPriceResolveKey(cardId, identity.language, outra || identity.pricingVariant);
   if (!resolved) return null;
 
   const fallbackLanguage = resolved.language !== identity.language;
@@ -1800,10 +1910,35 @@ function clearNonDatabaseAutomaticPrices() {
   return changed;
 }
 
+/* Preço automático guardado que o banco já não sustenta por ser de outra
+   versão — o "holo" do Cardmarket (preço do reverse) guardado numa holo ou no
+   foil especial dela. Sai, para a carta não continuar mostrando o preço do
+   reverse até a próxima mudança no banco. */
+function limparPrecoDeOutraVersao(cardId, variant) {
+  if (!hasFiniteNumber(variant.automaticEstimatedValue)) return false;
+  const idioma = variant.language || 'pt-br';
+  let deOutra = versaoQueTemOPreco(cardId, variant.pricingVariant, idioma) === null;
+  if (!deOutra && typeof precoComoPlana === 'function') {
+    const plana = precoComoPlana(cardId, variant);
+    if (plana) deOutra = versaoQueTemOPreco(cardId, plana.pricingVariant, idioma) === null;
+  }
+  if (!deOutra) return false;
+  Object.assign(variant, {
+    automaticEstimatedValue: null, automaticPriceSource: '', automaticPriceLabel: '', automaticPriceProvider: '',
+    automaticPriceOriginalValue: null, automaticPriceCurrency: '', automaticPriceUpdatedAt: null,
+    automaticPriceConfidence: '', automaticPriceFingerprint: '', automaticPriceValidationReasons: [],
+    automaticPriceValidationChecks: [], automaticPriceUserValidated: false, automaticPriceAcceptedFingerprint: '',
+    automaticPriceUserValidatedAt: null, automaticPriceListingsCount: 0, automaticPriceAcceptedCount: 0,
+    automaticPriceExcludedCount: 0, automaticPriceStoresCount: 0, automaticPriceLow: null, automaticPriceHigh: null,
+    automaticPriceMarketKey: '', automaticPriceMarketIdentity: null,
+  });
+  return true;
+}
+
 function applyAutomaticPriceToVariant(cardId, variant) {
   if (!variant) return false;
   const quote = automaticPriceQuote(cardId, variant);
-  if (!quote || !hasFiniteNumber(quote.brl)) return false;
+  if (!quote || !hasFiniteNumber(quote.brl)) return limparPrecoDeOutraVersao(cardId, variant);
   const nextValue = Math.round(Number(quote.brl) * 100) / 100;
   const nextUpdated = quote.fetchedAt ? new Date(Number(quote.fetchedAt)).toISOString() : new Date().toISOString();
   const previouslyAccepted = Boolean(variant.automaticPriceUserValidated)
@@ -8553,7 +8688,7 @@ function abrirRevisaoSessao() {
     ].filter(Boolean);
     const carimbado = linha.distribution && linha.distribution !== 'unstamped';
     const semPrecoDeFonte = carimbado || extras.length || (linha.pricingVariant && !VERSOES_PLANAS.has(linha.pricingVariant)
-      && !centralPriceResolveKey(card.id, idioma, linha.pricingVariant));
+      && !chaveDePrecoDaVersao(card.id, idioma, linha.pricingVariant));
     const pills = variantes.map(value => {
       const estilo = variantEstilo(value);
       return `<button type="button" class="variante-pill ${estilo.classe}${value === linha.pricingVariant ? ' ativo' : ''}"

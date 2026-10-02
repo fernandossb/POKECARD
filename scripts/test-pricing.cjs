@@ -141,4 +141,54 @@ assert.strictEqual(
   'Sem marcação no catálogo, todas as versões do mercado valem'
 );
 
+/* --- O que o Cardmarket quer dizer (5.87) ---
+   O banco grava o preço da carta no Cardmarket como "normal" e o preço
+   "-holo" dele (que é o do REVERSE) como "holo". As marcações do TCGdex
+   ("tcgdex-flag") e o "holofoil" do TCGplayer dizem que versão é cada um. */
+const preco = (p, k) => ({ p, c: 80, x: 1, k, u: '2026-10-01T12:00:00Z', v: [p], t: 1 });
+const entrada = (value, sources, kinds = ['market-variant']) => ({ language: 'en', value, sources, kinds, priced: true });
+const marcacao = value => ({ language: 'en', value, sources: ['tcgdex'], kinds: ['tcgdex-flag'], priced: false });
+Object.assign(context.centralPriceData.variantCatalog, {
+  // Dragonite V 076/078: só existe holo.
+  'x-dragonite': [marcacao('holo'), entrada('holofoil', ['tcgplayer']), entrada('normal', ['cardmarket'])],
+  // Só holo, sem TCGplayer: o preço da carta no Cardmarket é o da holo.
+  'x-so-holo': [marcacao('holo'), entrada('normal', ['cardmarket'])],
+  // Bulbasaur 151: comum + reverse; o "holo" do Cardmarket é o reverse.
+  'x-bulbasaur': [
+    entrada('normal', ['cardmarket', 'tcgdex', 'tcgplayer'], ['market-variant', 'tcgdex-flag']),
+    marcacao('reverse'), entrada('holo', ['cardmarket']), entrada('reverse-holofoil', ['tcgplayer']),
+  ],
+  // Comum com reverse que só o Cardmarket precifica.
+  'x-reverse-cm': [entrada('normal', ['cardmarket', 'tcgdex'], ['market-variant', 'tcgdex-flag']), entrada('holo', ['cardmarket'])],
+  // Holo rara com reverse: a holo não pode ficar com o preço do reverse.
+  'x-holo-rara': [
+    entrada('holo', ['cardmarket', 'tcgdex'], ['market-variant', 'tcgdex-flag']), entrada('holofoil', ['tcgplayer']),
+    entrada('normal', ['cardmarket']), marcacao('reverse'), entrada('reverse-holofoil', ['tcgplayer']),
+  ],
+});
+Object.assign(context.centralPriceData.prices, {
+  'x-dragonite::en::holofoil': preco(83.19, 'tcgplayer'), 'x-dragonite::en::normal': preco(51.03, 'cardmarket'),
+  'x-so-holo::en::normal': preco(40, 'cardmarket'),
+  'x-bulbasaur::en::normal': preco(0.9, 'tcgplayer'), 'x-bulbasaur::en::holo': preco(1.78, 'cardmarket'),
+  'x-bulbasaur::en::reverse-holofoil': preco(1.53, 'tcgplayer'),
+  'x-reverse-cm::en::normal': preco(1, 'cardmarket'), 'x-reverse-cm::en::holo': preco(2, 'cardmarket'),
+  'x-holo-rara::en::holo': preco(20.91, 'cardmarket'), 'x-holo-rara::en::holofoil': preco(18.01, 'tcgplayer'),
+  'x-holo-rara::en::normal': preco(14.36, 'cardmarket'), 'x-holo-rara::en::reverse-holofoil': preco(25.84, 'tcgplayer'),
+});
+const precoDe = (cardId, pricingVariant) => context.automaticPriceQuote(cardId, { ...exactVariant, pricingVariant, finish: pricingVariant })?.brl ?? null;
+
+assert.strictEqual(visiveis('x-dragonite', ['holo', 'holofoil', 'normal'], ''), 'holofoil', 'Dragonite V: o "normal" do Cardmarket é a holo, não uma Comum');
+assert.strictEqual(precoDe('x-dragonite', 'holo'), 83.19, 'Dragonite V: a holo usa o preço da holofoil do TCGplayer');
+assert.strictEqual(visiveis('x-so-holo', ['holo', 'normal'], ''), 'holo', 'Só holo: nada de Comum');
+assert.strictEqual(precoDe('x-so-holo', 'holo'), 40, 'Só holo sem TCGplayer: vale o preço da carta no Cardmarket');
+assert.strictEqual(visiveis('x-bulbasaur', ['holo', 'normal', 'reverse', 'reverse-holofoil'], ''), 'normal|reverse-holofoil', 'Bulbasaur 151: o "holo" do Cardmarket é o reverse, não uma Holográfica');
+assert.strictEqual(precoDe('x-bulbasaur', 'reverse-holofoil'), 1.53);
+assert.strictEqual(visiveis('x-reverse-cm', ['holo', 'normal'], ''), 'normal|reverse-holofoil', 'Reverse só no Cardmarket: aparece como Reverse');
+assert.strictEqual(precoDe('x-reverse-cm', 'reverse-holofoil'), 2, 'Reverse só no Cardmarket: usa o preço "holo" dele');
+assert.strictEqual(visiveis('x-holo-rara', ['holo', 'holofoil', 'normal', 'reverse', 'reverse-holofoil'], ''), 'holofoil|reverse-holofoil', 'Holo rara: uma holo e um reverse');
+assert.strictEqual(precoDe('x-holo-rara', 'holo'), 18.01, 'Holo rara: a holo não pode usar o preço do reverse (20,91)');
+assert.strictEqual(precoDe('x-holo-rara', 'reverse-holofoil'), 25.84);
+// Cópia já cadastrada com o nome antigo continua aparecendo para poder mudar.
+assert.strictEqual(visiveis('x-bulbasaur', ['holo', 'normal', 'reverse', 'reverse-holofoil'], 'holo'), 'holo|normal|reverse-holofoil', 'A versão escolhida não pode sumir');
+
 console.log('Precificação exclusiva pelo Price Database, prioridade de mercado e variantes visíveis aprovados.');

@@ -1,3 +1,12 @@
+# POKECARD Brasil 5.87.0 — Versões que não existem
+
+- **Sumiram a Comum e a Holográfica que não existem.** O banco de preços recebe do Cardmarket dois preços por carta e dá a eles nomes de versão que confundiam o app:
+  - o preço geral da carta vinha como **"Comum"**. Numa carta que só existe holo, ele é o preço da própria holo. Por isso a **Dragonite V 076/078 (Pokémon GO)** aparecia como Comum e Holográfica. Agora aparece só como Holográfica.
+  - o preço "holo" do Cardmarket é o do **reverse**, mas vinha como **"Holográfica"**. Por isso cartas comuns como a **Bulbasaur da 151** apareciam com uma Holográfica além do Reverse. Agora ficam só Comum e Reverse.
+- **O app usa o que o TCGdex diz da carta** (quais acabamentos ela tem) para saber o que é cada preço. Isso valia para milhares de cartas: o Master Set da **151** passou de 567 para **362 versões**, que é o número de verdade.
+- **Preço da holo corrigido.** Em holo raras, a holo podia ficar com o preço do reverse do Cardmarket. Agora ela usa o preço da holo (TCGplayer) ou, nas cartas só holo, o preço da carta no Cardmarket. Exemplo: Charizard 010/078 (Pokémon GO) passa de R$ 20,91 para R$ 18,01. Se o banco não tem preço da holo, ela fica sem preço em vez de mostrar o do reverse.
+- **Suas cópias não foram mexidas.** Se você já cadastrou uma carta numa versão que não existe (Comum de uma carta só holo, por exemplo), ela continua aparecendo no cadastro com as suas cópias, para você mudar para a versão certa.
+
 # POKECARD Brasil 5.86.0 — Fichário virtual
 
 - **Tocar numa coleção no Explorar abre um fichário de verdade**, e não mais a aba Coleção. Não há filtro, borda nem informação nas cartas: só a foto de cada uma, em páginas de **9 bolsos (3×3)** com plástico e reflexo, numa folha escura presa por **argolas**.
