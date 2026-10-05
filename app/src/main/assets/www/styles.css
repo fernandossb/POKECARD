@@ -2783,7 +2783,9 @@ select option {
 html.camera-ao-vivo,
 html.camera-ao-vivo body { background: transparent !important; }
 html.camera-ao-vivo #app { visibility: hidden; }
-html.camera-ao-vivo .modal-backdrop { background: transparent !important; }
+/* O desfoque do fundo do modal (backdrop-filter) borraria o <video> da câmera do
+   navegador, que — ao contrário da câmera nativa do Android — é um elemento da página. */
+html.camera-ao-vivo .modal-backdrop { background: transparent !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 html.camera-ao-vivo .modal { background: transparent !important; }
 
 /* A folha do scanner não é um cartão: é a tela inteira, vazada. */
@@ -6735,3 +6737,14 @@ html.sem-android::before {
   content: ''; position: fixed; top: 0; left: 0; right: 0; height: var(--safe-top, 0px);
   background: var(--vision-bg); z-index: 90; pointer-events: none;
 }
+
+/* ==========================================================================
+   5.94 — câmera no navegador (camera-web.js): a imagem é um <video> atrás do
+   app, que fica transparente (html.camera-ao-vivo), como no Android.
+   ========================================================================== */
+#camera-web {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  object-fit: cover; z-index: -1; background: #000; pointer-events: none;
+}
+/* A faixa do topo (relógio do iPhone) cobriria a imagem. */
+html.camera-ao-vivo::before { display: none !important; }

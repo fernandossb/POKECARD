@@ -62,4 +62,21 @@ assert(/__VERSAO__/.test(robo) && /sw\.js/.test(robo), 'A publicação da prévi
 // 5. O service worker não pode ser registrado no aplicativo Android (file://).
 assert(/\^https\?:\$\/\.test\(location\.protocol\)/.test(ler('pwa.js')), 'O registro precisa checar que o endereço é http(s)');
 
-console.log(`App instalável aprovado: ${enderecos.length} arquivos do index.html existem, manifesto e ícones conferem, service worker carimbável.`);
+// 6. Câmera do navegador: o módulo existe, compila e está na página; o leitor de
+// texto (pasta ocr/, fora do Git) é baixado pela publicação e guardado à parte.
+const camera = ler('camera-web.js');
+new vm.Script(camera, { filename: 'camera-web.js' });
+assert(enderecos.some(e => e.split('?')[0] === 'camera-web.js'), 'index.html precisa carregar camera-web.js');
+assert(html.indexOf('camera-web.js') > html.indexOf('app.js'), 'camera-web.js deve vir depois do app.js (usa avisarNaCamera)');
+for (const ponte of ['startLiveScanner', 'stopLiveScanner', 'pauseLiveScanner', 'resumeLiveScanner', 'lerDeNovoLogo']) {
+  assert(new RegExp(ponte + '\\s*:').test(camera), `CameraWeb precisa expor ${ponte} (mesma ponte do Android)`);
+}
+assert(!/tesseract/i.test(camera), 'camera-web.js ainda cita o Tesseract (o leitor agora é o PaddleOCR)');
+assert(fs.existsSync(path.join(__dirname, 'baixar-ocr.mjs')), 'scripts/baixar-ocr.mjs sumiu');
+assert(/baixar-ocr\.mjs/.test(robo) && /setup-node/.test(robo), 'A publicação da prévia precisa baixar o leitor de texto (ocr/)');
+assert(/ocr\//.test(fs.readFileSync(path.join(__dirname, '..', '.gitignore'), 'utf8')), 'ocr/ (30 MB) não pode ir para o Git');
+assert(!enderecos.some(e => e.startsWith('ocr/')), 'index.html não deve carregar ocr/ direto: só a câmera pede, quando abre');
+const sws = ler('sw.js');
+assert(/PASTA_OCR\s*=\s*'ocr\/'/.test(sws) && /CACHE_OCR/.test(sws), 'sw.js precisa guardar a pasta ocr/ num cache próprio (não é refeito a cada versão)');
+
+console.log(`App instalável aprovado: ${enderecos.length} arquivos do index.html existem, manifesto e ícones conferem, service worker carimbável, câmera web conectada.`);

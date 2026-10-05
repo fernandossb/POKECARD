@@ -10,3 +10,6 @@ local.properties
 *.keystore
 signing.properties
 SEGREDOS-GITHUB.txt
+
+# Leitor de texto da câmera do navegador: baixado por scripts/baixar-ocr.mjs na publicação do site
+app/src/main/assets/www/ocr/

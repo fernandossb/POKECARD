@@ -56,6 +56,24 @@ jobs:
           grep -n "^const VERSAO" "$PASTA/sw.js"
           if grep -q "__VERSAO__" "$PASTA/sw.js"; then echo "versão não carimbada"; exit 1; fi
 
+      # A câmera do navegador (iPhone) lê o texto da carta com o PaddleOCR rodando
+      # no próprio aparelho: ~30 MB de motor e modelos que NÃO ficam no Git nem no
+      # APK (no Android quem lê é o ML Kit). O script baixa tudo em versão fixa e
+      # confere o checksum; se algo mudar na fonte, a publicação para aqui.
+      - name: Instalar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Baixar o leitor de texto da câmera
+        shell: bash
+        run: |
+          node scripts/baixar-ocr.mjs
+          for ARQUIVO in ort.wasm.min.js ort-wasm-simd.wasm ort-wasm.wasm modelos/det.onnx modelos/rec.onnx; do
+            if [ ! -s "app/src/main/assets/www/ocr/$ARQUIVO" ]; then echo "ocr/$ARQUIVO não foi baixado"; exit 1; fi
+          done
+          du -sh app/src/main/assets/www/ocr
+
       - name: Configurar Pages
         uses: actions/configure-pages@v5
         with:

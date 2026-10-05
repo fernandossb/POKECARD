@@ -21,6 +21,11 @@
    service worker e o cache da versão anterior é apagado. */
 const VERSAO = '__VERSAO__';
 const CACHE = `pokecard-${VERSAO}`;
+// O leitor de texto da câmera (ocr/, ~7 MB) tem cache próprio: não é apagado a cada
+// versão do app, senão cada atualização baixaria tudo de novo. Mude o número se o
+// leitor mudar (scripts/baixar-ocr.mjs).
+const CACHE_OCR = 'pokecard-ocr-v1';
+const PASTA_OCR = 'ocr/';
 const BASE = new URL('./', self.location).pathname;
 const PASTAS_FIXAS = ['sprites/', 'set-logos/', 'collection-images/', 'fonts/', 'icons/'];
 // Sempre guardados na instalação, além do que o index.html carrega.
@@ -57,7 +62,7 @@ self.addEventListener('install', evento => {
 self.addEventListener('activate', evento => {
   evento.waitUntil((async () => {
     for (const nome of await caches.keys()) {
-      if (nome.startsWith('pokecard-') && nome !== CACHE) await caches.delete(nome);
+      if (nome.startsWith('pokecard-') && nome !== CACHE && nome !== CACHE_OCR) await caches.delete(nome);
     }
     await self.clients.claim();
   })());
@@ -84,8 +89,8 @@ async function paginaPrimeiro(pedido) {
   }
 }
 
-async function cachePrimeiro(pedido) {
-  const cache = await caches.open(CACHE);
+async function cachePrimeiro(pedido, nomeDoCache = CACHE) {
+  const cache = await caches.open(nomeDoCache);
   const guardada = await cache.match(pedido);
   if (guardada) return guardada;
   return guardar(cache, pedido, await fetch(pedido));
@@ -118,6 +123,10 @@ self.addEventListener('fetch', evento => {
     return;
   }
   const relativo = url.pathname.startsWith(BASE) ? url.pathname.slice(BASE.length) : url.pathname;
+  if (relativo.startsWith(PASTA_OCR)) {
+    evento.respondWith(cachePrimeiro(pedido, CACHE_OCR));
+    return;
+  }
   const fixo = /^\?v=/.test(url.search) || PASTAS_FIXAS.some(pasta => relativo.startsWith(pasta));
   evento.respondWith(fixo ? cachePrimeiro(pedido) : redePrimeiro(pedido));
 });

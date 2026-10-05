@@ -12,6 +12,20 @@ try {
    navegador oferece, e a câmera do scanner (que é do Android) fica de fora. */
 const NO_NAVEGADOR = !window.Android;
 
+/* A câmera do scanner: a ponte do Android (CameraX + ML Kit) ou, no navegador,
+   a câmera web (camera-web.js, Tesseract). As duas falam a mesma língua:
+   startLiveScanner, stopLiveScanner, pauseLiveScanner, resumeLiveScanner e
+   lerDeNovoLogo, e devolvem receiveScannerText / receiveScannerError /
+   receiveScannerGlare. O navegador precisa de https e de getUserMedia. */
+const CAMERA_WEB_POSSIVEL = NO_NAVEGADOR
+  && Boolean(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)
+  && window.isSecureContext === true;
+function temCamera() { return !NO_NAVEGADOR || CAMERA_WEB_POSSIVEL; }
+function pontaDaCamera() {
+  if (window.Android?.startLiveScanner) return window.Android;
+  return CAMERA_WEB_POSSIVEL ? (window.CameraWeb || null) : null;
+}
+
 const STORAGE_KEY = 'fichario-pokemon-br-plus-state-v1';
 const CATALOG_DB_NAME = 'fichario-pokemon-catalog-v1';
 const CATALOG_DB_STORE = 'catalog';
@@ -3375,7 +3389,7 @@ function renderTabs() {
       <span class="tab-icon">${tabIcon(icon)}</span><span class="tab-label">${label}</span>
     </button>
   `).join('') + `
-    <button class="tab scanner-tab" onclick="${NO_NAVEGADOR ? 'abrirBuscaDeCartas()' : 'openScannerSetup()'}" aria-label="${NO_NAVEGADOR ? 'Buscar carta' : 'Escanear carta'}">
+    <button class="tab scanner-tab" onclick="${temCamera() ? 'openScannerSetup()' : 'abrirBuscaDeCartas()'}" aria-label="${temCamera() ? 'Escanear carta' : 'Buscar carta'}">
       <img class="tab-icon scanner-pokebola" src="pokebola-scanner.webp" alt="">
     </button>` + primary.slice(2).map(([value, label, icon]) => `
     <button class="tab ${ui.tab === value ? 'active' : ''}" onclick="setTab('${value}')" aria-label="${label}">
@@ -3402,7 +3416,7 @@ function atualizarPokebolaDoScanner() {
   if (!botao) return;
   const quantas = leiturasEsperando();
   botao.classList.toggle('tem-leituras', quantas > 0);
-  const rotulo = NO_NAVEGADOR ? 'Buscar carta' : 'Escanear carta';
+  const rotulo = temCamera() ? 'Escanear carta' : 'Buscar carta';
   botao.setAttribute('aria-label', quantas
     ? `${rotulo} (${quantas} ${quantas === 1 ? 'leitura esperando' : 'leituras esperando'})`
     : rotulo);
@@ -3426,7 +3440,7 @@ function openMoreNavigation() {
   showModal(`<button class="modal-close" onclick="closeModal()" aria-label="Fechar">×</button>
     <h2>Mais opções</h2><p class="screen-subtitle">Acesse todas as áreas do seu fichário.</p>
     <div class="quick-action-list">
-      ${NO_NAVEGADOR ? '' : `<button onclick="closeModal();abrirConsultaDePreco()"><span class="quick-action-icon" aria-hidden="true">${icone('cifrao')}</span><span><strong>Consultar preço</strong><small>Aponte a câmera: o preço de cada versão, sem cadastrar</small></span></button>`}
+      ${!temCamera() ? '' : `<button onclick="closeModal();abrirConsultaDePreco()"><span class="quick-action-icon" aria-hidden="true">${icone('cifrao')}</span><span><strong>Consultar preço</strong><small>Aponte a câmera: o preço de cada versão, sem cadastrar</small></span></button>`}
       <button onclick="closeModal();setTab('wishlist')"><span class="quick-action-icon">${tabIcon('wishlist')}</span><span><strong>Wishlist</strong><small>Cartas que você procura</small></span></button>
       <button onclick="closeModal();setTab('repeated')"><span class="quick-action-icon">${tabIcon('repeated')}</span><span><strong>Repetidas</strong><small>Estoque para troca ou venda</small></span></button>
       <button onclick="closeModal();setTab('produtos')"><span class="quick-action-icon">${tabIcon('collections')}</span><span><strong>Produtos prontos</strong><small>Baralhos de batalha, kits e caixas</small></span></button>
@@ -3894,7 +3908,7 @@ function renderDashboard() {
       </section>
 
       <div class="quick-action-list consulta-atalho-inicio">
-        ${NO_NAVEGADOR ? '' : `<button onclick="abrirConsultaDePreco()"><span class="quick-action-icon" aria-hidden="true">${icone('cifrao')}</span><span><strong>Consultar preço</strong><small>Aponte a câmera para uma carta. Nada é cadastrado.</small></span></button>`}
+        ${!temCamera() ? '' : `<button onclick="abrirConsultaDePreco()"><span class="quick-action-icon" aria-hidden="true">${icone('cifrao')}</span><span><strong>Consultar preço</strong><small>Aponte a câmera para uma carta. Nada é cadastrado.</small></span></button>`}
       </div>
 
       <button class="pokedex-progress-card" onclick="setTab('pokedex')">
@@ -6800,9 +6814,10 @@ function scanNextCard() {
   // Caminho único: a câmera fica aberta dentro do app, atrás desta tela, e vai
   // lendo sozinha. A moldura, a faixa de miniaturas e os botões são desenhados
   // por cima da imagem.
-  if (window.Android?.startLiveScanner) {
+  const camera = pontaDaCamera();
+  if (camera) {
     scannerSession.live = true;
-    window.Android.startLiveScanner(scannerSession.finish);
+    camera.startLiveScanner(scannerSession.finish);
     telaCameraAoVivo();
     return;
   }
@@ -6817,7 +6832,7 @@ function scanNextCard() {
   closeModal();
   notify(window.Android
     ? 'Esta versão do aplicativo ainda não tem a câmera do scanner. Instale a versão mais nova.'
-    : 'A câmera do scanner só funciona dentro do aplicativo Android.');
+    : 'A câmera só abre por uma conexão segura (https). Abra o app pelo endereço do site.');
 }
 
 function stopScannerSession() {
@@ -7333,7 +7348,7 @@ function juntarLeituras(textos) {
 
 // Leitura que falhou por pouco: a câmera tenta de novo sem esperar o intervalo.
 function pedirOutraLeituraLogo() {
-  try { window.Android?.lerDeNovoLogo?.(); } catch (_) {}
+  try { pontaDaCamera()?.lerDeNovoLogo?.(); } catch (_) {}
 }
 
 function reflexoRecente() {
@@ -7599,7 +7614,7 @@ function telaCameraAoVivo() {
      o aplicativo aparecendo atrás, no lugar da imagem da câmera. */
   document.documentElement.classList.add('camera-ao-vivo');
   if (scannerSession.live) {
-    try { window.Android?.startLiveScanner?.(scannerSession.finish); } catch (_) {}
+    try { pontaDaCamera()?.startLiveScanner?.(scannerSession.finish); } catch (_) {}
   }
   const pendentes = leiturasPendentes();
   const total = totalLeituras();
@@ -8068,7 +8083,7 @@ function fecharPainelLeitura() {
 }
 
 function pausarCamera() {
-  try { window.Android?.pauseLiveScanner?.(); } catch (_) {}
+  try { pontaDaCamera()?.pauseLiveScanner?.(); } catch (_) {}
 }
 
 /* Encerra a câmera e devolve a tela normal do aplicativo.
@@ -8076,14 +8091,14 @@ function pausarCamera() {
    depender disso: se a ponte não responder — versão antiga, câmera que nunca
    chegou a abrir —, `#app` continuaria escondido e a tela ficaria vazia. */
 function sairDaCamera() {
-  try { if (scannerSession.live) window.Android?.stopLiveScanner?.(); } catch (_) {}
+  try { if (scannerSession.live) pontaDaCamera()?.stopLiveScanner?.(); } catch (_) {}
   scannerSession.live = false;
   document.documentElement.classList.remove('camera-ao-vivo');
 }
 
 function retomarCamera() {
   fecharPainelLeitura();
-  try { window.Android?.resumeLiveScanner?.(); } catch (_) {}
+  try { pontaDaCamera()?.resumeLiveScanner?.(); } catch (_) {}
 }
 
 /* ---------- Peças do painel de confirmação ---------- */
@@ -8793,6 +8808,16 @@ function encerrarLeitura() {
     notify(`${total} carta(s) para cadastrar continuam esperando na Pokébola.`);
   }
 }
+
+/* A câmera do navegador não abriu (permissão negada, sem câmera, sem internet para
+   baixar o leitor). O aviso da tela do scanner some em 2 s e deixaria a pessoa
+   diante de uma tela vazia: fecha o scanner e explica num aviso que fica. */
+window.cameraWebFalhou = function cameraWebFalhou(mensagem) {
+  scannerSession.active = false;
+  sairDaCamera();
+  closeModal();
+  notify(mensagem || 'Não foi possível abrir a câmera.');
+};
 
 window.receiveScannerError = function receiveScannerError(message) {
   if (!scannerSession.active) return;

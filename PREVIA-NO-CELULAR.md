@@ -26,16 +26,29 @@ https://fernandossb.github.io/POKECARD/
 
 ## O que funciona no iPhone
 
-Tudo, menos a câmera:
+Tudo:
 
 - Coleção, Fichário virtual, Pokédex, decks, troféus, wishlist, repetidas e preços em reais.
+- **Scanner pela câmera**: a Pokébola do meio da barra abre a câmera, você encaixa a carta
+  na moldura e o app a reconhece, igual ao Android (veja abaixo).
 - Funciona sem internet depois da primeira abertura (os preços e fotos novos precisam de internet).
 - Exportar para PDF, Excel e Liga Pokémon, e o backup, pelo botão **Compartilhar** do iPhone
   (salvar em Arquivos, iCloud Drive, AirDrop, WhatsApp).
 
-**Não tem a câmera do scanner** (ler a carta e consultar o preço apontando o celular):
-isso usa a câmera e o leitor de texto do Android. A Pokébola do meio da barra vira
-**Buscar carta**.
+### A câmera no iPhone
+
+- Na primeira vez o iPhone pede a **permissão da câmera** (toque em Permitir) e o app baixa
+  o leitor de texto, uns **30 MB**, uma vez só — com Wi-Fi, de preferência. Depois fica guardado
+  no aparelho e funciona sem internet.
+- Precisa do **iOS 16.4 ou mais novo** para ser rápido (em versões anteriores ainda funciona,
+  mais devagar).
+- Encaixe a carta **inteira** na moldura, com luz boa e **sem reflexo**: o iPhone não deixa
+  o app baixar o brilho, então o aviso de reflexo pede para você mudar o ângulo.
+- Cada leitura leva uns 2 a 4 segundos (o Android lê um pouco mais depressa).
+- A leitura é feita no próprio aparelho: a foto da câmera **nunca sai do iPhone**.
+- Se a câmera não abrir: confira em **Ajustes → Safari → Câmera** (ou, no app instalado,
+  **Ajustes → POKECARD**) se está em *Perguntar* ou *Permitir*. Sem a câmera, a Pokébola
+  continua servindo como **Buscar carta**: dá para achar pelo nome ou número.
 
 ## Backup (importante)
 
@@ -60,6 +73,12 @@ roda a cada envio para `main` que mexa na pasta do app, e também à mão em
 **Actions → Publicar prévia no navegador → Run workflow**. Ele publica no GitHub Pages
 e carimba a versão do app no `sw.js` (service worker), para o navegador instalar a
 versão nova e apagar o cache da anterior.
+
+Antes de empacotar, o robô roda `node scripts/baixar-ocr.mjs`: baixa para `www/ocr/` o leitor
+de texto da câmera (ONNX Runtime Web 1.17.3 + PaddleOCR PP-OCRv3, ~30 MB), em versão fixa
+e conferindo o checksum. Essa pasta **não vai para o Git nem para o APK** (no Android quem
+lê é o ML Kit). Para testar a câmera no seu computador: rode o mesmo comando e sirva a pasta
+`www` por `localhost` (a câmera só abre em https ou localhost).
 
 Não precisa configurar nada: o robô ativa o Pages na primeira vez (`enablement: true`).
 Só é preciso que as permissões de escrita estejam liberadas: **Settings → Actions → General →
