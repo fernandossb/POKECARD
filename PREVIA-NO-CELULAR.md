@@ -38,12 +38,13 @@ Tudo:
 ### A câmera no iPhone
 
 - Na primeira vez o iPhone pede a **permissão da câmera** (toque em Permitir) e o app baixa
-  o leitor de texto, uns **30 MB**, uma vez só — com Wi-Fi, de preferência. Depois fica guardado
+  o leitor de texto, uns **13 MB**, uma vez só — com Wi-Fi, de preferência. Depois fica guardado
   no aparelho e funciona sem internet.
 - Precisa do **iOS 16.4 ou mais novo** para ser rápido (em versões anteriores ainda funciona,
   mais devagar).
 - Encaixe a carta **inteira** na moldura, com luz boa e **sem reflexo**: o iPhone não deixa
   o app baixar o brilho, então o aviso de reflexo pede para você mudar o ângulo.
+- A tela **não apaga** enquanto o scanner está aberto (iOS 16.4 ou mais novo).
 - Cada leitura leva uns 2 a 4 segundos (o Android lê um pouco mais depressa).
 - A leitura é feita no próprio aparelho: a foto da câmera **nunca sai do iPhone**.
 - Se a câmera não abrir: confira em **Ajustes → Safari → Câmera** (ou, no app instalado,
@@ -75,7 +76,7 @@ e carimba a versão do app no `sw.js` (service worker), para o navegador instala
 versão nova e apagar o cache da anterior.
 
 Antes de empacotar, o robô roda `node scripts/baixar-ocr.mjs`: baixa para `www/ocr/` o leitor
-de texto da câmera (ONNX Runtime Web 1.17.3 + PaddleOCR PP-OCRv3, ~30 MB), em versão fixa
+de texto da câmera (ONNX Runtime Web 1.17.3 + PaddleOCR PP-OCRv3; ~30 MB em disco, uns 13 MB na rede porque o site comprime), em versão fixa
 e conferindo o checksum. Essa pasta **não vai para o Git nem para o APK** (no Android quem
 lê é o ML Kit). Para testar a câmera no seu computador: rode o mesmo comando e sirva a pasta
 `www` por `localhost` (a câmera só abre em https ou localhost).

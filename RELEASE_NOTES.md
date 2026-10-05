@@ -1,8 +1,15 @@
+# POKECARD Brasil 5.94.1 — Câmera do iPhone: tela acesa e download menor do que parecia
+
+- **A tela do iPhone não apaga mais com o scanner aberto.** Câmera aberta não segura a tela acesa, e sem tocar nela por 30 segundos ela apagava no meio de um lote de cartas. Agora o scanner pede ao iOS (16.4 ou mais novo) para mantê-la acesa e a devolve ao fechar a câmera.
+- **O leitor da câmera baixa uns 13 MB, não 30**: o site entrega os arquivos comprimidos. Ocupa uns 22 MB no aparelho depois de guardado. Os textos da 5.94.0 diziam 30 MB.
+- Abrir o scanner de novo na mesma sessão **não relê o motor de 10 MB**, só os modelos, e a cópia do motor que ficava na memória é liberada assim que ele inicia.
+- Testado no site publicado (https, service worker e cache do leitor de verdade) com uma câmera simulada: baixou o leitor com a porcentagem à vista e identificou a carta no painel; a leitura de uma carta de arte inteira (Mega Latias ex 181/132) e as falhas (sem permissão da câmera, sem internet no primeiro uso) também foram conferidas. **Ainda não foi testado num iPhone de verdade.**
+
 # POKECARD Brasil 5.94.0 — A câmera do scanner no iPhone
 
 - **O scanner por câmera agora funciona no iPhone** (e em qualquer navegador com https). A Pokébola do meio da barra abre a câmera, você encaixa a carta na moldura e o app a reconhece, mostra o painel "carta identificada" e cadastra ou consulta o preço — é o mesmo scanner do Android, com o mesmo painel, as mesmas versões e os mesmos preços. O botão volta a se chamar **Escanear carta** e a **Consultar preço** por câmera volta às telas.
 - **A leitura do texto da carta é feita no próprio aparelho**, com o PaddleOCR rodando em WebAssembly: a foto da câmera nunca sai do iPhone. Só a faixa de cima (nome) e a de baixo (numeração, ilustrador) da carta são lidas, e só o que cabe dentro da moldura.
-- **Na primeira vez** o app baixa o leitor (uns **30 MB**, uma vez só — de preferência no Wi-Fi), mostrando o andamento na tela da câmera. Depois fica guardado no aparelho e funciona sem internet. O iPhone pede a permissão da câmera; se for negada, o app explica onde liberar.
+- **Na primeira vez** o app baixa o leitor (uns **13 MB**, uma vez só — de preferência no Wi-Fi), mostrando o andamento na tela da câmera. Depois fica guardado no aparelho e funciona sem internet. O iPhone pede a permissão da câmera; se for negada, o app explica onde liberar.
 - **Precisão medida em 98 cartas de coleções sorteadas** (foto da carta colocada na moldura, com folga, giro e desfoque): **91% acertam já na primeira leitura, 96% entre as 3 primeiras opções, e nenhuma leitura "certa" deu a carta errada**. Com a carta bem menor que a moldura o acerto cai para 80% (90% entre as 3 melhores). Cada leitura leva uns 2 segundos num computador; no iPhone pode levar um pouco mais.
 - **Limites:** cartas de arte inteira com o número sobre a ilustração e reimpressões idênticas (mesmo nome, mesmo número) são as mais difíceis — nelas o app mostra as opções para você escolher, como no Android. O iPhone não deixa o app baixar a exposição, então o aviso de reflexo pede para mudar o ângulo. Pede iOS 16.4 ou mais novo para ser rápido.
 - **No Android nada muda**: a câmera e a leitura continuam no aplicativo (CameraX + ML Kit), e o APK não ganha um byte (o leitor só existe no site).

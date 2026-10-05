@@ -9,8 +9,9 @@
    · A imagem vem de getUserMedia e aparece num <video> ATRÁS do app (a tela da
      câmera é transparente, como no Android: html.camera-ao-vivo).
    · O texto é lido pelo PaddleOCR (detector + leitor, em formato ONNX) no ONNX
-     Runtime Web. Baixado na primeira vez (~22 MB, pasta ocr/, que só existe no
-     site — scripts/baixar-ocr.mjs) e guardado no aparelho.
+     Runtime Web. Baixado na primeira vez (~13 MB comprimidos, ~22 MB no
+     aparelho; pasta ocr/, que só existe no site — scripts/baixar-ocr.mjs) e
+     guardado no aparelho.
      Em 56 cartas de teste ele achou o número em 93% e o nome em 96%.
    · Só a carta é lida: o recorte é a moldura que o usuário encaixa na tela
      (o Android lê o quadro inteiro e confia que a carta o preenche).
@@ -41,6 +42,8 @@
   };
   var config = { faixas: [0.26, 0.80] };   // [fim da faixa de cima, início da faixa de baixo], em fração da altura
   var leitor = { det: null, rec: null, promessa: null };
+  var motorIniciado = false;  // o ONNX Runtime já instanciou o WebAssembly nesta página
+  var travaDaTela = null;     // Screen Wake Lock: a tela do iPhone não apaga durante a leitura
   var cartaCanvas = null;
   var trabalho = null;      // canvas e buffers reaproveitados entre quadros
 
@@ -102,7 +105,8 @@
     leitor.promessa = (async function () {
       var base = new URL('ocr/', document.baseURI).href;
       var simd = temSimd();
-      var total = (simd ? TAMANHOS.wasm : TAMANHOS.wasmSemSimd) + TAMANHOS.det + TAMANHOS.rec;
+      // O motor WebAssembly, depois de iniciado, fica na página: reabrir o scanner só relê os modelos.
+      var total = (motorIniciado ? 0 : simd ? TAMANHOS.wasm : TAMANHOS.wasmSemSimd) + TAMANHOS.det + TAMANHOS.rec;
       var baixado = 0, ultimoPct = -1;
       var andar = function (bytes) {
         baixado += bytes;
@@ -118,17 +122,27 @@
       ort.env.logLevel = 'error';
       // O motor é baixado aqui, com o andamento à vista, e entregue pronto ao ONNX
       // Runtime por um endereço local (blob:), para ele não baixar os 10 MB de novo.
-      var arquivoDoMotor = simd ? 'ort-wasm-simd.wasm' : 'ort-wasm.wasm';
-      var bytesDoMotor = await baixar(base + arquivoDoMotor, simd ? TAMANHOS.wasm : TAMANHOS.wasmSemSimd, andar);
-      var caminhos = {};
-      caminhos[arquivoDoMotor] = URL.createObjectURL(new Blob([bytesDoMotor], { type: 'application/wasm' }));
-      ort.env.wasm.wasmPaths = caminhos;
+      var enderecoLocal = null;
+      if (!motorIniciado) {
+        var arquivoDoMotor = simd ? 'ort-wasm-simd.wasm' : 'ort-wasm.wasm';
+        var bytesDoMotor = await baixar(base + arquivoDoMotor, simd ? TAMANHOS.wasm : TAMANHOS.wasmSemSimd, andar);
+        enderecoLocal = URL.createObjectURL(new Blob([bytesDoMotor], { type: 'application/wasm' }));
+        var caminhos = {};
+        caminhos[arquivoDoMotor] = enderecoLocal;
+        ort.env.wasm.wasmPaths = caminhos;
+      }
       var bytesDet = await baixar(base + 'modelos/det.onnx', TAMANHOS.det, andar);
       var bytesRec = await baixar(base + 'modelos/rec.onnx', TAMANHOS.rec, andar);
       dica('Quase pronto…');
       var opcoes = { executionProviders: ['wasm'], graphOptimizationLevel: 'all' };
-      leitor.det = await ort.InferenceSession.create(bytesDet, opcoes);
-      leitor.rec = await ort.InferenceSession.create(bytesRec, opcoes);
+      try {
+        leitor.det = await ort.InferenceSession.create(bytesDet, opcoes);
+        leitor.rec = await ort.InferenceSession.create(bytesRec, opcoes);
+        motorIniciado = true;
+      } finally {
+        // Já instanciado, o motor não precisa mais da cópia de 10 MB guardada na memória.
+        if (enderecoLocal) URL.revokeObjectURL(enderecoLocal);
+      }
       dica('Encaixe a carta dentro da moldura');
       return leitor;
     })();
@@ -387,6 +401,26 @@
     return v;
   }
 
+  /* Câmera aberta não segura a tela acesa no iPhone: sem toque por 30 s a tela
+     apagava no meio de um lote. O Wake Lock (iOS 16.4+) resolve; onde não existir,
+     ou for negado, o scanner funciona igual. */
+  function segurarATela() {
+    try {
+      if (!navigator.wakeLock || travaDaTela || document.hidden) return;
+      navigator.wakeLock.request('screen').then(function (trava) {
+        if (!estado.ativa) { trava.release(); return; }
+        travaDaTela = trava;
+        trava.addEventListener('release', function () { if (travaDaTela === trava) travaDaTela = null; });
+      }).catch(function () {});
+    } catch (_) {}
+  }
+
+  function soltarATela() {
+    var trava = travaDaTela;
+    travaDaTela = null;
+    if (trava) { try { trava.release(); } catch (_) {} }
+  }
+
   function mensagemDoErro(erro) {
     var nome = erro && erro.name;
     if (nome === 'NotAllowedError' || nome === 'SecurityError') return 'Permissão de câmera negada. Libere a câmera para este app nos ajustes do aparelho.';
@@ -438,6 +472,7 @@
     estado.ultimaEntrega = 0;
     var minha = ++estado.geracao;
     criarVideo();
+    segurarATela();
     // A câmera e o leitor sobem juntos: o aviso do leitor aparece enquanto a imagem já roda.
     abrirFluxo(minha).catch(function (erro) {
       if (estado.ativa && minha === estado.geracao) falhar(mensagemDoErro(erro));
@@ -453,6 +488,7 @@
     estado.ativa = false;
     estado.geracao++;
     clearTimeout(estado.temporizador);
+    soltarATela();
     if (estado.stream) {
       estado.stream.getTracks().forEach(function (t) { try { t.stop(); } catch (_) {} });
       estado.stream = null;
@@ -473,6 +509,7 @@
   // O iPhone desliga a câmera quando o app vai para segundo plano: ao voltar, reabre.
   document.addEventListener('visibilitychange', function () {
     if (document.hidden || !estado.ativa) return;
+    segurarATela();   // o sistema solta o Wake Lock quando a página some
     var faixa = estado.stream && estado.stream.getVideoTracks()[0];
     if (faixa && faixa.readyState === 'live') {
       if (estado.video && estado.video.paused) { var p = estado.video.play(); if (p && p.catch) p.catch(function () {}); }
@@ -496,6 +533,6 @@
     lerDeNovoLogo: function () { estado.ultimaEntrega = Date.now() - INTERVALO_MS + RETENTATIVA_MS; },
     // Para os testes.
     _estado: estado, _lerCarta: lerCarta, _prepararLeitor: prepararLeitor, _recortarCarta: recortarCarta,
-    _detectar: detectar, _lerTrecho: lerTrecho, _config: config,
+    _detectar: detectar, _lerTrecho: lerTrecho, _config: config, _soltarLeitor: soltarLeitor,
   };
 })();

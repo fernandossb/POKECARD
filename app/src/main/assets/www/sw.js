@@ -21,7 +21,7 @@
    service worker e o cache da versão anterior é apagado. */
 const VERSAO = '__VERSAO__';
 const CACHE = `pokecard-${VERSAO}`;
-// O leitor de texto da câmera (ocr/, ~7 MB) tem cache próprio: não é apagado a cada
+// O leitor de texto da câmera (ocr/, ~22 MB no aparelho) tem cache próprio: não é apagado a cada
 // versão do app, senão cada atualização baixaria tudo de novo. Mude o número se o
 // leitor mudar (scripts/baixar-ocr.mjs).
 const CACHE_OCR = 'pokecard-ocr-v1';
