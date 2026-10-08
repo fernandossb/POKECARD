@@ -6748,3 +6748,150 @@ html.sem-android::before {
 }
 /* A faixa do topo (relógio do iPhone) cobriria a imagem. */
 html.camera-ao-vivo::before { display: none !important; }
+
+/* =========================================================
+   PREMIUM DESIGN OVERHAUL - GLASSMORPHISM & DYNAMIC ANIMATIONS
+   ========================================================= */
+
+/* Enhanced Header with Glassmorphism */
+.app-header {
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3) !important;
+  transition: all 0.3s ease;
+}
+
+.kicker {
+  text-shadow: 0 0 10px rgba(255, 216, 77, 0.5) !important;
+  letter-spacing: 0.12em !important;
+}
+
+/* Tabs Redesign with smooth transitions */
+.tabs {
+  background: rgba(0,0,0,0.2) !important;
+  backdrop-filter: blur(10px) !important;
+}
+.tab {
+  background: rgba(255,255,255,0.05) !important;
+  border: 1px solid rgba(255,255,255,0.1) !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  border-radius: 12px !important;
+}
+.tab.active {
+  background: linear-gradient(135deg, var(--vision-primary), var(--vision-primary-glow)) !important;
+  color: var(--vision-bg) !important;
+  border-color: transparent !important;
+  box-shadow: 0 4px 15px var(--vision-primary-glow) !important;
+  transform: translateY(-2px) !important;
+}
+
+/* Cards & Panels - Glassmorphism */
+.stat-card, .panel, .card-row, .pokemon-tile, .set-card, .timeline-set-card {
+  background: var(--vision-surface-soft, rgba(255, 255, 255, 0.8)) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid var(--v5-borda, rgba(255, 255, 255, 0.15)) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
+  border-radius: 16px !important;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease !important;
+}
+
+/* Hover effects for interactive cards */
+.card-row:hover, .pokemon-tile:hover, .set-card:hover, .timeline-set-card:hover {
+  transform: translateY(-4px) scale(1.02) !important;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.2) !important;
+  border-color: var(--vision-primary) !important;
+  z-index: 10;
+}
+
+/* Buttons - Premium Gradients & Animations */
+.primary-btn, .load-more, .qty-btn {
+  background: linear-gradient(135deg, var(--vision-primary), var(--vision-flair-1, var(--vision-primary))) !important;
+  border: none !important;
+  box-shadow: 0 4px 15px var(--vision-primary-glow) !important;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+  border-radius: 12px !important;
+  overflow: hidden;
+  position: relative;
+  color: #fff !important;
+}
+.primary-btn::after, .load-more::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%; width: 50%; height: 100%;
+  background: linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0) 100%);
+  transform: skewX(-25deg);
+  animation: shine 4s infinite;
+}
+@keyframes shine {
+  0% { left: -100%; }
+  20% { left: 200%; }
+  100% { left: 200%; }
+}
+.primary-btn:active, .load-more:active, .qty-btn:active {
+  transform: scale(0.94) !important;
+  box-shadow: 0 2px 8px var(--vision-primary-glow) !important;
+}
+
+/* Input Fields */
+.field {
+  background: var(--vision-surface-soft) !important;
+  border: 1px solid var(--vision-line) !important;
+  backdrop-filter: blur(8px) !important;
+  border-radius: 12px !important;
+  transition: all 0.3s ease !important;
+}
+.field:focus {
+  background: var(--vision-surface) !important;
+  border-color: var(--vision-primary) !important;
+  box-shadow: 0 0 0 4px var(--vision-primary-tenue) !important;
+}
+
+/* Micro-animations & Theme Enhancements */
+.gengar-header-art {
+  animation: premiumFloat 5s ease-in-out infinite !important;
+}
+@keyframes premiumFloat {
+  0%, 100% { transform: translateY(0px) scale(1) rotate(-1.5deg); filter: drop-shadow(0 0 15px var(--vision-primary-glow)) drop-shadow(0 10px 15px rgba(0,0,0,0.6)); }
+  50% { transform: translateY(-8px) scale(1.05) rotate(1.5deg); filter: drop-shadow(0 0 25px var(--vision-primary)) drop-shadow(0 20px 25px rgba(0,0,0,0.4)); }
+}
+
+/* Better Progress Bars */
+.progress {
+  background: var(--vision-surface-2) !important;
+  backdrop-filter: blur(4px) !important;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.2) !important;
+}
+.progress > span {
+  background: linear-gradient(90deg, var(--vision-primary), var(--vision-flair-1, var(--vision-primary)), var(--vision-primary)) !important;
+  background-size: 200% 200% !important;
+  animation: gradientMove 3s ease infinite !important;
+  box-shadow: 0 0 8px var(--vision-primary-glow) !important;
+}
+@keyframes gradientMove {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Badges */
+.badge {
+  background: var(--vision-surface-2) !important;
+  border: 1px solid var(--v5-borda) !important;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1) !important;
+  backdrop-filter: blur(4px) !important;
+  color: var(--vision-text) !important;
+}
+.badge.owned {
+  background: rgba(61, 220, 151, 0.15) !important;
+  border-color: rgba(61, 220, 151, 0.4) !important;
+  color: var(--ok-texto) !important;
+}
+
+/* Modals */
+.modal-sheet {
+  background: var(--vision-bg) !important;
+  backdrop-filter: blur(25px) !important;
+  -webkit-backdrop-filter: blur(25px) !important;
+  border-top: 1px solid var(--v5-borda-forte) !important;
+}
