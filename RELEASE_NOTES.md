@@ -1,3 +1,7 @@
+# POKECARD Brasil 5.94.3 — Exportação de repetidas com cópia de segurança preservada
+
+- **A exportação em PDF e Excel de cartas repetidas (Duplicadas) agora desconta a cópia de segurança da coleção.** Cada versão física mantém uma cópia de segurança na coleção e exporta apenas as unidades excedentes (para troca ou venda), com as quantidades e valores corrigidos no cabeçalho, nas linhas da tabela e no total.
+
 # POKECARD Brasil 5.94.1 — Câmera do iPhone: tela acesa e download menor do que parecia
 
 - **A tela do iPhone não apaga mais com o scanner aberto.** Câmera aberta não segura a tela acesa, e sem tocar nela por 30 segundos ela apagava no meio de um lote de cartas. Agora o scanner pede ao iOS (16.4 ou mais novo) para mantê-la acesa e a devolve ao fechar a câmera.

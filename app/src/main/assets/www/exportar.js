@@ -43,8 +43,18 @@ const ROTULO_DO_FILTRO_DA_COLECAO = {
 // A lista da tela só vira opção quando é diferente da coleção inteira: há
 // busca, coleção, artista, ou um filtro que não é "Tenho".
 function listaDaTelaEhDiferente() {
-  return ui.cardFilter !== 'owned' || Boolean(normalize(ui.cardQuery))
+  const filtro = typeof currentCardFilter === 'function' ? currentCardFilter() : ui.cardFilter;
+  return filtro !== 'owned' || Boolean(normalize(ui.cardQuery))
     || ui.cardSet !== 'all' || ui.cardArtist !== 'all';
+}
+
+function ehFonteDeRepetidas(fonte = exportacao.fonte) {
+  if (fonte === 'repetidas') return true;
+  if (fonte === 'lista') {
+    const filtro = typeof currentCardFilter === 'function' ? currentCardFilter() : ui.cardFilter;
+    return filtro === 'repeated' || filtro === 'trade';
+  }
+  return false;
 }
 
 // Como no fichário: coleção mais nova primeiro, e dentro dela pelo número.
@@ -60,8 +70,9 @@ function ordemDoFichario(setsPorId) {
 
 function cartasDaFonte(fonte) {
   if (fonte === 'lista') {
+    const filtro = typeof currentCardFilter === 'function' ? currentCardFilter() : ui.cardFilter;
     // "Trocar/Vender" desenha por versão; aqui interessa a carta.
-    if (ui.cardFilter === 'trade') return [...new Map(sobrasParaTrocar().map(item => [item.card.id, item.card])).values()];
+    if (filtro === 'trade') return [...new Map(sobrasParaTrocar().map(item => [item.card.id, item.card])).values()];
     return filteredCardsForUi().result;
   }
   const lista = [];
@@ -110,27 +121,57 @@ function rotuloParaExportar(variante) {
 
 /* Versões que você tem, quantas e quanto valem — com o MESMO preço do
    Portfólio (effectiveVariantPrice), para o arquivo bater com o app. A carta
-   que você ainda não tem (Quero) leva o preço de mercado de uma cópia comum. */
+   que você ainda não tem (Quero) leva o preço de mercado de uma cópia comum.
+   Nas cartas repetidas (Duplicadas ou lista de sobras/troca), desconta 1 cópia
+   de segurança de cada versão física para ficar mantida na coleção. */
 function dadosDaCartaExportada(card) {
   if (exportacao.dados.has(card.id)) return exportacao.dados.get(card.id);
+  const repetidas = ehFonteDeRepetidas();
   const grupos = new Map();
-  for (const variante of variantsFor(card.id)) {
-    const quantidade = Math.max(0, Math.trunc(Number(variante.quantity) || 0));
-    if (!quantidade) continue;
-    const rotulo = rotuloParaExportar(variante);
-    const cotacao = effectiveVariantPrice(card.id, variante);
-    const preco = cotacao?.brl != null && Number.isFinite(Number(cotacao.brl)) ? Number(cotacao.brl) : null;
-    const chave = `${rotulo}|${preco}`;
-    const grupo = grupos.get(chave) || { rotulo, quantidade: 0, preco };
-    grupo.quantidade += quantidade;
-    grupos.set(chave, grupo);
+
+  if (repetidas) {
+    // Agrupa por versão idêntica: duas linhas separadas iguais contam como
+    // cópias da mesma versão física.
+    const porIdentidade = new Map();
+    for (const variante of variantsFor(card.id)) {
+      if (variante?.isWishlist) continue;
+      const quantidade = Math.max(0, Math.trunc(Number(variante.quantity) || 0));
+      if (!quantidade) continue;
+      const chave = typeof assinaturaVariante === 'function' ? assinaturaVariante(variante) : rotuloParaExportar(variante);
+      if (!porIdentidade.has(chave)) porIdentidade.set(chave, { variante, quantidade: 0 });
+      porIdentidade.get(chave).quantidade += quantidade;
+    }
+    for (const [, item] of porIdentidade) {
+      const sobra = item.quantidade - 1; // 1 cópia de segurança fica sempre na coleção
+      if (sobra < 1) continue;
+      const rotulo = rotuloParaExportar(item.variante);
+      const cotacao = effectiveVariantPrice(card.id, item.variante);
+      const preco = cotacao?.brl != null && Number.isFinite(Number(cotacao.brl)) ? Number(cotacao.brl) : null;
+      const chaveGrupo = `${rotulo}|${preco}`;
+      const grupo = grupos.get(chaveGrupo) || { rotulo, quantidade: 0, preco };
+      grupo.quantidade += sobra;
+      grupos.set(chaveGrupo, grupo);
+    }
+  } else {
+    for (const variante of variantsFor(card.id)) {
+      const quantidade = Math.max(0, Math.trunc(Number(variante.quantity) || 0));
+      if (!quantidade) continue;
+      const rotulo = rotuloParaExportar(variante);
+      const cotacao = effectiveVariantPrice(card.id, variante);
+      const preco = cotacao?.brl != null && Number.isFinite(Number(cotacao.brl)) ? Number(cotacao.brl) : null;
+      const chave = `${rotulo}|${preco}`;
+      const grupo = grupos.get(chave) || { rotulo, quantidade: 0, preco };
+      grupo.quantidade += quantidade;
+      grupos.set(chave, grupo);
+    }
   }
+
   const versoes = [...grupos.values()];
   const quantidade = versoes.reduce((soma, versao) => soma + versao.quantidade, 0);
   const comPreco = versoes.filter(versao => versao.preco != null);
   let valor = comPreco.length ? comPreco.reduce((soma, versao) => soma + versao.preco * versao.quantidade, 0) : null;
   let deMercado = false;
-  if (!quantidade) {
+  if (!quantidade && !repetidas) {
     const cotacao = automaticPriceQuote(card.id, 'normal');
     valor = cotacao?.brl != null && Number(cotacao.brl) > 0 ? Number(cotacao.brl) : null;
     deMercado = valor != null;
@@ -142,6 +183,7 @@ function dadosDaCartaExportada(card) {
 
 function resumoDasVersoes(dados) {
   if (dados.quantidade) return dados.versoes.map(versao => `${versao.quantidade}× ${versao.rotulo}`).join(' · ');
+  if (ehFonteDeRepetidas()) return '1 cópia mantida na coleção · sem sobra';
   return dados.naWishlist ? 'No Quero · você ainda não tem' : 'Você ainda não tem';
 }
 
@@ -217,6 +259,7 @@ function desenharExportacao() {
           aria-pressed="${exportacao.fonte === valor}" onclick="mudarFonteDaExportacao('${valor}')">${esc(rotulo)} <b>${quantas.toLocaleString('pt-BR')}</b></button>`).join('')}
       </div>
       ${exportacao.fonte === 'lista' ? `<p class="exportar-nota">${esc(descricaoDaListaDaTela())}</p>` : ''}
+      ${ehFonteDeRepetidas() ? '<p class="exportar-nota">Uma cópia de segurança de cada versão fica mantida na coleção. O arquivo lista apenas as cópias repetidas (para troca ou venda).</p>' : ''}
       ${total > EXPORTACAO_MAXIMO ? `<p class="exportar-nota">Esta lista tem ${total.toLocaleString('pt-BR')} cartas. Marque até ${EXPORTACAO_MAXIMO.toLocaleString('pt-BR')} por arquivo.</p>` : ''}
 
       <label class="vision-search exportar-busca"><span>${tabIcon('pokedex')}</span>
@@ -269,7 +312,10 @@ function atualizarRodapeDaExportacao() {
   const resumo = document.getElementById('exportarResumo');
   if (resumo) {
     resumo.textContent = cartas.length
-      ? [copias ? `${copias.toLocaleString('pt-BR')} ${copias === 1 ? 'cópia' : 'cópias'}` : '', valor ? `valor estimado ${money(valor)}` : ''].filter(Boolean).join(' · ')
+      ? [
+          copias ? `${copias.toLocaleString('pt-BR')} ${copias === 1 ? 'cópia' : 'cópias'}${ehFonteDeRepetidas() ? ' repetidas' : ''}` : '',
+          valor ? `valor estimado ${money(valor)}` : '',
+        ].filter(Boolean).join(' · ')
       : '';
   }
 }
@@ -285,6 +331,7 @@ function mudarFonteDaExportacao(fonte) {
   if (exportacao.fonte === fonte) return;
   exportacao.fonte = fonte;
   exportacao.busca = '';
+  exportacao.dados = new Map();
   marcarPadraoDaFonte();
   desenharExportacao();
 }
@@ -336,7 +383,8 @@ function escolherFormatoDaExportacao(formato) {
 }
 
 function descricaoDaListaDaTela() {
-  const partes = [ROTULO_DO_FILTRO_DA_COLECAO[ui.cardFilter] || 'Cartas'];
+  const filtro = typeof currentCardFilter === 'function' ? currentCardFilter() : ui.cardFilter;
+  const partes = [ROTULO_DO_FILTRO_DA_COLECAO[filtro] || 'Cartas'];
   if (ui.cardSet !== 'all') partes.push(catalog.sets.find(set => set.id === ui.cardSet)?.name || ui.cardSet);
   if (ui.cardArtist !== 'all') partes.push(`Artista: ${artistIndex.get(ui.cardArtist)?.nome || ui.cardArtist}`);
   if (normalize(ui.cardQuery)) partes.push(`"${String(ui.cardQuery).trim()}"`);
@@ -765,6 +813,7 @@ function montarPdfDaExportacao(dados, fotos, titulo) {
     `${dados.length} ${dados.length === 1 ? 'carta' : 'cartas'}`,
     copias ? `${copias} ${copias === 1 ? 'cópia' : 'cópias'}` : '',
     total ? `valor estimado ${money(total)}` : '',
+    ehFonteDeRepetidas() ? '1 cópia de segurança mantida na coleção' : '',
   ].filter(Boolean).join(' · ');
 
   const imagens = [];              // fotos únicas, na ordem em que entram
