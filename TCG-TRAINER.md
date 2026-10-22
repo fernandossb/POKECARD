@@ -15,4 +15,5 @@ O vínculo usa o ID exato TCGdex, compartilhado pelos dois catálogos. Não conf
 - `node scripts/test-trainer-bridge.cjs`: quantidades atuais, leitura sem alterar coleção/decks, fallback no navegador.
 - `gradle :trainer-engine:test`: regras, CPU, catálogo e limites de posse/IDs/impressões/energias/snapshot inválido.
 - `gradle :app:assembleDirectDebug :app:lintDirectDebug`: integração Android.
+- O baseline de lint registra somente dois avisos de erro já existentes do PokeCard (atributo de tema API 27 e receiver de download). O código dessas funções não foi alterado nesta integração. Novos erros continuam bloqueando a verificação.
 - A atualização instalada deve usar a assinatura original do PokeCard. Nunca desinstalar para contornar divergência de assinatura: a coleção fica no armazenamento privado do aplicativo.

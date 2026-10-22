@@ -9,6 +9,9 @@ android {
         buildConfig true
     }
 
+    // Existing PokeCard findings only; new integration findings still fail lint.
+    lint { baseline = file('lint-baseline.xml') }
+
     androidResources {
         // catalog.json, pokedex.json e collection-seed.json são cópias byte a byte
         // do payload dos data/*-data.js que o index.html carrega por <script>. No
