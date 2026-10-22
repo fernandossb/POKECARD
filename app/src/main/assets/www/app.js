@@ -11519,8 +11519,6 @@ function renderDecks() {
   const types = availableDeckTypes();
   return `<section class="screen">
     <h2 class="screen-title">Decks</h2>
-    <button class="primary-btn" onclick="openTcgTrainer()">${icone('espadas')} Jogar TCG Trainer · contra a máquina</button>
-    <p class="deck-auto-note">Monte seus decks de jogo com as cartas da sua coleção. Partidas para 1 jogador contra a máquina.</p>
     <p class="screen-subtitle">Monte um baralho de 60 cartas usando apenas o que existe no seu fichário. O gerador prioriza Pokémon do tipo escolhido e cartas de suporte.</p>
     <div class="deck-generator"><select id="deckPreferredType" class="field"><option value="">Melhor combinação geral</option>${types.map(([type,count])=>`<option value="${esc(type)}">Foco ${esc(type)} (${count} cópias)</option>`).join('')}</select><button class="primary-btn" onclick="generateStrongDeck()">${icone('espadas')} Montar deck forte</button></div>
     <button class="primary-btn deck-auto-btn" onclick="openAutoBuilder()">${icone('brilho')} Montador avançado — 3 opções analisadas</button>

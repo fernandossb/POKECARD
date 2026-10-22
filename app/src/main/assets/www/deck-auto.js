@@ -883,6 +883,7 @@
           :`<button class="panel deck-panel" onclick="selectedDeckId='${esc(deck.id)}';render()"><div class="set-title-row"><span class="set-name">${esc(deck.name)}</span></div></button>`).join('')
         :'<div class="empty"><strong>Nenhum deck criado</strong>Use o montador automático ou crie um deck vazio.</div>'}</div>`;
     return `<section class="screen"><h2 class="screen-title">Decks</h2>
+      <button class="auto-deck-hero" onclick="openTcgTrainer()"><span aria-hidden="true">${icone('espadas')}</span><div><strong>Jogar TCG Trainer</strong><small>Sua coleção · 1 jogador contra a máquina</small></div></button>
       <div class="decks-view-toggle">
         <button class="${ui.decksView==='dex'?'':'ativo'}" onclick="ui.decksView='mine';render()">Meus decks</button>
         <button class="${ui.decksView==='dex'?'ativo':''}" onclick="ui.decksView='dex';render()">Pokédex de decks</button>
