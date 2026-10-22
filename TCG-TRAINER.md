@@ -17,3 +17,9 @@ O vínculo usa o ID exato TCGdex, compartilhado pelos dois catálogos. Não conf
 - `gradle :app:assembleDirectDebug :app:lintDirectDebug`: integração Android.
 - O baseline de lint registra somente dois avisos de erro já existentes do PokeCard (atributo de tema API 27 e receiver de download). O código dessas funções não foi alterado nesta integração. Novos erros continuam bloqueando a verificação.
 - A atualização instalada deve usar a assinatura original do PokeCard. Nunca desinstalar para contornar divergência de assinatura: a coleção fica no armazenamento privado do aplicativo.
+
+## Resultado da integração 5.95.0 (código 197)
+
+82 testes do motor aprovados, ponte JS aprovada e seis verificações existentes do PokeCard aprovadas. APK de teste e lint concluídos (zero erros novos; baseline restrito aos dois erros preexistentes). A tela web real confirmou a nova entrada e os montadores anteriores. O build assinado do GitHub também passou, sem publicar release.
+
+Instalado no POCO X7 com `adb install -r`, após comparar a assinatura SHA-256 com a versão instalada. A coleção carregou no jogo com o mesmo total do fichário. No editor, adicionar duas vezes uma carta possuída em uma única cópia manteve a quantidade em um e desabilitou o botão +. Um rascunho foi salvo, preservado ao reabrir e depois excluído. Totais do portfólio, repetidas, Pokédex e o deck original foram conferidos após o retorno ao PokeCard. Nenhum rascunho de teste foi deixado no aplicativo.
