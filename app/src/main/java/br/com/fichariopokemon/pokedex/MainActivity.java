@@ -620,6 +620,32 @@ public final class MainActivity extends Activity {
 
     public final class AppBridge {
         @JavascriptInterface
+        public void openTcgTrainer(String snapshot) {
+            try {
+                if (snapshot == null || snapshot.length() > 4_000_000) throw new IllegalArgumentException();
+                JSONObject data = new JSONObject(snapshot);
+                if (data.getInt("version") != 1) throw new IllegalArgumentException();
+                JSONObject counts = data.getJSONObject("counts");
+                java.util.Iterator<String> ids = counts.keys();
+                while (ids.hasNext()) {
+                    String id = ids.next();
+                    Object value = counts.get(id);
+                    if (id.length() < 1 || id.length() > 120 || !(value instanceof Integer)
+                            || ((Integer) value) < 0 || ((Integer) value) > 1_000_000) throw new IllegalArgumentException();
+                }
+                android.util.AtomicFile file = new android.util.AtomicFile(new File(getFilesDir(), "trainer-owned.json"));
+                java.io.FileOutputStream stream = file.startWrite();
+                try {
+                    stream.write(data.toString().getBytes(StandardCharsets.UTF_8));
+                    file.finishWrite(stream);
+                } catch (Exception error) { file.failWrite(stream); throw error; }
+                runOnUiThread(() -> startActivity(new Intent(MainActivity.this, com.tcgtrainer.app.TrainerActivity.class)));
+            } catch (Exception error) {
+                runOnUiThread(() -> Toast.makeText(MainActivity.this, "Não foi possível carregar a coleção para o jogo. Tente novamente.", Toast.LENGTH_LONG).show());
+            }
+        }
+
+        @JavascriptInterface
         public double getTopInsetCss() {
             return topInsetCss;
         }

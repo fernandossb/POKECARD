@@ -1,0 +1,27 @@
+{
+  "id": "sve-006",
+  "name": "Fighting Energy",
+  "category": "Energy",
+  "hp": null,
+  "types": null,
+  "stage": null,
+  "evolveFrom": null,
+  "attacks": null,
+  "abilities": null,
+  "effect": null,
+  "trainerType": null,
+  "weaknesses": null,
+  "resistances": null,
+  "retreat": null,
+  "suffix": null,
+  "image": null,
+  "set": {
+    "cardCount": {
+      "official": 24,
+      "total": 24
+    },
+    "id": "sve",
+    "name": "Scarlet & Violet Energy"
+  },
+  "localId": "006"
+}

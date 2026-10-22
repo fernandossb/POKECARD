@@ -1,0 +1,45 @@
+{
+  "id": "me01-076",
+  "name": "Riolu",
+  "category": "Pokémon",
+  "hp": 80,
+  "types": [
+    "Lutador"
+  ],
+  "stage": "Básico",
+  "evolveFrom": null,
+  "attacks": [
+    {
+      "cost": [
+        "Lutador"
+      ],
+      "name": "Estocada Aceleratória",
+      "effect": "Durante o seu próximo turno, este Pokémon não poderá usar Estocada Aceleratória.",
+      "damage": 30
+    }
+  ],
+  "abilities": null,
+  "effect": null,
+  "trainerType": null,
+  "weaknesses": [
+    {
+      "type": "Psíquico",
+      "value": "×2"
+    }
+  ],
+  "resistances": null,
+  "retreat": 2,
+  "suffix": null,
+  "image": "https://assets.tcgdex.net/pt/me/me01/076",
+  "set": {
+    "cardCount": {
+      "official": 132,
+      "total": 188
+    },
+    "id": "me01",
+    "logo": "https://assets.tcgdex.net/pt/me/me01/logo",
+    "name": "Megaevolução",
+    "symbol": "https://assets.tcgdex.net/univ/me/me01/symbol"
+  },
+  "localId": "076"
+}

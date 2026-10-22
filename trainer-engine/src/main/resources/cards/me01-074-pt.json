@@ -1,0 +1,51 @@
+{
+  "id": "me01-074",
+  "name": "Lunatone",
+  "category": "Pokémon",
+  "hp": 110,
+  "types": [
+    "Lutador"
+  ],
+  "stage": "Básico",
+  "evolveFrom": null,
+  "attacks": [
+    {
+      "cost": [
+        "Lutador",
+        "Lutador"
+      ],
+      "name": "Gema Poderosa",
+      "damage": 50
+    }
+  ],
+  "abilities": [
+    {
+      "type": "Habilidade",
+      "name": "Ciclo Lunar",
+      "effect": "Uma vez durante o seu turno, se você tiver Solrock em jogo, você poderá descartar uma carta de Energia {F} Básica da sua mão para usar esta Habilidade. Compre 3 cartas. Você não pode usar mais de 1 Habilidade Ciclo Lunar por turno."
+    }
+  ],
+  "effect": null,
+  "trainerType": null,
+  "weaknesses": [
+    {
+      "type": "Planta",
+      "value": "×2"
+    }
+  ],
+  "resistances": null,
+  "retreat": 1,
+  "suffix": null,
+  "image": "https://assets.tcgdex.net/pt/me/me01/074",
+  "set": {
+    "cardCount": {
+      "official": 132,
+      "total": 188
+    },
+    "id": "me01",
+    "logo": "https://assets.tcgdex.net/pt/me/me01/logo",
+    "name": "Megaevolução",
+    "symbol": "https://assets.tcgdex.net/univ/me/me01/symbol"
+  },
+  "localId": "074"
+}

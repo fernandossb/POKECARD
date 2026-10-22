@@ -1,0 +1,29 @@
+{
+  "id": "sv10.5b-079",
+  "name": "Air Balloon",
+  "category": "Trainer",
+  "hp": null,
+  "types": null,
+  "stage": null,
+  "evolveFrom": null,
+  "attacks": null,
+  "abilities": null,
+  "effect": "The Retreat Cost of the Pokémon this card is attached to is {C}{C} less.",
+  "trainerType": "Tool",
+  "weaknesses": null,
+  "resistances": null,
+  "retreat": null,
+  "suffix": null,
+  "image": "https://assets.tcgdex.net/en/sv/sv10.5b/079",
+  "set": {
+    "cardCount": {
+      "official": 86,
+      "total": 172
+    },
+    "id": "sv10.5b",
+    "logo": "https://assets.tcgdex.net/en/sv/sv10.5b/logo",
+    "name": "Black Bolt",
+    "symbol": "https://assets.tcgdex.net/univ/sv/sv10.5b/symbol"
+  },
+  "localId": "079"
+}

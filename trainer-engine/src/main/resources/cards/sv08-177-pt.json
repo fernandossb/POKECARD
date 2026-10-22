@@ -1,0 +1,27 @@
+{
+  "id": "sv08-177",
+  "name": "Montanha da Gravidade",
+  "category": "Treinador",
+  "hp": null,
+  "types": null,
+  "stage": null,
+  "evolveFrom": null,
+  "attacks": null,
+  "abilities": null,
+  "effect": "Cada Pokémon Estágio 2 em jogo (seus e do seu oponente) recebe 30 PS a menos.",
+  "trainerType": "Estádio",
+  "weaknesses": null,
+  "resistances": null,
+  "retreat": null,
+  "suffix": null,
+  "image": "https://assets.tcgdex.net/pt/sv/sv08/177",
+  "set": {
+    "cardCount": {
+      "official": 191,
+      "total": 252
+    },
+    "id": "sv08",
+    "name": "Fagulhas Impetuosas"
+  },
+  "localId": "177"
+}

@@ -1,0 +1,28 @@
+{
+  "id": "sv08-177",
+  "name": "Gravity Mountain",
+  "category": "Trainer",
+  "hp": null,
+  "types": null,
+  "stage": null,
+  "evolveFrom": null,
+  "attacks": null,
+  "abilities": null,
+  "effect": "Each Stage 2 Pokémon in play (both yours and your opponent's) gets -30 HP.",
+  "trainerType": "Stadium",
+  "weaknesses": null,
+  "resistances": null,
+  "retreat": null,
+  "suffix": null,
+  "image": "https://assets.tcgdex.net/en/sv/sv08/177",
+  "set": {
+    "cardCount": {
+      "official": 191,
+      "total": 252
+    },
+    "id": "sv08",
+    "logo": "https://assets.tcgdex.net/en/sv/sv08/logo",
+    "name": "Surging Sparks"
+  },
+  "localId": "177"
+}

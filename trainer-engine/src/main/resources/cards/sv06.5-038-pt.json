@@ -1,0 +1,52 @@
+{
+  "id": "sv06.5-038",
+  "name": "Fezandipiti ex",
+  "category": "Pokémon",
+  "hp": 210,
+  "types": [
+    "Sombrio"
+  ],
+  "stage": "Básico",
+  "evolveFrom": null,
+  "attacks": [
+    {
+      "cost": [
+        "Incolor",
+        "Incolor",
+        "Incolor"
+      ],
+      "name": "Flecha Cruel",
+      "effect": "Este ataque causa 100 pontos de dano a 1 dos Pokémon do seu oponente. (Não aplique Fraqueza e Resistência aos Pokémon no Banco.)"
+    }
+  ],
+  "abilities": [
+    {
+      "type": "Habilidade",
+      "name": "Sair do Roteiro",
+      "effect": "Uma vez durante o seu turno, se algum dos seus Pokémon tiver sido Nocauteado durante o último turno do seu oponente, você poderá comprar 3 cartas. Você não pode usar mais de 1 Habilidade Sair do Roteiro por turno."
+    }
+  ],
+  "effect": null,
+  "trainerType": null,
+  "weaknesses": [
+    {
+      "type": "Lutador",
+      "value": "×2"
+    }
+  ],
+  "resistances": null,
+  "retreat": 1,
+  "suffix": "ex",
+  "image": "https://assets.tcgdex.net/pt/sv/sv06.5/038",
+  "set": {
+    "cardCount": {
+      "official": 64,
+      "total": 99
+    },
+    "id": "sv06.5",
+    "logo": "https://assets.tcgdex.net/pt/sv/sv06.5/logo",
+    "name": "Fábulas Nebulosas",
+    "symbol": "https://assets.tcgdex.net/univ/sv/sv06.5/symbol"
+  },
+  "localId": "038"
+}

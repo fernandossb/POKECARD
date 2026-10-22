@@ -1,0 +1,45 @@
+{
+  "id": "me01-075",
+  "name": "Solrock",
+  "category": "Pokemon",
+  "hp": 110,
+  "types": [
+    "Fighting"
+  ],
+  "stage": "Basic",
+  "evolveFrom": null,
+  "attacks": [
+    {
+      "cost": [
+        "Fighting"
+      ],
+      "name": "Cosmic Beam",
+      "effect": "If you don't have Lunatone on your Bench, this attack does nothing. This attack's damage isn't affected by Weakness or Resistance.",
+      "damage": 70
+    }
+  ],
+  "abilities": null,
+  "effect": null,
+  "trainerType": null,
+  "weaknesses": [
+    {
+      "type": "Grass",
+      "value": "×2"
+    }
+  ],
+  "resistances": null,
+  "retreat": 1,
+  "suffix": null,
+  "image": "https://assets.tcgdex.net/en/me/me01/075",
+  "set": {
+    "cardCount": {
+      "official": 132,
+      "total": 188
+    },
+    "id": "me01",
+    "logo": "https://assets.tcgdex.net/en/me/me01/logo",
+    "name": "Mega Evolution",
+    "symbol": "https://assets.tcgdex.net/univ/me/me01/symbol"
+  },
+  "localId": "075"
+}

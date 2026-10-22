@@ -1,0 +1,53 @@
+{
+  "id": "me01-073",
+  "name": "Hariyama",
+  "category": "Pokemon",
+  "hp": 150,
+  "types": [
+    "Fighting"
+  ],
+  "stage": "Stage1",
+  "evolveFrom": "Makuhita",
+  "attacks": [
+    {
+      "cost": [
+        "Fighting",
+        "Fighting",
+        "Fighting"
+      ],
+      "name": "Wild Press",
+      "effect": "This Pokémon also does 70 damage to itself.",
+      "damage": 210
+    }
+  ],
+  "abilities": [
+    {
+      "type": "Ability",
+      "name": "Heave-Ho Catcher",
+      "effect": "Once during your turn, when you play this Pokémon from your hand to evolve 1 of your Pokémon, you may use this Ability. Switch in 1 of your opponent's Benched Pokémon to the Active Spot."
+    }
+  ],
+  "effect": null,
+  "trainerType": null,
+  "weaknesses": [
+    {
+      "type": "Psychic",
+      "value": "×2"
+    }
+  ],
+  "resistances": null,
+  "retreat": 3,
+  "suffix": null,
+  "image": "https://assets.tcgdex.net/en/me/me01/073",
+  "set": {
+    "cardCount": {
+      "official": 132,
+      "total": 188
+    },
+    "id": "me01",
+    "logo": "https://assets.tcgdex.net/en/me/me01/logo",
+    "name": "Mega Evolution",
+    "symbol": "https://assets.tcgdex.net/univ/me/me01/symbol"
+  },
+  "localId": "073"
+}

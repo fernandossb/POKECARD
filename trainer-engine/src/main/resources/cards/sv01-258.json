@@ -1,0 +1,31 @@
+{
+  "id": "sv01-258",
+  "name": "Basic Fighting Energy",
+  "category": "Energy",
+  "hp": null,
+  "types": [
+    "Fighting"
+  ],
+  "stage": null,
+  "evolveFrom": null,
+  "attacks": null,
+  "abilities": null,
+  "effect": null,
+  "trainerType": null,
+  "weaknesses": null,
+  "resistances": null,
+  "retreat": null,
+  "suffix": null,
+  "image": "https://assets.tcgdex.net/en/sv/sv01/258",
+  "set": {
+    "cardCount": {
+      "official": 198,
+      "total": 258
+    },
+    "id": "sv01",
+    "logo": "https://assets.tcgdex.net/en/sv/sv01/logo",
+    "name": "Scarlet & Violet",
+    "symbol": "https://assets.tcgdex.net/univ/sv/sv01/symbol"
+  },
+  "localId": "258"
+}
