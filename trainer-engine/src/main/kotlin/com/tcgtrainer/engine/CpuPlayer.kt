@@ -76,13 +76,13 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
             return when (def.category) {
                 Category.ENERGY -> if (o.ownHand.count { d(it).category == Category.ENERGY } > 2) 8.0 else 65.0
                 Category.POKEMON -> when {
-                    def.evolvesFrom != null && own.any { it.top.definitionId == def.evolvesFrom } -> 110.0
+                    own.any { def.canEvolveFrom(d(it.top)) } -> 110.0
                     def.stage != Stage.BASIC -> 12.0
                     own.none { it.top.definitionId == def.id } && own.any { pokemon ->
                         d(pokemon.top).attacks.any { attack -> attack.effects.any { it is Effect.RequiresBenched && it.definitionId == def.id } } ||
                             d(pokemon.top).abilities.any { it.requiresInPlay == def.id }
                     } -> 120.0
-                    o.ownHand.any { d(it).evolvesFrom == def.id } -> 90.0
+                    o.ownHand.any { d(it).canEvolveFrom(def) } -> 90.0
                     own.size < 3 -> 80.0
                     own.any { it.top.definitionId == def.id } -> 15.0
                     else -> 45.0
@@ -100,7 +100,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
             val available = o.ownHand + own.map { it.top }
             val synergy = d(c).attacks.flatMap { it.effects }.filterIsInstance<Effect.RequiresBenched>()
                 .count { requirement -> available.any { it.definitionId == requirement.definitionId } }*80
-            val evolution = if (o.ownHand.any { d(it).evolvesFrom == c.definitionId }) 65 else 0
+            val evolution = if (o.ownHand.any { d(it).canEvolveFrom(d(c)) }) 65 else 0
             val cheapAttack = d(c).attacks.minOfOrNull { it.cost.size } ?: 5
             return potential(p) + synergy + evolution + (4-cheapAttack)*12 - d(c).prizes*5
         }

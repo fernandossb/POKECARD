@@ -73,7 +73,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     state.turn <= 2 -> reason("Não é permitido evoluir no primeiro turno de cada jogador.")
                     target.enteredPlayTurn == state.turn -> reason("Este Pokémon entrou em jogo neste turno.")
                     target.lastEvolutionTurn == state.turn -> reason("Este Pokémon já evoluiu neste turno.")
-                    evolution.category != Category.POKEMON || evolution.stage == Stage.BASIC || evolution.evolvesFrom != target.top.definitionId -> reason("Evolução incompatível.")
+                    !evolution.canEvolveFrom(definition(target.top)) -> reason("Evolução incompatível.")
                     else -> Legality.Legal
                 }
             }

@@ -116,6 +116,7 @@ object TrainerCatalog : CardCatalog {
         return CardDefinition(id, if (id == "sv01-258") "Energia de Luta Básica" else pt.string("name")!!, setCode, en.string("localId")!!,
             category = if (pokemon) Category.POKEMON else if (energy) Category.ENERGY else Category.TRAINER,
             stage = stage, evolvesFrom = when (en.string("evolveFrom")) { "Riolu" -> "me01-076"; "Makuhita" -> "me01-072"; else -> en.string("evolveFrom")?.let { academyNames[it] } },
+            canonicalName = en.string("name")!!, evolvesFromName = en.string("evolveFrom"),
             hp = en.string("hp")?.toIntOrNull() ?: 0,
             type = en.array("types").firstOrNull()?.jsonPrimitive?.content?.let(::type) ?: when (id) { "swsh12.5-153" -> EnergyType.FIRE; "swsh12.5-155" -> EnergyType.LIGHTNING; "swsh12.5-158" -> EnergyType.DARKNESS; else -> EnergyType.FIGHTING },
             weakness = en.array("weaknesses").firstOrNull()?.jsonObject?.string("type")?.let(::type),

@@ -57,8 +57,12 @@ import kotlinx.serialization.Serializable
     val source: String = "FICTÍCIA — somente teste do motor",
     val artAsset: String? = null, val text: String = "", val trainerType: TrainerType? = null,
     val trainerEffect: TrainerEffect? = null, val abilities: List<AbilityDefinition> = emptyList(),
-    val aceSpec: Boolean = false, val ruleBox: String = "", val implemented: Boolean = true
+    val aceSpec: Boolean = false, val ruleBox: String = "", val implemented: Boolean = true,
+    val canonicalName: String = name, val evolvesFromName: String? = null
 )
+fun CardDefinition.canEvolveFrom(base: CardDefinition): Boolean = category == Category.POKEMON &&
+    base.category == Category.POKEMON && stage != Stage.BASIC && stage.ordinal == base.stage.ordinal + 1 &&
+    (if (evolvesFromName != null) evolvesFromName == base.canonicalName else evolvesFrom == base.id)
 @Serializable data class CardInstance(val id: String, val definitionId: String)
 @Serializable data class PokemonInstance(
     val cards: List<CardInstance>, val damage: Int = 0, val energies: List<CardInstance> = emptyList(),

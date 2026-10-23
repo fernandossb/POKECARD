@@ -4,6 +4,14 @@ import kotlinx.serialization.json.*
 import kotlin.test.*
 
 class CatalogRuleCompilerTest {
+    @Test fun `evolution accepts another print of the same species but preserves owner and stage`() {
+        val evolution = TrainerCatalog.get("me01-077")
+        val base = TrainerCatalog.get("me01-076").copy(id = "another-riolu-print")
+        assertTrue(evolution.canEvolveFrom(base))
+        assertFalse(evolution.canEvolveFrom(base.copy(canonicalName = "Team Rocket's Riolu")))
+        assertFalse(evolution.canEvolveFrom(base.copy(stage = Stage.STAGE_ONE)))
+        assertFalse(evolution.canEvolveFrom(TrainerCatalog.get("me01-072")))
+    }
     private fun attack(effect: String, damage: String = "20") = buildJsonObject {
         put("name", "Teste"); put("effect", effect); put("damage", damage)
         put("cost", buildJsonArray { add("Colorless") })
