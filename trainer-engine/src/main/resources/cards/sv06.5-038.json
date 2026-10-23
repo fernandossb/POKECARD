@@ -1,0 +1,52 @@
+{
+  "id": "sv06.5-038",
+  "name": "Fezandipiti ex",
+  "category": "Pokemon",
+  "hp": 210,
+  "types": [
+    "Darkness"
+  ],
+  "stage": "Basic",
+  "evolveFrom": null,
+  "attacks": [
+    {
+      "cost": [
+        "Colorless",
+        "Colorless",
+        "Colorless"
+      ],
+      "name": "Cruel Arrow",
+      "effect": "This attack does 100 damage to 1 of your opponent's Pokémon. (Don't apply Weakness and Resistance for Benched Pokémon.)"
+    }
+  ],
+  "abilities": [
+    {
+      "type": "Ability",
+      "name": "Flip the Script",
+      "effect": "Once during your turn, if any of your Pokémon were Knocked Out during your opponent's last turn, you may draw 3 cards. You can't use more than 1 Flip the Script Ability each turn."
+    }
+  ],
+  "effect": null,
+  "trainerType": null,
+  "weaknesses": [
+    {
+      "type": "Fighting",
+      "value": "×2"
+    }
+  ],
+  "resistances": null,
+  "retreat": 1,
+  "suffix": "ex",
+  "image": "https://assets.tcgdex.net/en/sv/sv06.5/038",
+  "set": {
+    "cardCount": {
+      "official": 64,
+      "total": 99
+    },
+    "id": "sv06.5",
+    "logo": "https://assets.tcgdex.net/en/sv/sv06.5/logo",
+    "name": "Shrouded Fable",
+    "symbol": "https://assets.tcgdex.net/univ/sv/sv06.5/symbol"
+  },
+  "localId": "038"
+}

@@ -1,0 +1,55 @@
+{
+  "id": "sv06-141",
+  "name": "Ursaluna Lua Sangrenta ex",
+  "category": "Pokémon",
+  "hp": 260,
+  "types": [
+    "Incolor"
+  ],
+  "stage": "Básico",
+  "evolveFrom": null,
+  "attacks": [
+    {
+      "cost": [
+        "Incolor",
+        "Incolor",
+        "Incolor",
+        "Incolor",
+        "Incolor"
+      ],
+      "name": "Luar de Sangue",
+      "effect": "Durante o seu próximo turno, este Pokémon não poderá atacar.",
+      "damage": 240
+    }
+  ],
+  "abilities": [
+    {
+      "type": "Habilidade",
+      "name": "Talento Inato",
+      "effect": "O ataque Luar de Sangue usado por este Pokémon custa {C} a menos para cada carta de Prêmio que seu oponente pegou."
+    }
+  ],
+  "effect": null,
+  "trainerType": null,
+  "weaknesses": [
+    {
+      "type": "Lutador",
+      "value": "×2"
+    }
+  ],
+  "resistances": null,
+  "retreat": 3,
+  "suffix": "ex",
+  "image": "https://assets.tcgdex.net/pt/sv/sv06/141",
+  "set": {
+    "cardCount": {
+      "official": 167,
+      "total": 226
+    },
+    "id": "sv06",
+    "logo": "https://assets.tcgdex.net/pt/sv/sv06/logo",
+    "name": "Máscaras do Crepúsculo",
+    "symbol": "https://assets.tcgdex.net/univ/sv/sv06/symbol"
+  },
+  "localId": "141"
+}

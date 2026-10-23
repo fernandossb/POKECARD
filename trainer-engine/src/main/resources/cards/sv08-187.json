@@ -1,0 +1,28 @@
+{
+  "id": "sv08-187",
+  "name": "Surfer",
+  "category": "Trainer",
+  "hp": null,
+  "types": null,
+  "stage": null,
+  "evolveFrom": null,
+  "attacks": null,
+  "abilities": null,
+  "effect": "Switch your Active Pokémon with 1 of your Benched Pokémon. If you do, draw cards until you have 5 cards in your hand.",
+  "trainerType": "Supporter",
+  "weaknesses": null,
+  "resistances": null,
+  "retreat": null,
+  "suffix": null,
+  "image": "https://assets.tcgdex.net/en/sv/sv08/187",
+  "set": {
+    "cardCount": {
+      "official": 191,
+      "total": 252
+    },
+    "id": "sv08",
+    "logo": "https://assets.tcgdex.net/en/sv/sv08/logo",
+    "name": "Surging Sparks"
+  },
+  "localId": "187"
+}

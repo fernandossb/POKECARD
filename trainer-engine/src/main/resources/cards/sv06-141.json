@@ -1,0 +1,55 @@
+{
+  "id": "sv06-141",
+  "name": "Bloodmoon Ursaluna ex",
+  "category": "Pokemon",
+  "hp": 260,
+  "types": [
+    "Colorless"
+  ],
+  "stage": "Basic",
+  "evolveFrom": null,
+  "attacks": [
+    {
+      "cost": [
+        "Colorless",
+        "Colorless",
+        "Colorless",
+        "Colorless",
+        "Colorless"
+      ],
+      "name": "Blood Moon",
+      "effect": "During your next turn, this Pokémon can't attack.",
+      "damage": 240
+    }
+  ],
+  "abilities": [
+    {
+      "type": "Ability",
+      "name": "Seasoned Skill",
+      "effect": "Blood Moon used by this Pokémon costs {C} less for each Prize card your opponent has taken."
+    }
+  ],
+  "effect": null,
+  "trainerType": null,
+  "weaknesses": [
+    {
+      "type": "Fighting",
+      "value": "×2"
+    }
+  ],
+  "resistances": null,
+  "retreat": 3,
+  "suffix": "ex",
+  "image": "https://assets.tcgdex.net/en/sv/sv06/141",
+  "set": {
+    "cardCount": {
+      "official": 167,
+      "total": 226
+    },
+    "id": "sv06",
+    "logo": "https://assets.tcgdex.net/en/sv/sv06/logo",
+    "name": "Twilight Masquerade",
+    "symbol": "https://assets.tcgdex.net/univ/sv/sv06/symbol"
+  },
+  "localId": "141"
+}

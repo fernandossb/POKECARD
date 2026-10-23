@@ -1,0 +1,29 @@
+{
+  "id": "me01-131",
+  "name": "Ultra Bola",
+  "category": "Treinador",
+  "hp": null,
+  "types": null,
+  "stage": null,
+  "evolveFrom": null,
+  "attacks": null,
+  "abilities": null,
+  "effect": "Você só pode usar esta carta se descartar outras 2 cartas da sua mão.\n\nProcure por um Pokémon no seu baralho, revele-o e coloque-o na sua mão. Em seguida, embaralhe o seu baralho.",
+  "trainerType": "Item",
+  "weaknesses": null,
+  "resistances": null,
+  "retreat": null,
+  "suffix": null,
+  "image": "https://assets.tcgdex.net/pt/me/me01/131",
+  "set": {
+    "cardCount": {
+      "official": 132,
+      "total": 188
+    },
+    "id": "me01",
+    "logo": "https://assets.tcgdex.net/pt/me/me01/logo",
+    "name": "Megaevolução",
+    "symbol": "https://assets.tcgdex.net/univ/me/me01/symbol"
+  },
+  "localId": "131"
+}

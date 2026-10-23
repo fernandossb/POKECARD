@@ -1,0 +1,53 @@
+{
+  "id": "me01-073",
+  "name": "Hariyama",
+  "category": "Pokémon",
+  "hp": 150,
+  "types": [
+    "Lutador"
+  ],
+  "stage": "Estágio 1",
+  "evolveFrom": "Makuhita",
+  "attacks": [
+    {
+      "cost": [
+        "Lutador",
+        "Lutador",
+        "Lutador"
+      ],
+      "name": "Apertão Selvagem",
+      "effect": "Este Pokémon também causa 70 pontos de dano a si mesmo.",
+      "damage": 210
+    }
+  ],
+  "abilities": [
+    {
+      "type": "Habilidade",
+      "name": "Pegador Mestre",
+      "effect": "Uma vez durante o seu turno, quando você jogar este Pokémon da sua mão para evoluir 1 dos seus Pokémon, você poderá usar esta Habilidade. Mande 1 dos Pokémon no Banco do seu oponente para o Campo Ativo."
+    }
+  ],
+  "effect": null,
+  "trainerType": null,
+  "weaknesses": [
+    {
+      "type": "Psíquico",
+      "value": "×2"
+    }
+  ],
+  "resistances": null,
+  "retreat": 3,
+  "suffix": null,
+  "image": "https://assets.tcgdex.net/pt/me/me01/073",
+  "set": {
+    "cardCount": {
+      "official": 132,
+      "total": 188
+    },
+    "id": "me01",
+    "logo": "https://assets.tcgdex.net/pt/me/me01/logo",
+    "name": "Megaevolução",
+    "symbol": "https://assets.tcgdex.net/univ/me/me01/symbol"
+  },
+  "localId": "073"
+}

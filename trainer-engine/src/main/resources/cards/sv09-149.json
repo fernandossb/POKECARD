@@ -1,0 +1,29 @@
+{
+  "id": "sv09-149",
+  "name": "Iris's Fighting Spirit",
+  "category": "Trainer",
+  "hp": null,
+  "types": null,
+  "stage": null,
+  "evolveFrom": null,
+  "attacks": null,
+  "abilities": null,
+  "effect": "You can use this card only if you discard another card from your hand.\n\nDraw cards until you have 6 cards in your hand.",
+  "trainerType": "Supporter",
+  "weaknesses": null,
+  "resistances": null,
+  "retreat": null,
+  "suffix": null,
+  "image": "https://assets.tcgdex.net/en/sv/sv09/149",
+  "set": {
+    "cardCount": {
+      "official": 159,
+      "total": 190
+    },
+    "id": "sv09",
+    "logo": "https://assets.tcgdex.net/en/sv/sv09/logo",
+    "name": "Journey Together",
+    "symbol": "https://assets.tcgdex.net/univ/sv/sv09/symbol"
+  },
+  "localId": "149"
+}

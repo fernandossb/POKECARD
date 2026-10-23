@@ -1,0 +1,29 @@
+{
+  "id": "sv02-172",
+  "name": "Ordem da Chefia",
+  "category": "Treinador",
+  "hp": null,
+  "types": null,
+  "stage": null,
+  "evolveFrom": null,
+  "attacks": null,
+  "abilities": null,
+  "effect": "Mande 1 dos Pokémon no Banco do seu oponente para o Campo Ativo.",
+  "trainerType": "Apoiador",
+  "weaknesses": null,
+  "resistances": null,
+  "retreat": null,
+  "suffix": null,
+  "image": "https://assets.tcgdex.net/pt/sv/sv02/172",
+  "set": {
+    "cardCount": {
+      "official": 193,
+      "total": 279
+    },
+    "id": "sv02",
+    "logo": "https://assets.tcgdex.net/pt/sv/sv02/logo",
+    "name": "Evoluções em Paldea",
+    "symbol": "https://assets.tcgdex.net/univ/sv/sv02/symbol"
+  },
+  "localId": "172"
+}

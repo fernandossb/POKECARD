@@ -1,0 +1,29 @@
+{
+  "id": "sv06.5-061",
+  "name": "Maca Noturna",
+  "category": "Treinador",
+  "hp": null,
+  "types": null,
+  "stage": null,
+  "evolveFrom": null,
+  "attacks": null,
+  "abilities": null,
+  "effect": "Coloque um Pokémon ou uma carta de Energia Básica da sua pilha de descarte na sua mão.",
+  "trainerType": "Item",
+  "weaknesses": null,
+  "resistances": null,
+  "retreat": null,
+  "suffix": null,
+  "image": "https://assets.tcgdex.net/pt/sv/sv06.5/061",
+  "set": {
+    "cardCount": {
+      "official": 64,
+      "total": 99
+    },
+    "id": "sv06.5",
+    "logo": "https://assets.tcgdex.net/pt/sv/sv06.5/logo",
+    "name": "Fábulas Nebulosas",
+    "symbol": "https://assets.tcgdex.net/univ/sv/sv06.5/symbol"
+  },
+  "localId": "061"
+}

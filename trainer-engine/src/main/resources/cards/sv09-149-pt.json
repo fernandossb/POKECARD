@@ -1,0 +1,29 @@
+{
+  "id": "sv09-149",
+  "name": "Espírito de Luta da Iris",
+  "category": "Treinador",
+  "hp": null,
+  "types": null,
+  "stage": null,
+  "evolveFrom": null,
+  "attacks": null,
+  "abilities": null,
+  "effect": "Você só pode usar esta carta se descartar outra carta da sua mão.\n\nCompre cartas até ter 6 cartas na sua mão.",
+  "trainerType": "Apoiador",
+  "weaknesses": null,
+  "resistances": null,
+  "retreat": null,
+  "suffix": null,
+  "image": "https://assets.tcgdex.net/pt/sv/sv09/149",
+  "set": {
+    "cardCount": {
+      "official": 159,
+      "total": 190
+    },
+    "id": "sv09",
+    "logo": "https://assets.tcgdex.net/pt/sv/sv09/logo",
+    "name": "Amigos de Jornada",
+    "symbol": "https://assets.tcgdex.net/univ/sv/sv09/symbol"
+  },
+  "localId": "149"
+}

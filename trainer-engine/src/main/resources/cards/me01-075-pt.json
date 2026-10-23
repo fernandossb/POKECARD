@@ -1,0 +1,45 @@
+{
+  "id": "me01-075",
+  "name": "Solrock",
+  "category": "Pokémon",
+  "hp": 110,
+  "types": [
+    "Lutador"
+  ],
+  "stage": "Básico",
+  "evolveFrom": null,
+  "attacks": [
+    {
+      "cost": [
+        "Lutador"
+      ],
+      "name": "Feixe Cósmico",
+      "effect": "Se você não tiver Lunatone no seu Banco, este ataque não fará nada. O dano deste ataque não é afetado por Fraqueza ou Resistência.",
+      "damage": 70
+    }
+  ],
+  "abilities": null,
+  "effect": null,
+  "trainerType": null,
+  "weaknesses": [
+    {
+      "type": "Planta",
+      "value": "×2"
+    }
+  ],
+  "resistances": null,
+  "retreat": 1,
+  "suffix": null,
+  "image": "https://assets.tcgdex.net/pt/me/me01/075",
+  "set": {
+    "cardCount": {
+      "official": 132,
+      "total": 188
+    },
+    "id": "me01",
+    "logo": "https://assets.tcgdex.net/pt/me/me01/logo",
+    "name": "Megaevolução",
+    "symbol": "https://assets.tcgdex.net/univ/me/me01/symbol"
+  },
+  "localId": "075"
+}

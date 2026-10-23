@@ -1,0 +1,27 @@
+{
+  "id": "mee-006",
+  "name": "Fighting Energy",
+  "category": "Energy",
+  "hp": null,
+  "types": null,
+  "stage": null,
+  "evolveFrom": null,
+  "attacks": null,
+  "abilities": null,
+  "effect": null,
+  "trainerType": null,
+  "weaknesses": null,
+  "resistances": null,
+  "retreat": null,
+  "suffix": null,
+  "image": null,
+  "set": {
+    "cardCount": {
+      "official": 8,
+      "total": 8
+    },
+    "id": "mee",
+    "name": "Mega Evolution Energy"
+  },
+  "localId": "006"
+}

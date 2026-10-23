@@ -1,0 +1,29 @@
+{
+  "id": "me01-119",
+  "name": "Determinação da Lílian",
+  "category": "Treinador",
+  "hp": null,
+  "types": null,
+  "stage": null,
+  "evolveFrom": null,
+  "attacks": null,
+  "abilities": null,
+  "effect": "Embaralhe a sua mão no seu baralho. Em seguida, compre 6 cartas. Se você tiver exatamente 6 cartas de Prêmio restantes, compre 8 cartas em vez de 6.",
+  "trainerType": "Apoiador",
+  "weaknesses": null,
+  "resistances": null,
+  "retreat": null,
+  "suffix": null,
+  "image": "https://assets.tcgdex.net/pt/me/me01/119",
+  "set": {
+    "cardCount": {
+      "official": 132,
+      "total": 188
+    },
+    "id": "me01",
+    "logo": "https://assets.tcgdex.net/pt/me/me01/logo",
+    "name": "Megaevolução",
+    "symbol": "https://assets.tcgdex.net/univ/me/me01/symbol"
+  },
+  "localId": "119"
+}

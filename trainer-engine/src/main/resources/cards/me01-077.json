@@ -1,0 +1,54 @@
+{
+  "id": "me01-077",
+  "name": "Mega Lucario ex",
+  "category": "Pokemon",
+  "hp": 340,
+  "types": [
+    "Fighting"
+  ],
+  "stage": "Stage1",
+  "evolveFrom": "Riolu",
+  "attacks": [
+    {
+      "cost": [
+        "Fighting"
+      ],
+      "name": "Aura Jab",
+      "effect": "Attach up to 3 Basic {F} Energy cards from your discard pile to your Benched Pokémon in any way you like.",
+      "damage": 130
+    },
+    {
+      "cost": [
+        "Fighting",
+        "Fighting"
+      ],
+      "name": "Mega Brave",
+      "effect": "During your next turn, this Pokémon can't use Mega Brave.",
+      "damage": 270
+    }
+  ],
+  "abilities": null,
+  "effect": null,
+  "trainerType": null,
+  "weaknesses": [
+    {
+      "type": "Psychic",
+      "value": "×2"
+    }
+  ],
+  "resistances": null,
+  "retreat": 2,
+  "suffix": "ex",
+  "image": "https://assets.tcgdex.net/en/me/me01/077",
+  "set": {
+    "cardCount": {
+      "official": 132,
+      "total": 188
+    },
+    "id": "me01",
+    "logo": "https://assets.tcgdex.net/en/me/me01/logo",
+    "name": "Mega Evolution",
+    "symbol": "https://assets.tcgdex.net/univ/me/me01/symbol"
+  },
+  "localId": "077"
+}

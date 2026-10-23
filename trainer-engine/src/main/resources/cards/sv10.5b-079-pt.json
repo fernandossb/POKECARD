@@ -1,0 +1,28 @@
+{
+  "id": "sv10.5b-079",
+  "name": "Balão de Ar",
+  "category": "Treinador",
+  "hp": null,
+  "types": null,
+  "stage": null,
+  "evolveFrom": null,
+  "attacks": null,
+  "abilities": null,
+  "effect": "O custo de Recuo do Pokémon ao qual esta carta está ligada é {C}{C} a menos.",
+  "trainerType": "Ferramenta",
+  "weaknesses": null,
+  "resistances": null,
+  "retreat": null,
+  "suffix": null,
+  "image": "https://assets.tcgdex.net/pt/sv/sv10.5b/079",
+  "set": {
+    "cardCount": {
+      "official": 86,
+      "total": 172
+    },
+    "id": "sv10.5b",
+    "name": "Raio Preto",
+    "symbol": "https://assets.tcgdex.net/univ/sv/sv10.5b/symbol"
+  },
+  "localId": "079"
+}

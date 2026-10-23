@@ -1,0 +1,54 @@
+{
+  "id": "me01-077",
+  "name": "Mega Lucario ex",
+  "category": "Pokémon",
+  "hp": 340,
+  "types": [
+    "Lutador"
+  ],
+  "stage": "Estágio 1",
+  "evolveFrom": "Riolu",
+  "attacks": [
+    {
+      "cost": [
+        "Lutador"
+      ],
+      "name": "Soco Aura",
+      "effect": "Ligue até 3 cartas de Energia {F} Básica da sua pilha de descarte aos seus Pokémon no Banco como desejar.",
+      "damage": 130
+    },
+    {
+      "cost": [
+        "Lutador",
+        "Lutador"
+      ],
+      "name": "Megavalentia",
+      "effect": "Durante o seu próximo turno, este Pokémon não poderá usar Megavalentia.",
+      "damage": 270
+    }
+  ],
+  "abilities": null,
+  "effect": null,
+  "trainerType": null,
+  "weaknesses": [
+    {
+      "type": "Psíquico",
+      "value": "×2"
+    }
+  ],
+  "resistances": null,
+  "retreat": 2,
+  "suffix": "ex",
+  "image": "https://assets.tcgdex.net/pt/me/me01/077",
+  "set": {
+    "cardCount": {
+      "official": 132,
+      "total": 188
+    },
+    "id": "me01",
+    "logo": "https://assets.tcgdex.net/pt/me/me01/logo",
+    "name": "Megaevolução",
+    "symbol": "https://assets.tcgdex.net/univ/me/me01/symbol"
+  },
+  "localId": "077"
+}

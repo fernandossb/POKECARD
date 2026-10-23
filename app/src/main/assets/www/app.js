@@ -3390,7 +3390,7 @@ function renderTabs() {
     </button>
   `).join('') + `
     <button class="tab scanner-tab" onclick="${temCamera() ? 'openScannerSetup()' : 'abrirBuscaDeCartas()'}" aria-label="${temCamera() ? 'Escanear carta' : 'Buscar carta'}">
-      <img class="tab-icon scanner-pokebola" src="pokebola-scanner.webp" alt="">
+      <svg class="tab-icon scanner-pokebola" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5M6 12h12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
     </button>` + primary.slice(2).map(([value, label, icon]) => `
     <button class="tab ${ui.tab === value ? 'active' : ''}" onclick="setTab('${value}')" aria-label="${label}">
       <span class="tab-icon">${tabIcon(icon)}</span><span class="tab-label">${label}</span>
@@ -3447,7 +3447,7 @@ function openMoreNavigation() {
       <button onclick="closeModal();abrirTrofeus()"><span class="quick-action-icon" aria-hidden="true">${icone('trofeu')}</span><span><strong>Troféus</strong><small>${(() => { const r = typeof resumoTrofeus === 'function' ? resumoTrofeus() : null; return r ? `${r.conquistadas} de ${r.total} medalhas conquistadas` : 'Medalhas por coleção, tipo e região'; })()}</small></span></button>
       <button onclick="closeModal();abrirEnergiasBasicas()"><span class="quick-action-icon" aria-hidden="true">${icone('energia')}</span><span><strong>Energias básicas</strong><small>Escolha pelo tipo e pela tiragem — sem precisar do número</small></span></button>
       <button onclick="closeModal();abrirArteEstendida()"><span class="quick-action-icon" aria-hidden="true">${icone('quadro')}</span><span><strong>Arte Estendida</strong><small>${(() => { const r = typeof resumoArteEstendida === 'function' ? resumoArteEstendida() : null; return r ? `${r.tenho} de ${r.ligadas} cartas já na coleção · ${r.totalObras} ${r.totalObras === 1 ? 'obra' : 'obras'}` : 'Cartas que se completam lado a lado'; })()}</small></span></button>
-      <button onclick="closeModal();abrirTemaPokemon()"><span class="quick-action-icon">${tabIcon('pokedex')}</span><span><strong>Tema do aplicativo</strong><small>${esc(window.__TEMA_ATUAL__?.nome || 'Gengar')} · deixe o app com a cara do seu favorito</small></span></button>
+      <button onclick="limparArtes()"><span class="quick-action-icon">${tabIcon('pokedex')}</span><span><strong>Atualizar artes 3D</strong><small>Limpar o cache e baixar as artes novamente</small></span></button>
     </div>`);
 }
 
