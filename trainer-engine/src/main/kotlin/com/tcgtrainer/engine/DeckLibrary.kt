@@ -59,7 +59,7 @@ object CardLibrary {
         rows.map { (id, raw) ->
             val reviewed = TrainerCatalog.definitions[id]
             val category = when (raw.s("category")) { "Pokemon" -> Category.POKEMON; "Energy" -> Category.ENERGY; else -> Category.TRAINER }
-            val basicEnergy = category == Category.ENERGY && (raw.s("energyType") == "Normal" || id in listOf("sv01-258", "swsh12.5-153", "swsh12.5-155", "swsh12.5-158"))
+            val basicEnergy = CatalogRuleCompiler.basicEnergy(raw)
             val standard = id !in banned && (basicEnergy || trainerSignature(raw)?.let { it in currentTrainerTexts } == true ||
                 id in policy["reviewedReprints"]!!.jsonArray.map { it.jsonPrimitive.content } ||
                 eligible(raw))

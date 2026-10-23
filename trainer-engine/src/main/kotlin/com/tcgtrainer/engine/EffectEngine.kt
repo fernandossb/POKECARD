@@ -20,6 +20,7 @@ class EffectEngine(private val catalog: CardCatalog) {
         is Effect.Damage, is Effect.AccelerateEnergy, is Effect.RestrictNextTurn, is Effect.Recoil,
         is Effect.RequiresBenched, is Effect.TargetedDamage, Effect.IgnoreWeaknessResistance,
         is Effect.CoinDamage, is Effect.DiscardAttackEnergy, is Effect.EnergyFromDeck, is Effect.SupporterBonus, is Effect.Draw -> true
-        is Effect.Unsupported, is Effect.Heal -> false
+        is Effect.Heal -> true
+        is Effect.Unsupported -> false
     } }
 }

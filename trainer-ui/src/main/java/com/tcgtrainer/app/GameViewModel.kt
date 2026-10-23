@@ -56,15 +56,21 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     }
     fun deleteDeck(id: String) { viewModelScope.launch { try { db.decks().delete(id) } catch (e: Exception) { mutableDecks.value = mutableDecks.value.copy(message = e.message) } } }
     private val cpu = CpuPlayer()
-    fun start(seed: Long, mode: Mode, humanDeck: String = "lucario", cpuDeck: String = "lucario") {
+    fun start(seed: Long, mode: Mode, humanDeck: String = "lucario", cpuDeck: String = "random") {
         if (mutable.value.busy) return
         mutate {
             val own = checkNotNull(deck(humanDeck)) { "Seu deck não está pronto para jogar." }
-            val other = checkNotNull(deck(cpuDeck)) { "O deck da CPU não está pronto para jogar." }
+            val candidates = playableDecks().filter { it.cards.size == 60 }.filter {
+                own.format != DeckFormat.STANDARD || DeckValidator.validate(SavedDeck(it.id, it.name, DeckFormat.STANDARD, it.cards.groupingBy { id -> id }.eachCount())).playable
+            }
+            val other = if (cpuDeck == "random") {
+                check(candidates.isNotEmpty()) { "Ainda não há adversários implementados elegíveis para este formato." }
+                candidates[java.security.SecureRandom().nextInt(candidates.size)]
+            } else checkNotNull(deck(cpuDeck)) { "O deck da CPU não está pronto para jogar." }
             check(DeckValidator.validate(own).playable && DeckValidator.validate(other).playable) { "Confira as regras dos decks antes de jogar." }
             check(mode == Mode.TRAINING || owned.allows(own.cards)) { ownershipMessage(own.cards) ?: "Confira sua coleção no PokeCard." }
             session = GameSession(engine, SessionSnapshot(engine.newGame(seed,
-                decks = listOf(own.cards, other.cards), mode = mode).copy(humanDeckId = humanDeck, cpuDeckId = cpuDeck,
+                decks = listOf(own.cards, other.cards), mode = mode).copy(humanDeckId = humanDeck, cpuDeckId = other.id,
                     deckLists = listOf(own.cards, other.cards), deckNames = listOf(own.name, other.name), deckFormats = listOf(own.format, other.format))))
         }
     }

@@ -243,6 +243,11 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 update(opponent) { it.copy(active = it.active?.let { pokemon -> if (pokemon.id == defender.id) pokemon.copy(damage = pokemon.damage + preview.damage) else pokemon },
                     bench = it.bench.map { pokemon -> if (pokemon.id == defender.id) pokemon.copy(damage = pokemon.damage + preview.damage) else pokemon }) }
                 emit("DamageDealt", "HP restante: ${preview.remainingHp}.")
+                attack.effects.filterIsInstance<Effect.Heal>().forEach { heal ->
+                    val healed = minOf(heal.amount, next.players[actor].active!!.damage)
+                    updatePokemon(p.active.id) { it.copy(damage = it.damage - healed) }
+                    emit("PokemonHealed", "Curou $healed de dano do atacante.", healed)
+                }
                 attack.effects.filterIsInstance<Effect.Recoil>().forEach { recoil -> updatePokemon(p.active.id) { it.copy(damage = it.damage + recoil.damage) }; emit("RecoilDamage", "${recoil.damage} de dano no próprio atacante.") }
                 attack.effects.filterIsInstance<Effect.RestrictNextTurn>().forEach { restriction -> updatePokemon(p.active.id) { it.copy(restrictions = it.restrictions + AttackRestriction(restriction.attackId, state.turn + 2)) } }
                 attack.effects.filterIsInstance<Effect.Draw>().forEach { draw ->

@@ -90,12 +90,11 @@ import com.tcgtrainer.engine.*
 @Composable private fun HomeScreen(ui: UiState, vm: GameViewModel, selectedDeck: String, selectDeck: (String) -> Unit, availableDecks: List<TrainingDeck>, manage: () -> Unit, deck: () -> Unit, info: (String) -> Unit) {
     var seed by remember { mutableStateOf(java.security.SecureRandom().nextLong().toString()) }; var training by remember { mutableStateOf(true) }
     var options by remember { mutableStateOf(false) }
-    var cpuDeck by remember { mutableStateOf("solrock") }
+    val cpuDeck = "random"
     val chosen = availableDecks.firstOrNull { it.id == selectedDeck } ?: availableDecks.first()
     val opponent = availableDecks.firstOrNull { it.id == cpuDeck } ?: availableDecks.first()
     LaunchedEffect(availableDecks) {
         if (availableDecks.none { it.id == selectedDeck }) selectDeck(availableDecks.first().id)
-        if (availableDecks.none { it.id == cpuDeck }) cpuDeck = availableDecks.first().id
     }
     Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF152D42), Color(0xFF080F1C)))).safeDrawingPadding().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Spacer(Modifier.height(4.dp))
@@ -114,25 +113,33 @@ import com.tcgtrainer.engine.*
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Text("BARALHO SELECIONADO", fontSize = 9.sp, color = Aqua, letterSpacing = 2.sp)
                 Text(chosen.name, fontSize = 21.sp, fontWeight = FontWeight.Bold)
-                Text("${chosen.cards.size} cartas · lista de treino · artes offline", color = Muted, fontSize = 11.sp)
+                Text("${chosen.cards.size} cartas · lista de treino", color = Muted, fontSize = 11.sp)
                 Text("VER CARTAS  ›", color = Aqua, fontSize = 10.sp)
             }
         }
         OutlinedButton(onClick = manage, modifier = Modifier.fillMaxWidth()) { Text("MEUS DECKS · CRIAR E EDITAR") }
+        val updateContext = LocalContext.current
+        OutlinedButton(onClick = {
+            val intent = android.content.Intent().setClassName(updateContext.packageName, "br.com.fichariopokemon.pokedex.MainActivity")
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra("checkTrainerUpdate", true)
+            updateContext.startActivity(intent)
+        }, modifier = Modifier.fillMaxWidth()) { Text("VERIFICAR ATUALIZAÇÕES DE CARTAS E REGRAS") }
+        Text("Novas regras automáticas chegam nas versões revisadas do aplicativo. A verificação usa as versões oficiais publicadas do PokeCard.", color = Muted, fontSize = 11.sp)
         DeckSelector("SEU BARALHO", chosen.id, availableDecks, selectDeck)
         Text(chosen.strategy, color = Muted, fontSize = 11.sp)
         if (!training) vm.ownershipMessage(chosen.cards)?.let { Text(it, color = Coral, fontSize = 11.sp) }
         if (training) Text("Treino: 14 a 60 cartas, incluindo cartas ainda não possuídas. Listas incompletas alteram as chances de compra. Desative ‘Só minhas cartas’ no editor para planejar compras.", color = Muted, fontSize = 11.sp)
-        DeckSelector("BARALHO DA MÁQUINA", opponent.id, availableDecks, { cpuDeck = it })
+        Text("MÁQUINA · BARALHO ALEATÓRIO A CADA PARTIDA", color = Aqua, fontSize = 11.sp)
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) { Text(if (training) "Treinamento solo" else "Partida contra a máquina", fontWeight = FontWeight.SemiBold); Text(if (training) "Desfaz sua jogada e a resposta da CPU" else "Sem desfazer", color = Muted, fontSize = 11.sp) }
             Switch(training, { training = it })
         }
         TextButton(onClick = { options = !options }, contentPadding = PaddingValues(0.dp)) { Text("${if (options) "−" else "+"} OPÇÕES DA PARTIDA · SEED $seed", fontSize = 10.sp) }
         if (options) OutlinedTextField(seed, { seed = it }, label = { Text("Seed · abertura reproduzível") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        Button(onClick = { vm.start(seed.toLong(), if (training) Mode.TRAINING else Mode.MATCH, selectedDeck, cpuDeck); seed = java.security.SecureRandom().nextLong().toString() }, enabled = !ui.busy && seed.toLongOrNull() != null && (training || (vm.owned.allows(chosen.cards) && chosen.cards.size == 60 && opponent.cards.size == 60)), modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(12.dp)) { Text("JOGAR CONTRA A MÁQUINA", fontWeight = FontWeight.Bold, letterSpacing = 1.sp) }
+        Button(onClick = { vm.start(seed.toLong(), if (training) Mode.TRAINING else Mode.MATCH, selectedDeck, cpuDeck); seed = java.security.SecureRandom().nextLong().toString() }, enabled = !ui.busy && seed.toLongOrNull() != null && (training || (vm.owned.allows(chosen.cards) && chosen.cards.size == 60 )), modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(12.dp)) { Text("JOGAR CONTRA A MÁQUINA", fontWeight = FontWeight.Bold, letterSpacing = 1.sp) }
         OutlinedButton(onClick = vm::resume, enabled = ui.canContinue && !ui.busy, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(12.dp)) { Text("CONTINUAR PARTIDA") }
-        TextButton(onClick = { info("Jogo exclusivamente para você contra a máquina. Escolha os dois baralhos antes de começar. Crie seus próprios decks em MEUS DECKS: escolha nome e formato, busque cartas e ajuste quantidades. Salve decks incompletos como rascunho. Só decks válidos, com efeitos implementados, aparecem para jogar.\n\nPadrão 2026 e Academia 2022 são categorias separadas. Treino livre permite misturar cartas implementadas. O catálogo inclui dados adicionais com textos EN, ainda sem implementação de todos os efeitos; artes extras precisam de internet no primeiro acesso. As cartas jogáveis têm artes offline.\n\nA CPU usa as mesmas regras e não vê sua mão, os Prêmios ocultos ou a ordem dos decks.") }, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("COMO JOGAR", fontSize = 11.sp) }
+        TextButton(onClick = { info("Jogo exclusivamente para você contra a máquina. Escolha seu baralho; a CPU sorteia um adversário a cada partida. Crie seus próprios decks em MEUS DECKS: escolha nome e formato, busque cartas e ajuste quantidades. Salve decks incompletos como rascunho. Só decks válidos, com efeitos implementados, aparecem para jogar.\n\nPadrão 2026 e Academia 2022 são categorias separadas. Treino livre permite misturar cartas implementadas. O catálogo inclui dados adicionais com textos EN, ainda sem implementação de todos os efeitos; artes extras precisam de internet no primeiro acesso. As cartas originais têm artes offline; as cartas adicionais carregam as artes pela internet.\n\nA CPU usa as mesmas regras e não vê sua mão, os Prêmios ocultos ou a ordem dos decks.") }, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("COMO JOGAR", fontSize = 11.sp) }
         Text("1 JOGADOR × MÁQUINA  ·  PARTIDAS OFFLINE", Modifier.fillMaxWidth(), color = Muted, fontSize = 9.sp)
         ui.message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     }

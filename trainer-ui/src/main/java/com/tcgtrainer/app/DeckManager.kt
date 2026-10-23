@@ -41,7 +41,7 @@ import java.util.UUID
             TextButton(onClick = close) { Text("VOLTAR") }
         }
         Text("Sua coleção PokeCard: ${vm.owned.counts.values.sum()} cópias. Os decks do jogo são salvos separadamente dos decks do fichário.", color = Muted, fontSize = 12.sp)
-        Text("${vm.owned.counts.keys.count { CardLibrary.byId[it]?.implemented == true }} impressões possuídas com efeitos implementados. Cartas restantes aguardam suporte no jogo.", color = Muted, fontSize = 11.sp)
+        Text("${CardLibrary.entries.count { it.implemented }} impressões jogáveis, sendo ${CardLibrary.entries.count { it.implemented && it.standard }} no Padrão. Você pode treinar com cartas que ainda não possui. As demais podem ser salvas em rascunhos enquanto aguardam seus efeitos.", color = Muted, fontSize = 11.sp)
         Button(onClick = { edit(SavedDeck("custom-${UUID.randomUUID()}", "Novo deck")) }, enabled = ui.loaded, modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) { Text("+ CRIAR DECK DO ZERO") }
         if (!ui.loaded) LinearProgressIndicator(Modifier.fillMaxWidth())
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 20.dp)) {
@@ -76,9 +76,9 @@ import java.util.UUID
 
 @Composable private fun DeckEditor(deck: SavedDeck, owned: OwnedCollection, change: (SavedDeck) -> Unit, saving: Boolean, message: String?, back: () -> Unit, save: () -> Unit) {
     var query by remember { mutableStateOf("") }
-    var onlyPlayable by remember { mutableStateOf(true) }
+    var onlyPlayable by remember { mutableStateOf(false) }
     var inDeck by remember { mutableStateOf(false) }
-    var onlyOwned by remember { mutableStateOf(true) }
+    var onlyOwned by remember { mutableStateOf(false) }
     var category by remember { mutableStateOf<Category?>(null) }
     var enlarged by remember { mutableStateOf<LibraryCard?>(null) }
     val validation = remember(deck) { DeckValidator.validate(deck) }

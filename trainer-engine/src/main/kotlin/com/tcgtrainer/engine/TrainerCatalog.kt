@@ -11,7 +11,12 @@ object TrainerCatalog : CardCatalog {
         "sv06.5-061" to 2, "sv06-163" to 1, "me01-130" to 1, "sv10.5b-079" to 2, "sv01-258" to 12)
     private val academyIds by lazy { Academy2022.decks.flatMap { it.cards }.distinct() }
     private val academyNames by lazy { academyIds.associateBy { json(it).string("name")!! } }
-    val definitions: Map<String, CardDefinition> by lazy { (counts.keys + academyIds).associateWith(::read) }
+    val definitions: Map<String, CardDefinition> by lazy {
+        val reviewed = (counts.keys + academyIds).associateWith(::read)
+        CatalogRuleCompiler.rows.mapNotNull { (id, raw) ->
+            if (id in reviewed) null else CatalogRuleCompiler.compile(raw, reviewed)?.let { id to it }
+        }.toMap() + reviewed
+    }
     override fun get(id: String): CardDefinition = definitions[id] ?: TestCatalog.get(id)
     fun deck() = counts.flatMap { (id, count) -> List(count) { id } }
     val deckName = "Mega Lucario ex • treino"

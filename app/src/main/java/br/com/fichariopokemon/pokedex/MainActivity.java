@@ -132,6 +132,10 @@ public final class MainActivity extends Activity {
         setContentView(rootView);
         criarWebView();
         registerUpdateReceiver();
+        if (getIntent().getBooleanExtra("checkTrainerUpdate", false)) {
+            getIntent().removeExtra("checkTrainerUpdate");
+            checkForUpdateNative();
+        }
     }
 
     /* A tela do aplicativo. Fica num método próprio porque pode precisar ser
@@ -211,6 +215,16 @@ public final class MainActivity extends Activity {
             File file = pendingInstallFile;
             pendingInstallFile = null;
             installDownloadedApk(file);
+        }
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (intent.getBooleanExtra("checkTrainerUpdate", false)) {
+            intent.removeExtra("checkTrainerUpdate");
+            checkForUpdateNative();
         }
     }
 
