@@ -48,6 +48,6 @@ jobs:
         run: gradle --no-daemon :trainer-engine:test :app:assembleDirectRelease :app:lintDirectRelease
       - uses: actions/upload-artifact@v4
         with:
-          name: POKECARD-5.95.0-TCG-Trainer
+          name: POKECARD-5.96.0-TCG-Trainer
           path: app/build/outputs/apk/direct/release/app-direct-release.apk
           retention-days: 14

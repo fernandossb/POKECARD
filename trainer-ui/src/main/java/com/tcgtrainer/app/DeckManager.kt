@@ -52,9 +52,9 @@ import java.util.UUID
                 ElevatedCard(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(deck.name, fontWeight = FontWeight.Bold)
-                        Text("${deck.counts.values.sum()}/60 · ${deck.format.label()} · ${if (result.playable && vm.owned.allows(deck.cards())) "PRONTO PARA JOGAR" else "RASCUNHO"}", color = if (result.playable && vm.owned.allows(deck.cards())) Aqua else Coral, fontSize = 10.sp)
+                        Text("${deck.counts.values.sum()}/60 · ${deck.format.label()} · ${if (result.playable) "PRONTO PARA JOGAR" else "RASCUNHO"}", color = if (result.playable) Aqua else Coral, fontSize = 10.sp)
                         vm.ownershipMessage(deck.cards())?.let { Text(it, color = Coral, fontSize = 10.sp) }
-                        Row { TextButton(onClick = { edit(deck) }) { Text("EDITAR") }; TextButton(onClick = { use(deck.id) }, enabled = result.playable && vm.owned.allows(deck.cards())) { Text("USAR") }; TextButton(onClick = { delete = deck }) { Text("EXCLUIR", color = Coral) } }
+                        Row { TextButton(onClick = { edit(deck) }) { Text("EDITAR") }; TextButton(onClick = { use(deck.id) }, enabled = result.playable) { Text("USAR") }; TextButton(onClick = { delete = deck }) { Text("EXCLUIR", color = Coral) } }
                     }
                 }
             }
@@ -103,11 +103,11 @@ import java.util.UUID
                 Text("$total / 60 CARTAS", color = if (validation.playable) Aqua else Coral, fontWeight = FontWeight.Black)
                 Text(Category.entries.joinToString(" · ") { c -> "${when(c) { Category.POKEMON -> "Pokémon"; Category.TRAINER -> "Trein."; Category.ENERGY -> "Energia" }} ${deck.counts.entries.sumOf { if (CardLibrary.byId[it.key]?.category == c) it.value else 0 }}" }, color = Muted, fontSize = 10.sp)
             }
-            Button(onClick = save, enabled = !saving && deck.name.isNotBlank()) { Text(if (saving) "SALVANDO…" else if (validation.playable && owned.allows(deck.cards())) "SALVAR DECK" else "SALVAR RASCUNHO", fontSize = 10.sp) }
+            Button(onClick = save, enabled = !saving && deck.name.isNotBlank()) { Text(if (saving) "SALVANDO…" else if (validation.playable) "SALVAR DECK" else "SALVAR RASCUNHO", fontSize = 10.sp) }
         }
         if (validation.errors.isNotEmpty() || validation.unsupported.isNotEmpty()) Text(
             (validation.errors.take(2) + if (validation.unsupported.isNotEmpty()) listOf("${validation.unsupported.size} impressão(ões) com efeitos ainda não implementados: salve como rascunho.") else emptyList()).joinToString("\n"), color = Coral, fontSize = 10.sp)
-        else if (owned.allows(deck.cards())) Text("Deck pronto para jogar contra a máquina.", color = Aqua, fontSize = 11.sp)
+        else Text("Pronto para treinar. Partida normal exige 60 cartas e posse.", color = Aqua, fontSize = 11.sp)
         owned.message(deck.cards())?.let { Text(it, color = Coral, fontSize = 10.sp, maxLines = 3) }
         OutlinedTextField(query, { query = it }, label = { Text("Buscar nome, coleção, número ou ID") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -132,7 +132,7 @@ import java.util.UUID
                     }
                     TextButton(onClick = { change(deck.copy(counts = deck.counts.toMutableMap().apply { if (count <= 1) remove(card.id) else put(card.id, count-1) })) }, enabled = count > 0 && !saving, contentPadding = PaddingValues(0.dp), modifier = Modifier.width(30.dp)) { Text("−", fontSize = 22.sp) }
                     Text("$count", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                    TextButton(onClick = { change(deck.copy(counts = deck.counts + (card.id to count+1))) }, enabled = count < minOf(60, owned.quantity(card.id)) && !saving, contentPadding = PaddingValues(0.dp), modifier = Modifier.width(30.dp)) { Text("+", fontSize = 22.sp) }
+                    TextButton(onClick = { change(deck.copy(counts = deck.counts + (card.id to count+1))) }, enabled = count < 60 && !saving, contentPadding = PaddingValues(0.dp), modifier = Modifier.width(30.dp)) { Text("+", fontSize = 22.sp) }
                 }
             }
             if (results.isEmpty()) item { Text("Nenhuma carta neste filtro. Altere a busca, a categoria ou o formato.", color = Muted, fontSize = 12.sp) }

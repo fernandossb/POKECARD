@@ -93,7 +93,7 @@ object DeckValidator {
         if (deck.name.isBlank()) errors += "Dê um nome ao deck."
         if (deck.format == DeckFormat.STANDARD && LocalDate.now().isAfter(CardLibrary.policyValidThrough)) errors += "A política do Padrão precisa de revisão para esta temporada. Use Treino livre enquanto isso."
         if (deck.counts.values.any { it <= 0 }) errors += "Quantidades devem ser positivas."
-        if (deck.counts.values.sum() != 60) errors += "O deck precisa de 60 cartas (${deck.counts.values.sum()}/60)."
+        if (deck.counts.values.sum() !in 14..60) errors += "Para treinar, use de 14 a 60 cartas (${deck.counts.values.sum()}/60)."
         val known = deck.counts.mapNotNull { (id, n) -> CardLibrary.byId[id]?.let { it to n } ?: run { errors += "Carta desconhecida: $id"; null } }
         if (known.none { it.first.category == Category.POKEMON && it.first.stage == Stage.BASIC }) errors += "Inclua pelo menos um Pokémon Básico."
         known.filter { !it.first.basicEnergy }.groupBy { it.first.copyKey }.forEach { (_, copies) ->

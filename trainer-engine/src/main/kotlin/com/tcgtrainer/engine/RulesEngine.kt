@@ -6,7 +6,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
     fun definition(card: CardInstance) = catalog.get(card.definitionId)
 
     fun newGame(seed: Long, decks: List<List<String>> = listOf(TestCatalog.deck(), TestCatalog.deck()), mode: Mode = Mode.TRAINING): GameState {
-        require(decks.size == 2 && decks.all { it.size == 60 }) { "São necessários dois decks de 60 cartas." }
+        require(decks.size == 2 && decks.all { if (mode == Mode.TRAINING) it.size in 14..60 else it.size == 60 }) { "São necessários dois decks de 60 cartas." }
         require(decks.all { deck -> deck.any { isBasic(catalog.get(it)) } }) { "Deck sem Pokémon Básico." }
         val rng = SeededRng(RngState(seed))
         val starter = rng.nextInt(2)

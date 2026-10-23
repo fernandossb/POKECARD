@@ -62,7 +62,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             val own = checkNotNull(deck(humanDeck)) { "Seu deck não está pronto para jogar." }
             val other = checkNotNull(deck(cpuDeck)) { "O deck da CPU não está pronto para jogar." }
             check(DeckValidator.validate(own).playable && DeckValidator.validate(other).playable) { "Confira as regras dos decks antes de jogar." }
-            check(owned.allows(own.cards)) { ownershipMessage(own.cards) ?: "Confira sua coleção no PokeCard." }
+            check(mode == Mode.TRAINING || owned.allows(own.cards)) { ownershipMessage(own.cards) ?: "Confira sua coleção no PokeCard." }
             session = GameSession(engine, SessionSnapshot(engine.newGame(seed,
                 decks = listOf(own.cards, other.cards), mode = mode).copy(humanDeckId = humanDeck, cpuDeckId = cpuDeck,
                     deckLists = listOf(own.cards, other.cards), deckNames = listOf(own.name, other.name), deckFormats = listOf(own.format, other.format))))
@@ -74,7 +74,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             val save = db.saves().load() ?: error("Nenhuma partida salva.")
             val snapshot = GameSession.decode(save.payload)
             val cards = snapshot.state.deckLists.firstOrNull() ?: error("Partida sem lista de cartas.")
-            check(owned.allows(cards)) { ownershipMessage(cards) ?: "Confira sua coleção no PokeCard." }
+            check(snapshot.state.mode == Mode.TRAINING || owned.allows(cards)) { ownershipMessage(cards) ?: "Confira sua coleção no PokeCard." }
             session = GameSession(engine, snapshot)
         }
     }

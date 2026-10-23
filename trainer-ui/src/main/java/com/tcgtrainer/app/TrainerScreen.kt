@@ -50,6 +50,7 @@ import com.tcgtrainer.engine.*
         kotlinx.coroutines.delay(if (pace == AnimationPace.OFF) 0L else duration.toLong())
         panelsReady = true
     }
+    LaunchedEffect(state?.gameId, state?.phase) { if (state?.phase == Phase.GAME_OVER) textDialog = TrainingReview.describe(state) }
     Surface(Modifier.fillMaxSize(), color = Color(0xFF080F1C)) {
         if (state == null && managingDecks) DeckManager(vm, { managingDecks = false }, { selectedDeck = it; managingDecks = false })
         else if (state == null) HomeScreen(ui, vm, selectedDeck, { selectedDeck = it }, availableDecks, { managingDecks = true }, { deckOpen = true }, { textDialog = it })
@@ -87,7 +88,7 @@ import com.tcgtrainer.engine.*
 }
 
 @Composable private fun HomeScreen(ui: UiState, vm: GameViewModel, selectedDeck: String, selectDeck: (String) -> Unit, availableDecks: List<TrainingDeck>, manage: () -> Unit, deck: () -> Unit, info: (String) -> Unit) {
-    var seed by remember { mutableStateOf("123456") }; var training by remember { mutableStateOf(true) }
+    var seed by remember { mutableStateOf(java.security.SecureRandom().nextLong().toString()) }; var training by remember { mutableStateOf(true) }
     var options by remember { mutableStateOf(false) }
     var cpuDeck by remember { mutableStateOf("solrock") }
     val chosen = availableDecks.firstOrNull { it.id == selectedDeck } ?: availableDecks.first()
@@ -113,14 +114,15 @@ import com.tcgtrainer.engine.*
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Text("BARALHO SELECIONADO", fontSize = 9.sp, color = Aqua, letterSpacing = 2.sp)
                 Text(chosen.name, fontSize = 21.sp, fontWeight = FontWeight.Bold)
-                Text("60 cartas · lista de treino · artes offline", color = Muted, fontSize = 11.sp)
+                Text("${chosen.cards.size} cartas · lista de treino · artes offline", color = Muted, fontSize = 11.sp)
                 Text("VER CARTAS  ›", color = Aqua, fontSize = 10.sp)
             }
         }
         OutlinedButton(onClick = manage, modifier = Modifier.fillMaxWidth()) { Text("MEUS DECKS · CRIAR E EDITAR") }
         DeckSelector("SEU BARALHO", chosen.id, availableDecks, selectDeck)
         Text(chosen.strategy, color = Muted, fontSize = 11.sp)
-        vm.ownershipMessage(chosen.cards)?.let { Text(it, color = Coral, fontSize = 11.sp) }
+        if (!training) vm.ownershipMessage(chosen.cards)?.let { Text(it, color = Coral, fontSize = 11.sp) }
+        if (training) Text("Treino: 14 a 60 cartas, incluindo cartas ainda não possuídas. Listas incompletas alteram as chances de compra. Desative ‘Só minhas cartas’ no editor para planejar compras.", color = Muted, fontSize = 11.sp)
         DeckSelector("BARALHO DA MÁQUINA", opponent.id, availableDecks, { cpuDeck = it })
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) { Text(if (training) "Treinamento solo" else "Partida contra a máquina", fontWeight = FontWeight.SemiBold); Text(if (training) "Desfaz sua jogada e a resposta da CPU" else "Sem desfazer", color = Muted, fontSize = 11.sp) }
@@ -128,7 +130,7 @@ import com.tcgtrainer.engine.*
         }
         TextButton(onClick = { options = !options }, contentPadding = PaddingValues(0.dp)) { Text("${if (options) "−" else "+"} OPÇÕES DA PARTIDA · SEED $seed", fontSize = 10.sp) }
         if (options) OutlinedTextField(seed, { seed = it }, label = { Text("Seed · abertura reproduzível") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        Button(onClick = { vm.start(seed.toLong(), if (training) Mode.TRAINING else Mode.MATCH, selectedDeck, cpuDeck) }, enabled = !ui.busy && seed.toLongOrNull() != null && vm.owned.allows(chosen.cards), modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(12.dp)) { Text("JOGAR CONTRA A MÁQUINA", fontWeight = FontWeight.Bold, letterSpacing = 1.sp) }
+        Button(onClick = { vm.start(seed.toLong(), if (training) Mode.TRAINING else Mode.MATCH, selectedDeck, cpuDeck); seed = java.security.SecureRandom().nextLong().toString() }, enabled = !ui.busy && seed.toLongOrNull() != null && (training || (vm.owned.allows(chosen.cards) && chosen.cards.size == 60 && opponent.cards.size == 60)), modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(12.dp)) { Text("JOGAR CONTRA A MÁQUINA", fontWeight = FontWeight.Bold, letterSpacing = 1.sp) }
         OutlinedButton(onClick = vm::resume, enabled = ui.canContinue && !ui.busy, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(12.dp)) { Text("CONTINUAR PARTIDA") }
         TextButton(onClick = { info("Jogo exclusivamente para você contra a máquina. Escolha os dois baralhos antes de começar. Crie seus próprios decks em MEUS DECKS: escolha nome e formato, busque cartas e ajuste quantidades. Salve decks incompletos como rascunho. Só decks válidos, com efeitos implementados, aparecem para jogar.\n\nPadrão 2026 e Academia 2022 são categorias separadas. Treino livre permite misturar cartas implementadas. O catálogo inclui dados adicionais com textos EN, ainda sem implementação de todos os efeitos; artes extras precisam de internet no primeiro acesso. As cartas jogáveis têm artes offline.\n\nA CPU usa as mesmas regras e não vê sua mão, os Prêmios ocultos ou a ordem dos decks.") }, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("COMO JOGAR", fontSize = 11.sp) }
         Text("1 JOGADOR × MÁQUINA  ·  PARTIDAS OFFLINE", Modifier.fillMaxWidth(), color = Muted, fontSize = 9.sp)
