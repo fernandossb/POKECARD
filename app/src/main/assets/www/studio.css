@@ -1,0 +1,57 @@
+/* Fixed visual identity. Presentation only: no content or controls are removed. */
+:root {
+  color-scheme: dark;
+  --vision-bg: #10151c; --vision-surface: #19222c;
+  --vision-surface-2: #212d38; --vision-surface-3: #293744;
+  --vision-surface-soft: #151e27;
+  --vision-text: #eff5f8; --vision-text-fundo: #eff5f8;
+  --vision-text-soft: #c7d3dc; --vision-muted: #acbbc9;
+  --vision-muted-fundo: #acbbc9; --vision-line: #354554;
+  --vision-primary: #79ded0; --vision-primary-fundo: #79ded0;
+  --vision-primary-soft: #203e40; --vision-primary-tenue: #203e40;
+  --vision-primary-leve: #294d4e; --vision-primary-glow: transparent;
+  --vision-accent: #79ded0; --vision-purple: #acbbc9;
+  --vision-flair-1: #79ded0; --vision-flair-2: #acbbc9;
+  --vision-flair-1-glow: transparent; --vision-flair-2-glow: transparent;
+  --vision-danger: #ffb4ab; --v5-borda: #354554; --v5-borda-forte: #617587;
+  --dex-body: #19222c; --dex-body-dark: #10151c; --dex-body-text: #eff5f8;
+  --dex-plastic: none; --dex-sink: none; --dex-body-shadow: none;
+  --ink: #eff5f8; --muted: #acbbc9; --cream: #10151c;
+  --surface: #19222c; --line: #354554; --blue: #79ded0;
+}
+html, body, #app { background: var(--vision-bg) !important; color: var(--vision-text); }
+body::before, body::after { background: var(--vision-bg) !important; background-image: none !important; }
+.app-header, .sticky-shell, .tabs, .vision-home-head {
+  background: var(--vision-surface) !important; background-image: none !important;
+  box-shadow: none !important; color: var(--vision-text) !important;
+}
+.gengar-header-art, .gengar-atmosphere { display: none !important; }
+.portfolio-card, .pokedex-progress-card, .stat-card, .panel, .deck-panel,
+.auto-deck-hero, .quick-actions button, .consulta-atalho-inicio {
+  background: var(--vision-surface) !important;
+  border: 1px solid var(--vision-line) !important;
+  border-radius: 16px !important; box-shadow: none !important;
+  backdrop-filter: none !important; color: var(--vision-text) !important;
+}
+.portfolio-card::before { content: none !important; }
+.primary-btn::after, .load-more::after { content: none !important; }
+.scanner-pokebola { animation: none !important; filter: none !important; background: var(--vision-primary-soft) !important; color: var(--vision-primary) !important; border-radius: 16px; padding: 12px; box-shadow: none !important; }
+.ponto-alerta { animation: none !important; }
+.empty { grid-column: 1 / -1; width: 100%; }
+.portfolio-value strong { color: var(--vision-text) !important; }
+.tab { box-shadow: none !important; background: transparent !important; border-color: transparent !important; color: var(--vision-muted) !important; }
+.tab.active { background: var(--vision-primary-soft) !important; color: var(--vision-primary) !important; border-color: var(--vision-line) !important; }
+.primary-btn { background: var(--vision-primary) !important; color: #102c2a !important; box-shadow: none !important; }
+.field, input, select, textarea { color: var(--vision-text); }
+.field { background: var(--vision-surface-soft) !important; box-shadow: none !important; }
+.modal-sheet { background: var(--vision-bg) !important; }
+.progress > span { animation: none !important; background: var(--vision-primary) !important; box-shadow: none !important; }
+button, a, input, select { transition: background-color 140ms ease, border-color 140ms ease, transform 140ms ease !important; }
+button:active { transform: scale(.98); }
+button:disabled { transform: none; }
+:focus-visible { outline: 2px solid var(--vision-primary) !important; outline-offset: 3px; }
+.modal:not(.hidden) .modal-sheet { animation: studio-enter 180ms ease-out; }
+@keyframes studio-enter { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
