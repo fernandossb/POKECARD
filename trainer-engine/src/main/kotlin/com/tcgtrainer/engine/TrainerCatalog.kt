@@ -115,6 +115,7 @@ object TrainerCatalog : CardCatalog {
         val prizes = when { id == "me01-077" -> 3; en.string("suffix") in listOf("ex", "V") -> 2; else -> 1 }
         return CardDefinition(id, if (id == "sv01-258") "Energia de Luta Básica" else pt.string("name")!!, setCode, en.string("localId")!!,
             category = if (pokemon) Category.POKEMON else if (energy) Category.ENERGY else Category.TRAINER,
+            basicEnergy = energy && CatalogRuleCompiler.basicEnergy(en),
             stage = stage, evolvesFrom = when (en.string("evolveFrom")) { "Riolu" -> "me01-076"; "Makuhita" -> "me01-072"; else -> en.string("evolveFrom")?.let { academyNames[it] } },
             canonicalName = en.string("name")!!, evolvesFromName = en.string("evolveFrom"),
             hp = en.string("hp")?.toIntOrNull() ?: 0,

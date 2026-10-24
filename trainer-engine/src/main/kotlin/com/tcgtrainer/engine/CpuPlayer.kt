@@ -52,8 +52,24 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
             if (a.effects.filterIsInstance<Effect.RequiresBenched>().any { req -> own.none { it.id != p.id && it.top.definitionId == req.definitionId } }) return 0
             val extra = a.effects.filterIsInstance<Effect.CoinDamage>().sumOf { it.coins*it.perHeads/2 } +
                 if (input.flags.supporter) a.effects.filterIsInstance<Effect.SupporterBonus>().sumOf { it.damage } else 0
-            return effects.damage(p, target, a.effects + Effect.Damage(extra), input.flags.damageBoosts[d(p.top).type] ?: 0,
-                Effect.IgnoreWeaknessResistance in a.effects || (a.effects.any { it is Effect.TargetedDamage } && target.id != enemy?.id))
+            val base = effects.damage(p, target, a.effects + Effect.Damage(extra), input.flags.damageBoosts[d(p.top).type] ?: 0,
+                Effect.IgnoreWeaknessResistance in a.effects || (a.effects.any { it is Effect.TargetedDamage } && target.id != enemy?.id),
+                ownBenchCount = own.count { it.id != o.ownActiveId },
+                opponentBenchCount = o.opponentField.count { it.id != o.opponentActiveId },
+                ownInPlayCount = own.size,
+                ownHandCount = o.ownHand.size,
+                opponentHandCount = o.opponentHandCount,
+                targetIsOpponentActive = target.id == o.opponentActiveId,
+                ownDamagedPokemonCount = own.count { it.damage > 0 },
+                ownEnergyCounts = own.flatMap { it.energies }.mapNotNull { energy -> d(energy).type?.let { it to energy } }
+                    .groupBy({ it.first }, { it.second }).mapValues { it.value.size },
+                ignoreOpponentActiveEffects = Effect.IgnoreOpponentActiveEffects in a.effects,
+                ignoreResistance = Effect.IgnoreResistance in a.effects, turn = input.turn,
+                ownKnockedOutByAttackLastTurn = o.ownLastKnockedOutByAttackDamageTurn == input.turn-1)
+            val discardEffect = a.effects.filterIsInstance<Effect.DiscardBenchEnergyDamage>().firstOrNull()
+            val discarded = minOf(discardEffect?.max ?: 0, own.filter { it.id != o.ownActiveId }.sumOf { it.energies.size })
+            val multiplier = if (target.id == enemy?.id && Effect.IgnoreWeaknessResistance !in a.effects && d(target.top).weakness == d(p.top).type) 2 else 1
+            return base + discarded * (discardEffect?.perEnergyDamage ?: 0) * multiplier
         }
         fun attackValue(p: PokemonInstance, target: PokemonInstance? = enemy): Double {
             if (target == null) return 0.0
@@ -108,6 +124,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
             val choice = checkNotNull(input.choice)
             fun value(id: String): Double = when (choice.kind) {
                 ChoiceKind.DISCARD, ChoiceKind.ABILITY_ENERGY, ChoiceKind.DISCARD_ATTACK_ENERGY -> -keepValue(checkNotNull(card(id)))
+                ChoiceKind.ABILITY_ATTACH_ENERGY -> keepValue(checkNotNull(card(id))) + 10.0
                 ChoiceKind.SEARCH, ChoiceKind.RECOVER, ChoiceKind.SONIA -> keepValue(checkNotNull(card(id)))
                 ChoiceKind.SWITCH_OPPONENT, ChoiceKind.EVOLUTION_SWITCH -> active?.let { attackValue(it, pokemon(id)) } ?: 0.0
                 ChoiceKind.SWITCH_OWN -> attackValue(pokemon(id)) - (active?.let(::attackValue) ?: 0.0) + potential(pokemon(id))*.05
@@ -120,6 +137,35 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 ChoiceKind.ENERGY_FROM_DISCARD -> 10.0
                 ChoiceKind.ATTACH_DECK_ENERGY, ChoiceKind.RECYCLE_ENERGY -> 10.0
                 ChoiceKind.HEAL_TARGET -> minOf(pokemon(id).damage, choice.amount).toDouble()
+                ChoiceKind.ATTACK_HEAL_TARGET -> minOf(pokemon(id).damage, choice.amount).toDouble()
+                ChoiceKind.ATTACK_BENCH_POKEMON, ChoiceKind.ATTACK_ROTOM_SEARCH, ChoiceKind.ATTACK_MATCHING_ENERGY_SEARCH,
+                ChoiceKind.ATTACK_POKEMON_SEARCH, ChoiceKind.ABILITY_BASIC_POKEMON_TO_BENCH -> setupValue(checkNotNull(card(id)))
+                ChoiceKind.ATTACK_DAMAGE_TARGET, ChoiceKind.ATTACK_DAMAGE_COUNTER_TARGET, ChoiceKind.ATTACK_MULTI_DAMAGE_TARGETS,
+                ChoiceKind.ATTACK_MULTI_DAMAGE_SINGLE_TARGET -> o.opponentField.find { it.id == id }?.let { target ->
+                    if (target.damage + choice.amount >= hp(target)) 1000.0 else (target.damage.toDouble() / hp(target).coerceAtLeast(1))
+                } ?: 0.0
+                ChoiceKind.ATTACK_MOVE_DAMAGE_SOURCE -> o.opponentField.find { it.id == id }?.let { source ->
+                    if (source.damage >= 10 && o.opponentField.any { it.id != source.id }) 100.0 else -1.0
+                } ?: 0.0
+                ChoiceKind.ATTACK_MOVE_DAMAGE_DESTINATION -> o.opponentField.find { it.id == id }?.let { target ->
+                    if (target.damage+10 >= hp(target)) 1000.0 + d(target.top).prizes*100.0 else target.damage.toDouble()/hp(target).coerceAtLeast(1)
+                } ?: 0.0
+                ChoiceKind.ABILITY_DAMAGE_TARGET -> o.opponentField.find { it.id == id }?.let { target ->
+                    if (target.damage + choice.amount >= hp(target)) 1200.0 else target.damage.toDouble() / hp(target).coerceAtLeast(1)
+                } ?: 0.0
+                ChoiceKind.ATTACK_ENERGY, ChoiceKind.ATTACK_HAND_ENERGY, ChoiceKind.ATTACK_DECK_BASIC_ENERGY_ANY -> -keepValue(checkNotNull(card(id)))
+                ChoiceKind.ATTACK_ENERGY_TARGET -> {
+                    val target = pokemon(id)
+                    val energy = active?.energies?.firstOrNull { it.id == choice.selectedEnergy }
+                    if (energy == null) 0.0 else potential(target.copy(energies = target.energies + energy)) - potential(target)
+                }
+                ChoiceKind.ATTACK_HAND_ENERGY_TARGET, ChoiceKind.ATTACK_DECK_BASIC_ENERGY_TARGET -> {
+                    val target = pokemon(id)
+                    val energy = checkNotNull(card(checkNotNull(choice.selectedEnergy)))
+                    potential(target.copy(energies = target.energies + energy))-potential(target)
+                }
+                ChoiceKind.ATTACK_KNOCKOUT_BASIC_BENCH -> o.opponentField.find { it.id == id }?.let { 1000.0+d(it.top).prizes*100.0 } ?: 0.0
+                ChoiceKind.ATTACK_BENCH_ENERGY_DISCARD -> -keepValue(checkNotNull(card(id)))
             }
             if (choice.kind == ChoiceKind.SONIA) {
                 val groups = choice.candidates.groupBy { d(checkNotNull(card(it))).category }.values
@@ -155,7 +201,23 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 if (p.damage == 0) chargeValue+drawValue-1 else 10.0+p.damage.coerceAtMost(p.effectiveHp-p.currentDamage)*.35 + chargeValue +
                     (if (p.knockout) (if (p.uncertain) .5 else 1.0)*(200.0*p.prizes + if (p.prizes >= o.ownPrizeCount) 10000.0 else 0.0) else 0.0)
             }
-            is GameAction.UseAbility -> if (o.ownDeckCount <= 1) -5.0 else 150.0-o.ownHand.size
+            is GameAction.UseAbility -> {
+                val source = pokemon(a.pokemonId)
+                val ability = d(source.top).abilities.firstOrNull { it.id == a.abilityId }
+                if ((ability?.recoverBasicPokemonToBenchMaxHp ?: 0) > 0) {
+                    if (own.size >= 6) -5.0 else {
+                        val best = o.ownDiscard.filter { d(it).category == Category.POKEMON && d(it).stage == Stage.BASIC && d(it).hp <= checkNotNull(ability).recoverBasicPokemonToBenchMaxHp }
+                            .maxOfOrNull(::setupValue) ?: -5.0
+                        if (best > 0) 125.0+best*.1 else -5.0
+                    }
+                } else if ((ability?.healDamage ?: 0) > 0) {
+                    val heal = own.maxOfOrNull { minOf(it.damage, checkNotNull(ability).healDamage) } ?: 0
+                    if (heal > 0) 135.0+heal else -5.0
+                } else if (ability?.shuffleSelfIntoDeck == true) {
+                    val improvement = own.filter { it.id != source.id }.maxOfOrNull(::attackValue)?.minus(attackValue(source)) ?: Double.NEGATIVE_INFINITY
+                    if (improvement > 20 && o.ownDeckCount > 0) 35.0+improvement else -5.0
+                } else if (o.ownDeckCount <= 1) -5.0 else 150.0-o.ownHand.size
+            }
             is GameAction.Retreat -> {
                 val improvement = attackValue(pokemon(a.pokemonId)) - (active?.let(::attackValue) ?: 0.0)
                 if (improvement > 5) 30.0+improvement-a.energyIds.size*10 else -5.0

@@ -29,7 +29,7 @@ data class LibraryCard(val id: String, val name: String, val canonicalName: Stri
     }
     fun displayCard(): CardDefinition = TrainerCatalog.definitions[id] ?: CardDefinition(id, name, set, number,
         category = category, stage = stage, verified = true, source = source,
-        artAsset = image?.let { "remote:$it/high.webp" }, text = text, implemented = false)
+        artAsset = image?.let { "remote:$it/high.webp" }, text = text, implemented = false, basicEnergy = basicEnergy)
 }
 fun normalize(value: String): String = Normalizer.normalize(value, Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "").lowercase()
 

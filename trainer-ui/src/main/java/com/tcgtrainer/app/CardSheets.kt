@@ -201,5 +201,5 @@ private fun actionLabel(action: GameAction, state: GameState, engine: RulesEngin
 }
 internal fun energyLabel(type: EnergyType) = when (type) {
     EnergyType.FIGHTING -> "Luta"; EnergyType.FIRE -> "Fogo"; EnergyType.WATER -> "Água"; EnergyType.LIGHTNING -> "Elétrica"
-    EnergyType.PSYCHIC -> "Psíquica"; EnergyType.GRASS -> "Planta"; EnergyType.DARKNESS -> "Escuridão"; EnergyType.METAL -> "Metal"; EnergyType.COLORLESS -> "Incolor"
+    EnergyType.PSYCHIC -> "Psíquica"; EnergyType.GRASS -> "Planta"; EnergyType.DARKNESS -> "Escuridão"; EnergyType.METAL -> "Metal"; EnergyType.COLORLESS -> "Incolor"; EnergyType.DRAGON -> "Dragão"
 }

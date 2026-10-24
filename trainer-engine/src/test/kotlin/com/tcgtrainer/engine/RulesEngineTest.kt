@@ -17,6 +17,635 @@ class RulesEngineTest {
     }
     private fun play(s: GameState, a: GameAction): GameState = engine.apply(s, a).also { assertEquals(Legality.Legal, it.legality) }.state
 
+    @Test fun `Resolute Heart prevents attack knockout only at full HP`() {
+        val pikachu = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv08-057"), emptyMap())!!
+        val hit = AttackDefinition("huge-hit", "Huge Hit", emptyList(), listOf(Effect.Damage(500)))
+        val attacker = CardDefinition("test-attacker", "Test Attacker", "Test", "1", category = Category.POKEMON,
+            hp = 300, attacks = listOf(hit))
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            pikachu.id -> pikachu; attacker.id -> attacker; else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        fun state(damage: Int) = GameState("resolute", 12, RngState(12), listOf(
+            PlayerState(deck = List(10) { card("d0-$it", "TEST-004") }, prizes = List(6) { card("a-prize$it", "TEST-004") },
+                active = PokemonInstance(listOf(card("a", attacker.id)), enteredPlayTurn = 0), bench = listOf(field("a-bench"))),
+            PlayerState(deck = List(10) { card("d1-$it", "TEST-004") }, prizes = List(6) { card("p$it", "TEST-004") },
+                active = PokemonInstance(listOf(card("pikachu", pikachu.id)), damage = damage, enteredPlayTurn = 0))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val fullHp = state(0)
+        val preview = rules.preview(fullHp, hit.id)!!
+        assertEquals(10, preview.remainingHp)
+        assertFalse(preview.knockout)
+        assertEquals(0, preview.prizes)
+        val survived = rules.apply(fullHp, GameAction.Attack(hit.id))
+        assertEquals(Legality.Legal, survived.legality)
+        assertEquals(190, survived.state.players[1].active!!.damage)
+        assertTrue(survived.events.any { it.type == "KnockoutPrevented" })
+
+        val damaged = state(10)
+        assertTrue(rules.preview(damaged, hit.id)!!.knockout)
+        val knockedOut = rules.apply(damaged, GameAction.Attack(hit.id))
+        assertNull(knockedOut.state.players[1].active)
+        assertEquals(2, knockedOut.state.prizesOwed[0])
+    }
+
+    @Test fun `Abra Teleporter shuffles its stack and attached cards then requires promotion`() {
+        val abra = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv06-080"), emptyMap())!!
+        val tool = TrainerCatalog.get("me01-166")
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            abra.id -> abra; tool.id -> tool; else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        val abraCard = card("abra", abra.id)
+        val energy = card("abra-energy", "TEST-004")
+        val toolCard = card("abra-tool", tool.id)
+        val active = PokemonInstance(listOf(abraCard), energies = listOf(energy), enteredPlayTurn = 0, tool = toolCard)
+        val bench = field("reserve")
+        val player = PlayerState(deck = List(10) { card("deck$it", "TEST-004") }, prizes = List(6) { card("prize$it", "TEST-004") }, active = active, bench = listOf(bench))
+        val opponent = PlayerState(deck = List(10) { card("op-deck$it", "TEST-004") }, prizes = List(6) { card("op-prize$it", "TEST-004") }, active = field("opponent"))
+        val state = GameState("teleporter", 44, RngState(44), listOf(player, opponent), 0, 0, turn = 3, phase = Phase.MAIN)
+        val used = rules.apply(state, GameAction.UseAbility(active.id, abra.abilities.single().id))
+        assertEquals(Legality.Legal, used.legality)
+        assertNull(used.state.players[0].active)
+        assertEquals(Phase.PROMOTE, used.state.phase)
+        assertEquals(1, used.state.players[0].deck.count { it.id == abraCard.id })
+        assertEquals(1, used.state.players[0].deck.count { it.id == energy.id })
+        assertEquals(1, used.state.players[0].deck.count { it.id == toolCard.id })
+        assertEquals(Legality.Legal, rules.validate(used.state, GameAction.Promote(bench.id)))
+        val promoted = rules.apply(used.state, GameAction.Promote(bench.id))
+        assertEquals(bench.id, promoted.state.players[0].active!!.id)
+        assertEquals(Phase.MAIN, promoted.state.phase)
+    }
+
+    @Test fun `Alakazam Strange Hacking moves any selected damage counter after confusing Active`() {
+        val compiled = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv06-082"), emptyMap())!!
+        val move = compiled.attacks.first().copy(cost = emptyList())
+        val alakazam = compiled.copy(attacks = listOf(move))
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            alakazam.id -> alakazam; else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        val attacker = PokemonInstance(listOf(card("alakazam", alakazam.id)), enteredPlayTurn = 0)
+        val opponentActive = field("op-active").copy(damage = 20)
+        val opponentBench = field("op-bench").copy(damage = 40)
+        val players = listOf(
+            PlayerState(deck = List(10) { card("deck$it", "TEST-004") }, prizes = List(6) { card("prize$it", "TEST-004") }, active = attacker),
+            PlayerState(deck = List(10) { card("op-deck$it", "TEST-004") }, prizes = List(6) { card("op-prize$it", "TEST-004") }, active = opponentActive, bench = listOf(opponentBench))
+        )
+        val state = GameState("strange-hacking", 7, RngState(7), players, 0, 0, turn = 3, phase = Phase.MAIN)
+        val hit = rules.apply(state, GameAction.Attack(move.id))
+        assertEquals(Legality.Legal, hit.legality)
+        assertTrue(SpecialCondition.CONFUSED in hit.state.players[1].active!!.conditions)
+        assertEquals(ChoiceKind.ATTACK_MOVE_DAMAGE_SOURCE, hit.state.resolution!!.choices.first().kind)
+        val source = rules.apply(hit.state, GameAction.ChooseCards(listOf(opponentActive.id)))
+        assertEquals(ChoiceKind.ATTACK_MOVE_DAMAGE_DESTINATION, source.state.resolution!!.choices.first().kind)
+        val moved = rules.apply(source.state, GameAction.ChooseCards(listOf(opponentBench.id)))
+        assertEquals(10, moved.state.players[1].active!!.damage)
+        assertEquals(50, moved.state.players[1].bench.single().damage)
+        assertEquals(ChoiceKind.ATTACK_MOVE_DAMAGE_SOURCE, moved.state.resolution!!.choices.first().kind)
+        val finished = rules.apply(moved.state, GameAction.ChooseCards(emptyList()))
+        assertEquals(Legality.Legal, finished.legality)
+        assertEquals(10, finished.state.players[1].active!!.damage)
+        assertEquals(50, finished.state.players[1].bench.single().damage)
+        assertEquals(4, finished.state.turn)
+    }
+
+    @Test fun `Alcremie Colorful Confection searches only Pokemon matching attached Basic Energy types`() {
+        val alcremie = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv07-065"), emptyMap())!!
+        val grassPokemon = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me01-001"), emptyMap())!!
+        val firePokemon = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me01-019"), emptyMap())!!
+        val grassEnergy = CardDefinition("basic-grass", "Basic Grass Energy", "Test", "E1", category = Category.ENERGY,
+            type = EnergyType.GRASS, basicEnergy = true)
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            alcremie.id -> alcremie; grassPokemon.id -> grassPokemon; firePokemon.id -> firePokemon; grassEnergy.id -> grassEnergy
+            else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        val attacker = PokemonInstance(listOf(card("alcremie", alcremie.id)), energies = listOf(card("grass", grassEnergy.id)), enteredPlayTurn = 0)
+        val player = PlayerState(deck = listOf(card("bulba", grassPokemon.id), card("charmander", firePokemon.id)),
+            prizes = List(6) { card("prize$it", "TEST-004") }, active = attacker)
+        val opponent = PlayerState(deck = List(10) { card("op-deck$it", "TEST-004") },
+            prizes = List(6) { card("op-prize$it", "TEST-004") }, active = field("opponent"))
+        val state = GameState("colorful-confection", 14, RngState(14), listOf(player, opponent), 0, 0, turn = 3, phase = Phase.MAIN)
+        val attack = alcremie.attacks.first().copy(cost = emptyList())
+        val attackerDef = alcremie.copy(attacks = listOf(attack))
+        val rulesWithFreeAttack = RulesEngine(object : CardCatalog { override fun get(id: String) = if (id == alcremie.id) attackerDef else catalog.get(id) })
+        val search = rulesWithFreeAttack.apply(state, GameAction.Attack(attack.id))
+        assertEquals(Legality.Legal, search.legality)
+        assertEquals(listOf("bulba"), search.state.resolution!!.choices.first().candidates)
+        val selected = rulesWithFreeAttack.apply(search.state, GameAction.ChooseCards(listOf("bulba")))
+        assertTrue(selected.state.players[0].hand.any { it.id == "bulba" })
+        assertTrue(selected.state.players[0].deck.none { it.id == "bulba" })
+        assertTrue(selected.events.any { it.type == "PokemonSearchedByEnergyType" })
+        assertEquals(4, selected.state.turn)
+    }
+
+    @Test fun `Alcremie ex Confectionary Gift heals a selected Pokemon once per turn`() {
+        val alcremie = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv09-075"), emptyMap())!!
+        val catalog = object : CardCatalog { override fun get(id: String) = if (id == alcremie.id) alcremie else TrainerCatalog.get(id) }
+        val rules = RulesEngine(catalog)
+        val active = field("wounded").copy(damage = 50)
+        val source = PokemonInstance(listOf(card("alcremie-ex", alcremie.id)), enteredPlayTurn = 0)
+        val players = listOf(
+            PlayerState(deck = List(10) { card("deck$it", "TEST-004") }, prizes = List(6) { card("prize$it", "TEST-004") }, active = active, bench = listOf(source)),
+            PlayerState(deck = List(10) { card("op-deck$it", "TEST-004") }, prizes = List(6) { card("op-prize$it", "TEST-004") }, active = field("opponent"))
+        )
+        val state = GameState("confectionary-gift", 19, RngState(19), players, 0, 0, turn = 3, phase = Phase.MAIN)
+        val ability = alcremie.abilities.single()
+        val healedChoice = rules.apply(state, GameAction.UseAbility(source.id, ability.id))
+        assertEquals(Legality.Legal, healedChoice.legality)
+        assertEquals(ChoiceKind.HEAL_TARGET, healedChoice.state.resolution!!.choices.first().kind)
+        val healed = rules.apply(healedChoice.state, GameAction.ChooseCards(listOf(active.id)))
+        assertEquals(20, healed.state.players[0].active!!.damage)
+        assertTrue(healed.events.any { it.type == "DamageHealed" })
+        assertIs<Legality.Illegal>(rules.validate(healed.state, GameAction.UseAbility(source.id, ability.id)))
+    }
+
+    @Test fun `Alolan Exeggutor Tropical Frenzy distributes any number of hand Basic Energy`() {
+        val exeggutor = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv08-133"), emptyMap())!!
+        val attack = exeggutor.attacks.first().copy(cost = emptyList())
+        val exeggutorDef = exeggutor.copy(attacks = listOf(attack))
+        val tank = CardDefinition("test-tank", "Test Tank", "Test", "T", category = Category.POKEMON, hp = 300)
+        val grass = CardDefinition("test-basic-grass", "Basic Grass Energy", "Test", "E1", category = Category.ENERGY, type = EnergyType.GRASS, basicEnergy = true)
+        val fire = CardDefinition("test-basic-fire", "Basic Fire Energy", "Test", "E2", category = Category.ENERGY, type = EnergyType.FIRE, basicEnergy = true)
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            exeggutor.id -> exeggutorDef; tank.id -> tank; grass.id -> grass; fire.id -> fire; else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        val energy1 = card("grass-1", grass.id); val energy2 = card("fire-1", fire.id)
+        val active = PokemonInstance(listOf(card("exeggutor", exeggutor.id)), enteredPlayTurn = 0)
+        val reserve = field("reserve")
+        val p0 = PlayerState(deck = List(10) { card("deck$it", "TEST-004") }, hand = listOf(energy1, energy2),
+            prizes = List(6) { card("prize$it", "TEST-004") }, active = active, bench = listOf(reserve))
+        val p1 = PlayerState(deck = List(10) { card("op-deck$it", "TEST-004") }, prizes = List(6) { card("op-prize$it", "TEST-004") },
+            active = PokemonInstance(listOf(card("tank", tank.id)), enteredPlayTurn = 0))
+        val state = GameState("tropical-frenzy", 23, RngState(23), listOf(p0, p1), 0, 0, turn = 3, phase = Phase.MAIN)
+        var result = rules.apply(state, GameAction.Attack(attack.id))
+        assertEquals(ChoiceKind.ATTACK_HAND_ENERGY, result.state.resolution!!.choices.first().kind)
+        result = rules.apply(result.state, GameAction.ChooseCards(listOf(energy1.id)))
+        result = rules.apply(result.state, GameAction.ChooseCards(listOf(reserve.id)))
+        assertEquals(1, result.state.players[0].bench.single().energies.size)
+        result = rules.apply(result.state, GameAction.ChooseCards(listOf(energy2.id)))
+        result = rules.apply(result.state, GameAction.ChooseCards(listOf(active.id)))
+        result = rules.apply(result.state, GameAction.ChooseCards(emptyList()))
+        assertEquals(listOf(energy2.id), result.state.players[0].active!!.energies.map { it.id })
+        assertEquals(listOf(energy1.id), result.state.players[0].bench.single().energies.map { it.id })
+        assertFalse(result.state.players[0].flags.manualEnergy)
+        assertTrue(result.state.players[0].hand.none { it.id == energy1.id || it.id == energy2.id })
+    }
+
+    @Test fun `Altaria Humming Charge distributes up to two Basic Energy from deck to own Pokemon`() {
+        val altaria = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv08-134"), emptyMap())!!
+        val attack = altaria.attacks.first().copy(cost = emptyList())
+        val altariaDef = altaria.copy(attacks = listOf(attack))
+        val tank = CardDefinition("test-tank", "Test Tank", "Test", "T", category = Category.POKEMON, hp = 300)
+        val grass = CardDefinition("test-basic-grass", "Basic Grass Energy", "Test", "E1", category = Category.ENERGY, type = EnergyType.GRASS, basicEnergy = true)
+        val special = CardDefinition("test-special-energy", "Special Energy", "Test", "E2", category = Category.ENERGY, type = EnergyType.COLORLESS)
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            altaria.id -> altariaDef; tank.id -> tank; grass.id -> grass; special.id -> special; else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        val energy1 = card("grass-1", grass.id); val energy2 = card("grass-2", grass.id); val specialEnergy = card("special", special.id)
+        val reserve = field("reserve")
+        val state = GameState("humming-charge", 31, RngState(31), listOf(
+            PlayerState(deck = listOf(energy1, specialEnergy, energy2), prizes = List(6) { card("prize$it") },
+                active = PokemonInstance(listOf(card("altaria", altaria.id)), enteredPlayTurn = 0), bench = listOf(reserve)),
+            PlayerState(deck = List(10) { card("op-deck$it", "TEST-004") }, prizes = List(6) { card("op-prize$it") },
+                active = PokemonInstance(listOf(card("op-active", tank.id)), enteredPlayTurn = 0))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        var result = rules.apply(state, GameAction.Attack(attack.id))
+        assertEquals(ChoiceKind.ATTACK_DECK_BASIC_ENERGY_ANY, result.state.resolution!!.choices.first().kind)
+        result = rules.apply(result.state, GameAction.ChooseCards(listOf(energy1.id)))
+        result = rules.apply(result.state, GameAction.ChooseCards(listOf(reserve.id)))
+        result = rules.apply(result.state, GameAction.ChooseCards(listOf(energy2.id)))
+        result = rules.apply(result.state, GameAction.ChooseCards(listOf("altaria")))
+        result = rules.apply(result.state, GameAction.ChooseCards(emptyList()))
+        assertEquals(listOf(energy2.id), result.state.players[0].active!!.energies.map { it.id })
+        assertEquals(listOf(energy1.id), result.state.players[0].bench.single().energies.map { it.id })
+        assertEquals(listOf(specialEnergy.id), result.state.players[0].deck.map { it.id })
+        assertFalse(result.state.players[0].flags.manualEnergy)
+        assertEquals(Phase.MAIN, result.state.phase)
+    }
+
+    @Test fun `Applin Find a Friend searches a Pokemon and shuffles to finish attack`() {
+        val applin = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv06-126"), emptyMap())!!
+        val attack = applin.attacks.first().copy(cost = emptyList())
+        val applinDef = applin.copy(attacks = listOf(attack))
+        val target = CardDefinition("test-target", "Test Target", "Test", "P", category = Category.POKEMON, hp = 80)
+        val grass = CardDefinition("test-basic-grass", "Basic Grass Energy", "Test", "E", category = Category.ENERGY, type = EnergyType.GRASS, basicEnergy = true)
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            applin.id -> applinDef; target.id -> target; grass.id -> grass; else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        val targetCard = card("target", target.id)
+        val remaining = card("energy", grass.id)
+        val state = GameState("find-a-friend", 37, RngState(37), listOf(
+            PlayerState(deck = listOf(targetCard, remaining), prizes = List(6) { card("prize$it") },
+                active = PokemonInstance(listOf(card("applin", applin.id)), enteredPlayTurn = 0)),
+            PlayerState(deck = List(10) { card("op-deck$it", "TEST-004") }, prizes = List(6) { card("op-prize$it") },
+                active = field("op-active"))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val attackResult = rules.apply(state, GameAction.Attack(attack.id))
+        assertEquals(ChoiceKind.ATTACK_POKEMON_SEARCH, attackResult.state.resolution!!.choices.single().kind)
+        val resolved = rules.apply(attackResult.state, GameAction.ChooseCards(listOf(targetCard.id)))
+        assertTrue(resolved.state.players[0].hand.any { it.id == targetCard.id })
+        assertEquals(listOf(remaining.id), resolved.state.players[0].deck.map { it.id })
+        assertEquals(Phase.MAIN, resolved.state.phase)
+    }
+
+    @Test fun `Applin Nutrients heals the selected own Pokemon`() {
+        val applin = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv08-138"), emptyMap())!!
+        val attack = applin.attacks.first().copy(cost = emptyList())
+        val applinDef = applin.copy(attacks = listOf(attack))
+        val target = CardDefinition("test-target", "Test Target", "Test", "P", category = Category.POKEMON, hp = 100)
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            applin.id -> applinDef; target.id -> target; else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        val damaged = PokemonInstance(listOf(card("reserve", target.id)), damage = 50, enteredPlayTurn = 0)
+        val state = GameState("nutrients", 41, RngState(41), listOf(
+            PlayerState(deck = List(10) { card("deck$it", "TEST-004") }, prizes = List(6) { card("prize$it") },
+                active = PokemonInstance(listOf(card("applin", applin.id)), enteredPlayTurn = 0), bench = listOf(damaged)),
+            PlayerState(deck = List(10) { card("op-deck$it", "TEST-004") }, prizes = List(6) { card("op-prize$it") },
+                active = field("op-active"))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val result = rules.apply(state, GameAction.Attack(attack.id))
+        assertEquals(ChoiceKind.ATTACK_HEAL_TARGET, result.state.resolution!!.choices.single().kind)
+        val healed = rules.apply(result.state, GameAction.ChooseCards(listOf(damaged.id)))
+        assertEquals(20, healed.state.players[0].bench.single().damage)
+        assertEquals(Phase.MAIN, healed.state.phase)
+    }
+
+    @Test fun `Archaludon Coated Attack protects against Basic attackers of every type for opponent turn`() {
+        val archaludon = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me02-075"), emptyMap())!!
+        val attack = archaludon.attacks.first().copy(cost = emptyList())
+        val archaludonDef = archaludon.copy(attacks = listOf(attack))
+        val basicFire = CardDefinition("basic-fire", "Basic Fire", "Test", "F", category = Category.POKEMON, type = EnergyType.FIRE, stage = Stage.BASIC, hp = 100)
+        val basicColorless = CardDefinition("basic-colorless", "Basic Colorless", "Test", "C", category = Category.POKEMON, type = EnergyType.COLORLESS, stage = Stage.BASIC, hp = 100)
+        val evolution = CardDefinition("evolution", "Evolution", "Test", "E", category = Category.POKEMON, type = EnergyType.WATER, stage = Stage.STAGE_ONE, hp = 100)
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            archaludon.id -> archaludonDef; basicFire.id -> basicFire; basicColorless.id -> basicColorless; evolution.id -> evolution
+            else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        val state = GameState("coated-attack", 43, RngState(43), listOf(
+            PlayerState(deck = List(10) { card("deck$it", "TEST-004") }, prizes = List(6) { card("prize$it") },
+                active = PokemonInstance(listOf(card("archaludon", archaludon.id)), enteredPlayTurn = 0)),
+            PlayerState(deck = List(10) { card("op-deck$it", "TEST-004") }, prizes = List(6) { card("op-prize$it") },
+                active = PokemonInstance(listOf(card("op-active", basicFire.id)), enteredPlayTurn = 0))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val result = rules.apply(state, GameAction.Attack(attack.id))
+        assertEquals(Legality.Legal, result.legality)
+        val defended = result.state.players[0].active!!
+        assertEquals(4, defended.preventBasicPokemonDamageTurn)
+        val effects = EffectEngine(catalog)
+        val attacker = PokemonInstance(listOf(card("fire", basicFire.id)), enteredPlayTurn = 0)
+        val colorless = PokemonInstance(listOf(card("colorless", basicColorless.id)), enteredPlayTurn = 0)
+        val evolved = PokemonInstance(listOf(card("evolved", evolution.id)), enteredPlayTurn = 0)
+        assertEquals(0, effects.damage(attacker, defended, listOf(Effect.Damage(100)), turn = 4))
+        assertEquals(0, effects.damage(colorless, defended, listOf(Effect.Damage(100)), turn = 4))
+        assertEquals(100, effects.damage(evolved, defended, listOf(Effect.Damage(100)), turn = 4))
+    }
+
+    @Test fun `Archaludon Metal Bridge gives free retreat only to Pokemon with Metal Energy`() {
+        val archaludon = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv07-107"), emptyMap())!!
+        val activeDef = CardDefinition("bridge-active", "Bridge Active", "Test", "A", category = Category.POKEMON,
+            hp = 100, retreatCost = 3)
+        val metalEnergy = CardDefinition("metal-energy-def", "Metal Energy", "Test", "M", category = Category.ENERGY, type = EnergyType.METAL)
+        val metal = CardInstance("metal-energy", metalEnergy.id)
+        val active = PokemonInstance(listOf(card("active", activeDef.id)), energies = listOf(metal), enteredPlayTurn = 0)
+        val arch = PokemonInstance(listOf(card("arch", archaludon.id)), enteredPlayTurn = 0)
+        val rules = RulesEngine(object : CardCatalog { override fun get(id: String) = when (id) {
+            archaludon.id -> archaludon; activeDef.id -> activeDef; metalEnergy.id -> metalEnergy; else -> TrainerCatalog.get(id)
+        } })
+        assertEquals(0, rules.retreatCost(active, listOf(active, arch)))
+        assertEquals(3, rules.retreatCost(active.copy(energies = emptyList()), listOf(active.copy(energies = emptyList()), arch)))
+    }
+
+    @Test fun `Ampharos Synchro Pulse bonus uses actual hand sizes in attack preview`() {
+        val ampharos = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me04-029"), emptyMap())!!
+        val attack = ampharos.attacks.first().copy(cost = emptyList())
+        val ampharosDef = ampharos.copy(attacks = listOf(attack))
+        val defender = CardDefinition("test-defender", "Test Defender", "Test", "D", category = Category.POKEMON, hp = 300)
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            ampharos.id -> ampharosDef; defender.id -> defender; else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        fun state(ownHand: Int, opposingHand: Int) = GameState("synchro-$ownHand-$opposingHand", 47, RngState(47), listOf(
+            PlayerState(deck = List(10) { card("deck-$it", "TEST-004") }, hand = List(ownHand) { card("own-$it", "TEST-004") },
+                prizes = List(6) { card("prize$it") }, active = PokemonInstance(listOf(card("ampharos", ampharos.id)), enteredPlayTurn = 0)),
+            PlayerState(deck = List(10) { card("op-deck-$it", "TEST-004") }, hand = List(opposingHand) { card("op-hand-$it", "TEST-004") },
+                prizes = List(6) { card("op-prize$it") }, active = PokemonInstance(listOf(card("defender", defender.id)), enteredPlayTurn = 0))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        assertEquals(220, rules.preview(state(2, 2), attack.id)!!.damage)
+        assertEquals(140, rules.preview(state(2, 1), attack.id)!!.damage)
+    }
+
+    @Test fun `Annihilape Ghostly Blow places counters on a selected Bench Pokemon and awards its Prize`() {
+        val attackerDef = CardDefinition("test-attacker", "Test Attacker", "Test", "A", category = Category.POKEMON, hp = 300,
+            attacks = listOf(AttackDefinition("ghostly-blow", "Ghostly Blow", emptyList(), listOf(Effect.Damage(100), Effect.BenchDamageCounters(5)))) )
+        val targetDef = CardDefinition("test-target", "Test Target", "Test", "B", category = Category.POKEMON, stage = Stage.BASIC, hp = 60)
+        val victimDef = CardDefinition("test-victim", "Test Victim", "Test", "C", category = Category.POKEMON, hp = 300)
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            attackerDef.id -> attackerDef; targetDef.id -> targetDef; victimDef.id -> victimDef; else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        val state = GameState("ghostly-blow", 53, RngState(53), listOf(
+            PlayerState(deck = List(10) { card("deck$it", "TEST-004") }, prizes = List(6) { card("prize$it") },
+                active = PokemonInstance(listOf(card("attacker", attackerDef.id)), enteredPlayTurn = 0)),
+            PlayerState(deck = List(10) { card("op-deck$it", "TEST-004") }, prizes = List(6) { card("op-prize$it") },
+                active = PokemonInstance(listOf(card("victim", victimDef.id)), enteredPlayTurn = 0),
+                bench = listOf(PokemonInstance(listOf(card("target", targetDef.id)), damage = 10, enteredPlayTurn = 0)))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val started = rules.apply(state, GameAction.Attack("ghostly-blow"))
+        assertEquals(ChoiceKind.ATTACK_DAMAGE_COUNTER_TARGET, started.state.resolution!!.choices.single().kind)
+        val finished = rules.apply(started.state, GameAction.ChooseCards(listOf("target")))
+        assertTrue(finished.state.players[1].bench.isEmpty())
+        assertEquals(1, finished.state.prizesOwed[0])
+        assertEquals(-1, finished.state.players[1].lastKnockedOutByAttackDamageTurn)
+    }
+
+    @Test fun `Annihilape Durable Body survives a lethal attack on heads and is Knocked Out on tails`() {
+        val annihilape = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me05-041"), emptyMap())!!
+        val attackerDef = CardDefinition("test-attacker", "Test Attacker", "Test", "A", category = Category.POKEMON, hp = 300,
+            attacks = listOf(AttackDefinition("huge-hit", "Huge Hit", emptyList(), listOf(Effect.Damage(500)))))
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            attackerDef.id -> attackerDef; annihilape.id -> annihilape; else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        fun state(seed: Long) = GameState("durable-body-$seed", seed, RngState(seed), listOf(
+            PlayerState(deck = List(10) { card("a-deck-$it", "TEST-004") }, prizes = List(6) { card("a-prize$it") },
+                active = PokemonInstance(listOf(card("attacker", attackerDef.id)), enteredPlayTurn = 0)),
+            PlayerState(deck = List(10) { card("b-deck-$it", "TEST-004") }, prizes = List(6) { card("b-prize$it") },
+                active = PokemonInstance(listOf(card("annihilape", annihilape.id)), enteredPlayTurn = 0))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val headsSeed = (1L..100L).first { SeededRng(RngState(it)).nextInt(2) == 0 }
+        val survived = rules.apply(state(headsSeed), GameAction.Attack("huge-hit"))
+        assertEquals(Legality.Legal, survived.legality)
+        assertEquals(annihilape.hp - 10, survived.state.players[1].active!!.damage)
+        assertEquals(0, survived.state.prizesOwed[0])
+        assertTrue(survived.events.any { it.type == "CoinFlipped" && it.message.contains("Durable Body") })
+
+        val tailsSeed = (1L..100L).first { SeededRng(RngState(it)).nextInt(2) != 0 }
+        val knockedOut = rules.apply(state(tailsSeed), GameAction.Attack("huge-hit"))
+        assertNull(knockedOut.state.players[1].active)
+        assertEquals(1, knockedOut.state.prizesOwed[0])
+    }
+
+    @Test fun `Ambipom Dual Tail damages Active with Weakness and Bench without it then awards Prize`() {
+        val ambipom = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me02-079"), emptyMap())!!
+        val ambipomDef = ambipom.copy(attacks = ambipom.attacks.mapIndexed { index, attack -> if (index == 1) attack.copy(cost = emptyList()) else attack })
+        val activeDef = CardDefinition("test-active", "Test Active", "Test", "A", category = Category.POKEMON,
+            type = EnergyType.FIRE, weakness = ambipom.type, hp = 300)
+        val benchDef = CardDefinition("test-bench", "Test Bench", "Test", "B", category = Category.POKEMON,
+            stage = Stage.BASIC, type = EnergyType.FIRE, weakness = ambipom.type, hp = 50)
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            ambipom.id -> ambipomDef; activeDef.id -> activeDef; benchDef.id -> benchDef; else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        val energy1 = card("energy1", "TEST-004"); val energy2 = card("energy2", "TEST-004")
+        val state = GameState("dual-tail", 59, RngState(59), listOf(
+            PlayerState(deck = List(10) { card("deck$it", "TEST-004") }, prizes = List(6) { card("prize$it") },
+                active = PokemonInstance(listOf(card("ambipom", ambipom.id)), energies = listOf(energy1, energy2), enteredPlayTurn = 0)),
+            PlayerState(deck = List(10) { card("op-deck$it", "TEST-004") }, prizes = List(6) { card("op-prize$it") },
+                active = PokemonInstance(listOf(card("active", activeDef.id)), enteredPlayTurn = 0),
+                bench = listOf(PokemonInstance(listOf(card("bench", benchDef.id)), enteredPlayTurn = 0)))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val started = rules.apply(state, GameAction.Attack(ambipomDef.attacks.last().id))
+        assertEquals(ChoiceKind.ATTACK_MULTI_DAMAGE_TARGETS, started.state.resolution!!.choices.first().kind)
+        val targets = listOf("active", "bench")
+        val damageResolved = rules.apply(started.state, GameAction.ChooseCards(targets))
+        val discardChoice = damageResolved.state.resolution!!.choices.first()
+        assertEquals(ChoiceKind.DISCARD_ATTACK_ENERGY, discardChoice.kind)
+        val finished = rules.apply(damageResolved.state, GameAction.ChooseCards(discardChoice.candidates))
+        assertEquals(120, finished.state.players[1].active!!.damage)
+        assertTrue(finished.state.players[1].bench.isEmpty())
+        assertEquals(1, finished.state.prizesOwed[0])
+        assertTrue(finished.state.players[0].discard.any { it.id == energy1.id })
+        assertTrue(finished.state.players[0].discard.any { it.id == energy2.id })
+    }
+
+    @Test fun `Annihilape Destined Fight Knocks Out both Actives and awards Prizes simultaneously`() {
+        val annihilape = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv08-100"), emptyMap())!!
+        val attack = annihilape.attacks.last().copy(cost = emptyList())
+        val annihilapeDef = annihilape.copy(attacks = listOf(attack))
+        val other = CardDefinition("test-other", "Test Other", "Test", "O", category = Category.POKEMON, hp = 300)
+        val reserve = CardDefinition("test-reserve", "Test Reserve", "Test", "R", category = Category.POKEMON, stage = Stage.BASIC, hp = 100)
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            annihilape.id -> annihilapeDef; other.id -> other; reserve.id -> reserve; else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        val state = GameState("destined-fight", 61, RngState(61), listOf(
+            PlayerState(deck = List(10) { card("a-deck$it", "TEST-004") }, prizes = List(6) { card("a-prize$it") },
+                active = PokemonInstance(listOf(card("annihilape", annihilape.id)), enteredPlayTurn = 0),
+                bench = listOf(PokemonInstance(listOf(card("a-reserve", reserve.id)), enteredPlayTurn = 0))),
+            PlayerState(deck = List(10) { card("b-deck$it", "TEST-004") }, prizes = List(6) { card("b-prize$it") },
+                active = PokemonInstance(listOf(card("other", other.id)), enteredPlayTurn = 0),
+                bench = listOf(PokemonInstance(listOf(card("b-reserve", reserve.id)), enteredPlayTurn = 0)))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val result = rules.apply(state, GameAction.Attack(attack.id))
+        assertEquals(listOf(1, 1), result.state.prizesOwed)
+        assertNull(result.state.players[0].active)
+        assertNull(result.state.players[1].active)
+        assertEquals(Phase.SELECT_PRIZES, result.state.phase)
+        assertEquals(-1, result.state.players[0].lastKnockedOutByAttackDamageTurn)
+        assertEquals(-1, result.state.players[1].lastKnockedOutByAttackDamageTurn)
+    }
+
+    @Test fun `Arboliva Oil Salvo can repeat a target and ignores Weakness`() {
+        val arboliva = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv10-023"), emptyMap())!!
+        val arbolivaDef = arboliva.copy(attacks = arboliva.attacks.map { it.copy(cost = emptyList()) })
+        val target = CardDefinition("target", "Target", "Test", "T", category = Category.POKEMON, type = EnergyType.FIRE,
+            weakness = EnergyType.GRASS, hp = 300)
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            arboliva.id -> arbolivaDef; target.id -> target; else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        val state = GameState("oil-salvo", 67, RngState(67), listOf(
+            PlayerState(deck = List(10) { card("a-deck$it", "TEST-004") }, prizes = List(6) { card("a-prize$it") },
+                active = PokemonInstance(listOf(card("arboliva", arboliva.id)), enteredPlayTurn = 0)),
+            PlayerState(deck = List(10) { card("b-deck$it", "TEST-004") }, prizes = List(6) { card("b-prize$it") },
+                active = PokemonInstance(listOf(card("active", target.id)), enteredPlayTurn = 0),
+                bench = listOf(PokemonInstance(listOf(card("bench", target.id)), enteredPlayTurn = 0)))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        var result = rules.apply(state, GameAction.Attack(arbolivaDef.attacks.first().id))
+        repeat(6) { index ->
+            assertEquals(ChoiceKind.ATTACK_MULTI_DAMAGE_SINGLE_TARGET, result.state.resolution!!.choices.first().kind)
+            result = rules.apply(result.state, GameAction.ChooseCards(listOf("active")))
+            if (index < 5) assertEquals(5-index, result.state.resolution!!.choices.first().remaining)
+        }
+        assertEquals(120, result.state.players[1].active!!.damage)
+        assertEquals(0, result.state.players[1].bench.single().damage)
+        assertEquals(Phase.MAIN, result.state.phase)
+    }
+
+    @Test fun `Arboliva Aroma Shot removes all Special Conditions from itself`() {
+        val arboliva = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv10-023"), emptyMap())!!
+        val attack = arboliva.attacks[1].copy(cost = emptyList())
+        val arbolivaDef = arboliva.copy(attacks = listOf(attack))
+        val defender = CardDefinition("defender", "Defender", "Test", "D", category = Category.POKEMON, hp = 300)
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            arboliva.id -> arbolivaDef; defender.id -> defender; else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        val headsSeed = (1L..100L).first { SeededRng(RngState(it)).nextInt(2) == 0 }
+        val state = GameState("aroma-shot", headsSeed, RngState(headsSeed), listOf(
+            PlayerState(deck = List(10) { card("a-deck$it", "TEST-004") }, prizes = List(6) { card("a-prize$it") },
+                active = PokemonInstance(listOf(card("arboliva", arboliva.id)), conditions = setOf(SpecialCondition.POISONED, SpecialCondition.BURNED, SpecialCondition.CONFUSED), enteredPlayTurn = 0)),
+            PlayerState(deck = List(10) { card("b-deck$it", "TEST-004") }, prizes = List(6) { card("b-prize$it") },
+                active = PokemonInstance(listOf(card("defender", defender.id)), enteredPlayTurn = 0))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val result = rules.apply(state, GameAction.Attack(attack.id))
+        assertEquals(Legality.Legal, result.legality)
+        assertTrue(result.state.players[0].active!!.conditions.isEmpty())
+        assertTrue(result.events.any { it.type == "SpecialConditionsRecovered" })
+    }
+
+    @Test fun `Ambipom Wicked Tail removes a random opposing hand card for each heads`() {
+        val ambipom = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv06-138"), emptyMap())!!
+        val base = CardDefinition("test-aipom", "Aipom", "Test", "A", category = Category.POKEMON, stage = Stage.BASIC, hp = 70)
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            ambipom.id -> ambipom; base.id -> base; else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        fun heads(seed: Long): Int {
+            val rng = SeededRng(RngState(seed))
+            return List(2) { rng.nextInt(2) == 0 }.count { it }
+        }
+        for (expectedHeads in 0..2) {
+            val seed = (1L..1000L).first { heads(it) == expectedHeads }
+            val evolved = card("ambipom", ambipom.id)
+            val opponentHand = List(3) { card("op-hand-$expectedHeads-$it", "TEST-001") }
+            val opponentDeck = List(8) { card("op-deck-$expectedHeads-$it", "TEST-004") }
+            val state = GameState("wicked-tail-$expectedHeads", seed, RngState(seed), listOf(
+                PlayerState(deck = List(10) { card("deck-$expectedHeads-$it", "TEST-004") }, hand = listOf(evolved), prizes = List(6) { card("prize-$expectedHeads-$it") },
+                    active = PokemonInstance(listOf(card("aipom-$expectedHeads", base.id)), enteredPlayTurn = 0)),
+                PlayerState(deck = opponentDeck, hand = opponentHand, prizes = List(6) { card("op-prize-$expectedHeads-$it") },
+                    active = field("op-active-$expectedHeads"))
+            ), 0, 0, turn = 3, phase = Phase.MAIN)
+            val result = rules.apply(state, GameAction.Evolve(evolved.id, "aipom-$expectedHeads"))
+            assertEquals(Legality.Legal, result.legality)
+            val opposing = result.state.players[1]
+            assertEquals(3-expectedHeads, opposing.hand.size)
+            assertEquals(8+expectedHeads, opposing.deck.size)
+            assertTrue(opponentHand.filter { it !in opposing.hand }.all { it in opposing.deck })
+            val shuffled = result.events.find { it.type == "OpponentHandCardsShuffled" }
+            assertEquals(expectedHeads.takeIf { it > 0 }, shuffled?.amount)
+        }
+    }
+
+    @Test fun `Annihilape Lose Cool boosts only at two damage counters and only against the Active`() {
+        val annihilape = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv10-092"), emptyMap())!!
+        val target = CardDefinition("target", "Target", "Test", "T", category = Category.POKEMON, hp = 400)
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            annihilape.id -> annihilape; target.id -> target; else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        fun state(sourceDamage: Int) = GameState("lose-cool-$sourceDamage", 73, RngState(73), listOf(
+            PlayerState(deck = List(10) { card("a-deck$it", "TEST-004") }, prizes = List(6) { card("a-prize$it") },
+                active = PokemonInstance(listOf(card("annihilape", annihilape.id)), damage = sourceDamage, enteredPlayTurn = 0)),
+            PlayerState(deck = List(10) { card("b-deck$it", "TEST-004") }, prizes = List(6) { card("b-prize$it") },
+                active = PokemonInstance(listOf(card("active", target.id)), enteredPlayTurn = 0),
+                bench = listOf(PokemonInstance(listOf(card("bench", target.id)), enteredPlayTurn = 0)))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val attack = annihilape.attacks.first()
+        assertEquals(160, rules.preview(state(10), attack.id)!!.damage)
+        assertEquals(280, rules.preview(state(20), attack.id)!!.damage)
+        assertEquals(160, rules.preview(state(20), attack.id, "bench")!!.damage)
+    }
+
+    @Test fun `Alolan Exeggutor Swinging Sphene coin chooses Basic active or Basic bench knockout`() {
+        val exeggutor = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv08-133"), emptyMap())!!
+        val attack = exeggutor.attacks[1].copy(cost = emptyList())
+        val exeggutorDef = exeggutor.copy(attacks = listOf(attack))
+        val attackerTank = CardDefinition("test-attacker", "Test Attacker", "Test", "T", category = Category.POKEMON, hp = 300)
+        val basic = CardDefinition("test-basic", "Basic Target", "Test", "B", category = Category.POKEMON, stage = Stage.BASIC, hp = 100)
+        val evolution = CardDefinition("test-evolution", "Evolved Target", "Test", "E", category = Category.POKEMON, stage = Stage.STAGE_ONE, hp = 180)
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            exeggutor.id -> exeggutorDef; attackerTank.id -> attackerTank; basic.id -> basic; evolution.id -> evolution; else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        fun game(seed: Long, activeDefinition: String) = GameState("sphene-$seed", seed, RngState(seed), listOf(
+            PlayerState(deck = List(10) { card("deck-$seed-$it", "TEST-004") }, prizes = List(6) { card("prize-$seed-$it", "TEST-004") }, active = PokemonInstance(listOf(card("exeggutor-$seed", exeggutor.id)), enteredPlayTurn = 0)),
+            PlayerState(deck = List(10) { card("op-deck-$seed-$it", "TEST-004") }, prizes = List(6) { card("op-prize-$seed-$it", "TEST-004") },
+                active = PokemonInstance(listOf(card("op-active-$seed", activeDefinition)), enteredPlayTurn = 0), bench = listOf(
+                    PokemonInstance(listOf(card("bench-basic-$seed", basic.id)), enteredPlayTurn = 0),
+                    PokemonInstance(listOf(card("bench-evolution-$seed", evolution.id)), enteredPlayTurn = 0)))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val headsSeed = (1L..100L).first { SeededRng(RngState(it)).nextInt(2) == 0 }
+        val heads = rules.apply(game(headsSeed, basic.id), GameAction.Attack(attack.id))
+        assertEquals(Legality.Legal, heads.legality)
+        assertNull(heads.state.players[1].active)
+        assertEquals(1, heads.state.prizesOwed[0])
+        assertEquals(-1, heads.state.players[1].lastKnockedOutByAttackDamageTurn)
+        assertTrue(heads.events.any { it.type == "AttackEffectKnockout" })
+
+        val tailsSeed = (1L..100L).first { SeededRng(RngState(it)).nextInt(2) != 0 }
+        val tails = rules.apply(game(tailsSeed, evolution.id), GameAction.Attack(attack.id))
+        val choice = tails.state.resolution!!.choices.single()
+        assertEquals(ChoiceKind.ATTACK_KNOCKOUT_BASIC_BENCH, choice.kind)
+        assertEquals(listOf("bench-basic-$tailsSeed"), choice.candidates)
+        val resolved = rules.apply(tails.state, GameAction.ChooseCards(choice.candidates))
+        assertTrue(resolved.state.players[1].bench.none { it.id == choice.candidates.single() })
+        assertEquals(1, resolved.state.prizesOwed[0])
+    }
+
+    @Test fun `Retaliate counts a Pokemon knocked out by opponent attack damage last turn only`() {
+        val marowak = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv09-057"), emptyMap())!!
+        val retaliate = marowak.attacks.first().copy(cost = emptyList())
+        val marowakDef = marowak.copy(attacks = listOf(retaliate))
+        val victim = CardDefinition("retaliate-victim", "Victim", "Test", "V", category = Category.POKEMON, hp = 50)
+        val benchHit = AttackDefinition("bench-hit", "Bench Hit", emptyList(), listOf(Effect.Damage(10), Effect.BenchDamage(100)))
+        val attacker = CardDefinition("bench-attacker", "Bench Attacker", "Test", "A", category = Category.POKEMON, hp = 300, attacks = listOf(benchHit))
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            marowak.id -> marowakDef; victim.id -> victim; attacker.id -> attacker; else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        val marowakPokemon = PokemonInstance(listOf(card("marowak", marowak.id)), enteredPlayTurn = 0)
+        val victimPokemon = PokemonInstance(listOf(card("victim", victim.id)), enteredPlayTurn = 0)
+        val p0 = PlayerState(deck = List(10) { card("p0-deck$it", "TEST-004") }, prizes = List(6) { card("p0-prize$it", "TEST-004") },
+            active = marowakPokemon, bench = listOf(victimPokemon))
+        val p1 = PlayerState(deck = List(10) { card("p1-deck$it", "TEST-004") }, prizes = List(6) { card("p1-prize$it", "TEST-004") },
+            active = PokemonInstance(listOf(card("attacker", attacker.id)), enteredPlayTurn = 0))
+        val state = GameState("retaliate", 29, RngState(29), listOf(p0, p1), 0, 1, turn = 3, phase = Phase.MAIN)
+        val attacked = rules.apply(state, GameAction.Attack(benchHit.id))
+        assertEquals(ChoiceKind.ATTACK_DAMAGE_TARGET, attacked.state.resolution!!.choices.first().kind)
+        val ko = rules.apply(attacked.state, GameAction.ChooseCards(listOf(victimPokemon.id)))
+        assertNull(ko.state.players[0].bench.singleOrNull { it.id == victimPokemon.id })
+        assertEquals(3, ko.state.players[0].lastKnockedOutByAttackDamageTurn)
+        val prize = rules.apply(ko.state, GameAction.TakePrize(ko.state.players[1].prizes.first().id))
+        assertEquals(4, prize.state.turn)
+        assertEquals(0, prize.state.currentPlayer)
+        assertEquals(120, rules.preview(prize.state, retaliate.id)!!.damage)
+    }
+
+    @Test fun `Alomomola Gentle Fin returns only an eligible Basic Pokemon from discard`() {
+        val alomomola = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv10.5b-024"), emptyMap())!!
+        val eligible = CardDefinition("gentle-basic", "Small Basic", "Test", "B1", category = Category.POKEMON, stage = Stage.BASIC, hp = 70)
+        val highHp = eligible.copy(id = "gentle-high-hp", name = "High HP Basic", hp = 80)
+        val evolution = eligible.copy(id = "gentle-evolution", name = "Evolution", stage = Stage.STAGE_ONE, hp = 60)
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            alomomola.id -> alomomola; eligible.id -> eligible; highHp.id -> highHp; evolution.id -> evolution; else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        val selected = card("recover-small", eligible.id)
+        val tooBig = card("recover-high", highHp.id)
+        val notBasic = card("recover-evolution", evolution.id)
+        val source = PokemonInstance(listOf(card("alomomola", alomomola.id)), enteredPlayTurn = 0)
+        val p0 = PlayerState(deck = List(10) { card("deck$it", "TEST-004") }, discard = listOf(selected, tooBig, notBasic),
+            prizes = List(6) { card("prize$it", "TEST-004") }, active = source)
+        val p1 = PlayerState(deck = List(10) { card("op-deck$it", "TEST-004") }, prizes = List(6) { card("op-prize$it", "TEST-004") }, active = field("opponent"))
+        val state = GameState("gentle-fin", 31, RngState(31), listOf(p0, p1), 0, 0, turn = 3, phase = Phase.MAIN)
+        val ability = alomomola.abilities.single()
+        val search = rules.apply(state, GameAction.UseAbility(source.id, ability.id))
+        assertEquals(Legality.Legal, search.legality)
+        assertEquals(listOf(selected.id), search.state.resolution!!.choices.single().candidates)
+        val recovered = rules.apply(search.state, GameAction.ChooseCards(listOf(selected.id)))
+        assertTrue(recovered.state.players[0].bench.any { it.top.id == selected.id })
+        assertEquals(listOf(tooBig.id, notBasic.id), recovered.state.players[0].discard.map { it.id })
+        assertIs<Legality.Illegal>(rules.validate(recovered.state, GameAction.UseAbility(source.id, ability.id)))
+    }
+
     @Test fun `seed reproduces opening and unique copies`() {
         val a = engine.newGame(123456); val b = engine.newGame(123456)
         assertEquals(a, b); assertNotEquals(a.players[0].hand, engine.newGame(654321).players[0].hand)
@@ -77,6 +706,204 @@ class RulesEngineTest {
         assertEquals(40, engine.preview(s, "leaf")!!.damage)
         val after = play(s, GameAction.Attack("leaf"))
         assertEquals(40, after.players[1].active!!.damage); assertEquals(1, after.currentPlayer); assertEquals(4, after.turn)
+    }
+    @Test fun `exact hand size attack has no damage or other effects when condition fails`() {
+        val attack = AttackDefinition("hand-a0", "Trio-Cheehoo", listOf(EnergyType.COLORLESS),
+            listOf(Effect.Damage(120), Effect.RequiresExactHandSize(3)))
+        val definition = TestCatalog.get("TEST-001").copy(id = "hand-check", attacks = listOf(attack))
+        val catalog = object : CardCatalog { override fun get(id: String) = if (id == "hand-check") definition else TestCatalog.get(id) }
+        val rules = RulesEngine(catalog)
+        val state = main().let { s -> s.copy(players = listOf(s.players[0].copy(active = s.players[0].active!!.copy(
+            cards = listOf(card("attacker", "hand-check")))), s.players[1])) }
+        assertEquals(0, rules.preview(state, "hand-a0")!!.damage)
+        val failed = rules.apply(state, GameAction.Attack("hand-a0"))
+        assertEquals(Legality.Legal, failed.legality)
+        assertEquals(0, failed.state.players[1].active!!.damage)
+        assertTrue(failed.events.any { it.type == "AttackEffectFailed" })
+        val satisfied = state.copy(players = listOf(state.players[0].copy(hand = state.players[0].hand + card("third-card")), state.players[1]))
+        assertEquals(120, rules.preview(satisfied, "hand-a0")!!.damage)
+        val applied = rules.apply(satisfied, GameAction.Attack("hand-a0"))
+        assertEquals(Legality.Legal, applied.legality)
+        assertTrue(applied.events.any { it.type == "AttackDeclared" && it.amount == 120 })
+    }
+    @Test fun `random opponent hand card is revealed and shuffled into deck without entering discard`() {
+        val attack = AttackDefinition("shuffle-hand-a0", "Astonish", listOf(EnergyType.COLORLESS),
+            listOf(Effect.Damage(20), Effect.ShuffleRandomOpponentHand(1)))
+        val definition = TestCatalog.get("TEST-001").copy(id = "shuffle-hand-check", attacks = listOf(attack))
+        val catalog = object : CardCatalog { override fun get(id: String) = if (id == "shuffle-hand-check") definition else TestCatalog.get(id) }
+        val rules = RulesEngine(catalog)
+        val base = main()
+        val opponentHand = listOf(card("op-card-1", "TEST-002"), card("op-card-2", "TEST-003"))
+        val state = base.copy(players = listOf(
+            base.players[0].copy(active = base.players[0].active!!.copy(cards = listOf(card("attacker", "shuffle-hand-check")))),
+            base.players[1].copy(hand = opponentHand)))
+        val result = rules.apply(state, GameAction.Attack("shuffle-hand-a0"))
+        assertEquals(Legality.Legal, result.legality)
+        val updatedOpponent = result.state.players[1]
+        assertEquals(opponentHand.size, updatedOpponent.hand.size) // shuffled card removed; turn start draw added one
+        assertEquals(state.players[1].deck.size, updatedOpponent.deck.size)
+        assertTrue(updatedOpponent.discard.isEmpty())
+        val revealed = result.events.single { it.type == "OpponentCardsShuffledIntoDeck" }
+        val shuffledCard = opponentHand.single { catalog.get(it.definitionId).canonicalName in revealed.message }
+        assertTrue(updatedOpponent.hand.any { it.id == opponentHand.single { it != shuffledCard }.id })
+        assertEquals(1, (updatedOpponent.hand + updatedOpponent.deck).count { it.id == shuffledCard.id })
+        assertEquals(result.state, rules.apply(state, GameAction.Attack("shuffle-hand-a0")).state)
+    }
+    @Test fun `tool count damage includes all of the player's Pokemon`() {
+        val attack = AttackDefinition("tool-count-a0", "Gadget Show", listOf(EnergyType.COLORLESS), listOf(Effect.OwnToolCountDamage(30)))
+        val definition = TestCatalog.get("TEST-001").copy(id = "tool-count-check", attacks = listOf(attack))
+        val catalog = object : CardCatalog { override fun get(id: String) = if (id == "tool-count-check") definition else TestCatalog.get(id) }
+        val rules = RulesEngine(catalog)
+        val base = main()
+        val attacker = base.players[0].active!!.copy(cards = listOf(card("attacker", "tool-count-check")), tool = card("tool-a", "TEST-006"))
+        val bench = base.players[0].bench.map { it.copy(tool = card("tool-b", "TEST-006")) }
+        val state = base.copy(players = listOf(base.players[0].copy(active = attacker, bench = bench), base.players[1]))
+        assertEquals(60, rules.preview(state, "tool-count-a0")!!.damage)
+        val applied = rules.apply(state, GameAction.Attack("tool-count-a0"))
+        assertEquals(Legality.Legal, applied.legality)
+        assertTrue(applied.events.any { it.type == "AttackDeclared" && it.amount == 60 })
+    }
+    @Test fun `Roto Call searches any number of matching Pokemon up to free bench spaces then shuffles`() {
+        val rotom = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me02.5-092"), emptyMap())!!
+        val attack = rotom.attacks.first { it.name == "Roto Call" }
+        assertEquals(listOf(Effect.SearchRotomToBench), attack.effects)
+        val rotomBasic = TestCatalog.get("TEST-001").copy(id = "rotom-basic", name = "Rotom", category = Category.POKEMON, stage = Stage.BASIC)
+        val rotomV = rotomBasic.copy(id = "rotom-v", name = "Rotom V")
+        val unrelated = rotomBasic.copy(id = "unrelated", name = "Pikachu")
+        val catalog = object : CardCatalog {
+            override fun get(id: String) = when (id) {
+                rotom.id -> rotom
+                rotomBasic.id -> rotomBasic
+                rotomV.id -> rotomV
+                unrelated.id -> unrelated
+                else -> TestCatalog.get(id)
+            }
+        }
+        val rules = RulesEngine(catalog)
+        val base = main()
+        val rotomCards = listOf(card("rotom-card-a", rotomBasic.id), card("rotom-card-b", rotomV.id))
+        val unrelatedCard = card("not-rotom", unrelated.id)
+        val state = base.copy(players = listOf(base.players[0].copy(
+            active = base.players[0].active!!.copy(cards = listOf(card("rotom-attacker", rotom.id))),
+            deck = rotomCards + unrelatedCard + base.players[0].deck), base.players[1]))
+        val declared = rules.apply(state, GameAction.Attack(attack.id))
+        assertEquals(Legality.Legal, declared.legality)
+        val choice = declared.state.resolution!!.choices.single()
+        assertEquals(ChoiceKind.ATTACK_ROTOM_SEARCH, choice.kind)
+        assertEquals(setOf("rotom-card-a", "rotom-card-b"), choice.candidates.toSet())
+        assertEquals(2, choice.max)
+        val resolved = rules.apply(declared.state, GameAction.ChooseCards(listOf("rotom-card-a")))
+        assertEquals(Legality.Legal, resolved.legality)
+        assertTrue(resolved.state.players[0].bench.any { it.id == "rotom-card-a" })
+        assertTrue(resolved.state.players[0].deck.any { it.id == "rotom-card-b" })
+        assertTrue(resolved.state.players[0].deck.any { it.id == "not-rotom" })
+        assertTrue(resolved.events.any { it.type == "RotomSearched" && it.amount == 1 })
+        assertTrue(resolved.events.any { it.type == "DeckShuffled" })
+
+        val fullBenchState = state.copy(players = listOf(state.players[0].copy(bench = List(5) { field("full-bench-$it") }), state.players[1]))
+        val fullBenchResult = rules.apply(fullBenchState, GameAction.Attack(attack.id))
+        assertEquals(Legality.Legal, fullBenchResult.legality)
+        assertNull(fullBenchResult.state.resolution)
+        assertEquals(5, fullBenchResult.state.players[0].bench.size)
+        assertTrue(fullBenchResult.events.any { it.type == "DeckShuffled" })
+    }
+    @Test fun `Teal Dance attaches basic Grass Energy and draws only when energy is attached`() {
+        val ogerpon = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv06-025"), emptyMap())!!
+        val ability = ogerpon.abilities.single()
+        val specialGrassDefinition = TestCatalog.get("TEST-004").copy(id = "special-grass-energy", name = "Special Grass Energy", type = EnergyType.GRASS, basicEnergy = false)
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            ogerpon.id -> ogerpon
+            specialGrassDefinition.id -> specialGrassDefinition
+            else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        val base = main()
+        val basicGrass = card("basic-grass", "TEST-005")
+        val secondBasicGrass = card("basic-grass-2", "TEST-005")
+        val specialGrass = card("special-grass", specialGrassDefinition.id)
+        val ogerponActive = base.players[0].active!!.copy(cards = listOf(card("ogerpon-active", ogerpon.id)))
+        val ogerponBench = base.players[0].bench.single().copy(cards = listOf(card("ogerpon-bench", ogerpon.id)))
+        val state = base.copy(players = listOf(base.players[0].copy(active = ogerponActive, bench = listOf(ogerponBench),
+            hand = listOf(basicGrass, secondBasicGrass, specialGrass), deck = base.players[0].deck), base.players[1]))
+        assertEquals(Legality.Legal, rules.validate(state, GameAction.UseAbility("ogerpon-active", ability.id)))
+        val used = rules.apply(state, GameAction.UseAbility("ogerpon-active", ability.id))
+        assertEquals(Legality.Legal, used.legality)
+        assertEquals(setOf("basic-grass", "basic-grass-2"), used.state.resolution!!.choices.single().candidates.toSet())
+        assertFalse(used.state.players[0].active!!.energies.any { it.id == "basic-grass" })
+        val attached = rules.apply(used.state, GameAction.ChooseCards(listOf("basic-grass")))
+        assertEquals(Legality.Legal, attached.legality)
+        assertEquals(setOf("a-e0", "basic-grass"), attached.state.players[0].active!!.energies.map { it.id }.toSet())
+        assertTrue(attached.state.players[0].hand.any { it.id == "special-grass" })
+        assertEquals(state.players[0].hand.size, attached.state.players[0].hand.size) // one Energy out, one draw in
+        assertTrue(attached.events.any { it.type == "CardsDrawn" })
+        assertIs<Legality.Illegal>(rules.validate(attached.state, GameAction.UseAbility("ogerpon-active", ability.id)))
+        // A second Ogerpon has its own once-per-turn ability instance.
+        assertEquals(Legality.Legal, rules.validate(attached.state, GameAction.UseAbility("ogerpon-bench", ability.id)))
+        assertIs<Legality.Illegal>(rules.validate(state.copy(players = listOf(state.players[0].copy(hand = listOf(specialGrass)), state.players[1])),
+            GameAction.UseAbility("ogerpon-active", ability.id)))
+    }
+    @Test fun `Myriad Leaf Shower counts Energy attached to both Active Pokemon`() {
+        val source = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv06-025"), emptyMap())!!
+        val attack = source.attacks.first()
+        val catalog = object : CardCatalog { override fun get(id: String) = if (id == source.id) source else TrainerCatalog.get(id) }
+        val rules = RulesEngine(catalog)
+        val base = main()
+        val attacker = base.players[0].active!!.copy(cards = listOf(card("ogerpon", source.id)),
+            energies = listOf(card("a1", "TEST-005"), card("a2", "TEST-005"), card("a3", "TEST-005")))
+        val defender = base.players[1].active!!.copy(energies = listOf(card("d1", "TEST-004"), card("d2", "TEST-004"), card("d3", "TEST-004")))
+        val state = base.copy(players = listOf(base.players[0].copy(active = attacker), base.players[1].copy(active = defender)))
+        assertEquals(420, rules.preview(state, attack.id)!!.damage)
+        val result = rules.apply(state, GameAction.Attack(attack.id))
+        assertEquals(Legality.Legal, result.legality)
+        assertTrue(result.events.any { it.type == "AttackDeclared" && it.amount == 420 })
+    }
+    @Test fun `Terapagos attack first turn restriction depends on who starts`() {
+        val terapagos = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me02.5-179"), emptyMap())!!
+        val attack = terapagos.attacks.first()
+        val catalog = object : CardCatalog { override fun get(id: String) = if (id == terapagos.id) terapagos else TrainerCatalog.get(id) }
+        val rules = RulesEngine(catalog)
+        val base = main()
+        val attacker = base.players[1].active!!.copy(cards = listOf(card("tera", terapagos.id)),
+            energies = List(attack.cost.size) { card("tera-e$it", "TEST-004") })
+        val turnTwo = base.copy(players = listOf(base.players[0], base.players[1].copy(active = attacker)),
+            startingPlayer = 0, currentPlayer = 1, turn = 2)
+        assertIs<Legality.Illegal>(rules.validate(turnTwo, GameAction.Attack(attack.id)))
+        val laterTurn = turnTwo.copy(turn = 4)
+        assertEquals(Legality.Legal, rules.validate(laterTurn, GameAction.Attack(attack.id)))
+        assertEquals(30, rules.preview(laterTurn, attack.id)!!.damage)
+    }
+    @Test fun `Crown Opal prevents only damage from basic noncolorless attackers for one turn`() {
+        val terapagos = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me02.5-179"), emptyMap())!!
+        val attack = terapagos.attacks.first { it.name == "Crown Opal" }
+        val sturdy = TestCatalog.get("TEST-001").copy(id = "sturdy-target", hp = 500, weakness = null)
+        val basicGrass = TestCatalog.get("TEST-003").copy(id = "basic-grass-attacker")
+        val evolvedGrass = TestCatalog.get("TEST-002").copy(id = "evolved-grass-attacker", type = EnergyType.GRASS)
+        val basicColorless = TestCatalog.get("TEST-001").copy(id = "basic-colorless-attacker", type = EnergyType.COLORLESS)
+        val grassEnergy = TestCatalog.get("TEST-005").copy(id = "tera-grass-energy")
+        val waterEnergy = TestCatalog.get("TEST-004").copy(id = "tera-water-energy", name = "Basic Water Energy", type = EnergyType.WATER)
+        val lightningEnergy = TestCatalog.get("TEST-004").copy(id = "tera-lightning-energy", name = "Basic Lightning Energy", type = EnergyType.LIGHTNING)
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            terapagos.id -> terapagos; sturdy.id -> sturdy; basicGrass.id -> basicGrass
+            evolvedGrass.id -> evolvedGrass; basicColorless.id -> basicColorless
+            grassEnergy.id -> grassEnergy; waterEnergy.id -> waterEnergy; lightningEnergy.id -> lightningEnergy
+            else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        val base = main()
+        val terapagosField = PokemonInstance(listOf(card("tera", terapagos.id)),
+            energies = listOf(card("tera-grass", grassEnergy.id), card("tera-water", waterEnergy.id), card("tera-lightning", lightningEnergy.id)), enteredPlayTurn = 0)
+        val target = PokemonInstance(listOf(card("sturdy", sturdy.id)), enteredPlayTurn = 0)
+        val state = base.copy(players = listOf(base.players[0].copy(active = terapagosField), base.players[1].copy(active = target)))
+        val used = rules.apply(state, GameAction.Attack(attack.id))
+        assertEquals(Legality.Legal, used.legality)
+        val protected = used.state.players[0].active!!
+        assertEquals(used.state.turn, protected.preventBasicNonColorlessDamageTurn)
+        fun damageFrom(id: String, turn: Int = used.state.turn) = rules.effects.damage(PokemonInstance(listOf(card("test-$id", id)), enteredPlayTurn = 0),
+            protected, listOf(Effect.Damage(70)), turn = turn)
+        assertEquals(0, damageFrom(basicGrass.id))
+        assertEquals(70, damageFrom(evolvedGrass.id))
+        assertEquals(70, damageFrom(basicColorless.id))
+        assertEquals(70, damageFrom(basicGrass.id, used.state.turn + 1))
     }
     @Test fun `knockout waits for chosen prize and opposing promotion`() {
         val s = main().let { it.copy(players = listOf(it.players[0], it.players[1].copy(active = it.players[1].active!!.copy(damage = 40)))) }
@@ -171,7 +998,8 @@ class RulesEngineTest {
         // no bonus draws; attach first available energy and attack, otherwise pass.
         // v0.2 adds serialized effect state and named attack/KO events; conservation and replay above remain invariant.
         // v0.4 serializes selected decks and undo checkpoint sizes; game transitions remain unchanged.
-        // v0.5 adds deck identity/list metadata and structured event amounts; replay still matches every transition.
-        assertEquals("78ad6a84c068f4a3fb9b425904216703309e225e606350cde54ff74525eb45a3", digest)
+        // v0.5 adds deck identity/list metadata; v0.6 adds retreat-block state; v0.7 adds status and damage-reduction state.
+        // v0.8 adds protection from all Basic Pokémon attacks.
+        assertEquals("9f16847137aa5d4c0d4314d7beab72abbe1c8374c3b5b6c3ad241cc5cbfe1434", digest)
     }
 }

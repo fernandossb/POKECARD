@@ -2,7 +2,7 @@ package com.tcgtrainer.engine
 
 import kotlinx.serialization.Serializable
 
-@Serializable enum class EnergyType { FIGHTING, FIRE, WATER, LIGHTNING, PSYCHIC, GRASS, DARKNESS, METAL, COLORLESS }
+@Serializable enum class EnergyType { FIGHTING, FIRE, WATER, LIGHTNING, PSYCHIC, GRASS, DARKNESS, METAL, COLORLESS, DRAGON }
 @Serializable enum class Category { POKEMON, ENERGY, TRAINER }
 @Serializable enum class Stage { BASIC, STAGE_ONE, STAGE_TWO }
 @Serializable enum class Phase { CHOOSE_STARTER, SELECT_ACTIVE, SELECT_BENCH, MULLIGAN_BONUS, BONUS_BENCH, MAIN, RESOLVE_CHOICE, SELECT_PRIZES, PROMOTE, GAME_OVER }
@@ -10,6 +10,7 @@ import kotlinx.serialization.Serializable
 @Serializable sealed interface Effect {
     @Serializable data class Damage(val amount: Int) : Effect
     @Serializable data class Draw(val count: Int) : Effect
+    @Serializable data class DrawToHand(val size: Int) : Effect
     @Serializable data class Heal(val amount: Int) : Effect
     @Serializable data class Unsupported(val text: String) : Effect
     @Serializable data class AccelerateEnergy(val max: Int, val type: EnergyType) : Effect
@@ -17,12 +18,66 @@ import kotlinx.serialization.Serializable
     @Serializable data class Recoil(val damage: Int) : Effect
     @Serializable data class RequiresBenched(val definitionId: String) : Effect
     @Serializable data object IgnoreWeaknessResistance : Effect
+    @Serializable data object IgnoreResistance : Effect
+    @Serializable data object IgnoreOpponentActiveEffects : Effect
     @Serializable data class TargetedDamage(val damage: Int) : Effect
-    @Serializable data class CoinDamage(val coins: Int, val perHeads: Int) : Effect
+    @Serializable data class CoinDamage(val coins: Int, val perHeads: Int, val untilTails: Boolean = false,
+        val perEnergy: Boolean = false, val bonusOnly: Boolean = false, val perEnergyBothActive: Boolean = false) : Effect
     @Serializable data class DiscardAttackEnergy(val count: Int, val type: EnergyType? = null, val all: Boolean = false) : Effect
     @Serializable data class EnergyFromDeck(val count: Int, val type: EnergyType) : Effect
     @Serializable data class SupporterBonus(val damage: Int) : Effect
+    @Serializable data object PreventRetreatNextTurn : Effect
+    @Serializable data class ConditionalEnergyDamage(val type: EnergyType, val minimum: Int, val bonus: Int) : Effect
+    @Serializable data class ConditionalInPlayEnergyDamage(val type: EnergyType, val minimum: Int, val bonus: Int) : Effect
+    @Serializable data class SwitchOwn(val optional: Boolean = false) : Effect
+    @Serializable data class BenchedCountDamage(val perPokemon: Int) : Effect
+    @Serializable data class OwnInPlayCountDamage(val perPokemon: Int) : Effect
+    @Serializable data class OwnDamageCounterDamage(val perCounter: Int) : Effect
+    @Serializable data object SwitchOpponent : Effect
+    @Serializable data class BasicPokemonToBench(val count: Int) : Effect
+    @Serializable data object SearchRotomToBench : Effect
+    @Serializable data object RestrictIfSecondPlayerFirstTurn : Effect
+    @Serializable data object PreventBasicNonColorlessDamageNextTurn : Effect
+    @Serializable data object PreventBasicPokemonDamageNextTurn : Effect
+    @Serializable data class OwnBenchCountDamage(val perPokemon: Int) : Effect
+    @Serializable data class OwnDamagedPokemonCountDamage(val perPokemon: Int) : Effect
+    @Serializable data object MoveOpponentDamageCounters : Effect
+    @Serializable data class SearchPokemonMatchingAttachedBasicEnergy(val max: Int) : Effect
+    @Serializable data object AttachAnyBasicEnergyFromHand : Effect
+    @Serializable data class AttachBasicEnergyFromDeckAny(val max: Int) : Effect
+    @Serializable data class SearchPokemonToHand(val max: Int = 1) : Effect
+    @Serializable data class OpponentTypeDamage(val type: EnergyType, val bonus: Int) : Effect
+    @Serializable data class HealOwnPokemon(val amount: Int) : Effect
+    @Serializable data object CoinKnockOutBasic : Effect
+    @Serializable data class StatusCondition(val condition: SpecialCondition, val onHeads: Boolean = false, val minimumHeads: Int = 1, val onSelf: Boolean = false) : Effect
+    @Serializable data class DiscardDefendingEnergy(val count: Int, val onHeads: Boolean = false) : Effect
+    @Serializable data class BenchDamage(val amount: Int) : Effect
+    @Serializable data class BenchDamageCounters(val count: Int) : Effect
+    @Serializable data class MultiTargetDamage(val amount: Int, val targets: Int, val allowRepeat: Boolean = false, val ignoreWeaknessResistance: Boolean = false) : Effect
+    @Serializable data object KnockOutBothActive : Effect
+    @Serializable data object RecoverSelfFromSpecialConditions : Effect
+    @Serializable data object CoinMiss : Effect
+    @Serializable data class MoveEnergyToBench(val count: Int = 1) : Effect
+    @Serializable data class DiscardRandomOpponentHand(val count: Int) : Effect
+    @Serializable data class ShuffleRandomOpponentHand(val count: Int) : Effect
+    @Serializable data class DiscardOpponentDeck(val count: Int) : Effect
+    @Serializable data class DiscardBenchEnergyDamage(val max: Int, val perEnergyDamage: Int) : Effect
+    @Serializable data class ReduceDamageNextTurn(val amount: Int) : Effect
+    @Serializable data class SelfDamage(val amount: Int) : Effect
+    @Serializable data object PreventDefendingAttackNextTurn : Effect
+    @Serializable data class OwnHandCounterDamage(val countersPerCard: Int) : Effect
+    @Serializable data class OpponentExDamage(val bonus: Int) : Effect
+    @Serializable data class OwnEnergyCountDamage(val perEnergy: Int) : Effect
+    @Serializable data class OpponentEnergyCountDamage(val perEnergy: Int) : Effect
+    @Serializable data class ReduceDefendingAttackDamageNextTurn(val amount: Int) : Effect
+    @Serializable data class OpponentConditionDamage(val bonus: Int) : Effect
+    @Serializable data class OwnKnockoutLastTurnDamage(val bonus: Int) : Effect
+    @Serializable data class RequiresExactHandSize(val size: Int) : Effect
+    @Serializable data class OwnToolCountDamage(val perTool: Int) : Effect
+    @Serializable data class BothActiveEnergyCountDamage(val perEnergy: Int) : Effect
+    @Serializable data object PreventAttackDamageNextTurnOnHeads : Effect
 }
+@Serializable enum class SpecialCondition { POISONED, BURNED, ASLEEP, PARALYZED, CONFUSED }
 @Serializable data class AttackDefinition(val id: String, val name: String, val cost: List<EnergyType>, val effects: List<Effect>, val text: String = "")
 @Serializable enum class TrainerType { ITEM, SUPPORTER, STADIUM, TOOL }
 @Serializable enum class CardFilter { POKEMON, BASIC_FIGHTING_OR_ENERGY, POKEMON_OR_ENERGY, ITEM, TOOL, SUPPORTER, STADIUM, BASIC_POKEMON, BASIC_ENERGY, ENERGY, DARKNESS_POKEMON }
@@ -46,7 +101,20 @@ import kotlinx.serialization.Serializable
     val id: String, val name: String, val text: String, val draw: Int = 0,
     val discardEnergyType: EnergyType? = null, val requiresInPlay: String? = null,
     val requiresPreviousKnockout: Boolean = false, val onEvolveSwitch: Boolean = false,
-    val attackDiscountPerOpponentPrize: Boolean = false, val usageKey: String = id
+    val attackDiscountPerOpponentPrize: Boolean = false, val usageKey: String = id,
+    val requiresActive: Boolean = false, val onEvolveDraw: Int = 0,
+    val discardHandCount: Int = 0, val drawTo: Int = 0, val damageReduction: Int = 0,
+    val retaliateDamageCounters: Int = 0, val requiresTeamRocketPokemonCount: Int = 0,
+    val ignoreOpponentActiveEffects: Boolean = false, val damageCounters: Int = 0,
+    val damageTargets: Int = 0, val selfKnockout: Boolean = false,
+    val attachHandEnergyType: EnergyType? = null, val drawIfAttached: Int = 0,
+    val usagePerPokemon: Boolean = false, val surviveAttackKnockoutAtHp: Int = 0,
+    val shuffleSelfIntoDeck: Boolean = false, val healDamage: Int = 0,
+    val recoverBasicPokemonToBenchMaxHp: Int = 0, val damageBonusIfHandsEqual: Int = 0,
+    val surviveAttackKnockoutOnHeadsAtHp: Int = 0,
+    val onEvolveShuffleRandomOpponentHandPerHeads: Int = 0,
+    val damageBonusAgainstActiveWhenDamageAtLeast: Int = 0, val damageBonusAmount: Int = 0,
+    val freeRetreatWithAttachedEnergyType: EnergyType? = null
 )
 @Serializable data class CardDefinition(
     val id: String, val name: String, val set: String, val number: String, val variant: String = "normal",
@@ -58,7 +126,8 @@ import kotlinx.serialization.Serializable
     val artAsset: String? = null, val text: String = "", val trainerType: TrainerType? = null,
     val trainerEffect: TrainerEffect? = null, val abilities: List<AbilityDefinition> = emptyList(),
     val aceSpec: Boolean = false, val ruleBox: String = "", val implemented: Boolean = true,
-    val canonicalName: String = name, val evolvesFromName: String? = null
+    val canonicalName: String = name, val evolvesFromName: String? = null,
+    val basicEnergy: Boolean = false
 )
 fun CardDefinition.canEvolveFrom(base: CardDefinition): Boolean = category == Category.POKEMON &&
     base.category == Category.POKEMON && stage != Stage.BASIC && stage.ordinal == base.stage.ordinal + 1 &&
@@ -68,7 +137,10 @@ fun CardDefinition.canEvolveFrom(base: CardDefinition): Boolean = category == Ca
     val cards: List<CardInstance>, val damage: Int = 0, val energies: List<CardInstance> = emptyList(),
     val enteredPlayTurn: Int, val lastEvolutionTurn: Int = -1,
     val hpModifier: Int = 0, val damageModifier: Int = 0,
-    val tool: CardInstance? = null, val restrictions: List<AttackRestriction> = emptyList()
+    val tool: CardInstance? = null, val restrictions: List<AttackRestriction> = emptyList(), val retreatBlockedTurn: Int = -1,
+    val conditions: Set<SpecialCondition> = emptySet(), val incomingDamageReduction: Int = 0, val damageReductionTurn: Int = -1,
+    val attackImmunityTurn: Int = -1, val outgoingDamageReduction: Int = 0, val outgoingDamageReductionTurn: Int = -1,
+    val preventBasicNonColorlessDamageTurn: Int = -1, val preventBasicPokemonDamageTurn: Int = -1
 ) { val id: String get() = cards.first().id; val top: CardInstance get() = cards.last() }
 @Serializable data class AttackRestriction(val attackId: String?, val blockedTurn: Int)
 @Serializable data class TurnFlags(val manualEnergy: Boolean = false, val supporter: Boolean = false, val retreat: Boolean = false,
@@ -78,7 +150,8 @@ fun CardDefinition.canEvolveFrom(base: CardDefinition): Boolean = category == Ca
     val discard: List<CardInstance> = emptyList(), val prizes: List<CardInstance> = emptyList(),
     val active: PokemonInstance? = null, val bench: List<PokemonInstance> = emptyList(),
     val flags: TurnFlags = TurnFlags(), val mulligans: Int = 0, val bonusDraws: Int = 0,
-    val lastKnockedOutTurn: Int = -1, val prizePositions: List<String> = emptyList()
+    val lastKnockedOutTurn: Int = -1, val prizePositions: List<String> = emptyList(),
+    val lastKnockedOutByAttackDamageTurn: Int = -1
 ) { fun pokemon(): List<PokemonInstance> = listOfNotNull(active) + bench }
 @Serializable data class RngState(val value: Long, val position: Long = 0)
 @Serializable data class GameEvent(val type: String, val message: String, val amount: Int? = null)
@@ -97,11 +170,12 @@ fun CardDefinition.canEvolveFrom(base: CardDefinition): Boolean = category == Ca
     val promotionQueue: List<Int> = emptyList(), val afterResolution: ResolutionEnd = ResolutionEnd.MAIN,
     val humanDeckId: String = "lucario", val cpuDeckId: String = "lucario",
     val deckLists: List<List<String>> = emptyList(), val deckNames: List<String> = emptyList(),
-    val deckFormats: List<DeckFormat> = emptyList()
+    val deckFormats: List<DeckFormat> = emptyList(),
+    val pendingAttackDamageKnockoutIds: Set<String> = emptySet()
 )
 @Serializable enum class ResolutionEnd { MAIN, ATTACK }
-@Serializable enum class ChoiceKind { DISCARD, SEARCH, RECOVER, SWITCH_OWN, SWITCH_OPPONENT, ENERGY_FROM_DISCARD, ENERGY_TARGET, TOOL_TARGET, EVOLUTION_SWITCH, ABILITY_ENERGY, DISCARD_ATTACK_ENERGY, ATTACH_DECK_ENERGY, HEAL_TARGET, RECYCLE_ENERGY, SONIA }
-@Serializable data class ChoiceRequest(val kind: ChoiceKind, val title: String, val candidates: List<String>, val min: Int, val max: Int, val remaining: Int = 0, val selectedEnergy: String? = null, val energyType: EnergyType? = null, val amount: Int = 0, val visibleCards: List<String> = emptyList())
+@Serializable enum class ChoiceKind { DISCARD, SEARCH, RECOVER, SWITCH_OWN, SWITCH_OPPONENT, ENERGY_FROM_DISCARD, ENERGY_TARGET, TOOL_TARGET, EVOLUTION_SWITCH, ABILITY_ENERGY, ABILITY_DAMAGE_TARGET, ABILITY_ATTACH_ENERGY, ABILITY_BASIC_POKEMON_TO_BENCH, DISCARD_ATTACK_ENERGY, ATTACH_DECK_ENERGY, HEAL_TARGET, RECYCLE_ENERGY, SONIA, ATTACK_BENCH_POKEMON, ATTACK_ROTOM_SEARCH, ATTACK_DAMAGE_TARGET, ATTACK_ENERGY, ATTACK_ENERGY_TARGET, ATTACK_BENCH_ENERGY_DISCARD, ATTACK_MOVE_DAMAGE_SOURCE, ATTACK_MOVE_DAMAGE_DESTINATION, ATTACK_MATCHING_ENERGY_SEARCH, ATTACK_HAND_ENERGY, ATTACK_HAND_ENERGY_TARGET, ATTACK_KNOCKOUT_BASIC_BENCH, ATTACK_DECK_BASIC_ENERGY_ANY, ATTACK_DECK_BASIC_ENERGY_TARGET, ATTACK_POKEMON_SEARCH, ATTACK_HEAL_TARGET, ATTACK_DAMAGE_COUNTER_TARGET, ATTACK_MULTI_DAMAGE_TARGETS, ATTACK_MULTI_DAMAGE_SINGLE_TARGET }
+@Serializable data class ChoiceRequest(val kind: ChoiceKind, val title: String, val candidates: List<String>, val min: Int, val max: Int, val remaining: Int = 0, val selectedEnergy: String? = null, val energyType: EnergyType? = null, val amount: Int = 0, val visibleCards: List<String> = emptyList(), val damageMultiplier: Int = 1, val selectedTargets: List<String> = emptyList(), val sourcePokemonId: String? = null)
 @Serializable data class Resolution(val choices: List<ChoiceRequest>, val drawTo: Int = 0, val drawCount: Int = 0, val shuffleAfter: Boolean = false, val toolCard: CardInstance? = null)
 @Serializable sealed interface GameAction {
     @Serializable data class ChooseStartingPlayer(val player: Int) : GameAction

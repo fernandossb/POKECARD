@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.99.0 — TCG Trainer integrado
+
+- O aplicativo agora inclui o modo TCG Trainer para montar decks e jogar partidas contra a CPU.
+- Nesta versão, 1.139 das 3.061 impressões atualmente classificadas na rotação Padrão têm regras executáveis no motor de jogo. A cobertura continua em desenvolvimento; a lista de regras pendentes está documentada em `docs/executable-rules.md`.
+- O APK Android assinado desta versão é publicado nesta Release quando o build do GitHub Actions termina com sucesso.
+
 # POKECARD Brasil 5.94.3 — Exportação de repetidas com cópia de segurança preservada
 
 - **A exportação em PDF e Excel de cartas repetidas (Duplicadas) agora desconta a cópia de segurança da coleção.** Cada versão física mantém uma cópia de segurança na coleção e exporta apenas as unidades excedentes (para troca ou venda), com as quantidades e valores corrigidos no cabeçalho, nas linhas da tabela e no total.

@@ -15,8 +15,8 @@ object TestCatalog : CardCatalog {
         CardDefinition("TEST-003", "Explorador de Folha", "TEST", "003", category = Category.POKEMON,
             hp = 70, type = EnergyType.GRASS, retreatCost = 1, weakness = EnergyType.FIRE,
             attacks = listOf(AttackDefinition("leaf", "Folha de teste", listOf(EnergyType.COLORLESS), listOf(Effect.Damage(20))))),
-        CardDefinition("TEST-004", "Energia de Luta de teste", "TEST", "004", category = Category.ENERGY),
-        CardDefinition("TEST-005", "Energia de Planta de teste", "TEST", "005", category = Category.ENERGY, type = EnergyType.GRASS)
+        CardDefinition("TEST-004", "Energia de Luta de teste", "TEST", "004", category = Category.ENERGY, basicEnergy = true),
+        CardDefinition("TEST-005", "Energia de Planta de teste", "TEST", "005", category = Category.ENERGY, type = EnergyType.GRASS, basicEnergy = true)
     ).associateBy { it.id }
     override fun get(id: String): CardDefinition = definitions.getValue(id)
     // Construction deck, not a tournament-legal deck: more than four copies of fictional Pokémon.
