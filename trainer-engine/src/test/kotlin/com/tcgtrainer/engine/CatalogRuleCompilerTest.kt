@@ -33,6 +33,18 @@ class CatalogRuleCompilerTest {
         assertEquals(2, archaludon.abilities.single().onEvolveAttachMetalFromDiscardMax)
         assertEquals(listOf(Effect.Damage(220), Effect.NoWeaknessNextTurn), archaludon.attacks.single().effects)
     }
+    @Test fun `Archeops Ancient Wing compiles as a once-per-turn Active devolution ability`() {
+        val archeops = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv10.5w-051"), emptyMap())!!
+        val ability = archeops.abilities.single()
+        assertEquals("Ancient Wing", ability.name)
+        assertTrue(ability.requiresActive)
+        assertEquals(1, ability.devolveOpponentPokemonMax)
+    }
+    @Test fun `Ariados Big Net and String Bind compile passive retreat tax and cost-based damage`() {
+        val ariados = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv06-005"), emptyMap())!!
+        assertEquals(1, ariados.abilities.single().opponentActiveEvolutionRetreatCostBonus)
+        assertEquals(listOf(Effect.Damage(10), Effect.OpponentActiveRetreatCostDamage(30)), ariados.attacks.single().effects)
+    }
     @Test fun `healing executes and never creates negative damage`() {
         val move = CatalogRuleCompiler.compileAttack("test", 0, attack("Heal 30 damage from this Pokémon."))!!
         val def = CardDefinition("test", "Test", "T", "1", category = Category.POKEMON, hp = 200, attacks = listOf(move))

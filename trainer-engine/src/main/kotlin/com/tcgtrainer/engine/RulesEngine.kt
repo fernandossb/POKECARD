@@ -100,7 +100,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     active.retreatBlockedTurn == state.turn -> reason("Este Pokémon não pode recuar durante este turno.")
                     SpecialCondition.PARALYZED in active.conditions || SpecialCondition.ASLEEP in active.conditions -> reason("Este Pokémon não pode recuar enquanto está Paralisado ou Adormecido.")
                     p.bench.none { it.id == action.pokemonId } -> reason("Escolha um Pokémon do Banco.")
-                    action.energyIds.size != retreatCost(active, p.pokemon()) -> reason("Selecione exatamente o custo de recuo em Energias.")
+                    action.energyIds.size != retreatCost(active, p.pokemon(), state.players[1-state.currentPlayer].pokemon()) -> reason("Selecione exatamente o custo de recuo em Energias.")
                     action.energyIds.distinct().size != action.energyIds.size || !active.energies.map { it.id }.containsAll(action.energyIds) -> reason("Energias de recuo inválidas.")
                     else -> Legality.Legal
                 }
@@ -120,15 +120,18 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         return if (missing > 0) reason("Falta $missing Energia para o custo incolor.") else Legality.Legal
     }
 
-    fun retreatCost(pokemon: PokemonInstance, friendlyPokemon: List<PokemonInstance> = listOf(pokemon)): Int {
+    fun retreatCost(pokemon: PokemonInstance, friendlyPokemon: List<PokemonInstance> = listOf(pokemon), opponentPokemon: List<PokemonInstance> = emptyList()): Int {
         val free = friendlyPokemon.any { source ->
             definition(source.top).abilities.any { ability ->
                 val type = ability.freeRetreatWithAttachedEnergyType
                 type != null && pokemon.energies.any { definition(it).type == type }
             }
         }
-        if (free) return 0
-        return (definition(pokemon.top).retreatCost - ((pokemon.tool?.let(::definition)?.trainerEffect as? TrainerEffect.RetreatReduction)?.amount ?: 0)).coerceAtLeast(0)
+        val base = if (free) 0 else definition(pokemon.top).retreatCost
+        val increase = if (definition(pokemon.top).stage != Stage.BASIC) opponentPokemon.sumOf { source ->
+            definition(source.top).abilities.sumOf { it.opponentActiveEvolutionRetreatCostBonus }
+        } else 0
+        return (base + increase - ((pokemon.tool?.let(::definition)?.trainerEffect as? TrainerEffect.RetreatReduction)?.amount ?: 0)).coerceAtLeast(0)
     }
     fun attackCost(state: GameState, pokemon: PokemonInstance, attack: AttackDefinition): List<EnergyType> {
         val discount = if (definition(pokemon.top).abilities.any { it.attackDiscountPerOpponentPrize }) 6-state.players[1-state.currentPlayer].prizes.size else 0
@@ -182,7 +185,9 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             ownDamagedPokemonCount = state.players[state.currentPlayer].pokemon().count { it.damage > 0 },
             ownEnergyCounts = state.players[state.currentPlayer].pokemon().flatMap { it.energies }
                 .mapNotNull { energy -> definition(energy).type?.let { it to energy } }.groupBy({ it.first }, { it.second }).mapValues { it.value.size },
-            ownKnockedOutByAttackLastTurn = state.players[state.currentPlayer].lastKnockedOutByAttackDamageTurn == state.turn-1)
+            ownKnockedOutByAttackLastTurn = state.players[state.currentPlayer].lastKnockedOutByAttackDamageTurn == state.turn-1,
+            opponentActiveRetreatCost = if (defender.id == opponent.active?.id)
+                retreatCost(defender, opponent.pokemon(), state.players[state.currentPlayer].pokemon()) else 0)
         val hp = effects.effectiveHp(defender, state)
         val survivalHp = if (defender.damage == 0) definition(defender.top).abilities.maxOfOrNull { it.surviveAttackKnockoutAtHp } ?: 0 else 0
         val remaining = if (survivalHp > 0 && damage >= hp) survivalHp else (hp - defender.damage - damage).coerceAtLeast(0)
@@ -854,7 +859,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 if (attack.effects.any { it is Effect.TargetedDamage }) state.players[1-state.currentPlayer].pokemon().forEach { candidates += GameAction.Attack(attack.id, it.id) }
                 else candidates += GameAction.Attack(attack.id)
             }
-            val cost = retreatCost(active, p.pokemon())
+            val cost = retreatCost(active, p.pokemon(), state.players[1-state.currentPlayer].pokemon())
             fun combinations(ids: List<String>, n: Int): List<List<String>> = when {
                 n == 0 -> listOf(emptyList())
                 ids.size < n -> emptyList()

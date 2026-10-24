@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.99.2 — Archeops e Ariados no TCG Trainer
+
+- Archeops pode usar Ancient Wing uma vez por turno no Ativo para devolver à mão a evolução de Estágio mais alto de um Pokémon adversário; desvoluir remove Condições Especiais e efeitos, e pode causar Nocaute e Prêmios.
+- Big Net de Ariados aumenta o custo de recuo do Pokémon Evoluído Ativo adversário, e String Bind calcula o bônus usando esse custo alterado.
+- O motor de regras cobre 1.145 das 3.061 impressões da rotação Padrão.
+
 # POKECARD Brasil 5.99.1 — Mais cartas disponíveis no TCG Trainer
 
 - Archaludon ex agora executa Assemble Alloy ao evoluir, permitindo escolher até 2 Energias Metal Básicas do descarte e distribuir entre seus Pokémon Metal.

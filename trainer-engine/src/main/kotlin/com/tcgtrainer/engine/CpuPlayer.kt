@@ -52,6 +52,12 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
             if (a.effects.filterIsInstance<Effect.RequiresBenched>().any { req -> own.none { it.id != p.id && it.top.definitionId == req.definitionId } }) return 0
             val extra = a.effects.filterIsInstance<Effect.CoinDamage>().sumOf { it.coins*it.perHeads/2 } +
                 if (input.flags.supporter) a.effects.filterIsInstance<Effect.SupporterBonus>().sumOf { it.damage } else 0
+            val targetIsActive = target.id == o.opponentActiveId
+            val retreatTax = if (targetIsActive && d(target.top).stage != Stage.BASIC) own.sumOf { pokemon ->
+                d(pokemon.top).abilities.sumOf { it.opponentActiveEvolutionRetreatCostBonus }
+            } else 0
+            val targetToolReduction = (target.tool?.let(::d)?.trainerEffect as? TrainerEffect.RetreatReduction)?.amount ?: 0
+            val targetRetreatCost = (d(target.top).retreatCost + retreatTax - targetToolReduction).coerceAtLeast(0)
             val base = effects.damage(p, target, a.effects + Effect.Damage(extra), input.flags.damageBoosts[d(p.top).type] ?: 0,
                 Effect.IgnoreWeaknessResistance in a.effects || (a.effects.any { it is Effect.TargetedDamage } && target.id != enemy?.id),
                 ownBenchCount = own.count { it.id != o.ownActiveId },
@@ -65,7 +71,8 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                     .groupBy({ it.first }, { it.second }).mapValues { it.value.size },
                 ignoreOpponentActiveEffects = Effect.IgnoreOpponentActiveEffects in a.effects,
                 ignoreResistance = Effect.IgnoreResistance in a.effects, turn = input.turn,
-                ownKnockedOutByAttackLastTurn = o.ownLastKnockedOutByAttackDamageTurn == input.turn-1)
+                ownKnockedOutByAttackLastTurn = o.ownLastKnockedOutByAttackDamageTurn == input.turn-1,
+                opponentActiveRetreatCost = if (targetIsActive) targetRetreatCost else 0)
             val discardEffect = a.effects.filterIsInstance<Effect.DiscardBenchEnergyDamage>().firstOrNull()
             val discarded = minOf(discardEffect?.max ?: 0, own.filter { it.id != o.ownActiveId }.sumOf { it.energies.size })
             val multiplier = if (target.id == enemy?.id && !(target.weaknessSuppressedTurn >= 0 && target.weaknessSuppressedTurn == input.turn) && Effect.IgnoreWeaknessResistance !in a.effects && d(target.top).weakness == d(p.top).type) 2 else 1
@@ -157,6 +164,10 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 } ?: 0.0
                 ChoiceKind.ABILITY_DAMAGE_TARGET -> o.opponentField.find { it.id == id }?.let { target ->
                     if (target.damage + choice.amount >= hp(target)) 1200.0 else target.damage.toDouble() / hp(target).coerceAtLeast(1)
+                } ?: 0.0
+                ChoiceKind.ABILITY_DEVOLVE_TARGET -> o.opponentField.find { it.id == id }?.let { target ->
+                    val devolved = target.copy(cards = target.cards.dropLast(1))
+                    if (target.damage >= hp(devolved)) 1300.0 + d(target.top).prizes * 100.0 else 100.0 + (target.damage.toDouble() / hp(devolved).coerceAtLeast(1))
                 } ?: 0.0
                 ChoiceKind.ATTACK_ENERGY, ChoiceKind.ATTACK_HAND_ENERGY, ChoiceKind.ATTACK_DECK_BASIC_ENERGY_ANY -> -keepValue(checkNotNull(card(id)))
                 ChoiceKind.ATTACK_ENERGY_TARGET -> {

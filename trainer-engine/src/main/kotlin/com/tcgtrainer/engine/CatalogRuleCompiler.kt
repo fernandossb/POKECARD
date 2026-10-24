@@ -31,6 +31,10 @@ internal object CatalogRuleCompiler {
         val text = raw.s("effect")?.trim().orEmpty()
         if (text == "All of your Pokémon that have {M} Energy attached have no Retreat Cost.")
             return AbilityDefinition("$id-ability$index", name, text, freeRetreatWithAttachedEnergyType = EnergyType.METAL)
+        if (text == "Once during your turn, if this Pokémon is in the Active Spot, you may devolve 1 of your opponent's evolved Pokémon by putting the highest Stage Evolution card on it into your opponent's hand.")
+            return AbilityDefinition("$id-ability$index", name, text, requiresActive = true, usageKey = name, devolveOpponentPokemonMax = 1)
+        if (text == "Your opponent's Active Evolution Pokémon's Retreat Cost is {C} more.")
+            return AbilityDefinition("$id-ability$index", name, text, opponentActiveEvolutionRetreatCostBonus = 1)
         val evolveMetal = Regex("When you play this Pokémon from your hand to evolve 1 of your Pokémon during your turn, you may attach up to (\\d+) Basic \\{M} Energy cards from your discard pile to your \\{M} Pokémon in any way you like\\.").matchEntire(text)
         if (evolveMetal != null) return AbilityDefinition("$id-ability$index", name, text,
             onEvolveAttachMetalFromDiscardMax = evolveMetal.groupValues[1].toInt())
@@ -172,6 +176,7 @@ internal object CatalogRuleCompiler {
         val opponentTypeBonus = Regex("If your opponent's Active Pokémon is a \\{([GRFLWPMD])} Pokémon, this attack does (\\d+) more damage\\.").matchEntire(text)
         val ownEnergyBonus = Regex("This attack does (\\d+) more damage for each Energy attached to this Pokémon\\.").matchEntire(text)
         val opponentEnergyBonus = Regex("This attack does (\\d+) more damage for each Energy attached to your opponent's Active Pokémon\\.").matchEntire(text)
+        val opponentRetreatCostBonus = Regex("This attack does (\\d+) more damage for each \\{C} in your opponent's Active Pokémon's Retreat Cost\\.").matchEntire(text)
         val opponentConditionBonus = Regex("If your opponent's Active Pokémon is affected by a Special Condition, this attack does (\\d+) more damage\\.").matchEntire(text)
         val benchedDamage = Regex("This attack does (\\d+) more damage for each Benched Pokémon \\(both yours and your opponent's\\)\\.").matchEntire(text)
         val ownInPlayDamage = Regex("This attack does (\\d+) damage for each of your Pokémon in play\\.").matchEntire(text)
@@ -254,7 +259,7 @@ internal object CatalogRuleCompiler {
             }
         } else {
             val damage = if (damageText.isEmpty()) 0 else
-                (if (coinBonus != null || coinBonusMultiple != null || coinBonusUntilTails != null || conditionalEnergy != null || conditionalInPlayEnergy != null || ownKnockoutBonus != null || opponentExBonus != null || opponentTypeBonus != null || ownEnergyBonus != null || opponentEnergyBonus != null || opponentConditionBonus != null || bothActiveEnergyDamage != null || benchedDamage != null || benchEnergyBonus != null) damageText.removeSuffix("+") else damageText).toIntOrNull() ?: return null
+                (if (coinBonus != null || coinBonusMultiple != null || coinBonusUntilTails != null || conditionalEnergy != null || conditionalInPlayEnergy != null || ownKnockoutBonus != null || opponentExBonus != null || opponentTypeBonus != null || ownEnergyBonus != null || opponentEnergyBonus != null || opponentRetreatCostBonus != null || opponentConditionBonus != null || bothActiveEnergyDamage != null || benchedDamage != null || benchEnergyBonus != null) damageText.removeSuffix("+") else damageText).toIntOrNull() ?: return null
             if (damage < 0) return null
             if (damage > 0) effects += Effect.Damage(damage)
             val draw = Regex("Draw (a|1|2|3) cards?\\.").matchEntire(text)
@@ -312,6 +317,10 @@ internal object CatalogRuleCompiler {
                 opponentEnergyBonus != null -> {
                     if (damage <= 0 || !damageText.endsWith("+")) return null
                     effects += Effect.OpponentEnergyCountDamage(opponentEnergyBonus.groupValues[1].toInt())
+                }
+                opponentRetreatCostBonus != null -> {
+                    if (damage <= 0 || !damageText.endsWith("+")) return null
+                    effects += Effect.OpponentActiveRetreatCostDamage(opponentRetreatCostBonus.groupValues[1].toInt())
                 }
                 bothActiveEnergyDamage != null -> {
                     if (damage <= 0 || !damageText.endsWith("+")) return null

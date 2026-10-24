@@ -374,6 +374,67 @@ class RulesEngineTest {
         assertEquals(100, damage)
     }
 
+    @Test fun `Archeops Ancient Wing devolves opponent evolution and clears effects`() {
+        val archeops = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv10.5w-051"), emptyMap())!!
+        val base = CardDefinition("devolve-base", "Base Pokémon", "Test", "B", category = Category.POKEMON,
+            stage = Stage.BASIC, hp = 100)
+        val evolved = CardDefinition("devolve-evolution", "Evolution", "Test", "E", category = Category.POKEMON,
+            stage = Stage.STAGE_ONE, hp = 180, evolvesFromName = base.canonicalName)
+        val rules = RulesEngine(object : CardCatalog { override fun get(id: String) = when (id) {
+            archeops.id -> archeops; base.id -> base; evolved.id -> evolved; else -> TrainerCatalog.get(id)
+        } })
+        val target = PokemonInstance(listOf(card("target-base", base.id), card("target-evolution", evolved.id)), damage = 30,
+            enteredPlayTurn = 0, conditions = setOf(SpecialCondition.POISONED), weaknessSuppressedTurn = 3,
+            incomingDamageReduction = 20, damageReductionTurn = 3)
+        val state = GameState("ancient-wing", 93, RngState(93), listOf(
+            PlayerState(deck = List(10) { card("a-deck-$it") }, prizes = List(6) { card("a-prize-$it") },
+                active = PokemonInstance(listOf(card("archeops", archeops.id)), enteredPlayTurn = 0)),
+            PlayerState(deck = List(10) { card("b-deck-$it") }, prizes = List(6) { card("b-prize-$it") },
+                active = target, bench = listOf(field("op-bench")))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val used = rules.apply(state, GameAction.UseAbility("archeops", archeops.abilities.single().id))
+        assertEquals(Legality.Legal, used.legality)
+        assertEquals(ChoiceKind.ABILITY_DEVOLVE_TARGET, used.state.resolution!!.choices.single().kind)
+        val devolved = rules.apply(used.state, GameAction.ChooseCards(listOf("target-base")))
+        assertEquals(Legality.Legal, devolved.legality)
+        assertEquals(listOf("devolve-base"), devolved.state.players[1].active!!.cards.map { it.definitionId })
+        assertEquals(30, devolved.state.players[1].active!!.damage)
+        assertTrue(devolved.state.players[1].active!!.conditions.isEmpty())
+        assertEquals(-1, devolved.state.players[1].active!!.weaknessSuppressedTurn)
+        assertEquals(1, devolved.state.players[1].hand.count { it.id == "target-evolution" })
+        assertEquals(Phase.MAIN, devolved.state.phase)
+
+        val lethalState = state.copy(gameId = "ancient-wing-knockout", players = state.players.mapIndexed { index, player ->
+            if (index == 1) player.copy(active = target.copy(damage = 100)) else player
+        })
+        val lethalAbility = rules.apply(lethalState, GameAction.UseAbility("archeops", archeops.abilities.single().id))
+        val knockout = rules.apply(lethalAbility.state, GameAction.ChooseCards(listOf("target-base")))
+        assertEquals(Legality.Legal, knockout.legality)
+        assertNull(knockout.state.players[1].active)
+        assertEquals(Phase.SELECT_PRIZES, knockout.state.phase)
+        assertEquals(1, knockout.state.prizesOwed[0])
+    }
+
+    @Test fun `Ariados Big Net taxes opponent evolution retreat and boosts String Bind`() {
+        val ariados = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv06-005"), emptyMap())!!
+        val attack = ariados.attacks.single().copy(cost = emptyList())
+        val ariadosDef = ariados.copy(attacks = listOf(attack))
+        val evolved = CardDefinition("taxed-evolution", "Taxed Evolution", "Test", "E", category = Category.POKEMON,
+            stage = Stage.STAGE_ONE, hp = 200, retreatCost = 2)
+        val rules = RulesEngine(object : CardCatalog { override fun get(id: String) = when (id) {
+            ariadosDef.id -> ariadosDef; evolved.id -> evolved; else -> TrainerCatalog.get(id)
+        } })
+        val ariadosPokemon = PokemonInstance(listOf(card("ariados", ariadosDef.id)), enteredPlayTurn = 0)
+        val target = PokemonInstance(listOf(card("evolved", evolved.id)), enteredPlayTurn = 0)
+        assertEquals(3, rules.retreatCost(target, listOf(target), listOf(ariadosPokemon)))
+        val state = GameState("big-net", 94, RngState(94), listOf(
+            PlayerState(deck = List(10) { card("a-deck-$it") }, prizes = List(6) { card("a-prize-$it") }, active = ariadosPokemon),
+            PlayerState(deck = List(10) { card("b-deck-$it") }, prizes = List(6) { card("b-prize-$it") }, active = target)
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val preview = rules.preview(state, attack.id)!!
+        assertEquals(100, preview.damage)
+    }
+
     @Test fun `Ampharos Synchro Pulse bonus uses actual hand sizes in attack preview`() {
         val ampharos = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me04-029"), emptyMap())!!
         val attack = ampharos.attacks.first().copy(cost = emptyList())

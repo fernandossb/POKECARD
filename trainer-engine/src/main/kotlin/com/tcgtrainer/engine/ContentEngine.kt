@@ -78,8 +78,10 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     ability.onEvolveDraw > 0 -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
                     ability.onEvolveShuffleRandomOpponentHandPerHeads > 0 -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
                     ability.onEvolveAttachMetalFromDiscardMax > 0 -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
+                    ability.devolveOpponentPokemonMax > 0 && s.players[1-s.currentPlayer].pokemon().none { it.cards.size > 1 } -> illegal("Não há Pokémon adversário evoluído para desvoluir.")
                     ability.attackDiscountPerOpponentPrize -> illegal("Esta habilidade é aplicada automaticamente ao custo do ataque.")
-                    ability.draw <= 0 && ability.drawTo <= 0 && ability.damageCounters <= 0 && ability.attachHandEnergyType == null && !ability.shuffleSelfIntoDeck && ability.healDamage <= 0 && ability.recoverBasicPokemonToBenchMaxHp <= 0 && ability.onEvolveShuffleRandomOpponentHandPerHeads <= 0 -> illegal("Habilidade não suportada.")
+                    ability.opponentActiveEvolutionRetreatCostBonus > 0 -> illegal("Esta habilidade passiva é aplicada automaticamente ao recuo.")
+                    ability.draw <= 0 && ability.drawTo <= 0 && ability.damageCounters <= 0 && ability.attachHandEnergyType == null && !ability.shuffleSelfIntoDeck && ability.healDamage <= 0 && ability.recoverBasicPokemonToBenchMaxHp <= 0 && ability.devolveOpponentPokemonMax <= 0 && ability.onEvolveShuffleRandomOpponentHandPerHeads <= 0 -> illegal("Habilidade não suportada.")
                     ability.damageCounters > 0 && s.players[1-s.currentPlayer].pokemon().size < ability.damageTargets -> illegal("Não há Pokémon adversários suficientes para esta habilidade.")
                     abilityUsageKey(pokemon, ability) in p.flags.abilitiesUsed -> illegal("Esta habilidade já foi usada neste turno.")
                     ability.requiresActive && p.active?.id != pokemon.id -> illegal("Esta habilidade só pode ser usada com este Pokémon no Ativo.")
@@ -199,6 +201,9 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     "Escolha ${ability.damageTargets} Pokémon adversário para receber ${ability.damageCounters} contadores de dano.",
                     s.players[1-actor].pokemon().map { it.id }, ability.damageTargets, ability.damageTargets,
                     amount = ability.damageCounters*10, sourcePokemonId = pokemon.id))))
+                else if (ability.devolveOpponentPokemonMax > 0) begin(Resolution(listOf(ChoiceRequest(ChoiceKind.ABILITY_DEVOLVE_TARGET,
+                    "Escolha 1 Pokémon evoluído do adversário para devolver sua evolução de Estágio mais alto à mão.",
+                    s.players[1-actor].pokemon().filter { it.cards.size > 1 }.map { it.id }, 1, 1))))
                 else if (ability.attachHandEnergyType != null) {
                     val candidates = p.hand.filter { def(it).category == Category.ENERGY && def(it).basicEnergy && def(it).type == ability.attachHandEnergyType }.map { it.id }
                     begin(Resolution(listOf(ChoiceRequest(ChoiceKind.ABILITY_ATTACH_ENERGY,
@@ -256,6 +261,24 @@ internal class ContentEngine(private val rules: RulesEngine) {
                             player.copy(active = player.active?.let { if (it.id == choice.sourcePokemonId) knockOut(it) else it },
                                 bench = player.bench.map { if (it.id == choice.sourcePokemonId) knockOut(it) else it })
                         }
+                    }
+                    ChoiceKind.ABILITY_DEVOLVE_TARGET -> {
+                        val opponent = 1-actor
+                        val targetId = ids.single()
+                        val target = s.players[opponent].pokemon().first { it.id == targetId && it.cards.size > 1 }
+                        val returnedEvolution = target.cards.last()
+                        update(opponent) { player -> player.copy(hand = player.hand + returnedEvolution,
+                            active = player.active?.let { pokemon -> if (pokemon.id == targetId) pokemon.copy(
+                                cards = pokemon.cards.dropLast(1), conditions = emptySet(), restrictions = emptyList(), retreatBlockedTurn = -1,
+                                damageModifier = 0, incomingDamageReduction = 0, damageReductionTurn = -1, attackImmunityTurn = -1,
+                                outgoingDamageReduction = 0, outgoingDamageReductionTurn = -1, preventBasicNonColorlessDamageTurn = -1,
+                                preventBasicPokemonDamageTurn = -1, weaknessSuppressedTurn = -1) else pokemon },
+                            bench = player.bench.map { pokemon -> if (pokemon.id == targetId) pokemon.copy(
+                                cards = pokemon.cards.dropLast(1), conditions = emptySet(), restrictions = emptyList(), retreatBlockedTurn = -1,
+                                damageModifier = 0, incomingDamageReduction = 0, damageReductionTurn = -1, attackImmunityTurn = -1,
+                                outgoingDamageReduction = 0, outgoingDamageReductionTurn = -1, preventBasicNonColorlessDamageTurn = -1,
+                                preventBasicPokemonDamageTurn = -1, weaknessSuppressedTurn = -1) else pokemon }) }
+                        events += GameEvent("PokemonDevolved", "${def(returnedEvolution).name} voltou à mão do adversário; Condições Especiais e efeitos foram removidos.")
                     }
                     ChoiceKind.ABILITY_ATTACH_ENERGY -> if (ids.isNotEmpty()) {
                         val energy = p.hand.first { it.id == ids.single() && def(it).category == Category.ENERGY && def(it).basicEnergy }
