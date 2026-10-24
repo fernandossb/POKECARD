@@ -121,7 +121,8 @@ import kotlinx.serialization.Serializable
     val onEvolveAttachMetalFromDiscardMax: Int = 0,
     val devolveOpponentPokemonMax: Int = 0,
     val opponentActiveEvolutionRetreatCostBonus: Int = 0,
-    val searchBasicEnergyTypeToHand: EnergyType? = null, val searchBasicEnergyMaxToHand: Int = 0
+    val searchBasicEnergyTypeToHand: EnergyType? = null, val searchBasicEnergyMaxToHand: Int = 0,
+    val onEvolveRecoverNamedTrainerFromDiscard: String? = null, val onEvolveRecoverNamedTrainerMax: Int = 0
 )
 @Serializable data class CardDefinition(
     val id: String, val name: String, val set: String, val number: String, val variant: String = "normal",
@@ -182,7 +183,7 @@ fun CardDefinition.canEvolveFrom(base: CardDefinition): Boolean = category == Ca
     val pendingAttackDamageKnockoutIds: Set<String> = emptySet()
 )
 @Serializable enum class ResolutionEnd { MAIN, ATTACK }
-@Serializable enum class ChoiceKind { DISCARD, SEARCH, RECOVER, SWITCH_OWN, SWITCH_OPPONENT, ENERGY_FROM_DISCARD, ENERGY_TARGET, TOOL_TARGET, EVOLUTION_SWITCH, EVOLUTION_METAL_ENERGY, EVOLUTION_METAL_ENERGY_TARGET, ABILITY_ENERGY, ABILITY_DAMAGE_TARGET, ABILITY_ATTACH_ENERGY, ABILITY_BASIC_POKEMON_TO_BENCH, ABILITY_DEVOLVE_TARGET, ABILITY_SEARCH_BASIC_ENERGY_TO_HAND, DISCARD_ATTACK_ENERGY, ATTACH_DECK_ENERGY, HEAL_TARGET, RECYCLE_ENERGY, SONIA, ATTACK_BENCH_POKEMON, ATTACK_ROTOM_SEARCH, ATTACK_DAMAGE_TARGET, ATTACK_ENERGY, ATTACK_ENERGY_TARGET, ATTACK_BENCH_ENERGY_DISCARD, ATTACK_MOVE_DAMAGE_SOURCE, ATTACK_MOVE_DAMAGE_DESTINATION, ATTACK_MATCHING_ENERGY_SEARCH, ATTACK_HAND_ENERGY, ATTACK_HAND_ENERGY_TARGET, ATTACK_KNOCKOUT_BASIC_BENCH, ATTACK_DECK_BASIC_ENERGY_ANY, ATTACK_DECK_BASIC_ENERGY_TARGET, ATTACK_POKEMON_SEARCH, ATTACK_HEAL_TARGET, ATTACK_DAMAGE_COUNTER_TARGET, ATTACK_MULTI_DAMAGE_TARGETS, ATTACK_MULTI_DAMAGE_SINGLE_TARGET }
+@Serializable enum class ChoiceKind { DISCARD, SEARCH, RECOVER, SWITCH_OWN, SWITCH_OPPONENT, ENERGY_FROM_DISCARD, ENERGY_TARGET, TOOL_TARGET, EVOLUTION_SWITCH, EVOLUTION_METAL_ENERGY, EVOLUTION_METAL_ENERGY_TARGET, EVOLUTION_RECOVER_NAMED_TRAINER, ABILITY_ENERGY, ABILITY_DAMAGE_TARGET, ABILITY_ATTACH_ENERGY, ABILITY_BASIC_POKEMON_TO_BENCH, ABILITY_DEVOLVE_TARGET, ABILITY_SEARCH_BASIC_ENERGY_TO_HAND, DISCARD_ATTACK_ENERGY, ATTACH_DECK_ENERGY, HEAL_TARGET, RECYCLE_ENERGY, SONIA, ATTACK_BENCH_POKEMON, ATTACK_ROTOM_SEARCH, ATTACK_DAMAGE_TARGET, ATTACK_ENERGY, ATTACK_ENERGY_TARGET, ATTACK_BENCH_ENERGY_DISCARD, ATTACK_MOVE_DAMAGE_SOURCE, ATTACK_MOVE_DAMAGE_DESTINATION, ATTACK_MATCHING_ENERGY_SEARCH, ATTACK_HAND_ENERGY, ATTACK_HAND_ENERGY_TARGET, ATTACK_KNOCKOUT_BASIC_BENCH, ATTACK_DECK_BASIC_ENERGY_ANY, ATTACK_DECK_BASIC_ENERGY_TARGET, ATTACK_POKEMON_SEARCH, ATTACK_HEAL_TARGET, ATTACK_DAMAGE_COUNTER_TARGET, ATTACK_MULTI_DAMAGE_TARGETS, ATTACK_MULTI_DAMAGE_SINGLE_TARGET }
 @Serializable data class ChoiceRequest(val kind: ChoiceKind, val title: String, val candidates: List<String>, val min: Int, val max: Int, val remaining: Int = 0, val selectedEnergy: String? = null, val energyType: EnergyType? = null, val amount: Int = 0, val visibleCards: List<String> = emptyList(), val damageMultiplier: Int = 1, val selectedTargets: List<String> = emptyList(), val sourcePokemonId: String? = null)
 @Serializable data class Resolution(val choices: List<ChoiceRequest>, val drawTo: Int = 0, val drawCount: Int = 0, val shuffleAfter: Boolean = false, val toolCard: CardInstance? = null)
 @Serializable sealed interface GameAction {

@@ -42,6 +42,10 @@ internal object CatalogRuleCompiler {
         val evolveMetal = Regex("When you play this Pokémon from your hand to evolve 1 of your Pokémon during your turn, you may attach up to (\\d+) Basic \\{M} Energy cards from your discard pile to your \\{M} Pokémon in any way you like\\.").matchEntire(text)
         if (evolveMetal != null) return AbilityDefinition("$id-ability$index", name, text,
             onEvolveAttachMetalFromDiscardMax = evolveMetal.groupValues[1].toInt())
+        val evolveRecoverNamedTrainer = Regex("When you play this Pokémon from your hand to evolve 1 of your Pokémon during your turn, you may put up to (\\d+) (.+) cards from your discard pile into your hand\\.").matchEntire(text)
+        if (evolveRecoverNamedTrainer != null) return AbilityDefinition("$id-ability$index", name, text,
+            onEvolveRecoverNamedTrainerFromDiscard = evolveRecoverNamedTrainer.groupValues[2],
+            onEvolveRecoverNamedTrainerMax = evolveRecoverNamedTrainer.groupValues[1].toInt())
         val evolveRandomShuffle = Regex("When you play this Pokémon from your hand to evolve 1 of your Pokémon during your turn, you may flip (\\d+) coins?\\. For each heads, choose a random card from your opponent's hand\\. Your opponent reveals those cards and shuffles them into their deck\\.").matchEntire(text)
         if (evolveRandomShuffle != null) return AbilityDefinition("$id-ability$index", name, text,
             onEvolveShuffleRandomOpponentHandPerHeads = evolveRandomShuffle.groupValues[1].toInt())

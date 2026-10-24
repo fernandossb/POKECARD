@@ -78,6 +78,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     ability.onEvolveDraw > 0 -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
                     ability.onEvolveShuffleRandomOpponentHandPerHeads > 0 -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
                     ability.onEvolveAttachMetalFromDiscardMax > 0 -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
+                    ability.onEvolveRecoverNamedTrainerFromDiscard != null -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
                     ability.devolveOpponentPokemonMax > 0 && s.players[1-s.currentPlayer].pokemon().none { it.cards.size > 1 } -> illegal("Não há Pokémon adversário evoluído para desvoluir.")
                     ability.attackDiscountPerOpponentPrize -> illegal("Esta habilidade é aplicada automaticamente ao custo do ataque.")
                     ability.opponentActiveEvolutionRetreatCostBonus > 0 -> illegal("Esta habilidade passiva é aplicada automaticamente ao recuo.")
@@ -249,6 +250,11 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                 "Escolha um dos seus Pokémon Metal para receber a próxima Energia.", eligible, 1, 1,
                                 selectedEnergy = remainingEnergyIds.first(), selectedTargets = remainingEnergyIds.drop(1))) + remainingChoices
                         }
+                    }
+                    ChoiceKind.EVOLUTION_RECOVER_NAMED_TRAINER -> {
+                        val cards = p.discard.filter { it.id in ids && def(it).category == Category.TRAINER }
+                        update { it.copy(discard = it.discard - cards.toSet(), hand = it.hand + cards) }
+                        events += GameEvent("EvolutionCardsRecovered", "Recuperou ${cards.size} carta(s) de Treinador da evolução.", cards.size)
                     }
                     ChoiceKind.DISCARD, ChoiceKind.ABILITY_ENERGY -> {
                         val cards = p.hand.filter { it.id in ids }

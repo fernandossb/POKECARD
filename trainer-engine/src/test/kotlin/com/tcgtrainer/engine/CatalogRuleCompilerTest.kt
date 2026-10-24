@@ -66,6 +66,13 @@ class CatalogRuleCompilerTest {
         assertEquals(listOf(Effect.EnergyFromDeck(2, EnergyType.WATER)), articuno.attacks.first().effects)
         assertEquals(listOf(Effect.Damage(110)), articuno.attacks.last().effects)
     }
+    @Test fun `Arven Greedent Greedy Order compiles named Trainer recovery on evolution`() {
+        val greedent = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv10-159"), emptyMap())!!
+        val ability = greedent.abilities.single()
+        assertEquals("Greedy Order", ability.name)
+        assertEquals("Arven's Sandwich", ability.onEvolveRecoverNamedTrainerFromDiscard)
+        assertEquals(2, ability.onEvolveRecoverNamedTrainerMax)
+    }
     @Test fun `healing executes and never creates negative damage`() {
         val move = CatalogRuleCompiler.compileAttack("test", 0, attack("Heal 30 damage from this Pokémon."))!!
         val def = CardDefinition("test", "Test", "T", "1", category = Category.POKEMON, hp = 200, attacks = listOf(move))

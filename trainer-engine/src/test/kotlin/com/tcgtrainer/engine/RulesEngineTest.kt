@@ -541,6 +541,36 @@ class RulesEngineTest {
         assertTrue(attached.events.any { it.type == "DeckShuffled" })
     }
 
+    @Test fun `Arven Greedent recovers up to two Arven's Sandwich cards when evolved`() {
+        val greedent = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv10-159"), emptyMap())!!
+        val skwovet = CardDefinition("arven-skwovet", "Arven's Skwovet", "Test", "S", category = Category.POKEMON,
+            stage = Stage.BASIC, hp = 60)
+        val sandwich = CardDefinition("arven-sandwich", "Arven's Sandwich", "Test", "T", category = Category.TRAINER)
+        val otherTrainer = CardDefinition("other-trainer", "Other Trainer", "Test", "O", category = Category.TRAINER)
+        val rules = RulesEngine(object : CardCatalog { override fun get(id: String) = when (id) {
+            greedent.id -> greedent; skwovet.id -> skwovet; sandwich.id -> sandwich; otherTrainer.id -> otherTrainer
+            else -> TrainerCatalog.get(id)
+        } })
+        val evolutionCard = card("greedent-card", greedent.id)
+        val sandwiches = listOf(card("sandwich-1", sandwich.id), card("sandwich-2", sandwich.id))
+        val unrelated = card("unrelated", otherTrainer.id)
+        val state = GameState("greedy-order", 99, RngState(99), listOf(
+            PlayerState(deck = List(10) { card("a-deck-$it") }, hand = listOf(evolutionCard), discard = sandwiches + unrelated,
+                prizes = List(6) { card("a-prize-$it") }, active = PokemonInstance(listOf(card("skwovet", skwovet.id)), enteredPlayTurn = 0)),
+            PlayerState(deck = List(10) { card("op-deck-$it") }, prizes = List(6) { card("op-prize-$it") }, active = field("op"))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val evolved = rules.apply(state, GameAction.Evolve(evolutionCard.id, "skwovet"))
+        assertEquals(Legality.Legal, evolved.legality)
+        val choice = evolved.state.resolution!!.choices.single()
+        assertEquals(ChoiceKind.EVOLUTION_RECOVER_NAMED_TRAINER, choice.kind)
+        assertEquals(setOf("sandwich-1", "sandwich-2"), choice.candidates.toSet())
+        val recovered = rules.apply(evolved.state, GameAction.ChooseCards(choice.candidates))
+        assertEquals(Legality.Legal, recovered.legality)
+        assertEquals(setOf("sandwich-1", "sandwich-2"), recovered.state.players[0].hand.map { it.id }.toSet())
+        assertEquals(listOf("unrelated"), recovered.state.players[0].discard.map { it.id })
+        assertEquals(Phase.MAIN, recovered.state.phase)
+    }
+
     @Test fun `Ampharos Synchro Pulse bonus uses actual hand sizes in attack preview`() {
         val ampharos = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me04-029"), emptyMap())!!
         val attack = ampharos.attacks.first().copy(cost = emptyList())

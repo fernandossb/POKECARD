@@ -1,3 +1,8 @@
+# POKECARD Brasil 5.99.6 — Greedy Order de Arven's Greedent
+
+- Ao evoluir para Arven's Greedent, escolha até 2 Arven's Sandwich do descarte para a mão.
+- O motor de regras cobre 1.155 das 3.061 impressões da rotação Padrão.
+
 # POKECARD Brasil 5.99.5 — Articuno busca Energias Água
 
 - Frigid Fluttering busca até 2 Energias Água Básicas do deck e as liga ao Articuno; depois, embaralha.

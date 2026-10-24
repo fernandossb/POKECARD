@@ -308,7 +308,19 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN, resolution = Resolution(listOf(ChoiceRequest(
                         ChoiceKind.EVOLUTION_METAL_ENERGY, "${metalAttach.name}: você pode escolher até ${metalAttach.onEvolveAttachMetalFromDiscardMax} Energias Metal Básicas do descarte.",
                         metalEnergy.map { it.id }, 0, minOf(metalAttach.onEvolveAttachMetalFromDiscardMax, metalEnergy.size)))))
-                } else if (definition(card).abilities.any { it.onEvolveSwitch } && next.players[1-actor].bench.isNotEmpty()) {
+                } else {
+                    val namedRecovery = definition(card).abilities.firstOrNull { it.onEvolveRecoverNamedTrainerFromDiscard != null }
+                    val eligible = namedRecovery?.let { ability -> next.players[actor].discard.filter {
+                        definition(it).category == Category.TRAINER && definition(it).name == ability.onEvolveRecoverNamedTrainerFromDiscard
+                    } }.orEmpty()
+                    if (namedRecovery != null && eligible.isNotEmpty()) {
+                        next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN, resolution = Resolution(listOf(ChoiceRequest(
+                            ChoiceKind.EVOLUTION_RECOVER_NAMED_TRAINER,
+                            "${namedRecovery.name}: você pode recuperar até ${namedRecovery.onEvolveRecoverNamedTrainerMax} ${namedRecovery.onEvolveRecoverNamedTrainerFromDiscard}(s) do descarte.",
+                            eligible.map { it.id }, 0, minOf(namedRecovery.onEvolveRecoverNamedTrainerMax, eligible.size), visibleCards = eligible.map { it.id }))))
+                    }
+                }
+                if (next.phase != Phase.RESOLVE_CHOICE && definition(card).abilities.any { it.onEvolveSwitch } && next.players[1-actor].bench.isNotEmpty()) {
                     next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN, resolution = Resolution(listOf(ChoiceRequest(
                         ChoiceKind.EVOLUTION_SWITCH, "Usar habilidade da evolução? Escolha um Pokémon do Banco adversário ou pule.", next.players[1-actor].bench.map { it.id }, 0, 1))))
                 }
