@@ -379,7 +379,14 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     emit("CoinFlipped", results.joinToString { if (it) "CARA" else "COROA" })
                     results.count { it }
                 } ?: knockoutHeads
-                val preview = preview(state, action.attackId, action.targetId, heads)!!
+                val opponent = 1-actor
+                val toolTarget = next.players[opponent].active
+                if (Effect.DiscardDefendingTools in attack.effects && toolTarget?.tool != null && toolTarget.attackImmunityTurn != state.turn) {
+                    val tool = toolTarget.tool
+                    update(opponent) { it.copy(active = it.active?.let { active -> if (active.id == toolTarget.id) active.copy(tool = null) else active }, discard = it.discard + tool) }
+                    emit("DefendingToolsDiscarded", "Descartou ${definition(tool).name} do Pokémon Ativo adversário.")
+                }
+                val preview = preview(next, action.attackId, action.targetId, heads)!!
                 val discardCoin = attack.effects.any { it is Effect.DiscardDefendingEnergy && it.onHeads }
                 val discardHeads = if (discardCoin) {
                     val rng = SeededRng(next.rng); val result = rng.nextInt(2) == 0
@@ -399,7 +406,6 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     next = next.copy(rng = rng.state); emit("CoinFlipped", if (result) "CARA — proteção" else "COROA — proteção")
                     result
                 } else false
-                val opponent = 1-actor
                 val defender = action.targetId?.let { id -> next.players[opponent].pokemon().first { it.id == id } } ?: next.players[opponent].active!!
                 val defenderEffectsPrevented = defender.attackImmunityTurn == state.turn
                 emit("AttackDeclared", "${attack.name}: ${preview.damage} de dano em ${definition(defender.top).name}.", preview.damage)

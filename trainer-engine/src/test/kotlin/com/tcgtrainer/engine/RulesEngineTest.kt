@@ -586,6 +586,31 @@ class RulesEngineTest {
         assertEquals(30, rules.preview(state(10), attack.id)!!.damage)
     }
 
+    @Test fun `Arven Skwovet Gnaw Through discards the opponent Active Tool before damage`() {
+        val skwovet = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv10-158"), emptyMap())!!
+        val attack = skwovet.attacks.single().copy(cost = emptyList())
+        val skwovetDef = skwovet.copy(attacks = listOf(attack))
+        val activeDef = CardDefinition("tool-target", "Tool Target", "Test", "A", category = Category.POKEMON, hp = 100)
+        val toolDef = CardDefinition("target-tool", "Target Tool", "Test", "T", category = Category.TRAINER,
+            trainerType = TrainerType.TOOL, trainerEffect = TrainerEffect.RetreatReduction(1))
+        val tool = card("tool", toolDef.id)
+        val rules = RulesEngine(object : CardCatalog { override fun get(id: String) = when (id) {
+            skwovetDef.id -> skwovetDef; activeDef.id -> activeDef; toolDef.id -> toolDef; else -> TrainerCatalog.get(id)
+        } })
+        val state = GameState("gnaw-through", 101, RngState(101), listOf(
+            PlayerState(deck = List(10) { card("a-deck-$it") }, prizes = List(6) { card("a-prize-$it") },
+                active = PokemonInstance(listOf(card("skwovet", skwovetDef.id)), enteredPlayTurn = 0)),
+            PlayerState(deck = List(10) { card("b-deck-$it") }, prizes = List(6) { card("b-prize-$it") },
+                active = PokemonInstance(listOf(card("target", activeDef.id)), tool = tool, enteredPlayTurn = 0))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val result = rules.apply(state, GameAction.Attack(attack.id))
+        assertEquals(Legality.Legal, result.legality)
+        assertNull(result.state.players[1].active!!.tool)
+        assertTrue(result.state.players[1].discard.any { it.id == tool.id })
+        assertEquals(10, result.state.players[1].active!!.damage)
+        assertTrue(result.events.any { it.type == "DefendingToolsDiscarded" })
+    }
+
     @Test fun `Ampharos Synchro Pulse bonus uses actual hand sizes in attack preview`() {
         val ampharos = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me04-029"), emptyMap())!!
         val attack = ampharos.attacks.first().copy(cost = emptyList())

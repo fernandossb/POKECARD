@@ -1,3 +1,8 @@
+# POKECARD Brasil 5.99.8 — Gnaw Through de Arven's Skwovet
+
+- Antes do dano, Gnaw Through descarta todas as Pokémon Tools do Pokémon Ativo adversário.
+- O motor de regras cobre 1.164 das 3.061 impressões da rotação Padrão.
+
 # POKECARD Brasil 5.99.7 — Vigorous Tackle de Arven's Mabosstiff ex
 
 - Vigorous Tackle causa 120 de dano adicional enquanto Arven's Mabosstiff ex não tiver contadores de dano.

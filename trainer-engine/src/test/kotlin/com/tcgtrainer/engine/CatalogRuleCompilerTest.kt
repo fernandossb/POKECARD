@@ -78,6 +78,10 @@ class CatalogRuleCompilerTest {
         assertEquals(listOf(Effect.Damage(30), Effect.OwnUndamagedDamageBonus(120)), mabosstiff.attacks.first().effects)
         assertEquals(listOf(Effect.Damage(210), Effect.RestrictNextTurn(mabosstiff.attacks.last().id)), mabosstiff.attacks.last().effects)
     }
+    @Test fun `Arven Skwovet Gnaw Through compiles removal of opposing Active Pokémon Tools before damage`() {
+        val skwovet = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv10-158"), emptyMap())!!
+        assertEquals(listOf(Effect.Damage(10), Effect.DiscardDefendingTools), skwovet.attacks.single().effects)
+    }
     @Test fun `healing executes and never creates negative damage`() {
         val move = CatalogRuleCompiler.compileAttack("test", 0, attack("Heal 30 damage from this Pokémon."))!!
         val def = CardDefinition("test", "Test", "T", "1", category = Category.POKEMON, hp = 200, attacks = listOf(move))

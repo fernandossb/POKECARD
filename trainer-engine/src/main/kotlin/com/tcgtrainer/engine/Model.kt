@@ -27,6 +27,7 @@ import kotlinx.serialization.Serializable
     @Serializable data class EnergyFromDeck(val count: Int, val type: EnergyType) : Effect
     @Serializable data class SupporterBonus(val damage: Int) : Effect
     @Serializable data object PreventRetreatNextTurn : Effect
+    @Serializable data object DiscardDefendingTools : Effect
     @Serializable data class ConditionalEnergyDamage(val type: EnergyType, val minimum: Int, val bonus: Int) : Effect
     @Serializable data class ConditionalInPlayEnergyDamage(val type: EnergyType, val minimum: Int, val bonus: Int) : Effect
     @Serializable data class SwitchOwn(val optional: Boolean = false) : Effect

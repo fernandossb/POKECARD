@@ -415,6 +415,7 @@ internal object CatalogRuleCompiler {
                 heal != null -> effects += Effect.Heal(heal.groupValues[1].toInt())
                 text == "During your next turn, this Pokémon can't attack." -> effects += Effect.RestrictNextTurn()
                 text == "During your next turn, this Pokémon can't use attacks." -> effects += Effect.RestrictNextTurn()
+                text == "Before doing damage, discard all Pokémon Tools from your opponent's Active Pokémon." -> effects += Effect.DiscardDefendingTools
                 text == "During your opponent's next turn, the Defending Pokémon can't retreat." -> effects += Effect.PreventRetreatNextTurn
                 reduceDamage != null -> effects += Effect.ReduceDamageNextTurn(reduceDamage.groupValues[1].toInt())
                 reduceDefenderAttack != null -> effects += Effect.ReduceDefendingAttackDamageNextTurn(reduceDefenderAttack.groupValues[1].toInt())
