@@ -481,6 +481,38 @@ class RulesEngineTest {
         assertEquals(3, result.state.players[0].discard.count { it.id.startsWith("bench-fire-") })
     }
 
+    @Test fun `Aromatisse Scent Collection searches up to two Basic Psychic Energy and shuffles`() {
+        val aromatisse = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me03-036"), emptyMap())!!
+        val psychic = CardDefinition("psychic-basic", "Basic Psychic Energy", "Test", "P", category = Category.ENERGY,
+            type = EnergyType.PSYCHIC, basicEnergy = true)
+        val fire = CardDefinition("fire-basic", "Basic Fire Energy", "Test", "R", category = Category.ENERGY,
+            type = EnergyType.FIRE, basicEnergy = true)
+        val rules = RulesEngine(object : CardCatalog { override fun get(id: String) = when (id) {
+            aromatisse.id -> aromatisse; psychic.id -> psychic; fire.id -> fire; else -> TrainerCatalog.get(id)
+        } })
+        val psychic1 = card("psychic-1", psychic.id)
+        val psychic2 = card("psychic-2", psychic.id)
+        val fireCard = card("fire-1", fire.id)
+        val state = GameState("scent-collection", 97, RngState(97), listOf(
+            PlayerState(deck = listOf(psychic1, fireCard, psychic2) + List(7) { card("deck-$it") },
+                prizes = List(6) { card("a-prize-$it") }, active = PokemonInstance(listOf(card("aromatisse", aromatisse.id)), enteredPlayTurn = 0)),
+            PlayerState(deck = List(10) { card("op-deck-$it") }, prizes = List(6) { card("op-prize-$it") }, active = field("op"))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val ability = aromatisse.abilities.single()
+        val used = rules.apply(state, GameAction.UseAbility("aromatisse", ability.id))
+        assertEquals(Legality.Legal, used.legality)
+        val choice = used.state.resolution!!.choices.single()
+        assertEquals(ChoiceKind.ABILITY_SEARCH_BASIC_ENERGY_TO_HAND, choice.kind)
+        assertEquals(setOf(psychic1.id, psychic2.id), choice.candidates.toSet())
+        assertEquals(choice.candidates.toSet(), choice.visibleCards.toSet())
+        val searched = rules.apply(used.state, GameAction.ChooseCards(choice.candidates))
+        assertEquals(Legality.Legal, searched.legality)
+        assertEquals(setOf(psychic1.id, psychic2.id), searched.state.players[0].hand.map { it.id }.toSet())
+        assertFalse(searched.state.players[0].deck.any { it.id in choice.candidates })
+        assertTrue(searched.events.any { it.type == "DeckShuffled" })
+        assertIs<Legality.Illegal>(rules.validate(searched.state, GameAction.UseAbility("aromatisse", ability.id)))
+    }
+
     @Test fun `Ampharos Synchro Pulse bonus uses actual hand sizes in attack preview`() {
         val ampharos = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me04-029"), emptyMap())!!
         val attack = ampharos.attacks.first().copy(cost = emptyList())

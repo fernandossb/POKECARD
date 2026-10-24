@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.99.4 — Busca de Energia de Aromatisse
+
+- Scent Collection busca até 2 Energias Psíquicas Básicas do deck para a mão, revela as opções, embaralha e pode ser usada uma vez por turno.
+- Draining Kiss cura 30 de dano do próprio Aromatisse.
+- O motor de regras cobre 1.149 das 3.061 impressões da rotação Padrão.
+
 # POKECARD Brasil 5.99.3 — Armarouge em batalha
 
 - Flame Legion conta cada Pokémon do seu Banco que tenha Energia Fogo ligada.

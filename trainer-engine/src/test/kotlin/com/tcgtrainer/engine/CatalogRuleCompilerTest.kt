@@ -53,6 +53,14 @@ class CatalogRuleCompilerTest {
         assertTrue(blaster.effects.contains(Effect.DiscardAttackEnergy(0, EnergyType.FIRE, all = true)))
         assertTrue(blaster.effects.contains(Effect.TargetedDamage(180, benchedOnly = true)))
     }
+    @Test fun `Aromatisse Scent Collection compiles a once-per-turn Basic Psychic Energy search`() {
+        val aromatisse = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me03-036"), emptyMap())!!
+        val ability = aromatisse.abilities.single()
+        assertEquals("Scent Collection", ability.name)
+        assertEquals(EnergyType.PSYCHIC, ability.searchBasicEnergyTypeToHand)
+        assertEquals(2, ability.searchBasicEnergyMaxToHand)
+        assertEquals(listOf(Effect.Damage(50), Effect.Heal(30)), aromatisse.attacks.single().effects)
+    }
     @Test fun `healing executes and never creates negative damage`() {
         val move = CatalogRuleCompiler.compileAttack("test", 0, attack("Heal 30 damage from this Pokémon."))!!
         val def = CardDefinition("test", "Test", "T", "1", category = Category.POKEMON, hp = 200, attacks = listOf(move))

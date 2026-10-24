@@ -81,7 +81,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     ability.devolveOpponentPokemonMax > 0 && s.players[1-s.currentPlayer].pokemon().none { it.cards.size > 1 } -> illegal("Não há Pokémon adversário evoluído para desvoluir.")
                     ability.attackDiscountPerOpponentPrize -> illegal("Esta habilidade é aplicada automaticamente ao custo do ataque.")
                     ability.opponentActiveEvolutionRetreatCostBonus > 0 -> illegal("Esta habilidade passiva é aplicada automaticamente ao recuo.")
-                    ability.draw <= 0 && ability.drawTo <= 0 && ability.damageCounters <= 0 && ability.attachHandEnergyType == null && !ability.shuffleSelfIntoDeck && ability.healDamage <= 0 && ability.recoverBasicPokemonToBenchMaxHp <= 0 && ability.devolveOpponentPokemonMax <= 0 && ability.onEvolveShuffleRandomOpponentHandPerHeads <= 0 -> illegal("Habilidade não suportada.")
+                    ability.draw <= 0 && ability.drawTo <= 0 && ability.damageCounters <= 0 && ability.attachHandEnergyType == null && ability.searchBasicEnergyTypeToHand == null && !ability.shuffleSelfIntoDeck && ability.healDamage <= 0 && ability.recoverBasicPokemonToBenchMaxHp <= 0 && ability.devolveOpponentPokemonMax <= 0 && ability.onEvolveShuffleRandomOpponentHandPerHeads <= 0 -> illegal("Habilidade não suportada.")
                     ability.damageCounters > 0 && s.players[1-s.currentPlayer].pokemon().size < ability.damageTargets -> illegal("Não há Pokémon adversários suficientes para esta habilidade.")
                     abilityUsageKey(pokemon, ability) in p.flags.abilitiesUsed -> illegal("Esta habilidade já foi usada neste turno.")
                     ability.requiresActive && p.active?.id != pokemon.id -> illegal("Esta habilidade só pode ser usada com este Pokémon no Ativo.")
@@ -204,6 +204,12 @@ internal class ContentEngine(private val rules: RulesEngine) {
                 else if (ability.devolveOpponentPokemonMax > 0) begin(Resolution(listOf(ChoiceRequest(ChoiceKind.ABILITY_DEVOLVE_TARGET,
                     "Escolha 1 Pokémon evoluído do adversário para devolver sua evolução de Estágio mais alto à mão.",
                     s.players[1-actor].pokemon().filter { it.cards.size > 1 }.map { it.id }, 1, 1))))
+                else if (ability.searchBasicEnergyTypeToHand != null) {
+                    val eligible = p.deck.filter { def(it).category == Category.ENERGY && def(it).basicEnergy && def(it).type == ability.searchBasicEnergyTypeToHand }
+                    begin(Resolution(listOf(ChoiceRequest(ChoiceKind.ABILITY_SEARCH_BASIC_ENERGY_TO_HAND,
+                        "Busque até ${ability.searchBasicEnergyMaxToHand} Energias Básicas de ${ability.searchBasicEnergyTypeToHand} para sua mão.",
+                        eligible.map { it.id }, 0, minOf(ability.searchBasicEnergyMaxToHand, eligible.size), visibleCards = eligible.map { it.id })), shuffleAfter = true))
+                }
                 else if (ability.attachHandEnergyType != null) {
                     val candidates = p.hand.filter { def(it).category == Category.ENERGY && def(it).basicEnergy && def(it).type == ability.attachHandEnergyType }.map { it.id }
                     begin(Resolution(listOf(ChoiceRequest(ChoiceKind.ABILITY_ATTACH_ENERGY,
@@ -279,6 +285,11 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                 outgoingDamageReduction = 0, outgoingDamageReductionTurn = -1, preventBasicNonColorlessDamageTurn = -1,
                                 preventBasicPokemonDamageTurn = -1, weaknessSuppressedTurn = -1) else pokemon }) }
                         events += GameEvent("PokemonDevolved", "${def(returnedEvolution).name} voltou à mão do adversário; Condições Especiais e efeitos foram removidos.")
+                    }
+                    ChoiceKind.ABILITY_SEARCH_BASIC_ENERGY_TO_HAND -> {
+                        val cards = p.deck.filter { it.id in ids && def(it).category == Category.ENERGY && def(it).basicEnergy }
+                        update { it.copy(deck = it.deck - cards.toSet(), hand = it.hand + cards) }
+                        events += GameEvent("AbilityEnergySearched", "Buscou ${cards.size} Energia(s) Básica(s) para a mão.", cards.size)
                     }
                     ChoiceKind.ABILITY_ATTACH_ENERGY -> if (ids.isNotEmpty()) {
                         val energy = p.hand.first { it.id == ids.single() && def(it).category == Category.ENERGY && def(it).basicEnergy }
