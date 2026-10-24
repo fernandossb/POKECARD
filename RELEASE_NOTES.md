@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.99.1 — Mais cartas disponíveis no TCG Trainer
+
+- Archaludon ex agora executa Assemble Alloy ao evoluir, permitindo escolher até 2 Energias Metal Básicas do descarte e distribuir entre seus Pokémon Metal.
+- Metal Defender remove a Fraqueza do Archaludon durante o próximo turno adversário. Metal Bridge também concede recuo gratuito aos seus Pokémon com Energia Metal ligada.
+- O motor de regras passou a cobrir 1.142 das 3.061 impressões da rotação Padrão; cartas sem suporte completo continuam bloqueadas no editor de deck.
+
 # POKECARD Brasil 5.99.0 — TCG Trainer integrado
 
 - O aplicativo agora inclui o modo TCG Trainer para montar decks e jogar partidas contra a CPU.

@@ -49,7 +49,7 @@ class EffectEngine(private val catalog: CardCatalog) {
         val attackBase = (base - if (turn == attacker.outgoingDamageReductionTurn) attacker.outgoingDamageReduction else 0).coerceAtLeast(0)
         if (attackBase == 0) return counterDamage
         var value = (attackBase + attacker.damageModifier + boost).coerceAtLeast(0)
-        if (!ignoreWeaknessResistance && target.weakness == source.type) value *= 2
+        if (!ignoreWeaknessResistance && !(defender.weaknessSuppressedTurn >= 0 && defender.weaknessSuppressedTurn == turn) && target.weakness == source.type) value *= 2
         if (!ignoreWeaknessResistance && !ignoreResistance && target.resistance == source.type) value -= target.resistanceAmount
         val ignoresOpponentActiveEffects = ignoreOpponentActiveEffects || source.abilities.any { it.ignoreOpponentActiveEffects }
         if (!ignoresOpponentActiveEffects) value -= target.abilities.sumOf { it.damageReduction }
@@ -65,7 +65,7 @@ class EffectEngine(private val catalog: CardCatalog) {
         Effect.SwitchOpponent, is Effect.BasicPokemonToBench, Effect.SearchRotomToBench,
         Effect.RestrictIfSecondPlayerFirstTurn, Effect.PreventBasicNonColorlessDamageNextTurn, Effect.PreventBasicPokemonDamageNextTurn, is Effect.OwnBenchCountDamage,
         is Effect.OwnDamagedPokemonCountDamage,
-        is Effect.StatusCondition, is Effect.DiscardDefendingEnergy, is Effect.BenchDamage, is Effect.BenchDamageCounters, is Effect.MultiTargetDamage, Effect.KnockOutBothActive, Effect.RecoverSelfFromSpecialConditions, Effect.CoinMiss,
+        is Effect.StatusCondition, is Effect.DiscardDefendingEnergy, is Effect.BenchDamage, is Effect.BenchDamageCounters, is Effect.MultiTargetDamage, Effect.KnockOutBothActive, Effect.RecoverSelfFromSpecialConditions, Effect.NoWeaknessNextTurn, Effect.CoinMiss,
         is Effect.ReduceDamageNextTurn, is Effect.SelfDamage, Effect.PreventDefendingAttackNextTurn,
         is Effect.OwnHandCounterDamage, is Effect.OpponentExDamage, is Effect.OpponentTypeDamage, is Effect.OwnEnergyCountDamage,
         is Effect.OpponentEnergyCountDamage, is Effect.ReduceDefendingAttackDamageNextTurn,

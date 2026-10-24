@@ -28,6 +28,11 @@ class CatalogRuleCompilerTest {
             assertEquals(EnergyType.METAL, archaludon.abilities.single().freeRetreatWithAttachedEnergyType)
         }
     }
+    @Test fun `Archaludon ex Assemble Alloy and Metal Defender compile with their full effects`() {
+        val archaludon = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv08-130"), emptyMap())!!
+        assertEquals(2, archaludon.abilities.single().onEvolveAttachMetalFromDiscardMax)
+        assertEquals(listOf(Effect.Damage(220), Effect.NoWeaknessNextTurn), archaludon.attacks.single().effects)
+    }
     @Test fun `healing executes and never creates negative damage`() {
         val move = CatalogRuleCompiler.compileAttack("test", 0, attack("Heal 30 damage from this Pokémon."))!!
         val def = CardDefinition("test", "Test", "T", "1", category = Category.POKEMON, hp = 200, attacks = listOf(move))

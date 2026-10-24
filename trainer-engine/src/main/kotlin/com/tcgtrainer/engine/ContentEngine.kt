@@ -19,6 +19,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
             CardFilter.BASIC_POKEMON -> d.category == Category.POKEMON && d.stage == Stage.BASIC
             CardFilter.BASIC_ENERGY, CardFilter.ENERGY -> d.category == Category.ENERGY
             CardFilter.DARKNESS_POKEMON -> d.category == Category.POKEMON && d.type == EnergyType.DARKNESS
+            CardFilter.METAL_POKEMON -> d.category == Category.POKEMON && d.type == EnergyType.METAL
         }
     }
     fun validate(s: GameState, action: GameAction): Legality {
@@ -76,6 +77,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     ability.onEvolveSwitch -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
                     ability.onEvolveDraw > 0 -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
                     ability.onEvolveShuffleRandomOpponentHandPerHeads > 0 -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
+                    ability.onEvolveAttachMetalFromDiscardMax > 0 -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
                     ability.attackDiscountPerOpponentPrize -> illegal("Esta habilidade é aplicada automaticamente ao custo do ataque.")
                     ability.draw <= 0 && ability.drawTo <= 0 && ability.damageCounters <= 0 && ability.attachHandEnergyType == null && !ability.shuffleSelfIntoDeck && ability.healDamage <= 0 && ability.recoverBasicPokemonToBenchMaxHp <= 0 && ability.onEvolveShuffleRandomOpponentHandPerHeads <= 0 -> illegal("Habilidade não suportada.")
                     ability.damageCounters > 0 && s.players[1-s.currentPlayer].pokemon().size < ability.damageTargets -> illegal("Não há Pokémon adversários suficientes para esta habilidade.")
@@ -216,6 +218,27 @@ internal class ContentEngine(private val rules: RulesEngine) {
                 var remainingChoices = resolution.choices.drop(1)
                 val p = s.players[actor]
                 when (choice.kind) {
+                    ChoiceKind.EVOLUTION_METAL_ENERGY -> if (ids.isNotEmpty()) {
+                        val eligible = p.pokemon().filter { def(it.top).type == EnergyType.METAL }.map { it.id }
+                        remainingChoices = listOf(ChoiceRequest(ChoiceKind.EVOLUTION_METAL_ENERGY_TARGET,
+                            "Escolha um dos seus Pokémon Metal para receber a Energia.", eligible, 1, 1,
+                            selectedEnergy = ids.first(), selectedTargets = ids.drop(1))) + remainingChoices
+                    }
+                    ChoiceKind.EVOLUTION_METAL_ENERGY_TARGET -> {
+                        val energy = p.discard.first { it.id == choice.selectedEnergy && def(it).category == Category.ENERGY && def(it).basicEnergy && def(it).type == EnergyType.METAL }
+                        val target = ids.single()
+                        update { player -> player.copy(discard = player.discard - energy,
+                            active = player.active?.let { if (it.id == target) it.copy(energies = it.energies + energy) else it },
+                            bench = player.bench.map { if (it.id == target) it.copy(energies = it.energies + energy) else it }) }
+                        events += GameEvent("EvolutionEnergyAttached", "Ligou ${def(energy).name} a um Pokémon Metal.")
+                        val remainingEnergyIds = choice.selectedTargets
+                        if (remainingEnergyIds.isNotEmpty()) {
+                            val eligible = s.players[actor].pokemon().filter { def(it.top).type == EnergyType.METAL }.map { it.id }
+                            remainingChoices = listOf(ChoiceRequest(ChoiceKind.EVOLUTION_METAL_ENERGY_TARGET,
+                                "Escolha um dos seus Pokémon Metal para receber a próxima Energia.", eligible, 1, 1,
+                                selectedEnergy = remainingEnergyIds.first(), selectedTargets = remainingEnergyIds.drop(1))) + remainingChoices
+                        }
+                    }
                     ChoiceKind.DISCARD, ChoiceKind.ABILITY_ENERGY -> {
                         val cards = p.hand.filter { it.id in ids }
                         update { it.copy(hand = it.hand - cards.toSet(), discard = it.discard + cards) }
@@ -503,6 +526,6 @@ internal class ContentEngine(private val rules: RulesEngine) {
         CardFilter.POKEMON_OR_ENERGY -> "Pokémon ou Energia Básica"; CardFilter.ITEM -> "Item"
         CardFilter.TOOL -> "Ferramenta"; CardFilter.SUPPORTER -> "Apoiador"; CardFilter.STADIUM -> "Estádio"
         CardFilter.BASIC_POKEMON -> "Pokémon Básico"; CardFilter.BASIC_ENERGY -> "Energia Básica"
-        CardFilter.ENERGY -> "Energia"; CardFilter.DARKNESS_POKEMON -> "Pokémon de Escuridão"
+        CardFilter.ENERGY -> "Energia"; CardFilter.DARKNESS_POKEMON -> "Pokémon de Escuridão"; CardFilter.METAL_POKEMON -> "Pokémon Metal"
     }
 }

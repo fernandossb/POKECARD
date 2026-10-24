@@ -190,7 +190,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         val minimum = if (coin != null && rolledHeads == null) preview(state, attackId, targetId, 0)!!.damage else damage
         val coinMaximum = if (coin != null && rolledHeads == null) preview(state, attackId, targetId, coinFlipCount)!!.damage else damage
         val bonusAfterWeakness = if (attack.effects.contains(Effect.IgnoreWeaknessResistance) || defender.id != opponent.active?.id) benchEnergyBonus
-            else if (definition(defender.top).weakness == definition(attacker.top).type) benchEnergyBonus * 2 else benchEnergyBonus
+            else if (!(defender.weaknessSuppressedTurn >= 0 && defender.weaknessSuppressedTurn == state.turn) && definition(defender.top).weakness == definition(attacker.top).type) benchEnergyBonus * 2 else benchEnergyBonus
         val maximum = coinMaximum + bonusAfterWeakness
         return AttackPreview(damage, hp, defender.damage, remaining, remaining == 0, if (remaining == 0) definition(defender.top).prizes else 0,
             uncertain, minimum, maximum)
@@ -292,7 +292,14 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     }
                     next = next.copy(rng = rng.state)
                 }
-                if (definition(card).abilities.any { it.onEvolveSwitch } && next.players[1-actor].bench.isNotEmpty()) {
+                val metalAttach = definition(card).abilities.firstOrNull { it.onEvolveAttachMetalFromDiscardMax > 0 }
+                val metalEnergy = next.players[actor].discard.filter { definition(it).category == Category.ENERGY && definition(it).basicEnergy && definition(it).type == EnergyType.METAL }
+                val metalPokemon = next.players[actor].pokemon().filter { definition(it.top).type == EnergyType.METAL }
+                if (metalAttach != null && metalEnergy.isNotEmpty() && metalPokemon.isNotEmpty()) {
+                    next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN, resolution = Resolution(listOf(ChoiceRequest(
+                        ChoiceKind.EVOLUTION_METAL_ENERGY, "${metalAttach.name}: você pode escolher até ${metalAttach.onEvolveAttachMetalFromDiscardMax} Energias Metal Básicas do descarte.",
+                        metalEnergy.map { it.id }, 0, minOf(metalAttach.onEvolveAttachMetalFromDiscardMax, metalEnergy.size)))))
+                } else if (definition(card).abilities.any { it.onEvolveSwitch } && next.players[1-actor].bench.isNotEmpty()) {
                     next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN, resolution = Resolution(listOf(ChoiceRequest(
                         ChoiceKind.EVOLUTION_SWITCH, "Usar habilidade da evolução? Escolha um Pokémon do Banco adversário ou pule.", next.players[1-actor].bench.map { it.id }, 0, 1))))
                 }
@@ -464,6 +471,10 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     updatePokemon(p.active.id) { it.copy(conditions = emptySet()) }
                     emit("SpecialConditionsRecovered", "${definition(p.active.top).name} se recuperou de todas as Condições Especiais.")
                 }
+                if (Effect.NoWeaknessNextTurn in attack.effects) {
+                    updatePokemon(p.active.id) { it.copy(weaknessSuppressedTurn = state.turn + 1) }
+                    emit("WeaknessRemovedNextTurn", "${definition(p.active.top).name} não terá Fraqueza durante o próximo turno adversário.")
+                }
                 attack.effects.filterIsInstance<Effect.ReduceDamageNextTurn>().forEach { effect ->
                     updatePokemon(p.active.id) { it.copy(incomingDamageReduction = effect.amount, damageReductionTurn = state.turn + 1) }
                     emit("DamageReducedNextTurn", "O atacante receberá ${effect.amount} de dano a menos no próximo turno adversário.")
@@ -608,8 +619,10 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     val energies = next.players[actor].bench.flatMap { it.energies }
                     val maxDiscard = minOf(effect.max, energies.size)
                     val weaknessMultiplier = if (Effect.IgnoreWeaknessResistance in attack.effects) 1 else {
-                        val defenderType = next.players[opponent].active?.let { definition(it.top).weakness }
-                        if (defenderType == definition(p.active!!.top).type) 2 else 1
+                        val defender = next.players[opponent].active
+                        val defenderType = defender?.let { definition(it.top).weakness }
+                        val weaknessSuppressed = defender?.let { it.weaknessSuppressedTurn >= 0 && it.weaknessSuppressedTurn == state.turn } == true
+                        if (!weaknessSuppressed && defenderType == definition(p.active!!.top).type) 2 else 1
                     }
                     if (maxDiscard > 0) choices += ChoiceRequest(ChoiceKind.ATTACK_BENCH_ENERGY_DISCARD,
                         "Você pode descartar até $maxDiscard Energia(s) do seu Banco para aumentar o dano.",

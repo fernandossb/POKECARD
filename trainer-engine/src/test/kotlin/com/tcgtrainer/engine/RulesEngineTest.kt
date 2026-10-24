@@ -322,6 +322,58 @@ class RulesEngineTest {
         assertEquals(3, rules.retreatCost(active.copy(energies = emptyList()), listOf(active.copy(energies = emptyList()), arch)))
     }
 
+    @Test fun `Archaludon ex Assemble Alloy attaches selected discard energies to chosen Metal Pokemon`() {
+        val archaludon = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv08-130"), emptyMap())!!
+        val duraludon = CardDefinition("test-duraludon", "Duraludon", "Test", "D", category = Category.POKEMON,
+            stage = Stage.BASIC, type = EnergyType.METAL, hp = 130)
+        val metalEnergy = CardDefinition("test-metal-energy", "Basic Metal Energy", "Test", "M", category = Category.ENERGY,
+            type = EnergyType.METAL, basicEnergy = true)
+        val rules = RulesEngine(object : CardCatalog { override fun get(id: String) = when (id) {
+            archaludon.id -> archaludon; duraludon.id -> duraludon; metalEnergy.id -> metalEnergy; else -> TrainerCatalog.get(id)
+        } })
+        val evolvedCard = card("archaludon-card", archaludon.id)
+        val energies = listOf(card("discard-metal-1", metalEnergy.id), card("discard-metal-2", metalEnergy.id))
+        val state = GameState("assemble-alloy", 91, RngState(91), listOf(
+            PlayerState(deck = List(10) { card("deck-$it") }, hand = listOf(evolvedCard), discard = energies,
+                prizes = List(6) { card("prize-$it") },
+                active = PokemonInstance(listOf(card("duraludon", duraludon.id)), enteredPlayTurn = 0)),
+            PlayerState(deck = List(10) { card("op-deck-$it") }, prizes = List(6) { card("op-prize-$it") }, active = field("op"))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val evolved = rules.apply(state, GameAction.Evolve(evolvedCard.id, "duraludon"))
+        assertEquals(Legality.Legal, evolved.legality)
+        assertEquals(ChoiceKind.EVOLUTION_METAL_ENERGY, evolved.state.resolution!!.choices.single().kind)
+        val selected = rules.apply(evolved.state, GameAction.ChooseCards(energies.map { it.id }))
+        assertEquals(ChoiceKind.EVOLUTION_METAL_ENERGY_TARGET, selected.state.resolution!!.choices.single().kind)
+        val first = rules.apply(selected.state, GameAction.ChooseCards(listOf("duraludon")))
+        val second = rules.apply(first.state, GameAction.ChooseCards(listOf("duraludon")))
+        assertEquals(Legality.Legal, second.legality)
+        assertEquals(2, second.state.players[0].active!!.energies.size)
+        assertTrue(second.state.players[0].discard.isEmpty())
+        assertEquals(Phase.MAIN, second.state.phase)
+    }
+
+    @Test fun `Archaludon ex Metal Defender removes weakness for the next opponent turn`() {
+        val archaludon = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv08-130"), emptyMap())!!
+        val attack = archaludon.attacks.single().copy(cost = emptyList())
+        val archDef = archaludon.copy(attacks = listOf(attack))
+        val fireAttacker = CardDefinition("fire-attacker", "Fire Attacker", "Test", "F", category = Category.POKEMON,
+            type = EnergyType.FIRE, hp = 300)
+        val rules = RulesEngine(object : CardCatalog { override fun get(id: String) = when (id) {
+            archDef.id -> archDef; fireAttacker.id -> fireAttacker; else -> TrainerCatalog.get(id)
+        } })
+        val state = GameState("metal-defender", 92, RngState(92), listOf(
+            PlayerState(deck = List(10) { card("a-deck-$it") }, prizes = List(6) { card("a-prize-$it") },
+                active = PokemonInstance(listOf(card("arch", archDef.id)), enteredPlayTurn = 0)),
+            PlayerState(deck = List(10) { card("b-deck-$it") }, prizes = List(6) { card("b-prize-$it") },
+                active = PokemonInstance(listOf(card("fire", fireAttacker.id)), enteredPlayTurn = 0))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val attacked = rules.apply(state, GameAction.Attack(attack.id))
+        assertEquals(4, attacked.state.players[0].active!!.weaknessSuppressedTurn)
+        val damage = rules.effects.damage(attacked.state.players[1].active!!, attacked.state.players[0].active!!,
+            listOf(Effect.Damage(100)), turn = 4)
+        assertEquals(100, damage)
+    }
+
     @Test fun `Ampharos Synchro Pulse bonus uses actual hand sizes in attack preview`() {
         val ampharos = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me04-029"), emptyMap())!!
         val attack = ampharos.attacks.first().copy(cost = emptyList())
@@ -999,7 +1051,7 @@ class RulesEngineTest {
         // v0.2 adds serialized effect state and named attack/KO events; conservation and replay above remain invariant.
         // v0.4 serializes selected decks and undo checkpoint sizes; game transitions remain unchanged.
         // v0.5 adds deck identity/list metadata; v0.6 adds retreat-block state; v0.7 adds status and damage-reduction state.
-        // v0.8 adds protection from all Basic Pokémon attacks.
-        assertEquals("9f16847137aa5d4c0d4314d7beab72abbe1c8374c3b5b6c3ad241cc5cbfe1434", digest)
+        // v0.8 adds protection from all Basic Pokémon attacks; v0.9 adds timed weakness suppression.
+        assertEquals("155d0cf1e27f0632a25f3370e9b6996196195524754f26a15d163987467c6a7e", digest)
     }
 }

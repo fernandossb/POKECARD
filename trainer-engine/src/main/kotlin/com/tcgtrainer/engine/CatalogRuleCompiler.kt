@@ -31,6 +31,9 @@ internal object CatalogRuleCompiler {
         val text = raw.s("effect")?.trim().orEmpty()
         if (text == "All of your Pokémon that have {M} Energy attached have no Retreat Cost.")
             return AbilityDefinition("$id-ability$index", name, text, freeRetreatWithAttachedEnergyType = EnergyType.METAL)
+        val evolveMetal = Regex("When you play this Pokémon from your hand to evolve 1 of your Pokémon during your turn, you may attach up to (\\d+) Basic \\{M} Energy cards from your discard pile to your \\{M} Pokémon in any way you like\\.").matchEntire(text)
+        if (evolveMetal != null) return AbilityDefinition("$id-ability$index", name, text,
+            onEvolveAttachMetalFromDiscardMax = evolveMetal.groupValues[1].toInt())
         val evolveRandomShuffle = Regex("When you play this Pokémon from your hand to evolve 1 of your Pokémon during your turn, you may flip (\\d+) coins?\\. For each heads, choose a random card from your opponent's hand\\. Your opponent reveals those cards and shuffles them into their deck\\.").matchEntire(text)
         if (evolveRandomShuffle != null) return AbilityDefinition("$id-ability$index", name, text,
             onEvolveShuffleRandomOpponentHandPerHeads = evolveRandomShuffle.groupValues[1].toInt())
@@ -365,6 +368,7 @@ internal object CatalogRuleCompiler {
                     repeatedMultiTargetDamage.groupValues[2].toInt(), repeatedMultiTargetDamage.groupValues[1].toInt(),
                     allowRepeat = true, ignoreWeaknessResistance = true)
                 text == "This Pokémon recovers from all Special Conditions." -> effects += Effect.RecoverSelfFromSpecialConditions
+                text == "During your opponent's next turn, this Pokémon has no Weakness." -> effects += Effect.NoWeaknessNextTurn
                 discardDefendingCoin != null -> effects += Effect.DiscardDefendingEnergy(if (discardDefendingCoin.groupValues[1] in listOf("an", "a")) 1 else discardDefendingCoin.groupValues[1].toInt(), onHeads = true)
                 discardDefending != null -> effects += Effect.DiscardDefendingEnergy(if (discardDefending.groupValues[1] in listOf("an", "a")) 1 else discardDefending.groupValues[1].toInt())
                 draw != null -> effects += Effect.Draw(if (draw.groupValues[1] == "a") 1 else draw.groupValues[1].toInt())

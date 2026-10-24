@@ -68,7 +68,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 ownKnockedOutByAttackLastTurn = o.ownLastKnockedOutByAttackDamageTurn == input.turn-1)
             val discardEffect = a.effects.filterIsInstance<Effect.DiscardBenchEnergyDamage>().firstOrNull()
             val discarded = minOf(discardEffect?.max ?: 0, own.filter { it.id != o.ownActiveId }.sumOf { it.energies.size })
-            val multiplier = if (target.id == enemy?.id && Effect.IgnoreWeaknessResistance !in a.effects && d(target.top).weakness == d(p.top).type) 2 else 1
+            val multiplier = if (target.id == enemy?.id && !(target.weaknessSuppressedTurn >= 0 && target.weaknessSuppressedTurn == input.turn) && Effect.IgnoreWeaknessResistance !in a.effects && d(target.top).weakness == d(p.top).type) 2 else 1
             return base + discarded * (discardEffect?.perEnergyDamage ?: 0) * multiplier
         }
         fun attackValue(p: PokemonInstance, target: PokemonInstance? = enemy): Double {
@@ -123,7 +123,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
         if (input.phase == Phase.RESOLVE_CHOICE) {
             val choice = checkNotNull(input.choice)
             fun value(id: String): Double = when (choice.kind) {
-                ChoiceKind.DISCARD, ChoiceKind.ABILITY_ENERGY, ChoiceKind.DISCARD_ATTACK_ENERGY -> -keepValue(checkNotNull(card(id)))
+                ChoiceKind.DISCARD, ChoiceKind.ABILITY_ENERGY, ChoiceKind.DISCARD_ATTACK_ENERGY, ChoiceKind.EVOLUTION_METAL_ENERGY -> -keepValue(checkNotNull(card(id)))
                 ChoiceKind.ABILITY_ATTACH_ENERGY -> keepValue(checkNotNull(card(id))) + 10.0
                 ChoiceKind.SEARCH, ChoiceKind.RECOVER, ChoiceKind.SONIA -> keepValue(checkNotNull(card(id)))
                 ChoiceKind.SWITCH_OPPONENT, ChoiceKind.EVOLUTION_SWITCH -> active?.let { attackValue(it, pokemon(id)) } ?: 0.0
@@ -132,6 +132,11 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                     val p = pokemon(id)
                     val energy = checkNotNull(o.ownDiscard.find { it.id == choice.selectedEnergy })
                     potential(p.copy(energies = p.energies + energy))-potential(p) + if (p.energies.size < 3) 10.0 else -10.0
+                }
+                ChoiceKind.EVOLUTION_METAL_ENERGY_TARGET -> {
+                    val p = pokemon(id)
+                    val energy = checkNotNull(o.ownDiscard.find { it.id == choice.selectedEnergy })
+                    potential(p.copy(energies = p.energies + energy))-potential(p)
                 }
                 ChoiceKind.TOOL_TARGET -> if (id == active?.id) 50.0 else 15.0-pokemon(id).energies.size
                 ChoiceKind.ENERGY_FROM_DISCARD -> 10.0
