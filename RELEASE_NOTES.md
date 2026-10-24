@@ -1,3 +1,8 @@
+# POKECARD Brasil 5.99.7 — Vigorous Tackle de Arven's Mabosstiff ex
+
+- Vigorous Tackle causa 120 de dano adicional enquanto Arven's Mabosstiff ex não tiver contadores de dano.
+- O motor de regras cobre 1.158 das 3.061 impressões da rotação Padrão.
+
 # POKECARD Brasil 5.99.6 — Greedy Order de Arven's Greedent
 
 - Ao evoluir para Arven's Greedent, escolha até 2 Arven's Sandwich do descarte para a mão.

@@ -571,6 +571,21 @@ class RulesEngineTest {
         assertEquals(Phase.MAIN, recovered.state.phase)
     }
 
+    @Test fun `Arven Mabosstiff Vigorous Tackle loses its bonus after taking damage`() {
+        val mabosstiff = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv10-139"), emptyMap())!!
+        val rules = RulesEngine(object : CardCatalog { override fun get(id: String) =
+            if (id == mabosstiff.id) mabosstiff else TrainerCatalog.get(id)
+        })
+        val attack = mabosstiff.attacks.first()
+        fun state(damage: Int) = GameState("vigorous-tackle", 100, RngState(100), listOf(
+            PlayerState(deck = List(10) { card("a-deck-$it") }, prizes = List(6) { card("a-prize-$it") },
+                active = PokemonInstance(listOf(card("mabosstiff", "sv10-139")), damage = damage, enteredPlayTurn = 0)),
+            PlayerState(deck = List(10) { card("b-deck-$it") }, prizes = List(6) { card("b-prize-$it") }, active = field("op"))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        assertEquals(150, rules.preview(state(0), attack.id)!!.damage)
+        assertEquals(30, rules.preview(state(10), attack.id)!!.damage)
+    }
+
     @Test fun `Ampharos Synchro Pulse bonus uses actual hand sizes in attack preview`() {
         val ampharos = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me04-029"), emptyMap())!!
         val attack = ampharos.attacks.first().copy(cost = emptyList())
