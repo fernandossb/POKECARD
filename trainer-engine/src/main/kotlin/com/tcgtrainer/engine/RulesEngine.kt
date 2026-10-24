@@ -691,7 +691,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         if (effect.optional) "Você pode trocar seu Ativo por um Pokémon do Banco." else "Troque seu Ativo por um Pokémon do Banco.",
                         bench.map { it.id }, if (effect.optional) 0 else 1, 1)
                 }
-                if (!defenderEffectsPrevented && Effect.SwitchOpponent in attack.effects) {
+                if (!defenderEffectsPrevented && (Effect.SwitchOpponent in attack.effects || Effect.PullOpponentBench in attack.effects)) {
                     val opponentBench = next.players[1-actor].bench
                     if (opponentBench.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.SWITCH_OPPONENT,
                         "Seu oponente escolhe o Pokémon que entra no Ativo.", opponentBench.map { it.id }, 1, 1)

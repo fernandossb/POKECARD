@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.99.9 — ataques de Arven's Toedscruel
+
+- Pull permite escolher um Pokémon do Banco adversário para entrar no Ativo após o ataque.
+- Reckless Charge causa 120 de dano e também 30 ao próprio atacante.
+- O motor de regras cobre 1.168 das 3.061 impressões da rotação Padrão.
+
 # POKECARD Brasil 5.99.8 — Gnaw Through de Arven's Skwovet
 
 - Antes do dano, Gnaw Through descarta todas as Pokémon Tools do Pokémon Ativo adversário.

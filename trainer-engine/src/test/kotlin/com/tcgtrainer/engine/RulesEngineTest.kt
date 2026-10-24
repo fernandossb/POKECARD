@@ -611,6 +611,31 @@ class RulesEngineTest {
         assertTrue(result.events.any { it.type == "DefendingToolsDiscarded" })
     }
 
+    @Test fun `Arven Toedscruel Pull switches in a chosen opposing Benched Pokemon`() {
+        val toedscruel = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv10-110"), emptyMap())!!
+        val pull = toedscruel.attacks.first().copy(cost = emptyList())
+        val toedscruelDef = toedscruel.copy(attacks = listOf(pull))
+        val activeDef = CardDefinition("pull-active", "Active Target", "Test", "A", category = Category.POKEMON, hp = 100)
+        val benchDef = CardDefinition("pull-bench", "Bench Target", "Test", "B", category = Category.POKEMON, hp = 100)
+        val rules = RulesEngine(object : CardCatalog { override fun get(id: String) = when (id) {
+            toedscruelDef.id -> toedscruelDef; activeDef.id -> activeDef; benchDef.id -> benchDef; else -> TrainerCatalog.get(id)
+        } })
+        fun card(id: String, definitionId: String) = CardInstance(id, definitionId)
+        val benchPokemon = PokemonInstance(listOf(card("bench-pokemon", benchDef.id)), enteredPlayTurn = 0)
+        val state = GameState("pull", 55, RngState(55), listOf(
+            PlayerState(deck = List(10) { card("a-deck-$it", "sv01-258") }, prizes = List(6) { card("a-prize-$it", "sv01-258") },
+                active = PokemonInstance(listOf(card("toedscruel", toedscruelDef.id)), enteredPlayTurn = 0)),
+            PlayerState(deck = List(10) { card("b-deck-$it", "sv01-258") }, prizes = List(6) { card("b-prize-$it", "sv01-258") },
+                active = PokemonInstance(listOf(card("active-pokemon", activeDef.id)), enteredPlayTurn = 0), bench = listOf(benchPokemon))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val attackResult = rules.apply(state, GameAction.Attack(pull.id))
+        assertEquals(Legality.Legal, attackResult.legality)
+        assertEquals(ChoiceKind.SWITCH_OPPONENT, attackResult.state.resolution!!.choices.single().kind)
+        val switched = rules.apply(attackResult.state, GameAction.ChooseCards(listOf(benchPokemon.id)))
+        assertEquals(benchPokemon.id, switched.state.players[1].active!!.id)
+        assertEquals("active-pokemon", switched.state.players[1].bench.single().id)
+    }
+
     @Test fun `Ampharos Synchro Pulse bonus uses actual hand sizes in attack preview`() {
         val ampharos = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me04-029"), emptyMap())!!
         val attack = ampharos.attacks.first().copy(cost = emptyList())

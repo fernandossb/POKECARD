@@ -66,7 +66,7 @@ class EffectEngine(private val catalog: CardCatalog) {
         is Effect.CoinDamage, is Effect.DiscardAttackEnergy, is Effect.EnergyFromDeck, is Effect.SupporterBonus, is Effect.Draw,
         Effect.PreventRetreatNextTurn, Effect.DiscardDefendingTools, is Effect.ConditionalEnergyDamage, is Effect.ConditionalInPlayEnergyDamage, is Effect.SwitchOwn,
         is Effect.BenchedCountDamage, is Effect.OwnBenchWithEnergyDamage, is Effect.OwnInPlayCountDamage, is Effect.OwnDamageCounterDamage, is Effect.OwnUndamagedDamageBonus,
-        Effect.SwitchOpponent, is Effect.BasicPokemonToBench, Effect.SearchRotomToBench,
+        Effect.SwitchOpponent, Effect.PullOpponentBench, is Effect.BasicPokemonToBench, Effect.SearchRotomToBench,
         Effect.RestrictIfSecondPlayerFirstTurn, Effect.PreventBasicNonColorlessDamageNextTurn, Effect.PreventBasicPokemonDamageNextTurn, is Effect.OwnBenchCountDamage,
         is Effect.OwnDamagedPokemonCountDamage,
         is Effect.StatusCondition, is Effect.DiscardDefendingEnergy, is Effect.BenchDamage, is Effect.BenchDamageCounters, is Effect.MultiTargetDamage, Effect.KnockOutBothActive, Effect.RecoverSelfFromSpecialConditions, Effect.NoWeaknessNextTurn, Effect.CoinMiss,

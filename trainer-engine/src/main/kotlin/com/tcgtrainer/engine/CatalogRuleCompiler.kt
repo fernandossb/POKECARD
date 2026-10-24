@@ -197,6 +197,7 @@ internal object CatalogRuleCompiler {
         val ownToolDamage = Regex("This attack does (\\d+) damage for each Pokémon Tool attached to all of your Pokémon\\.").matchEntire(text)
         val bothActiveEnergyDamage = Regex("This attack does (\\d+) more damage for each Energy attached to both Active Pokémon\\.").matchEntire(text)
         val moveOpponentDamageCounters = text == "Your opponent's Active Pokémon is now Confused. You may move any number of damage counters from your opponent's Pokémon to their other Pokémon in any way you like."
+        val pullOpponentBench = text == "Switch in 1 of your opponent's Benched Pokémon to the Active Spot."
         val benchSearch = Regex("Search your deck for up to (\\d+) Basic Pokémon and put them onto your Bench\\. Then, shuffle your deck\\.|Search your deck for a Basic Pokémon and put it onto your Bench\\. Then, shuffle your deck\\.").matchEntire(text)
         val rotomSearch = Regex("""You may search your deck for any number of Pokémon that have "Rotom" in their name and put them onto your Bench\. Then, shuffle your deck\.""").matchEntire(text)
         val matchingEnergySearch = Regex("Search your deck for up to (\\d+) Pokémon that are the same type as any Basic Energy attached to this Pokémon, reveal them, and put them into your hand\\. Then, shuffle your deck\\.").matchEntire(text)
@@ -297,6 +298,7 @@ internal object CatalogRuleCompiler {
                     effects += Effect.StatusCondition(SpecialCondition.CONFUSED)
                     effects += Effect.MoveOpponentDamageCounters
                 }
+                pullOpponentBench -> effects += Effect.PullOpponentBench
                 matchingEnergySearch != null -> effects += Effect.SearchPokemonMatchingAttachedBasicEnergy(matchingEnergySearch.groupValues[1].toInt())
                 pokemonSearchToHand != null -> effects += Effect.SearchPokemonToHand()
                 attachAnyBasicEnergy -> effects += Effect.AttachAnyBasicEnergyFromHand

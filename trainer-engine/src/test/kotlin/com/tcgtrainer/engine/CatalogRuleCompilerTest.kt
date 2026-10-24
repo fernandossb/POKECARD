@@ -82,6 +82,11 @@ class CatalogRuleCompilerTest {
         val skwovet = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv10-158"), emptyMap())!!
         assertEquals(listOf(Effect.Damage(10), Effect.DiscardDefendingTools), skwovet.attacks.single().effects)
     }
+    @Test fun `Arven Toedscruel attacks compile gust and self damage effects`() {
+        val toedscruel = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv10-110"), emptyMap())!!
+        assertEquals(listOf(Effect.PullOpponentBench), toedscruel.attacks.first().effects)
+        assertEquals(listOf(Effect.Damage(120), Effect.Recoil(30)), toedscruel.attacks.last().effects)
+    }
     @Test fun `healing executes and never creates negative damage`() {
         val move = CatalogRuleCompiler.compileAttack("test", 0, attack("Heal 30 damage from this Pokémon."))!!
         val def = CardDefinition("test", "Test", "T", "1", category = Category.POKEMON, hp = 200, attacks = listOf(move))
