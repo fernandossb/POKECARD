@@ -87,6 +87,11 @@ class CatalogRuleCompilerTest {
         assertEquals(listOf(Effect.PullOpponentBench), toedscruel.attacks.first().effects)
         assertEquals(listOf(Effect.Damage(120), Effect.Recoil(30)), toedscruel.attacks.last().effects)
     }
+    @Test fun `Audino Beckon compiles Supporter recovery from discard`() {
+        val audino = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv09-124"), emptyMap())!!
+        assertEquals(listOf(Effect.RecoverSupporterFromDiscard), audino.attacks.first().effects)
+        assertEquals(listOf(Effect.Damage(70)), audino.attacks.last().effects)
+    }
     @Test fun `healing executes and never creates negative damage`() {
         val move = CatalogRuleCompiler.compileAttack("test", 0, attack("Heal 30 damage from this Pokémon."))!!
         val def = CardDefinition("test", "Test", "T", "1", category = Category.POKEMON, hp = 200, attacks = listOf(move))

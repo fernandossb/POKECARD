@@ -713,6 +713,14 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         "Você pode buscar qualquer número de Pokémon com Rotom no nome para colocar no Banco.",
                         candidates.map { it.id }, 0, maxCards)
                 }
+                if (Effect.RecoverSupporterFromDiscard in attack.effects) {
+                    val supporters = next.players[actor].discard.filter {
+                        definition(it).category == Category.TRAINER && definition(it).trainerType == TrainerType.SUPPORTER
+                    }
+                    if (supporters.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.RECOVER,
+                        "Escolha um Apoiador do descarte para recuperar.", supporters.map { it.id }, 1, 1,
+                        visibleCards = supporters.map { it.id })
+                }
                 attack.effects.filterIsInstance<Effect.SearchPokemonMatchingAttachedBasicEnergy>().forEach { effect ->
                     val types = next.players[actor].active!!.energies.filter { definition(it).basicEnergy }.map { definition(it).type }.toSet()
                     val eligible = next.players[actor].deck.filter { definition(it).category == Category.POKEMON && definition(it).type in types }

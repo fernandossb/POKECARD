@@ -37,6 +37,7 @@ import kotlinx.serialization.Serializable
     @Serializable data class OwnUndamagedDamageBonus(val bonus: Int) : Effect
     @Serializable data object SwitchOpponent : Effect
     @Serializable data object PullOpponentBench : Effect
+    @Serializable data object RecoverSupporterFromDiscard : Effect
     @Serializable data class BasicPokemonToBench(val count: Int) : Effect
     @Serializable data object SearchRotomToBench : Effect
     @Serializable data object RestrictIfSecondPlayerFirstTurn : Effect

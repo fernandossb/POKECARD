@@ -636,6 +636,33 @@ class RulesEngineTest {
         assertEquals("active-pokemon", switched.state.players[1].bench.single().id)
     }
 
+    @Test fun `Audino Beckon recovers only a Supporter from discard`() {
+        val audino = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv09-124"), emptyMap())!!
+        val beckon = audino.attacks.first().copy(cost = emptyList())
+        val audinoDef = audino.copy(attacks = listOf(beckon))
+        val targetDef = CardDefinition("beckon-target", "Beckon Target", "Test", "T", category = Category.POKEMON, hp = 150)
+        val supporterDef = CardDefinition("test-supporter", "Test Supporter", "Test", "S", category = Category.TRAINER, trainerType = TrainerType.SUPPORTER)
+        val itemDef = CardDefinition("test-item", "Test Item", "Test", "I", category = Category.TRAINER, trainerType = TrainerType.ITEM)
+        val supporter = CardInstance("supporter", supporterDef.id)
+        val item = CardInstance("item", itemDef.id)
+        val rules = RulesEngine(object : CardCatalog { override fun get(id: String) = when (id) {
+            audinoDef.id -> audinoDef; targetDef.id -> targetDef; supporterDef.id -> supporterDef; itemDef.id -> itemDef; else -> TrainerCatalog.get(id)
+        } })
+        fun card(id: String) = CardInstance(id, "sv01-258")
+        val state = GameState("beckon", 65, RngState(65), listOf(
+            PlayerState(deck = List(10) { card("a-deck-$it") }, prizes = List(6) { card("a-prize-$it") },
+                active = PokemonInstance(listOf(CardInstance("audino", audinoDef.id)), enteredPlayTurn = 0), discard = listOf(supporter, item)),
+            PlayerState(deck = List(10) { card("b-deck-$it") }, prizes = List(6) { card("b-prize-$it") },
+                active = PokemonInstance(listOf(CardInstance("target", targetDef.id)), enteredPlayTurn = 0))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val attackResult = rules.apply(state, GameAction.Attack(beckon.id))
+        assertEquals(listOf(supporter.id), attackResult.state.resolution!!.choices.single().candidates)
+        val recovered = rules.apply(attackResult.state, GameAction.ChooseCards(listOf(supporter.id)))
+        assertTrue(recovered.state.players[0].hand.any { it.id == supporter.id })
+        assertTrue(recovered.state.players[0].discard.any { it.id == item.id })
+        assertEquals(0, recovered.state.players[1].active!!.damage)
+    }
+
     @Test fun `Ampharos Synchro Pulse bonus uses actual hand sizes in attack preview`() {
         val ampharos = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me04-029"), emptyMap())!!
         val attack = ampharos.attacks.first().copy(cost = emptyList())
