@@ -1,3 +1,8 @@
+# POKECARD Brasil 5.99.5 — Articuno busca Energias Água
+
+- Frigid Fluttering busca até 2 Energias Água Básicas do deck e as liga ao Articuno; depois, embaralha.
+- O motor de regras cobre 1.153 das 3.061 impressões da rotação Padrão.
+
 # POKECARD Brasil 5.99.4 — Busca de Energia de Aromatisse
 
 - Scent Collection busca até 2 Energias Psíquicas Básicas do deck para a mão, revela as opções, embaralha e pode ser usada uma vez por turno.

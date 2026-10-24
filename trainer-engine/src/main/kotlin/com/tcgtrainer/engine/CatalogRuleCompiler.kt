@@ -279,6 +279,7 @@ internal object CatalogRuleCompiler {
             val heal = Regex("Heal (\\d+) damage from this Pokémon\\.").matchEntire(text)
             val healAnyPokemon = Regex("Heal (\\d+) damage from 1 of your Pokémon\\.").matchEntire(text)
             val energySearch = Regex("Search your deck for a Basic \\{([GFRLWPMD])} Energy card and attach it to this Pokémon\\. Then, shuffle your deck\\.").matchEntire(text)
+        val energySearchUpTo = Regex("Search your deck for up to (\\d+) Basic \\{([GFRLWPMD])} Energy cards and attach them to this Pokémon\\. Then, shuffle your deck\\.").matchEntire(text)
             when {
                 text.isEmpty() -> Unit
                 healAnyPokemon != null -> effects += Effect.HealOwnPokemon(healAnyPokemon.groupValues[1].toInt())
@@ -396,7 +397,9 @@ internal object CatalogRuleCompiler {
                 discardDefendingCoin != null -> effects += Effect.DiscardDefendingEnergy(if (discardDefendingCoin.groupValues[1] in listOf("an", "a")) 1 else discardDefendingCoin.groupValues[1].toInt(), onHeads = true)
                 discardDefending != null -> effects += Effect.DiscardDefendingEnergy(if (discardDefending.groupValues[1] in listOf("an", "a")) 1 else discardDefending.groupValues[1].toInt())
                 draw != null -> effects += Effect.Draw(if (draw.groupValues[1] == "a") 1 else draw.groupValues[1].toInt())
-                energySearch != null -> effects += Effect.EnergyFromDeck(1, symbolType(energySearch.groupValues[1]) ?: return null)
+                energySearch != null || energySearchUpTo != null -> effects += Effect.EnergyFromDeck(
+                    energySearchUpTo?.groupValues?.get(1)?.toInt() ?: 1,
+                    symbolType(energySearchUpTo?.groupValues?.get(2) ?: energySearch!!.groupValues[1]) ?: return null)
                 benchSearch != null -> effects += Effect.BasicPokemonToBench(benchSearch.groupValues[1].toIntOrNull() ?: 1)
                 rotomSearch != null -> effects += Effect.SearchRotomToBench
                 recoil != null -> effects += Effect.Recoil(recoil.groupValues[1].toInt())

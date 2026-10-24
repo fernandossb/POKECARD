@@ -61,6 +61,11 @@ class CatalogRuleCompilerTest {
         assertEquals(2, ability.searchBasicEnergyMaxToHand)
         assertEquals(listOf(Effect.Damage(50), Effect.Heal(30)), aromatisse.attacks.single().effects)
     }
+    @Test fun `Articuno Frigid Fluttering compiles a search for up to two Basic Water Energy`() {
+        val articuno = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv09-032"), emptyMap())!!
+        assertEquals(listOf(Effect.EnergyFromDeck(2, EnergyType.WATER)), articuno.attacks.first().effects)
+        assertEquals(listOf(Effect.Damage(110)), articuno.attacks.last().effects)
+    }
     @Test fun `healing executes and never creates negative damage`() {
         val move = CatalogRuleCompiler.compileAttack("test", 0, attack("Heal 30 damage from this Pokémon."))!!
         val def = CardDefinition("test", "Test", "T", "1", category = Category.POKEMON, hp = 200, attacks = listOf(move))

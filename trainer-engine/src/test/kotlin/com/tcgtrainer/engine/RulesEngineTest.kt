@@ -513,6 +513,34 @@ class RulesEngineTest {
         assertIs<Legality.Illegal>(rules.validate(searched.state, GameAction.UseAbility("aromatisse", ability.id)))
     }
 
+    @Test fun `Articuno Frigid Fluttering attaches only selected Basic Water Energy and shuffles`() {
+        val articuno = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv09-032"), emptyMap())!!
+        val attack = articuno.attacks.first().copy(cost = emptyList())
+        val articunoDef = articuno.copy(attacks = listOf(attack))
+        val water = CardDefinition("water-basic", "Basic Water Energy", "Test", "W", category = Category.ENERGY,
+            type = EnergyType.WATER, basicEnergy = true)
+        val fire = CardDefinition("fire-basic", "Basic Fire Energy", "Test", "R", category = Category.ENERGY,
+            type = EnergyType.FIRE, basicEnergy = true)
+        val water1 = card("water-1", water.id); val water2 = card("water-2", water.id); val fire1 = card("fire-1", fire.id)
+        val rules = RulesEngine(object : CardCatalog { override fun get(id: String) = when (id) {
+            articunoDef.id -> articunoDef; water.id -> water; fire.id -> fire; else -> TrainerCatalog.get(id)
+        } })
+        val state = GameState("frigid-fluttering", 98, RngState(98), listOf(
+            PlayerState(deck = listOf(water1, fire1, water2) + List(7) { card("deck-$it") },
+                prizes = List(6) { card("a-prize-$it") }, active = PokemonInstance(listOf(card("articuno", articunoDef.id)), enteredPlayTurn = 0)),
+            PlayerState(deck = List(10) { card("op-deck-$it") }, prizes = List(6) { card("op-prize-$it") }, active = field("op"))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val attacked = rules.apply(state, GameAction.Attack(attack.id))
+        assertEquals(Legality.Legal, attacked.legality)
+        val choice = attacked.state.resolution!!.choices.single()
+        assertEquals(setOf(water1.id, water2.id), choice.candidates.toSet())
+        val attached = rules.apply(attacked.state, GameAction.ChooseCards(choice.candidates))
+        assertEquals(Legality.Legal, attached.legality)
+        assertEquals(setOf(water1.id, water2.id), attached.state.players[0].active!!.energies.map { it.id }.toSet())
+        assertTrue(attached.state.players[0].deck.none { it.id in choice.candidates })
+        assertTrue(attached.events.any { it.type == "DeckShuffled" })
+    }
+
     @Test fun `Ampharos Synchro Pulse bonus uses actual hand sizes in attack preview`() {
         val ampharos = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me04-029"), emptyMap())!!
         val attack = ampharos.attacks.first().copy(cost = emptyList())
