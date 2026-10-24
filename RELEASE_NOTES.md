@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.99.3 — Armarouge em batalha
+
+- Flame Legion conta cada Pokémon do seu Banco que tenha Energia Fogo ligada.
+- Crimson Blaster agora exige alvo no Banco adversário, ignora Fraqueza/Resistência e descarta todas as Energias Fogo do atacante.
+- O motor de regras cobre 1.148 das 3.061 impressões da rotação Padrão.
+
 # POKECARD Brasil 5.99.2 — Archeops e Ariados no TCG Trainer
 
 - Archeops pode usar Ancient Wing uma vez por turno no Ativo para devolver à mão a evolução de Estágio mais alto de um Pokémon adversário; desvoluir remove Condições Especiais e efeitos, e pode causar Nocaute e Prêmios.

@@ -77,7 +77,9 @@ import com.tcgtrainer.engine.*
                 Text("Custo: ${definition.cost.joinToString { energyLabel(it) }}", color = Muted, fontSize = 12.sp)
                 if (definition.text.isNotEmpty()) Text(definition.text, fontSize = 12.sp)
                 val targeted = definition.effects.any { it is Effect.TargetedDamage }
-                val choices = if (targeted) state.players[1-actor].pokemon().map { GameAction.Attack(definition.id, it.id) } else listOf(GameAction.Attack(definition.id))
+                val benchOnly = definition.effects.filterIsInstance<Effect.TargetedDamage>().any { it.benchedOnly }
+                val targets = if (benchOnly) state.players[1-actor].bench else state.players[1-actor].pokemon()
+                val choices = if (targeted) targets.map { GameAction.Attack(definition.id, it.id) } else listOf(GameAction.Attack(definition.id))
                 if (humanTurn && own.active?.top?.id == card.id && state.turn > 0) choices.forEach { action ->
                     val legality = engine.validate(state, action)
                     val preview = engine.preview(state, action.attackId, action.targetId)

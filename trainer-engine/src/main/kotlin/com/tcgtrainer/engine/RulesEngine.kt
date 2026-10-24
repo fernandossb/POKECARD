@@ -89,6 +89,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     rocketRequirement > rocketCount -> reason("Este Pokémon só pode atacar com pelo menos $rocketRequirement Pokémon da Equipe Rocket em jogo.")
                     !effects.supported(attack) -> reason("Efeito ainda não suportado; ataque bloqueado.")
                     active.restrictions.any { it.blockedTurn == state.turn && (it.attackId == null || it.attackId == action.attackId) } -> reason("Este Pokémon não pode usar este ataque neste turno devido ao seu ataque anterior.")
+                    attack.effects.filterIsInstance<Effect.TargetedDamage>().any { it.benchedOnly } && state.players[1-state.currentPlayer].bench.none { it.id == action.targetId } -> reason("Escolha um Pokémon do Banco adversário como alvo.")
                     attack.effects.any { it is Effect.TargetedDamage } && state.players[1-state.currentPlayer].pokemon().none { it.id == action.targetId } -> reason("Escolha um Pokémon adversário como alvo.")
                     else -> energyCost(active, attackCost(state, active, attack))
                 }
@@ -187,7 +188,10 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 .mapNotNull { energy -> definition(energy).type?.let { it to energy } }.groupBy({ it.first }, { it.second }).mapValues { it.value.size },
             ownKnockedOutByAttackLastTurn = state.players[state.currentPlayer].lastKnockedOutByAttackDamageTurn == state.turn-1,
             opponentActiveRetreatCost = if (defender.id == opponent.active?.id)
-                retreatCost(defender, opponent.pokemon(), state.players[state.currentPlayer].pokemon()) else 0)
+                retreatCost(defender, opponent.pokemon(), state.players[state.currentPlayer].pokemon()) else 0,
+            ownBenchWithEnergyCounts = EnergyType.entries.associateWith { type ->
+                state.players[state.currentPlayer].bench.count { pokemon -> pokemon.energies.any { definition(it).type == type } }
+            })
         val hp = effects.effectiveHp(defender, state)
         val survivalHp = if (defender.damage == 0) definition(defender.top).abilities.maxOfOrNull { it.surviveAttackKnockoutAtHp } ?: 0 else 0
         val remaining = if (survivalHp > 0 && damage >= hp) survivalHp else (hp - defender.damage - damage).coerceAtLeast(0)
@@ -856,7 +860,8 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         (0..minOf(p.bonusDraws, p.deck.size)).forEach { candidates += GameAction.MulliganDraw(it) }
         p.active?.let { active ->
             definition(active.top).attacks.forEach { attack ->
-                if (attack.effects.any { it is Effect.TargetedDamage }) state.players[1-state.currentPlayer].pokemon().forEach { candidates += GameAction.Attack(attack.id, it.id) }
+                if (attack.effects.filterIsInstance<Effect.TargetedDamage>().any { it.benchedOnly }) state.players[1-state.currentPlayer].bench.forEach { candidates += GameAction.Attack(attack.id, it.id) }
+                else if (attack.effects.any { it is Effect.TargetedDamage }) state.players[1-state.currentPlayer].pokemon().forEach { candidates += GameAction.Attack(attack.id, it.id) }
                 else candidates += GameAction.Attack(attack.id)
             }
             val cost = retreatCost(active, p.pokemon(), state.players[1-state.currentPlayer].pokemon())

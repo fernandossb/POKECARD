@@ -20,7 +20,7 @@ import kotlinx.serialization.Serializable
     @Serializable data object IgnoreWeaknessResistance : Effect
     @Serializable data object IgnoreResistance : Effect
     @Serializable data object IgnoreOpponentActiveEffects : Effect
-    @Serializable data class TargetedDamage(val damage: Int) : Effect
+    @Serializable data class TargetedDamage(val damage: Int, val benchedOnly: Boolean = false) : Effect
     @Serializable data class CoinDamage(val coins: Int, val perHeads: Int, val untilTails: Boolean = false,
         val perEnergy: Boolean = false, val bonusOnly: Boolean = false, val perEnergyBothActive: Boolean = false) : Effect
     @Serializable data class DiscardAttackEnergy(val count: Int, val type: EnergyType? = null, val all: Boolean = false) : Effect
@@ -40,6 +40,7 @@ import kotlinx.serialization.Serializable
     @Serializable data object PreventBasicNonColorlessDamageNextTurn : Effect
     @Serializable data object PreventBasicPokemonDamageNextTurn : Effect
     @Serializable data class OwnBenchCountDamage(val perPokemon: Int) : Effect
+    @Serializable data class OwnBenchWithEnergyDamage(val perPokemon: Int, val type: EnergyType) : Effect
     @Serializable data class OwnDamagedPokemonCountDamage(val perPokemon: Int) : Effect
     @Serializable data object MoveOpponentDamageCounters : Effect
     @Serializable data class SearchPokemonMatchingAttachedBasicEnergy(val max: Int) : Effect

@@ -45,6 +45,14 @@ class CatalogRuleCompilerTest {
         assertEquals(1, ariados.abilities.single().opponentActiveEvolutionRetreatCostBonus)
         assertEquals(listOf(Effect.Damage(10), Effect.OpponentActiveRetreatCostDamage(30)), ariados.attacks.single().effects)
     }
+    @Test fun `Armarouge Flame Legion and Crimson Blaster compile energy-counting and bench shot rules`() {
+        val armarouge = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv08-034"), emptyMap())!!
+        assertEquals(listOf(Effect.Damage(40), Effect.OwnBenchWithEnergyDamage(40, EnergyType.FIRE)),
+            CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me05-012"), emptyMap())!!.attacks.single().effects)
+        val blaster = armarouge.attacks.single { it.name == "Crimson Blaster" }
+        assertTrue(blaster.effects.contains(Effect.DiscardAttackEnergy(0, EnergyType.FIRE, all = true)))
+        assertTrue(blaster.effects.contains(Effect.TargetedDamage(180, benchedOnly = true)))
+    }
     @Test fun `healing executes and never creates negative damage`() {
         val move = CatalogRuleCompiler.compileAttack("test", 0, attack("Heal 30 damage from this Pokémon."))!!
         val def = CardDefinition("test", "Test", "T", "1", category = Category.POKEMON, hp = 200, attacks = listOf(move))

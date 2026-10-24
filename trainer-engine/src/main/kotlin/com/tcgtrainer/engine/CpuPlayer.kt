@@ -72,7 +72,10 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 ignoreOpponentActiveEffects = Effect.IgnoreOpponentActiveEffects in a.effects,
                 ignoreResistance = Effect.IgnoreResistance in a.effects, turn = input.turn,
                 ownKnockedOutByAttackLastTurn = o.ownLastKnockedOutByAttackDamageTurn == input.turn-1,
-                opponentActiveRetreatCost = if (targetIsActive) targetRetreatCost else 0)
+                opponentActiveRetreatCost = if (targetIsActive) targetRetreatCost else 0,
+                ownBenchWithEnergyCounts = EnergyType.entries.associateWith { type ->
+                    own.filter { it.id != p.id }.count { pokemon -> pokemon.energies.any { d(it).type == type } }
+                })
             val discardEffect = a.effects.filterIsInstance<Effect.DiscardBenchEnergyDamage>().firstOrNull()
             val discarded = minOf(discardEffect?.max ?: 0, own.filter { it.id != o.ownActiveId }.sumOf { it.energies.size })
             val multiplier = if (target.id == enemy?.id && !(target.weaknessSuppressedTurn >= 0 && target.weaknessSuppressedTurn == input.turn) && Effect.IgnoreWeaknessResistance !in a.effects && d(target.top).weakness == d(p.top).type) 2 else 1

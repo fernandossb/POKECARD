@@ -435,6 +435,52 @@ class RulesEngineTest {
         assertEquals(100, preview.damage)
     }
 
+    @Test fun `Armarouge counts Fire-powered Bench Pokemon and Crimson Blaster discards Fire Energy to hit Bench`() {
+        val flameLegion = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me05-012"), emptyMap())!!
+        val damageAttack = flameLegion.attacks.single().copy(cost = emptyList())
+        val armarouge = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv08-034"), emptyMap())!!
+        val blaster = armarouge.attacks.single { it.name == "Crimson Blaster" }.copy(cost = emptyList())
+        val fireEnergy = CardDefinition("fire-energy", "Basic Fire Energy", "Test", "R", category = Category.ENERGY,
+            type = EnergyType.FIRE, basicEnergy = true)
+        val benchGrass = CardDefinition("fire-bench", "Fire Bench", "Test", "B", category = Category.POKEMON, hp = 100)
+        val activeDef = CardDefinition("fire-attacker", "Fire Attacker", "Test", "A", category = Category.POKEMON,
+            hp = 200, type = EnergyType.FIRE, attacks = listOf(blaster))
+        val targetDef = CardDefinition("bench-target", "Bench Target", "Test", "T", category = Category.POKEMON,
+            hp = 300, type = EnergyType.GRASS, weakness = EnergyType.FIRE)
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            flameLegion.id -> flameLegion.copy(attacks = listOf(damageAttack)); armarouge.id -> activeDef; activeDef.id -> activeDef
+            fireEnergy.id -> fireEnergy; benchGrass.id -> benchGrass; targetDef.id -> targetDef
+            else -> TrainerCatalog.get(id)
+        } }
+        val fire1 = card("bench-fire-1", fireEnergy.id)
+        val fire2 = card("bench-fire-2", fireEnergy.id)
+        val fire3 = card("bench-fire-3", fireEnergy.id)
+        val boostedState = GameState("flame-legion", 95, RngState(95), listOf(
+            PlayerState(deck = List(10) { card("a-deck-$it") }, prizes = List(6) { card("a-prize-$it") },
+                active = PokemonInstance(listOf(card("flame-ariados", flameLegion.id)), enteredPlayTurn = 0),
+                bench = listOf(PokemonInstance(listOf(card("b1", benchGrass.id)), energies = listOf(fire1), enteredPlayTurn = 0),
+                    PokemonInstance(listOf(card("b2", benchGrass.id)), energies = listOf(fire2, fire3), enteredPlayTurn = 0))),
+            PlayerState(deck = List(10) { card("b-deck-$it") }, prizes = List(6) { card("b-prize-$it") },
+                active = field("op-active"))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        assertEquals(120, RulesEngine(catalog).preview(boostedState, damageAttack.id)!!.damage)
+
+        val rules = RulesEngine(catalog)
+        val attacker = PokemonInstance(listOf(card("attacker", activeDef.id)), energies = listOf(fire1, fire2, fire3), enteredPlayTurn = 0)
+        val target = PokemonInstance(listOf(card("target", targetDef.id)), enteredPlayTurn = 0)
+        val state = GameState("crimson-blaster", 96, RngState(96), listOf(
+            PlayerState(deck = List(10) { card("c-deck-$it") }, prizes = List(6) { card("c-prize-$it") }, active = attacker),
+            PlayerState(deck = List(10) { card("d-deck-$it") }, prizes = List(6) { card("d-prize-$it") },
+                active = field("op-active"), bench = listOf(target))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        assertEquals(Legality.Legal, rules.validate(state, GameAction.Attack(blaster.id, target.id)))
+        val result = rules.apply(state, GameAction.Attack(blaster.id, target.id))
+        assertEquals(Legality.Legal, result.legality)
+        assertEquals(180, result.state.players[1].bench.single().damage)
+        assertTrue(result.state.players[0].active!!.energies.isEmpty())
+        assertEquals(3, result.state.players[0].discard.count { it.id.startsWith("bench-fire-") })
+    }
+
     @Test fun `Ampharos Synchro Pulse bonus uses actual hand sizes in attack preview`() {
         val ampharos = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me04-029"), emptyMap())!!
         val attack = ampharos.attacks.first().copy(cost = emptyList())
