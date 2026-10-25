@@ -73,6 +73,10 @@ internal object CatalogRuleCompiler {
         if (counterattack != null) return AbilityDefinition("$id-ability$index", name, text,
             requiresActive = true, retaliateDamageCounters = counterattack.groupValues[1].toInt(), usageKey = name)
         val attachEnergyDraw = Regex("Once during your turn, you may attach a Basic \\{([GRFLWPMD])} Energy card from your hand to this Pokémon\\. If you attached Energy to a Pokémon in this way, draw a card\\.").matchEntire(text)
+        val attachEnergyToType = Regex("Once during your turn, you may use this Ability\\. Attach a Basic \\{([GRFLWPMD])} Energy card from your hand to 1 of your \\{([GRFLWPMD])} Pokémon\\.").matchEntire(text)
+        if (attachEnergyToType != null) return AbilityDefinition("$id-ability$index", name, text, usageKey = name,
+            attachHandEnergyType = symbolType(attachEnergyToType.groupValues[1]) ?: return null,
+            attachHandEnergyToPokemonType = symbolType(attachEnergyToType.groupValues[2]) ?: return null)
         if (attachEnergyDraw != null) return AbilityDefinition("$id-ability$index", name, text,
             usageKey = name, attachHandEnergyType = symbolType(attachEnergyDraw.groupValues[1]) ?: return null,
             drawIfAttached = 1, usagePerPokemon = true)

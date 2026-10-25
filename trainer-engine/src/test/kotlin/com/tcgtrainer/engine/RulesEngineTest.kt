@@ -830,6 +830,34 @@ class RulesEngineTest {
         assertTrue(result.events.any { it.type == "OpponentHandShuffled" })
     }
 
+    @Test fun `Barbaracle Stone Arms attaches a Fighting Basic Energy to a chosen Fighting Pokemon`() {
+        val barbaracle = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me03-043"), emptyMap())!!
+        val energyDef = CardDefinition("stone-arms-energy", "Fighting Energy", "Test", "F", category = Category.ENERGY, type = EnergyType.FIGHTING, basicEnergy = true)
+        val targetDef = CardDefinition("stone-arms-target", "Fighting Target", "Test", "T", category = Category.POKEMON, hp = 120, type = EnergyType.FIGHTING)
+        val enemyDef = CardDefinition("stone-arms-enemy", "Enemy", "Test", "E", category = Category.POKEMON, hp = 100)
+        val rules = RulesEngine(object : CardCatalog { override fun get(id: String) = when (id) {
+            barbaracle.id -> barbaracle; energyDef.id -> energyDef; targetDef.id -> targetDef; enemyDef.id -> enemyDef; else -> TrainerCatalog.get(id)
+        } })
+        fun filler(id: String) = CardInstance(id, "sv01-258")
+        val energy = CardInstance("fighting-energy", energyDef.id)
+        val target = PokemonInstance(listOf(CardInstance("fighting-target", targetDef.id)), enteredPlayTurn = 0)
+        val state = GameState("stone-arms", 103, RngState(103), listOf(
+            PlayerState(deck = List(10) { filler("a-deck-$it") }, hand = listOf(energy), prizes = List(6) { filler("a-prize-$it") },
+                active = PokemonInstance(listOf(CardInstance("barbaracle", barbaracle.id)), enteredPlayTurn = 0), bench = listOf(target)),
+            PlayerState(deck = List(10) { filler("b-deck-$it") }, prizes = List(6) { filler("b-prize-$it") },
+                active = PokemonInstance(listOf(CardInstance("enemy", enemyDef.id)), enteredPlayTurn = 0))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val ability = barbaracle.abilities.single()
+        val used = rules.apply(state, GameAction.UseAbility("barbaracle", ability.id))
+        assertEquals(Legality.Legal, used.legality)
+        val chooseEnergy = rules.apply(used.state, GameAction.ChooseCards(listOf(energy.id)))
+        assertEquals(ChoiceKind.ABILITY_ATTACH_ENERGY_TARGET, chooseEnergy.state.resolution!!.choices.single().kind)
+        val attached = rules.apply(chooseEnergy.state, GameAction.ChooseCards(listOf(target.id)))
+        assertTrue(attached.state.players[0].hand.none { it.id == energy.id })
+        assertTrue(attached.state.players[0].bench.single().energies.any { it.id == energy.id })
+        assertEquals(Legality.Illegal("Esta habilidade já foi usada neste turno."), rules.validate(attached.state, GameAction.UseAbility("barbaracle", ability.id)))
+    }
+
     @Test fun `Ampharos Synchro Pulse bonus uses actual hand sizes in attack preview`() {
         val ampharos = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me04-029"), emptyMap())!!
         val attack = ampharos.attacks.first().copy(cost = emptyList())

@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.99.18 — Stone Arms de Barbaracle
+
+- Stone Arms liga uma Energia de Luta Básica da mão a um Pokémon de Luta escolhido; pode ser usada uma vez por turno.
+- As duas impressões legais de Barbaracle usam a mesma regra.
+- O motor de regras cobre 1.192 das 3.061 impressões da rotação Padrão.
+
 # POKECARD Brasil 5.99.17 — Cursed Words de Banette
 
 - Cursed Words permite que o adversário escolha três cartas da própria mão para embaralhar no deck.

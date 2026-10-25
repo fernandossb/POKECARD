@@ -141,6 +141,11 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
             fun value(id: String): Double = when (choice.kind) {
                 ChoiceKind.DISCARD, ChoiceKind.ABILITY_ENERGY, ChoiceKind.DISCARD_ATTACK_ENERGY, ChoiceKind.EVOLUTION_METAL_ENERGY -> -keepValue(checkNotNull(card(id)))
                 ChoiceKind.ABILITY_ATTACH_ENERGY -> keepValue(checkNotNull(card(id))) + 10.0
+                ChoiceKind.ABILITY_ATTACH_ENERGY_TARGET -> {
+                    val target = pokemon(id)
+                    val energy = checkNotNull(card(choice.selectedEnergy!!))
+                    potential(target.copy(energies = target.energies + energy)) - potential(target)
+                }
                 ChoiceKind.SEARCH, ChoiceKind.RECOVER, ChoiceKind.SONIA, ChoiceKind.EVOLUTION_RECOVER_NAMED_TRAINER -> keepValue(checkNotNull(card(id)))
                 ChoiceKind.ABILITY_SEARCH_BASIC_ENERGY_TO_HAND -> keepValue(checkNotNull(card(id)))
                 ChoiceKind.ABILITY_MOVE_ENERGY_TO_SELF -> -keepValue(checkNotNull(card(id)))

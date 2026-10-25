@@ -154,6 +154,16 @@ class CatalogRuleCompilerTest {
         assertEquals(listOf(Effect.OpponentChoosesHandShuffle(3)), banette.attacks.first().effects)
         assertEquals(listOf(Effect.Damage(70)), banette.attacks.last().effects)
     }
+    @Test fun `Barbaracle Stone Arms compiles a once per turn Fighting Energy attachment`() {
+        for (id in listOf("me03-043", "mep-065")) {
+            val barbaracle = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            val ability = barbaracle.abilities.single()
+            assertEquals(EnergyType.FIGHTING, ability.attachHandEnergyType)
+            assertEquals(EnergyType.FIGHTING, ability.attachHandEnergyToPokemonType)
+            assertEquals("Stone Arms", ability.name)
+            assertEquals(listOf(Effect.Damage(80)), barbaracle.attacks.single().effects)
+        }
+    }
     @Test fun `Tera card trait identifiers match current rotation catalog prints`() {
         assertEquals(90, CardTraits.teraPokemonIds.size)
         CardTraits.teraPokemonIds.forEach { id ->
