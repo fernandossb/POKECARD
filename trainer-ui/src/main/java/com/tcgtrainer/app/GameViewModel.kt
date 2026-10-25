@@ -12,7 +12,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 data class UiState(val game: GameState? = null, val canContinue: Boolean = false, val busy: Boolean = true, val message: String? = null)
-data class DeckUiState(val saved: List<SavedDeck> = emptyList(), val loaded: Boolean = false, val saving: Boolean = false, val message: String? = null)
+data class DeckUiState(val saved: List<SavedDeck> = emptyList(), val playableSaved: List<SavedDeck> = emptyList(), val loaded: Boolean = false, val saving: Boolean = false, val message: String? = null)
 
 class GameViewModel(app: Application) : AndroidViewModel(app) {
     val owned = try {
@@ -27,7 +27,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private val mutableDecks = MutableStateFlow(DeckUiState())
     val deckUi = mutableDecks.asStateFlow()
     fun clearDeckMessage() { mutableDecks.value = mutableDecks.value.copy(message = null) }
-    fun playableDecks() = TrainingDecks.all + mutableDecks.value.saved.filter { DeckValidator.validate(it).playable }.map { it.playableDeck() }
+    fun playableDecks() = TrainingDecks.all + mutableDecks.value.playableSaved.map { it.playableDeck() }
     fun deck(id: String) = playableDecks().firstOrNull { it.id == id }
     init { viewModelScope.launch {
         try { mutable.value = UiState(canContinue = db.saves().load() != null, busy = false) }
@@ -35,7 +35,9 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     }; viewModelScope.launch {
         try {
             db.decks().observe().collect { records ->
-                mutableDecks.value = mutableDecks.value.copy(saved = records.map { DeckCodec.decode(it.payload) }, loaded = true)
+                val saved = withContext(Dispatchers.Default) { records.map { DeckCodec.decode(it.payload) } }
+                val playable = withContext(Dispatchers.Default) { saved.filter { DeckValidator.validate(it).playable } }
+                mutableDecks.value = mutableDecks.value.copy(saved = saved, playableSaved = playable, loaded = true)
             }
         } catch (e: Exception) { mutableDecks.value = mutableDecks.value.copy(loaded = true, message = "Falha ao ler decks: ${e.message}") }
     } }
@@ -58,19 +60,25 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     fun start(seed: Long, mode: Mode, humanDeck: String = "lucario", cpuDeck: String = "random") {
         if (mutable.value.busy) return
         mutate {
-            val own = checkNotNull(deck(humanDeck)) { "Seu deck não está pronto para jogar." }
-            val candidates = playableDecks().filter { it.cards.size == 60 }.filter {
-                own.format != DeckFormat.STANDARD || DeckValidator.validate(SavedDeck(it.id, it.name, DeckFormat.STANDARD, it.cards.groupingBy { id -> id }.eachCount())).playable
+            val newSession = withContext(Dispatchers.Default) {
+                val decks = playableDecks()
+                val own = checkNotNull(decks.firstOrNull { it.id == humanDeck }) { "Seu deck não está pronto para jogar." }
+                val candidates = decks.filter { it.cards.size == 60 }.filter {
+                    own.format != DeckFormat.STANDARD || DeckValidator.validate(SavedDeck(it.id, it.name, DeckFormat.STANDARD, it.cards.groupingBy { id -> id }.eachCount())).playable
+                }
+                val other = if (cpuDeck == "random") {
+                    check(candidates.isNotEmpty()) { "Ainda não há adversários implementados elegíveis para este formato." }
+                    candidates[java.security.SecureRandom().nextInt(candidates.size)]
+                } else checkNotNull(candidates.firstOrNull { it.id == cpuDeck }) {
+                    "Este deck da máquina não é válido para o formato selecionado. Escolha outro baralho."
+                }
+                check(DeckValidator.validate(own).playable && DeckValidator.validate(other).playable) { "Confira as regras dos decks antes de jogar." }
+                check(mode == Mode.TRAINING || owned.allows(own.cards)) { ownershipMessage(own.cards) ?: "Confira sua coleção no PokeCard." }
+                GameSession(engine, SessionSnapshot(engine.newGame(seed,
+                    decks = listOf(own.cards, other.cards), mode = mode).copy(humanDeckId = humanDeck, cpuDeckId = other.id,
+                        deckLists = listOf(own.cards, other.cards), deckNames = listOf(own.name, other.name), deckFormats = listOf(own.format, other.format))))
             }
-            val other = if (cpuDeck == "random") {
-                check(candidates.isNotEmpty()) { "Ainda não há adversários implementados elegíveis para este formato." }
-                candidates[java.security.SecureRandom().nextInt(candidates.size)]
-            } else checkNotNull(deck(cpuDeck)) { "O deck da CPU não está pronto para jogar." }
-            check(DeckValidator.validate(own).playable && DeckValidator.validate(other).playable) { "Confira as regras dos decks antes de jogar." }
-            check(mode == Mode.TRAINING || owned.allows(own.cards)) { ownershipMessage(own.cards) ?: "Confira sua coleção no PokeCard." }
-            session = GameSession(engine, SessionSnapshot(engine.newGame(seed,
-                decks = listOf(own.cards, other.cards), mode = mode).copy(humanDeckId = humanDeck, cpuDeckId = other.id,
-                    deckLists = listOf(own.cards, other.cards), deckNames = listOf(own.name, other.name), deckFormats = listOf(own.format, other.format))))
+            session = newSession
         }
     }
     fun resume() {

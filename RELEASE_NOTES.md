@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.99.32 — Partidas e deck da máquina
+
+- A validação de decks e a preparação de partidas agora rodam fora da thread visual, evitando congelamento ao tocar em Jogar.
+- O menu inicial agora permite escolher o deck da máquina ou manter a escolha aleatória.
+- Baralhos inválidos para o formato são recusados com uma mensagem visível.
+- Validado por testes do motor e compilação Android.
 # POKECARD Brasil 5.99.31 — Correção de abertura do TCG Trainer
 
 - A tela inicial do Trainer carrega as artes de capa em segundo plano, sem compilar o catálogo inteiro durante a abertura.
