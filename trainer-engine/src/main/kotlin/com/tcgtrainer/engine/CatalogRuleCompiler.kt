@@ -29,6 +29,8 @@ internal object CatalogRuleCompiler {
     private fun compileAbility(id: String, index: Int, raw: JsonObject): AbilityDefinition? {
         val name = raw.s("name") ?: return null
         val text = raw.s("effect")?.trim().orEmpty()
+        if (text == "Prevent all effects of your opponent's Pokémon's attacks and Abilities done to this Pokémon. (Damage is not an effect.)")
+            return AbilityDefinition("$id-ability$index", name, text, preventOpponentEffects = true)
         if (text == "All of your Pokémon that have any {W} Energy attached take 50 less damage from attacks from your opponent's Pokémon (after applying Weakness and Resistance). The effect of Tundra Wall doesn't stack.")
             return AbilityDefinition("$id-ability$index", name, text, tundraWallWaterDamageReduction = 50)
         if (text == "As long as this Pokémon is on your Bench, prevent all damage done to each of your Pokémon by attacks from your opponent's Pokémon that have 2 or less Energy attached.")
@@ -223,6 +225,7 @@ internal object CatalogRuleCompiler {
         val matchingEnergySearch = Regex("Search your deck for up to (\\d+) Pokémon that are the same type as any Basic Energy attached to this Pokémon, reveal them, and put them into your hand\\. Then, shuffle your deck\\.").matchEntire(text)
         val basicEnergyToHandSearch = Regex("Search your deck for up to (\\d+) Basic Energy cards, reveal them, and put them into your hand\\. Then, shuffle your deck\\.").matchEntire(text)
         val pokemonSearchToHand = Regex("Search your deck for a Pokémon, reveal it, and put it into your hand\\. Then, shuffle your deck\\.").matchEntire(text)
+        val anyCardSearchToHand = text == "You may search your deck for a card and put it into your hand. Then, shuffle your deck."
         val attachAnyBasicEnergy = text == "You may attach any number of Basic Energy cards from your hand to your Pokémon in any way you like."
         val attachBasicEnergyFromDeckAny = Regex("Search your deck for up to (\\d+) Basic Energy cards and attach them to your Pokémon in any way you like\\. Then, shuffle your deck\\.").matchEntire(text)
         val coinKnockOutBasic = text == "Flip a coin. If heads, Knock Out your opponent's Active Basic Pokémon. If tails, Knock Out 1 of your opponent's Benched Basic Pokémon."
@@ -343,6 +346,7 @@ internal object CatalogRuleCompiler {
                 matchingEnergySearch != null -> effects += Effect.SearchPokemonMatchingAttachedBasicEnergy(matchingEnergySearch.groupValues[1].toInt())
                 basicEnergyToHandSearch != null -> effects += Effect.SearchBasicEnergyToHand(basicEnergyToHandSearch.groupValues[1].toInt())
                 pokemonSearchToHand != null -> effects += Effect.SearchPokemonToHand()
+                anyCardSearchToHand -> effects += Effect.SearchAnyCardToHand
                 attachAnyBasicEnergy -> effects += Effect.AttachAnyBasicEnergyFromHand
                 attachBasicEnergyFromDeckAny != null -> effects += Effect.AttachBasicEnergyFromDeckAny(attachBasicEnergyFromDeckAny.groupValues[1].toInt())
                 coinKnockOutBasic -> effects += Effect.CoinKnockOutBasic

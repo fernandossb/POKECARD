@@ -1,5 +1,7 @@
 package com.tcgtrainer.engine
 
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import kotlin.test.*
 
 class RulesEngineTest {
@@ -66,6 +68,49 @@ class RulesEngineTest {
         assertEquals(Legality.Legal, result.legality)
         assertEquals(160, result.state.players[1].active!!.damage)
         assertTrue(result.events.any { it.type == "OpponentHandRevealed" })
+    }
+
+    @Test fun `Puppet Pull chooses any card and shuffles the deck after the attack`() {
+        val row = CatalogRuleCompiler.rows.getValue("me05-034")
+        val attack = CatalogRuleCompiler.compileAttack("puppet-pull", 0, row["attacks"]!!.jsonArray.first().jsonObject)!!.copy(cost = emptyList())
+        val banette = CardDefinition("puppet-pull", "Banette", "Test", "1", category = Category.POKEMON, hp = 200, attacks = listOf(attack))
+        val sought = card("sought", "me01-001")
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            banette.id -> banette; else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        val state = GameState("puppet-pull", 42, RngState(42), listOf(
+            PlayerState(deck = listOf(sought) + List(9) { card("d0-$it", "sv01-258") }, prizes = List(6) { card("p0-$it", "sv01-258") },
+                active = PokemonInstance(listOf(card("banette", banette.id)), enteredPlayTurn = 0)),
+            PlayerState(deck = List(10) { card("d1-$it", "sv01-258") }, prizes = List(6) { card("p1-$it", "sv01-258") }, active = field("target", "me01-077"))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val hit = rules.apply(state, GameAction.Attack(attack.id))
+        assertEquals(Legality.Legal, hit.legality)
+        assertEquals(ChoiceKind.ATTACK_ANY_CARD_SEARCH, hit.state.resolution!!.choices.single().kind)
+        val chosen = rules.apply(hit.state, GameAction.ChooseCards(listOf(sought.id)))
+        assertEquals(Legality.Legal, chosen.legality)
+        assertTrue(chosen.state.players[0].hand.any { it.id == sought.id })
+        assertFalse(chosen.state.players[0].deck.any { it.id == sought.id })
+    }
+
+    @Test fun `Banette Hide n Sneak prevents attack effects but not damage`() {
+        val banette = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me05-034"), emptyMap())!!
+        val incoming = CardDefinition("effect-attacker", "Effect Attacker", "Test", "1", category = Category.POKEMON, hp = 200,
+            attacks = listOf(AttackDefinition("status-hit", "Status Hit", emptyList(), listOf(Effect.Damage(50), Effect.StatusCondition(SpecialCondition.PARALYZED)))))
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            banette.id -> banette; incoming.id -> incoming; else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        val state = GameState("hide-sneak", 45, RngState(45), listOf(
+            PlayerState(deck = List(10) { card("d0-$it", "sv01-258") }, prizes = List(6) { card("p0-$it", "sv01-258") }, active = field("attacker", incoming.id)),
+            PlayerState(deck = List(10) { card("d1-$it", "sv01-258") }, prizes = List(6) { card("p1-$it", "sv01-258") }, active = PokemonInstance(listOf(card("banette", banette.id)), enteredPlayTurn = 0))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val expectedDamage = rules.preview(state, "status-hit")!!.damage
+        val result = rules.apply(state, GameAction.Attack("status-hit"))
+        assertEquals(Legality.Legal, result.legality)
+        assertTrue(expectedDamage > 0)
+        assertEquals(expectedDamage, result.state.players[1].active!!.damage)
+        assertFalse(SpecialCondition.PARALYZED in result.state.players[1].active!!.conditions)
     }
 
     @Test fun `Resolute Heart prevents attack knockout only at full HP`() {

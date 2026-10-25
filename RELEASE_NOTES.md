@@ -1,3 +1,8 @@
+# POKECARD Brasil 5.99.22 — Hide 'n' Sneak e Puppet Pull de Banette
+
+- Hide 'n' Sneak impede efeitos de ataques e habilidades adversárias direcionados a Banette; o dano de ataque continua normal.
+- Puppet Pull permite buscar qualquer carta do deck para a mão e embaralha o deck após a escolha.
+- As duas impressões de Banette usam essas regras; cobertura: 1.201 das 3.061 impressões Padrão.
 # POKECARD Brasil 5.99.21 — Energy Straw de Beautifly
 
 - Energy Straw revela a mão adversária e causa 80 de dano para cada carta de Energia encontrada.

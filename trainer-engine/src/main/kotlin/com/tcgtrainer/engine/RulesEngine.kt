@@ -441,7 +441,8 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     result
                 } else false
                 val defender = action.targetId?.let { id -> next.players[opponent].pokemon().first { it.id == id } } ?: next.players[opponent].active!!
-                val defenderEffectsPrevented = defender.attackImmunityTurn == state.turn
+                val defenderEffectsPrevented = defender.attackImmunityTurn == state.turn ||
+                    definition(defender.top).abilities.any { it.preventOpponentEffects }
                 if (attack.effects.any { it is Effect.OpponentHandEnergyCountDamage }) {
                     val revealed = next.players[opponent].hand.joinToString(", ") { definition(it).name }
                     emit("OpponentHandRevealed", "Mão adversária revelada: ${revealed.ifEmpty { "vazia" }}.")
@@ -653,12 +654,12 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         "Você pode ligar Energias Básicas da mão aos seus Pokémon, uma por vez.", eligible.map { it.id }, 0, 1)
                 }
                 if (!defenderEffectsPrevented && knockoutHeads == 0 && Effect.CoinKnockOutBasic in attack.effects) {
-                    val targets = next.players[opponent].bench.filter { definition(it.top).stage == Stage.BASIC && it.attackImmunityTurn != state.turn }
+                    val targets = next.players[opponent].bench.filter { definition(it.top).stage == Stage.BASIC && it.attackImmunityTurn != state.turn && definition(it.top).abilities.none { ability -> ability.preventOpponentEffects } }
                     if (targets.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.ATTACK_KNOCKOUT_BASIC_BENCH,
                         "Escolha um Pokémon Básico do Banco adversário para Nocautear.", targets.map { it.id }, 1, 1)
                 }
                 if (!defenderEffectsPrevented && Effect.MoveOpponentDamageCounters in attack.effects) {
-                    val field = next.players[opponent].pokemon()
+                    val field = next.players[opponent].pokemon().filter { definition(it.top).abilities.none { ability -> ability.preventOpponentEffects } }
                     val sources = field.filter { source -> source.damage >= 10 && field.any { it.id != source.id } }
                     if (sources.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.ATTACK_MOVE_DAMAGE_SOURCE,
                         "Você pode mover contadores de dano entre Pokémon adversários.", sources.map { it.id }, 0, 1)
@@ -669,8 +670,8 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         "Escolha um Pokémon do Banco adversário para receber ${effect.amount} de dano.", bench.map { it.id }, 1, 1, amount = effect.amount)
                 }
                 attack.effects.filterIsInstance<Effect.BenchDamageCounters>().forEach { effect ->
-                    val bench = next.players[opponent].bench.filter { it.attackImmunityTurn != state.turn }
-                    if (!defenderEffectsPrevented && bench.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.ATTACK_DAMAGE_COUNTER_TARGET,
+                    val bench = next.players[opponent].bench.filter { it.attackImmunityTurn != state.turn && definition(it.top).abilities.none { ability -> ability.preventOpponentEffects } }
+                    if (bench.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.ATTACK_DAMAGE_COUNTER_TARGET,
                         "Escolha um Pokémon do Banco adversário para receber ${effect.count} contadores de dano.",
                         bench.map { it.id }, 1, 1, amount = effect.count * 10)
                 }
@@ -717,6 +718,12 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     val eligible = next.players[actor].deck.filter { definition(it).category == Category.POKEMON }
                     choices += ChoiceRequest(ChoiceKind.ATTACK_POKEMON_SEARCH,
                         "Você pode buscar um Pokémon no deck e colocá-lo na mão.", eligible.map { it.id }, 0, minOf(effect.max, eligible.size), visibleCards = eligible.map { it.id })
+                }
+                if (Effect.SearchAnyCardToHand in attack.effects && next.players[actor].deck.isNotEmpty()) {
+                    val eligible = next.players[actor].deck
+                    choices += ChoiceRequest(ChoiceKind.ATTACK_ANY_CARD_SEARCH,
+                        "Você pode buscar qualquer carta no deck e colocá-la na mão.", eligible.map { it.id }, 0, 1,
+                        visibleCards = eligible.map { it.id })
                 }
                 attack.effects.filterIsInstance<Effect.SearchBasicEnergyToHand>().forEach { effect ->
                     val eligible = next.players[actor].deck.filter { definition(it).category == Category.ENERGY && definition(it).basicEnergy }
@@ -782,7 +789,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 }
                 val acceleration = attack.effects.filterIsInstance<Effect.AccelerateEnergy>().firstOrNull()
                 if (choices.isNotEmpty()) next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.ATTACK,
-                    resolution = Resolution(choices, shuffleAfter = attack.effects.any { it is Effect.EnergyFromDeck || it is Effect.AttachBasicEnergyFromDeckAny || it is Effect.SearchPokemonToHand || it is Effect.BasicPokemonToBench || it == Effect.SearchRotomToBench || it is Effect.SearchPokemonMatchingAttachedBasicEnergy || it is Effect.SearchBasicEnergyToHand }))
+                    resolution = Resolution(choices, shuffleAfter = attack.effects.any { it is Effect.EnergyFromDeck || it is Effect.AttachBasicEnergyFromDeckAny || it is Effect.SearchPokemonToHand || it == Effect.SearchAnyCardToHand || it is Effect.BasicPokemonToBench || it == Effect.SearchRotomToBench || it is Effect.SearchPokemonMatchingAttachedBasicEnergy || it is Effect.SearchBasicEnergyToHand }))
                 else if (acceleration != null && p.bench.isNotEmpty()) {
                     val eligible = next.players[actor].discard.filter { definition(it).category == Category.ENERGY && definition(it).type == acceleration.type }.map { it.id }
                     if (eligible.isNotEmpty()) next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.ATTACK,

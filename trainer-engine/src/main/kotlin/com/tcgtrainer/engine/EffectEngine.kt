@@ -27,7 +27,8 @@ class EffectEngine(private val catalog: CardCatalog) {
         if (defender.preventBasicNonColorlessDamageTurn >= 0 && defender.preventBasicNonColorlessDamageTurn == turn &&
             source.stage == Stage.BASIC && source.type != EnergyType.COLORLESS) return 0
         if (defender.preventBasicPokemonDamageTurn >= 0 && defender.preventBasicPokemonDamageTurn == turn && source.stage == Stage.BASIC) return 0
-        val counterDamage = effects.filterIsInstance<Effect.OwnHandCounterDamage>().sumOf { it.countersPerCard * 10 * ownHandCount }
+        val targetPreventsEffects = target.abilities.any { it.preventOpponentEffects }
+        val counterDamage = if (targetPreventsEffects) 0 else effects.filterIsInstance<Effect.OwnHandCounterDamage>().sumOf { it.countersPerCard * 10 * ownHandCount }
         val abilityHandBonus = if (ownHandCount == opponentHandCount) source.abilities.sumOf { it.damageBonusIfHandsEqual } else 0
         val abilityDamageBonus = if (targetIsOpponentActive) source.abilities.sumOf { ability ->
             if (ability.damageBonusAgainstActiveWhenDamageAtLeast > 0 && attacker.damage >= ability.damageBonusAgainstActiveWhenDamageAtLeast)
@@ -78,7 +79,7 @@ class EffectEngine(private val catalog: CardCatalog) {
     }
     fun supported(attack: AttackDefinition): Boolean = attack.effects.all { effect -> when (effect) {
         is Effect.Damage, is Effect.DrawToHand, is Effect.AccelerateEnergy, is Effect.RestrictNextTurn, is Effect.Recoil,
-        is Effect.RequiresBenched, is Effect.TargetedDamage, is Effect.SearchPokemonToHand, is Effect.HealOwnPokemon, Effect.IgnoreWeaknessResistance, Effect.IgnoreResistance, Effect.IgnoreOpponentActiveEffects,
+        is Effect.RequiresBenched, is Effect.TargetedDamage, is Effect.SearchPokemonToHand, Effect.SearchAnyCardToHand, is Effect.HealOwnPokemon, Effect.IgnoreWeaknessResistance, Effect.IgnoreResistance, Effect.IgnoreOpponentActiveEffects,
         is Effect.CoinDamage, is Effect.DiscardAttackEnergy, is Effect.EnergyFromDeck, is Effect.SupporterBonus, is Effect.Draw,
         Effect.PreventRetreatNextTurn, Effect.DiscardDefendingTools, is Effect.ConditionalEnergyDamage, is Effect.ConditionalInPlayEnergyDamage, is Effect.SwitchOwn,
         is Effect.BenchedCountDamage, is Effect.OwnBenchWithEnergyDamage, is Effect.OwnInPlayCountDamage, is Effect.OwnDamageCounterDamage, is Effect.OwnUndamagedDamageBonus,

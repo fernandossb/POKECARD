@@ -184,6 +184,13 @@ class CatalogRuleCompilerTest {
             assertTrue(beautifly.attacks.single { it.name == "Stun Spore" }.effects.any { it is Effect.StatusCondition && it.onHeads })
         }
     }
+    @Test fun `Banette Puppet Pull compiles an optional search for any card`() {
+        val row = CatalogRuleCompiler.rows.getValue("me05-034")
+        val attack = CatalogRuleCompiler.compileAttack("me05-034", 0, row["attacks"]!!.jsonArray.first().jsonObject)!!
+        assertTrue(Effect.SearchAnyCardToHand in attack.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(attack))
+        assertTrue(CatalogRuleCompiler.compile(row, emptyMap())!!.abilities.single().preventOpponentEffects)
+    }
     @Test fun `Tera card trait identifiers match current rotation catalog prints`() {
         assertEquals(90, CardTraits.teraPokemonIds.size)
         CardTraits.teraPokemonIds.forEach { id ->
