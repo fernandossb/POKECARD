@@ -144,16 +144,19 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
         if (input.phase == Phase.RESOLVE_CHOICE) {
             val choice = checkNotNull(input.choice)
             fun value(id: String): Double = when (choice.kind) {
-                ChoiceKind.DISCARD, ChoiceKind.ABILITY_ENERGY, ChoiceKind.DISCARD_ATTACK_ENERGY, ChoiceKind.EVOLUTION_METAL_ENERGY -> -keepValue(checkNotNull(card(id)))
+                ChoiceKind.DISCARD, ChoiceKind.ABILITY_ENERGY, ChoiceKind.ABILITY_DISCARD_ENERGY_FROM_DISCARD, ChoiceKind.DISCARD_ATTACK_ENERGY, ChoiceKind.EVOLUTION_METAL_ENERGY -> -keepValue(checkNotNull(card(id)))
                 ChoiceKind.ABILITY_ATTACH_ENERGY -> keepValue(checkNotNull(card(id))) + 10.0
-                ChoiceKind.ABILITY_ATTACH_ENERGY_TARGET -> {
+                ChoiceKind.ABILITY_ATTACH_ENERGY_TARGET, ChoiceKind.ABILITY_DISCARD_ENERGY_TARGET -> {
                     val target = pokemon(id)
-                    val energy = checkNotNull(card(choice.selectedEnergy!!))
+                    val energy = checkNotNull(if (choice.kind == ChoiceKind.ABILITY_DISCARD_ENERGY_TARGET)
+                        o.ownDiscard.find { it.id == choice.selectedEnergy } else card(choice.selectedEnergy!!))
                     potential(target.copy(energies = target.energies + energy)) - potential(target)
                 }
                 ChoiceKind.SEARCH, ChoiceKind.RECOVER, ChoiceKind.SONIA, ChoiceKind.EVOLUTION_RECOVER_NAMED_TRAINER -> keepValue(checkNotNull(card(id)))
                 ChoiceKind.ABILITY_SEARCH_BASIC_ENERGY_TO_HAND -> keepValue(checkNotNull(card(id)))
                 ChoiceKind.ABILITY_MOVE_ENERGY_TO_SELF -> -keepValue(checkNotNull(card(id)))
+                ChoiceKind.ABILITY_MOVE_BASIC_ENERGY -> 1.0
+                ChoiceKind.ABILITY_MOVE_BASIC_ENERGY_TARGET -> { val target = pokemon(id); val energy = checkNotNull(own.flatMap { it.energies }.find { it.id == choice.selectedEnergy }); potential(target.copy(energies = target.energies + energy)) - potential(target) }
                 ChoiceKind.OPPONENT_SHUFFLES_OWN_HAND -> -keepValue(checkNotNull(card(id)))
                 ChoiceKind.SWITCH_OPPONENT, ChoiceKind.EVOLUTION_SWITCH -> active?.let { attackValue(it, pokemon(id)) } ?: 0.0
                 ChoiceKind.SWITCH_OWN -> attackValue(pokemon(id)) - (active?.let(::attackValue) ?: 0.0) + potential(pokemon(id))*.05

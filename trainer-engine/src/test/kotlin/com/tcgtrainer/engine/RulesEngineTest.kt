@@ -1061,6 +1061,40 @@ class RulesEngineTest {
         assertEquals(Legality.Illegal("Esta habilidade já foi usada neste turno."), rules.validate(attached.state, GameAction.UseAbility("barbaracle", ability.id)))
     }
 
+    @Test fun `Blissey ex Happy Switch moves only a Basic Energy between different own Pokemon once`() {
+        val blissey = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv06-134"), emptyMap())!!
+        val basic = CardDefinition("happy-basic", "Fire Energy", "Test", "B", category = Category.ENERGY, type = EnergyType.FIRE, basicEnergy = true)
+        val special = CardDefinition("happy-special", "Special Energy", "Test", "S", category = Category.ENERGY)
+        val targetDef = CardDefinition("happy-target", "Target", "Test", "T", category = Category.POKEMON, hp = 100)
+        val enemyDef = CardDefinition("happy-enemy", "Enemy", "Test", "E", category = Category.POKEMON, hp = 100)
+        val rules = RulesEngine(object : CardCatalog { override fun get(id: String) = when (id) {
+            blissey.id -> blissey; basic.id -> basic; special.id -> special; targetDef.id -> targetDef; enemyDef.id -> enemyDef
+            else -> TrainerCatalog.get(id)
+        } })
+        fun filler(id: String) = CardInstance(id, "sv01-258")
+        val basicCard = CardInstance("happy-energy", basic.id)
+        val specialCard = CardInstance("happy-special-energy", special.id)
+        val source = PokemonInstance(listOf(CardInstance("happy-blissey", blissey.id)), energies = listOf(basicCard, specialCard), enteredPlayTurn = 0)
+        val target = PokemonInstance(listOf(CardInstance("happy-target-card", targetDef.id)), enteredPlayTurn = 0)
+        val state = GameState("happy-switch", 211, RngState(211), listOf(
+            PlayerState(deck = List(10) { filler("happy-deck-$it") }, prizes = List(6) { filler("happy-prize-$it") }, active = source, bench = listOf(target)),
+            PlayerState(deck = List(10) { filler("happy-enemy-deck-$it") }, prizes = List(6) { filler("happy-enemy-prize-$it") }, active = PokemonInstance(listOf(CardInstance("happy-enemy-card", enemyDef.id)), enteredPlayTurn = 0))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val ability = blissey.abilities.single()
+        val begun = rules.apply(state, GameAction.UseAbility("happy-blissey", ability.id))
+        assertEquals(Legality.Legal, begun.legality)
+        val energyChoice = begun.state.resolution!!.choices.single()
+        assertEquals(listOf(basicCard.id), energyChoice.candidates)
+        val chooseBasic = rules.apply(begun.state, GameAction.ChooseCards(listOf(basicCard.id)))
+        assertEquals(listOf(target.id), chooseBasic.state.resolution!!.choices.single().candidates)
+        val moved = rules.apply(chooseBasic.state, GameAction.ChooseCards(listOf(target.id)))
+        assertEquals(Legality.Legal, moved.legality)
+        assertTrue(moved.state.players[0].active!!.energies.any { it.id == specialCard.id })
+        assertFalse(moved.state.players[0].active!!.energies.any { it.id == basicCard.id })
+        assertTrue(moved.state.players[0].bench.single().energies.any { it.id == basicCard.id })
+        assertEquals(Legality.Illegal("Esta habilidade já foi usada neste turno."), rules.validate(moved.state, GameAction.UseAbility("happy-blissey", ability.id)))
+    }
+
     @Test fun `Basculin Bared Fangs deals damage only when opposing Active starts undamaged`() {
         val basculin = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv10.5w-024"), emptyMap())!!
         val attack = basculin.attacks.last().copy(cost = emptyList())
@@ -1739,6 +1773,36 @@ class RulesEngineTest {
         assertEquals(Phase.BONUS_BENCH, drawn.phase)
         assertIs<Legality.Illegal>(engine.validate(drawn, GameAction.PlayBasic("old-basic")))
         assertEquals(Legality.Legal, engine.validate(drawn, GameAction.PlayBasic("bonus-basic")))
+    }
+    @Test fun `Blaziken ex Seething Spirit attaches one Basic Energy from discard to any own Pokemon once per turn`() {
+        val blaziken = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv09-024"), emptyMap())!!
+        val basic = CardDefinition("test-basic-energy", "Basic Fire Energy", "Test", "R", category = Category.ENERGY, type = EnergyType.FIRE, basicEnergy = true)
+        val special = CardDefinition("test-special-energy", "Special Energy", "Test", "S", category = Category.ENERGY, type = EnergyType.COLORLESS, basicEnergy = false)
+        val target = CardDefinition("test-energy-target", "Target", "Test", "T", category = Category.POKEMON, hp = 100)
+        val rules = RulesEngine(object : CardCatalog { override fun get(id: String) = when (id) {
+            blaziken.id -> blaziken; basic.id -> basic; special.id -> special; target.id -> target; else -> TrainerCatalog.get(id)
+        } })
+        val basicCard = card("discard-basic", basic.id); val specialCard = card("discard-special", special.id)
+        val ally = PokemonInstance(listOf(card("ally", target.id)), enteredPlayTurn = 0)
+        val state = GameState("seething-spirit", 52, RngState(52), listOf(
+            PlayerState(deck = List(10) { card("d0-$it") }, discard = listOf(basicCard, specialCard), prizes = List(6) { card("p0-$it") },
+                active = PokemonInstance(listOf(card("blaziken", blaziken.id)), enteredPlayTurn = 0), bench = listOf(ally)),
+            PlayerState(deck = List(10) { card("d1-$it") }, prizes = List(6) { card("p1-$it") }, active = field("op"))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val ability = blaziken.abilities.single()
+        val used = rules.apply(state, GameAction.UseAbility("blaziken", ability.id))
+        assertEquals(Legality.Legal, used.legality)
+        val chooseEnergy = used.state.resolution!!.choices.single()
+        assertEquals(ChoiceKind.ABILITY_DISCARD_ENERGY_FROM_DISCARD, chooseEnergy.kind)
+        assertEquals(listOf(basicCard.id), chooseEnergy.candidates)
+        val chooseTarget = rules.apply(used.state, GameAction.ChooseCards(listOf(basicCard.id)))
+        assertEquals(ChoiceKind.ABILITY_DISCARD_ENERGY_TARGET, chooseTarget.state.resolution!!.choices.single().kind)
+        val attached = rules.apply(chooseTarget.state, GameAction.ChooseCards(listOf(ally.id)))
+        assertEquals(Legality.Legal, attached.legality)
+        assertTrue(attached.state.players[0].discard.any { it.id == specialCard.id })
+        assertFalse(attached.state.players[0].discard.any { it.id == basicCard.id })
+        assertTrue(attached.state.players[0].bench.single().energies.any { it.id == basicCard.id })
+        assertEquals(Legality.Illegal("Esta habilidade já foi usada neste turno."), rules.validate(attached.state, GameAction.UseAbility("blaziken", ability.id)))
     }
     @Test fun `seeded full game conserves all copies and replay matches`() {
         val initial = engine.newGame(123456)

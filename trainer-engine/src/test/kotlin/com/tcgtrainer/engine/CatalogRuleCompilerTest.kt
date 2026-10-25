@@ -30,6 +30,19 @@ class CatalogRuleCompilerTest {
             assertTrue(Effect.DiscardEnergyThenBenchDamage(2, 120) in attack.effects)
         }
     }
+    @Test fun `Blissey ex Happy Switch and Return compile fully`() {
+        for (id in listOf("sv06-134", "sv06-201")) {
+            val blissey = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            assertTrue(blissey.abilities.single().moveBasicEnergyBetweenOwnPokemon)
+            assertTrue(Effect.DrawToHand(6) in blissey.attacks.single { it.name == "Return" }.effects)
+        }
+    }
+    @Test fun `Blaziken ex Seething Spirit attaches a Basic Energy from discard and blocks its next attack`() {
+        val blaziken = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv09-024"), emptyMap())!!
+        assertTrue(blaziken.abilities.single().attachBasicEnergyFromDiscard)
+        assertEquals("Seething Spirit", blaziken.abilities.single().name)
+        assertEquals(listOf(Effect.Damage(200), Effect.RestrictNextTurn()), blaziken.attacks.single().effects)
+    }
     @Test fun `Archaludon Metal Bridge compiles to a passive Metal energy retreat rule`() {
         for (id in listOf("sv07-107", "sv07-155", "sv08.5-070")) {
             val archaludon = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!

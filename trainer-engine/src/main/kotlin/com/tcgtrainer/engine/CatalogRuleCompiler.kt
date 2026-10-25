@@ -47,6 +47,10 @@ internal object CatalogRuleCompiler {
             return AbilityDefinition("$id-ability$index", name, text, requiresActive = true, usageKey = name, devolveOpponentPokemonMax = 1)
         if (text == "Your opponent's Active Evolution Pokémon's Retreat Cost is {C} more.")
             return AbilityDefinition("$id-ability$index", name, text, opponentActiveEvolutionRetreatCostBonus = 1)
+        if (text == "Once during your turn, you may move a Basic Energy from 1 of your Pokémon to another of your Pokémon.")
+            return AbilityDefinition("$id-ability$index", name, text, usageKey = name, moveBasicEnergyBetweenOwnPokemon = true)
+        if (text == "Once during your turn, you may attach a Basic Energy card from your discard pile to 1 of your Pokémon.")
+            return AbilityDefinition("$id-ability$index", name, text, usageKey = name, attachBasicEnergyFromDiscard = true)
         val searchEnergyToHand = Regex("Once during your turn, you may use this Ability\\. Search your deck for up to (\\d+) Basic \\{([GRFLWPMD])} Energy cards, reveal them, and put them into your hand\\. Then, shuffle your deck\\.").matchEntire(text)
         if (searchEnergyToHand != null) return AbilityDefinition("$id-ability$index", name, text,
             usageKey = name, searchBasicEnergyTypeToHand = symbolType(searchEnergyToHand.groupValues[2]) ?: return null,

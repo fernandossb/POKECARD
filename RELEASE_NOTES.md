@@ -1,3 +1,18 @@
+# POKECARD Brasil 5.99.29 — Happy Switch de Blissey ex
+
+- Happy Switch move uma Energia Básica entre dois Pokémon seus diferentes, à sua escolha, uma vez por turno.
+- Energias Especiais não aparecem entre as opções; Return mantém o dano de 180 e compra até completar 6 cartas na mão.
+- As duas impressões de Blissey ex executam a habilidade e o ataque; testes de compilação e partida cobrem seleção, transferência e limite de uso.
+
+- Cobertura Padrão: 1.223 de 3.061 impressões.
+
+# POKECARD Brasil 5.99.28 — Seething Spirit de Blaziken ex
+
+- Seething Spirit permite ligar uma Energia Básica do descarte a qualquer Pokémon próprio, uma vez por turno.
+- Smolder-sault já bloqueava os ataques de Blaziken ex no próximo turno e agora fica coberto junto com a habilidade.
+- A ativação só oferece Energias Básicas, pede a escolha de qualquer Pokémon próprio e consome a habilidade uma vez por turno.
+- Cobertura Padrão: 1.221 de 3.061 impressões.
+
 # POKECARD Brasil 5.99.27 — Inferno Kick Flurry de Blaziken
 
 - Ataque de Blaziken causa dano ao Ativo, descarta duas Energias do atacante e permite escolher um Pokémon do Banco para receber mais 120 de dano sem Fraqueza/Resistência.
