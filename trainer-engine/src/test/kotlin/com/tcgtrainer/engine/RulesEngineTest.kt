@@ -743,6 +743,38 @@ class RulesEngineTest {
         assertEquals(80, result.state.players[1].active!!.damage)
     }
 
+    @Test fun `Azumarill ex Bubble Gathering can move multiple energies from other Pokemon in one turn`() {
+        val azumarill = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me02.5-084"), emptyMap())!!
+        val energyDef = CardDefinition("bubble-energy", "Fire Energy", "Test", "F", category = Category.ENERGY, type = EnergyType.FIRE, basicEnergy = true)
+        val donorDef = CardDefinition("bubble-donor", "Donor", "Test", "D", category = Category.POKEMON, hp = 100)
+        val targetDef = CardDefinition("bubble-target", "Target", "Test", "T", category = Category.POKEMON, hp = 100)
+        val azumarillDef = azumarill.copy()
+        val rules = RulesEngine(object : CardCatalog { override fun get(id: String) = when (id) {
+            azumarillDef.id -> azumarillDef; energyDef.id -> energyDef; donorDef.id -> donorDef; targetDef.id -> targetDef; else -> TrainerCatalog.get(id)
+        } })
+        fun filler(id: String) = CardInstance(id, "sv01-258")
+        val energy1 = CardInstance("donor-energy-1", energyDef.id)
+        val energy2 = CardInstance("donor-energy-2", energyDef.id)
+        val state = GameState("bubble-gathering", 93, RngState(93), listOf(
+            PlayerState(deck = List(10) { filler("a-deck-$it") }, prizes = List(6) { filler("a-prize-$it") },
+                active = PokemonInstance(listOf(CardInstance("azumarill", azumarillDef.id)), enteredPlayTurn = 0),
+                bench = listOf(PokemonInstance(listOf(CardInstance("donor", donorDef.id)), energies = listOf(energy1, energy2), enteredPlayTurn = 0))),
+            PlayerState(deck = List(10) { filler("b-deck-$it") }, prizes = List(6) { filler("b-prize-$it") },
+                active = PokemonInstance(listOf(CardInstance("target", targetDef.id)), enteredPlayTurn = 0))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val ability = azumarill.abilities.single()
+        var result = rules.apply(state, GameAction.UseAbility("azumarill", ability.id))
+        assertEquals(Legality.Legal, result.legality)
+        result = rules.apply(result.state, GameAction.ChooseCards(listOf(energy1.id)))
+        assertTrue(result.state.players[0].active!!.energies.any { it.id == energy1.id })
+        result = rules.apply(result.state, GameAction.UseAbility("azumarill", ability.id))
+        assertEquals(Legality.Legal, result.legality)
+        result = rules.apply(result.state, GameAction.ChooseCards(listOf(energy2.id)))
+        assertEquals(setOf(energy1.id, energy2.id), result.state.players[0].active!!.energies.map { it.id }.toSet())
+        assertTrue(result.state.players[0].flags.abilitiesUsed.none { it.contains(ability.name) })
+        assertEquals(Legality.Illegal("Não há Energia em outro Pokémon para mover."), rules.validate(result.state, GameAction.UseAbility("azumarill", ability.id)))
+    }
+
     @Test fun `Ampharos Synchro Pulse bonus uses actual hand sizes in attack preview`() {
         val ampharos = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me04-029"), emptyMap())!!
         val attack = ampharos.attacks.first().copy(cost = emptyList())

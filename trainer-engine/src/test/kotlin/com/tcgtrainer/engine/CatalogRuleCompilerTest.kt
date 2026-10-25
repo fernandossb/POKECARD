@@ -135,6 +135,12 @@ class CatalogRuleCompilerTest {
         val azelf = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv08-080"), emptyMap())!!
         assertEquals(listOf(Effect.Damage(10), Effect.OpponentFieldDamageCounterDamage(10)), azelf.attacks.single().effects)
     }
+    @Test fun `Azumarill ex compiles unlimited energy transfer and Psychic Energy damage scaling`() {
+        val azumarill = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me02.5-084"), emptyMap())!!
+        assertTrue(azumarill.abilities.single().moveEnergyFromOtherPokemonToSelf)
+        assertTrue(azumarill.abilities.single().unlimitedUse)
+        assertEquals(listOf(Effect.Damage(60), Effect.OwnEnergyTypeCountDamage(EnergyType.PSYCHIC, 40)), azumarill.attacks.single().effects)
+    }
     @Test fun `healing executes and never creates negative damage`() {
         val move = CatalogRuleCompiler.compileAttack("test", 0, attack("Heal 30 damage from this Pokémon."))!!
         val def = CardDefinition("test", "Test", "T", "1", category = Category.POKEMON, hp = 200, attacks = listOf(move))

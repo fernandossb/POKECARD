@@ -31,6 +31,8 @@ internal object CatalogRuleCompiler {
         val text = raw.s("effect")?.trim().orEmpty()
         if (text == "All of your Pokémon that have any {W} Energy attached take 50 less damage from attacks from your opponent's Pokémon (after applying Weakness and Resistance). The effect of Tundra Wall doesn't stack.")
             return AbilityDefinition("$id-ability$index", name, text, tundraWallWaterDamageReduction = 50)
+        if (text == "As often as you like during your turn, you may use this Ability. Move an Energy from 1 of your other Pokémon to this Pokémon.")
+            return AbilityDefinition("$id-ability$index", name, text, moveEnergyFromOtherPokemonToSelf = true, unlimitedUse = true)
         if (text == "All of your Pokémon that have {M} Energy attached have no Retreat Cost.")
             return AbilityDefinition("$id-ability$index", name, text, freeRetreatWithAttachedEnergyType = EnergyType.METAL)
         if (text == "Once during your turn, if this Pokémon is in the Active Spot, you may devolve 1 of your opponent's evolved Pokémon by putting the highest Stage Evolution card on it into your opponent's hand.")
@@ -196,6 +198,7 @@ internal object CatalogRuleCompiler {
         val ownDamagedPokemon = Regex("This attack does (\\d+) damage for each of your Pokémon that has any damage counters on it\\.").matchEntire(text)
         val ownDamageCounters = Regex("This attack does (\\d+) damage for each damage counter on this Pokémon\\.").matchEntire(text)
         val opponentFieldDamageCounters = Regex("This attack does (\\d+) more damage for each damage counter on all of your opponent's Pokémon\\.").matchEntire(text)
+        val ownPsychicEnergyDamage = Regex("This attack does (\\d+) more damage for each \\{P} Energy attached to this Pokémon\\.").matchEntire(text)
         val ownHandCounters = Regex("Place (\\d+) damage counters on your opponent's Active Pokémon for each card in your hand\\.").matchEntire(text)
         val ownToolDamage = Regex("This attack does (\\d+) damage for each Pokémon Tool attached to all of your Pokémon\\.").matchEntire(text)
         val discardTopEnergyDamage = Regex("Discard the top (\\d+) cards of your deck, and this attack does (\\d+) damage for each Basic \\{([GRFLWPMD])} Energy card you discarded in this way\\.").matchEntire(text)
@@ -242,7 +245,13 @@ internal object CatalogRuleCompiler {
             rawParts.mapNotNull { part -> runCatching { SpecialCondition.valueOf(part.uppercase()) }.getOrNull() }
                 .takeIf { parts -> parts.size >= 2 && parts.size == rawParts.size }
         }
-        if (opponentFieldDamageCounters != null) {
+        if (ownPsychicEnergyDamage != null) {
+            val perEnergy = ownPsychicEnergyDamage.groupValues[1].toInt()
+            if (!damageText.endsWith("+")) return null
+            val base = damageText.removeSuffix("+").toIntOrNull() ?: return null
+            if (base > 0) effects += Effect.Damage(base)
+            effects += Effect.OwnEnergyTypeCountDamage(EnergyType.PSYCHIC, perEnergy)
+        } else if (opponentFieldDamageCounters != null) {
             val perCounter = opponentFieldDamageCounters.groupValues[1].toInt()
             if (!damageText.endsWith("+")) return null
             val base = damageText.removeSuffix("+").toIntOrNull() ?: return null

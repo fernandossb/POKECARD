@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.99.15 — Bubble Gathering de Azumarill ex
+
+- Bubble Gathering move uma Energia de outro Pokémon para Azumarill ex, pode ser usada quantas vezes houver Energias transferíveis no mesmo turno.
+- Energized Balloon causa 40 de dano adicional por Energia Psíquica ligada.
+- O motor de regras cobre 1.186 das 3.061 impressões da rotação Padrão.
+
 # POKECARD Brasil 5.99.14 — Neurokinesis de Azelf
 
 - Neurokinesis soma 10 de dano por contador em todos os Pokémon do campo adversário; a prévia e a resolução usam a mesma contagem.

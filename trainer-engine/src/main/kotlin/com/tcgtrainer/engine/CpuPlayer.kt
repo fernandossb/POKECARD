@@ -139,6 +139,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 ChoiceKind.ABILITY_ATTACH_ENERGY -> keepValue(checkNotNull(card(id))) + 10.0
                 ChoiceKind.SEARCH, ChoiceKind.RECOVER, ChoiceKind.SONIA, ChoiceKind.EVOLUTION_RECOVER_NAMED_TRAINER -> keepValue(checkNotNull(card(id)))
                 ChoiceKind.ABILITY_SEARCH_BASIC_ENERGY_TO_HAND -> keepValue(checkNotNull(card(id)))
+                ChoiceKind.ABILITY_MOVE_ENERGY_TO_SELF -> -keepValue(checkNotNull(card(id)))
                 ChoiceKind.SWITCH_OPPONENT, ChoiceKind.EVOLUTION_SWITCH -> active?.let { attackValue(it, pokemon(id)) } ?: 0.0
                 ChoiceKind.SWITCH_OWN -> attackValue(pokemon(id)) - (active?.let(::attackValue) ?: 0.0) + potential(pokemon(id))*.05
                 ChoiceKind.ENERGY_TARGET -> {

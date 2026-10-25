@@ -82,9 +82,9 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     ability.devolveOpponentPokemonMax > 0 && s.players[1-s.currentPlayer].pokemon().none { it.cards.size > 1 } -> illegal("Não há Pokémon adversário evoluído para desvoluir.")
                     ability.attackDiscountPerOpponentPrize -> illegal("Esta habilidade é aplicada automaticamente ao custo do ataque.")
                     ability.opponentActiveEvolutionRetreatCostBonus > 0 -> illegal("Esta habilidade passiva é aplicada automaticamente ao recuo.")
-                    ability.draw <= 0 && ability.drawTo <= 0 && ability.damageCounters <= 0 && ability.attachHandEnergyType == null && ability.searchBasicEnergyTypeToHand == null && !ability.shuffleSelfIntoDeck && ability.healDamage <= 0 && ability.recoverBasicPokemonToBenchMaxHp <= 0 && ability.devolveOpponentPokemonMax <= 0 && ability.onEvolveShuffleRandomOpponentHandPerHeads <= 0 -> illegal("Habilidade não suportada.")
+                    ability.draw <= 0 && ability.drawTo <= 0 && ability.damageCounters <= 0 && ability.attachHandEnergyType == null && ability.searchBasicEnergyTypeToHand == null && !ability.shuffleSelfIntoDeck && !ability.moveEnergyFromOtherPokemonToSelf && ability.healDamage <= 0 && ability.recoverBasicPokemonToBenchMaxHp <= 0 && ability.devolveOpponentPokemonMax <= 0 && ability.onEvolveShuffleRandomOpponentHandPerHeads <= 0 -> illegal("Habilidade não suportada.")
                     ability.damageCounters > 0 && s.players[1-s.currentPlayer].pokemon().size < ability.damageTargets -> illegal("Não há Pokémon adversários suficientes para esta habilidade.")
-                    abilityUsageKey(pokemon, ability) in p.flags.abilitiesUsed -> illegal("Esta habilidade já foi usada neste turno.")
+                    !ability.unlimitedUse && abilityUsageKey(pokemon, ability) in p.flags.abilitiesUsed -> illegal("Esta habilidade já foi usada neste turno.")
                     ability.requiresActive && p.active?.id != pokemon.id -> illegal("Esta habilidade só pode ser usada com este Pokémon no Ativo.")
                     ability.shuffleSelfIntoDeck && p.bench.isEmpty() -> illegal("É preciso ter um Pokémon no Banco para usar esta habilidade.")
                     p.hand.size < ability.discardHandCount -> illegal("Falta uma carta na mão para pagar o custo da habilidade.")
@@ -95,6 +95,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     ability.healDamage > 0 && p.pokemon().none { it.damage > 0 } -> illegal("Não há dano para curar.")
                     ability.recoverBasicPokemonToBenchMaxHp > 0 && p.bench.size >= 5 -> illegal("O Banco já tem 5 Pokémon.")
                     ability.recoverBasicPokemonToBenchMaxHp > 0 && p.discard.none { def(it).category == Category.POKEMON && def(it).stage == Stage.BASIC && def(it).hp <= ability.recoverBasicPokemonToBenchMaxHp } -> illegal("Não há Pokémon Básico válido no descarte.")
+                    ability.moveEnergyFromOtherPokemonToSelf && p.pokemon().filter { it.id != pokemon.id }.none { it.energies.isNotEmpty() } -> illegal("Não há Energia em outro Pokémon para mover.")
                     p.deck.isEmpty() && (ability.draw > 0 || ability.drawTo > p.hand.size) -> illegal("Seu deck está vazio.")
                     else -> Legality.Legal
                 }
@@ -181,9 +182,15 @@ internal class ContentEngine(private val rules: RulesEngine) {
             is GameAction.UseAbility -> {
                 val p = s.players[actor]; val pokemon = p.pokemon().first { it.id == action.pokemonId }
                 val ability = def(pokemon.top).abilities.first { it.id == action.abilityId }
-                update { it.copy(flags = it.flags.copy(abilitiesUsed = it.flags.abilitiesUsed + abilityUsageKey(pokemon, ability))) }
+                if (!ability.unlimitedUse) update { it.copy(flags = it.flags.copy(abilitiesUsed = it.flags.abilitiesUsed + abilityUsageKey(pokemon, ability))) }
                 events += GameEvent("AbilityUsed", "Usou ${ability.name}.")
-                if (ability.shuffleSelfIntoDeck) {
+                if (ability.moveEnergyFromOtherPokemonToSelf) {
+                    val energies = p.pokemon().filter { it.id != pokemon.id }.flatMap { it.energies }
+                    begin(Resolution(listOf(ChoiceRequest(ChoiceKind.ABILITY_MOVE_ENERGY_TO_SELF,
+                        "Escolha uma Energia de outro Pokémon para mover para ${def(pokemon.top).name}.",
+                        energies.map { it.id }, 1, 1, sourcePokemonId = pokemon.id))))
+                }
+                else if (ability.shuffleSelfIntoDeck) {
                     val cards = pokemon.cards + pokemon.energies + listOfNotNull(pokemon.tool)
                     update { it.copy(active = null, deck = it.deck + cards) }
                     val rng = SeededRng(s.rng)
@@ -310,6 +317,23 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         val card = p.discard.first { it.id == ids.single() && def(it).category == Category.POKEMON && def(it).stage == Stage.BASIC }
                         update { it.copy(discard = it.discard - card, bench = it.bench + PokemonInstance(listOf(card), enteredPlayTurn = s.turn)) }
                         events += GameEvent("PokemonRecoveredToBench", "Colocou ${def(card).name} do descarte no Banco pela habilidade.")
+                    }
+                    ChoiceKind.ABILITY_MOVE_ENERGY_TO_SELF -> {
+                        val targetId = checkNotNull(choice.sourcePokemonId)
+                        val sourceId = p.pokemon().first { pokemon -> pokemon.id != targetId && pokemon.energies.any { it.id == ids.single() } }.id
+                        val energy = p.pokemon().first { it.id == sourceId }.energies.first { it.id == ids.single() }
+                        update { player -> player.copy(
+                            active = player.active?.let { pokemon -> when (pokemon.id) {
+                                sourceId -> pokemon.copy(energies = pokemon.energies - energy)
+                                targetId -> pokemon.copy(energies = pokemon.energies + energy)
+                                else -> pokemon
+                            } },
+                            bench = player.bench.map { pokemon -> when (pokemon.id) {
+                                sourceId -> pokemon.copy(energies = pokemon.energies - energy)
+                                targetId -> pokemon.copy(energies = pokemon.energies + energy)
+                                else -> pokemon
+                            } }) }
+                        events += GameEvent("AbilityEnergyMoved", "Moveu uma Energia de outro Pokémon para ${def((p.pokemon().first { it.id == targetId }).top).name}.")
                     }
                     ChoiceKind.SEARCH, ChoiceKind.SONIA -> {
                         val cards = p.deck.filter { it.id in ids }
