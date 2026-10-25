@@ -34,7 +34,6 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         catch (e: Exception) { mutable.value = UiState(busy = false, message = "Falha ao ler save: ${e.message}") }
     }; viewModelScope.launch {
         try {
-            withContext(Dispatchers.Default) { CardLibrary.entries.size }
             db.decks().observe().collect { records ->
                 mutableDecks.value = mutableDecks.value.copy(saved = records.map { DeckCodec.decode(it.payload) }, loaded = true)
             }

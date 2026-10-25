@@ -105,9 +105,9 @@ import com.tcgtrainer.engine.*
         TextButton(onClick = { activity?.finish() }) { Text("‹ VOLTAR AO POKECARD") }
         Text("Coleção PokeCard · ${vm.owned.counts.values.sum()} cópias. Para atualizar, volte ao fichário e abra o jogo novamente.", color = Muted, fontSize = 11.sp)
         Row(Modifier.height(160.dp).fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-            CardArt(TrainerCatalog.get("me01-074"), Modifier.width(84.dp).height(125.dp))
-            CardArt(TrainerCatalog.get(chosen.cover), Modifier.padding(horizontal = 8.dp).width(110.dp).height(154.dp))
-            CardArt(TrainerCatalog.get(opponent.cover), Modifier.width(84.dp).height(125.dp))
+            CardArt("me01-074", Modifier.width(84.dp).height(125.dp))
+            CardArt(chosen.cover, Modifier.padding(horizontal = 8.dp).width(110.dp).height(154.dp))
+            CardArt(opponent.cover, Modifier.width(84.dp).height(125.dp))
         }
         Surface(shape = RoundedCornerShape(16.dp), color = Color(0xFF192B3E), onClick = deck) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {

@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.99.31 — Correção de abertura do TCG Trainer
+
+- A tela inicial do Trainer carrega as artes de capa em segundo plano, sem compilar o catálogo inteiro durante a abertura.
+- Removido o pré-carregamento do catálogo de edição de decks ao iniciar o jogo.
+- Corrige o caminho de inicialização que podia bloquear ou encerrar o app antes de exibir o Trainer.
+- Validado por compilação Android e testes do motor; emulador indisponível nesta máquina por falta de aceleração de virtualização.
 # POKECARD Brasil 5.99.30 — Cobertura de mais 202 cartas no TCG Trainer
 
 - Regras reutilizáveis ampliam a cobertura do motor para 1.425 cartas Standard executáveis, 202 a mais que a versão anterior.

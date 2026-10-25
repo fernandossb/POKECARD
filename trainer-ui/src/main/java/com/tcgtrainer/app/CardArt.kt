@@ -28,6 +28,24 @@ import java.net.URI
 import java.security.MessageDigest
 
 private object ArtCache { val bitmaps = android.util.LruCache<String, ImageBitmap>(32) }
+
+/** Loads cover art without resolving the entire executable catalog on the UI thread. */
+@Composable internal fun CardArt(cardId: String, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    var bitmap by remember(cardId) { mutableStateOf(ArtCache.bitmaps.get(cardId)) }
+    LaunchedEffect(cardId) {
+        if (bitmap == null) {
+            bitmap = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.assets.open("cards/$cardId.webp").use { BitmapFactory.decodeStream(it)?.asImageBitmap() }
+                }.getOrNull()?.also { ArtCache.bitmaps.put(cardId, it) }
+            }
+        }
+    }
+    if (bitmap != null) Image(bitmap!!, contentDescription = cardId, modifier = modifier.clip(RoundedCornerShape(5.dp)), contentScale = ContentScale.Fit)
+    else Box(modifier.clip(RoundedCornerShape(5.dp)).background(Color(0xFF775A32)).border(1.dp, Color(0xFFE2BD74), RoundedCornerShape(5.dp)))
+}
+
 @Composable internal fun CardArt(card: CardDefinition, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     var bitmap by remember(card.id) { mutableStateOf(ArtCache.bitmaps.get(card.id)) }

@@ -61,7 +61,7 @@ import java.util.UUID
             item { Text("BASES PARA DUPLICAR", color = Aqua, fontWeight = FontWeight.Bold) }
             items(TrainingDecks.all, key = { it.id }) { base ->
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    CardArt(TrainerCatalog.get(base.cover), Modifier.size(45.dp, 64.dp))
+                    CardArt(base.cover, Modifier.size(45.dp, 64.dp))
                     Column(Modifier.weight(1f)) { Text(base.name, fontSize = 13.sp); Text(base.format.label(), color = Muted, fontSize = 10.sp) }
                     TextButton(onClick = { edit(SavedDeck("custom-${UUID.randomUUID()}", "${base.name} · cópia", base.format, base.cards.groupingBy { it }.eachCount())) }) { Text("COPIAR", fontSize = 11.sp) }
                 }
