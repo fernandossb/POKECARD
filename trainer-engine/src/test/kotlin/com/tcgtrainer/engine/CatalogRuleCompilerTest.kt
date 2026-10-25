@@ -22,6 +22,14 @@ class CatalogRuleCompilerTest {
         assertNull(CatalogRuleCompiler.compileAttack("test", 0, attack("Flip 2 coins. This attack does 20 damage for each heads.", "30×")))
         assertNotNull(CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me01-006"), emptyMap()))
     }
+    @Test fun `Blaziken Inferno Kick Flurry compiles base damage energy discard and bench shot`() {
+        for (id in listOf("sv10-042", "sv10-192")) {
+            val blaziken = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            val attack = blaziken.attacks.single { it.name == "Inferno Kick Flurry" }
+            assertTrue(Effect.Damage(120) in attack.effects)
+            assertTrue(Effect.DiscardEnergyThenBenchDamage(2, 120) in attack.effects)
+        }
+    }
     @Test fun `Archaludon Metal Bridge compiles to a passive Metal energy retreat rule`() {
         for (id in listOf("sv07-107", "sv07-155", "sv08.5-070")) {
             val archaludon = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!

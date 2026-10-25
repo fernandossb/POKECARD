@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.99.27 — Inferno Kick Flurry de Blaziken
+
+- Ataque de Blaziken causa dano ao Ativo, descarta duas Energias do atacante e permite escolher um Pokémon do Banco para receber mais 120 de dano sem Fraqueza/Resistência.
+- Ambas as impressões do catálogo executam o efeito.
+- Cobertura Padrão: 1.220 de 3.061 impressões.
+
 # POKECARD Brasil 5.99.26 — Ice Age de Black Kyurem ex
 
 - Ice Age aplica Paralisia somente se o Pokémon Ativo adversário for do tipo Dragão ({N}).

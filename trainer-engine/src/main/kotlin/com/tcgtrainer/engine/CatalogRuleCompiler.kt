@@ -238,6 +238,7 @@ internal object CatalogRuleCompiler {
         val discardDefendingCoin = Regex("Flip a coin\\. If heads, discard (an|a|1|2) Energy from your opponent's Active Pokémon\\.").matchEntire(text)
         val discardDefending = Regex("Discard (an|a|1|2) Energy from your opponent's Active Pokémon\\.").matchEntire(text)
         val benchDamage = Regex("This attack also does (\\d+) damage to 1 of your opponent's Benched Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
+        val discardEnergyBenchDamage = Regex("Discard (\\d+) Energy from this Pokémon\\. This attack also does (\\d+) damage to 1 of your opponent's Benched Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
         val discardFireTargetedBench = Regex("Discard all \\{R} Energy from this Pokémon, and this attack does (\\d+) damage to 1 of your opponent's Benched Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
         val benchDamageCounters = Regex("Place (\\d+) damage counters on 1 of your opponent's Benched Pokémon\\.").matchEntire(text)
         val multiTargetDamage = Regex("Discard (\\d+) Energy from this Pokémon, and this attack does (\\d+) damage to each of (\\d+) of your opponent's Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
@@ -309,6 +310,10 @@ internal object CatalogRuleCompiler {
             val perPokemon = ownSpeciesDamage.groupValues[1].toInt()
             if (damageText != "${perPokemon}×" && damageText != "${perPokemon}x") return null
             effects += Effect.OwnSpeciesCountDamage(species, perPokemon)
+        } else if (discardEnergyBenchDamage != null) {
+            val base = damageText.toIntOrNull() ?: return null
+            if (base > 0) effects += Effect.Damage(base)
+            effects += Effect.DiscardEnergyThenBenchDamage(discardEnergyBenchDamage.groupValues[1].toInt(), discardEnergyBenchDamage.groupValues[2].toInt())
         } else if (discardFireTargetedBench != null) {
             if (damageText.isNotEmpty()) return null
             effects += Effect.DiscardAttackEnergy(0, EnergyType.FIRE, all = true)
@@ -468,6 +473,7 @@ internal object CatalogRuleCompiler {
                     effects += Effect.OpponentActiveTypeCondition(symbolType(opponentTypeStatus.groupValues[1]) ?: return null)
                     effects += Effect.StatusCondition(SpecialCondition.valueOf(opponentTypeStatus.groupValues[2].uppercase()))
                 }
+                discardEnergyBenchDamage != null -> effects += Effect.DiscardEnergyThenBenchDamage(discardEnergyBenchDamage.groupValues[1].toInt(), discardEnergyBenchDamage.groupValues[2].toInt())
                 benchDamage != null -> effects += Effect.BenchDamage(benchDamage.groupValues[1].toInt())
                 benchDamageCounters != null -> effects += Effect.BenchDamageCounters(benchDamageCounters.groupValues[1].toInt())
                 multiTargetDamage != null -> {

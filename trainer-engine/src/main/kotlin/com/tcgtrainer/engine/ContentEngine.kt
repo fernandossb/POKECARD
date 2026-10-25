@@ -400,6 +400,14 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         val cards = p.active!!.energies.filter { it.id in ids }
                         update { it.copy(active = it.active!!.copy(energies = it.active.energies - cards.toSet()), discard = it.discard + cards) }
                         events += GameEvent("AttackEnergyDiscarded", "Descartou ${cards.size} Energia(s) do atacante.")
+                        if (choice.amount > 0) {
+                            val attacker = s.players[actor].active ?: error("Atacante ausente durante dano ao Banco.")
+                            val attack = rules.definition(attacker.top).attacks.first { candidate -> candidate.effects.any { it is Effect.DiscardEnergyThenBenchDamage && it.amount == choice.amount } }
+                            val effect = attack.effects.filterIsInstance<Effect.DiscardEnergyThenBenchDamage>().first { it.amount == choice.amount }
+                            val targets = s.players[1-actor].bench.filter { it.attackImmunityTurn != s.turn && def(it.top).abilities.none { ability -> ability.preventOpponentEffects } }
+                            if (targets.isNotEmpty()) remainingChoices = listOf(ChoiceRequest(ChoiceKind.ATTACK_DISCARD_THEN_BENCH_TARGET,
+                                "Escolha um Pokémon do Banco adversário para receber ${effect.amount} de dano.", targets.map { it.id }, 1, 1, amount = effect.amount)) + remainingChoices
+                        }
                     }
                     ChoiceKind.ATTACH_DECK_ENERGY -> {
                         val cards = p.deck.filter { it.id in ids }
@@ -490,6 +498,15 @@ internal class ContentEngine(private val rules: RulesEngine) {
                             if (pokemon.id in ids) pokemon.copy(damage = pokemon.damage + choice.amount) else pokemon
                         }) }
                         events += GameEvent("BenchDamageDealt", "Causou ${choice.amount} de dano ao Banco adversário.", choice.amount)
+                    }
+                    ChoiceKind.ATTACK_DISCARD_THEN_BENCH_TARGET -> {
+                        val owner = 1-actor; val targetId = ids.single()
+                        val target = s.players[owner].bench.first { it.id == targetId }
+                        val hp = rules.effects.effectiveHp(target, s)
+                        if (target.damage < hp && target.damage + choice.amount >= hp)
+                            s = s.copy(pendingAttackDamageKnockoutIds = s.pendingAttackDamageKnockoutIds + target.id)
+                        update(owner) { player -> player.copy(bench = player.bench.map { if (it.id == targetId) it.copy(damage = it.damage + choice.amount) else it }) }
+                        events += GameEvent("BenchDamageDealt", "Causou ${choice.amount} de dano ao Banco adversário, sem aplicar Fraqueza ou Resistência.", choice.amount)
                     }
                     ChoiceKind.ATTACK_DAMAGE_COUNTER_TARGET -> {
                         val targetId = ids.single()
