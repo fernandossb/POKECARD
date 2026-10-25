@@ -214,6 +214,14 @@ class CatalogRuleCompilerTest {
             assertEquals(listOf(Effect.Damage(60), Effect.OpponentActiveDamagedDamage(60)), bisharp.attacks.last().effects)
         }
     }
+    @Test fun `Black Kyurem ex Ice Age compiles conditional Paralysis against Dragon Pokemon`() {
+        for (id in listOf("sv08-048", "sv08-218")) {
+            val blackKyurem = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            val iceAge = blackKyurem.attacks.first()
+            assertTrue(Effect.OpponentActiveTypeCondition(EnergyType.DRAGON) in iceAge.effects)
+            assertTrue(Effect.StatusCondition(SpecialCondition.PARALYZED) in iceAge.effects)
+        }
+    }
     @Test fun `Tera card trait identifiers match current rotation catalog prints`() {
         assertEquals(90, CardTraits.teraPokemonIds.size)
         CardTraits.teraPokemonIds.forEach { id ->

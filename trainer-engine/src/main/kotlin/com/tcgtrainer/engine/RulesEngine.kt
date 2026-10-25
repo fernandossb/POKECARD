@@ -525,7 +525,9 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     emit("SelfDamage", "O atacante recebeu ${effect.amount} de dano.", effect.amount)
                 }
                 attack.effects.filterIsInstance<Effect.StatusCondition>().forEach { effect ->
-                    if ((effect.onSelf || !defenderEffectsPrevented) && (!effect.onHeads || (if (coin != null) (heads ?: 0) >= effect.minimumHeads else statusHeads))) {
+                    val opponentTypeRequirement = attack.effects.filterIsInstance<Effect.OpponentActiveTypeCondition>().firstOrNull()?.type
+                    if ((effect.onSelf || !defenderEffectsPrevented) && (!effect.onHeads || (if (coin != null) (heads ?: 0) >= effect.minimumHeads else statusHeads)) &&
+                        (effect.onSelf || opponentTypeRequirement == null || definition(defender.top).type == opponentTypeRequirement)) {
                         val exclusive = setOf(SpecialCondition.ASLEEP, SpecialCondition.PARALYZED, SpecialCondition.CONFUSED)
                         fun applyCondition(target: PokemonInstance) = target.copy(conditions =
                             (if (effect.condition in exclusive) target.conditions - exclusive else target.conditions) + effect.condition)

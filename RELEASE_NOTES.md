@@ -1,3 +1,8 @@
+# POKECARD Brasil 5.99.26 — Ice Age de Black Kyurem ex
+
+- Ice Age aplica Paralisia somente se o Pokémon Ativo adversário for do tipo Dragão ({N}).
+- As duas impressões de Black Kyurem ex seguem a condição e continuam causando os 90 de dano.
+- Cobertura: 1.218 das 3.061 impressões da rotação Padrão.
 # POKECARD Brasil 5.99.25 — Finishing Blow de Bisharp
 
 - Finishing Blow acrescenta 60 de dano quando o Pokémon Ativo adversário já tem contadores de dano.

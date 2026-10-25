@@ -194,6 +194,32 @@ class RulesEngineTest {
         assertEquals(120, rules.preview(state(10), attack.id)!!.damage)
     }
 
+    @Test fun `Black Kyurem Ice Age paralyzes only a Dragon Active`() {
+        val blackKyurem = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv08-048"), emptyMap())!!
+        val attack = blackKyurem.attacks.first().copy(cost = emptyList())
+        val target = CardDefinition("ice-age-target", "Target", "Test", "1", category = Category.POKEMON, hp = 300)
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            blackKyurem.id -> blackKyurem.copy(attacks = listOf(attack)); target.id -> target; else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        fun state(type: EnergyType) = GameState("ice-age", 50, RngState(50), listOf(
+            PlayerState(deck = List(10) { card("d0-$it", "sv01-258") }, prizes = List(6) { card("p0-$it", "sv01-258") },
+                active = PokemonInstance(listOf(card("black-kyurem", blackKyurem.id)), enteredPlayTurn = 0)),
+            PlayerState(deck = List(10) { card("d1-$it", "sv01-258") }, prizes = List(6) { card("p1-$it", "sv01-258") },
+                active = PokemonInstance(listOf(card("target", target.id)), enteredPlayTurn = 0))
+        ), 0, 0, turn = 3, phase = Phase.MAIN).let { game ->
+            val typedCatalog = object : CardCatalog { override fun get(id: String) = if (id == target.id) target.copy(type = type) else catalog.get(id) }
+            RulesEngine(typedCatalog) to game
+        }
+        for ((type, paralyzed) in listOf(EnergyType.DRAGON to true, EnergyType.WATER to false)) {
+            val (typedRules, game) = state(type)
+            val result = typedRules.apply(game, GameAction.Attack(attack.id))
+            assertEquals(Legality.Legal, result.legality)
+            assertEquals(paralyzed, SpecialCondition.PARALYZED in result.state.players[1].active!!.conditions)
+            assertEquals(90, result.state.players[1].active!!.damage)
+        }
+    }
+
     @Test fun `Resolute Heart prevents attack knockout only at full HP`() {
         val pikachu = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv08-057"), emptyMap())!!
         val hit = AttackDefinition("huge-hit", "Huge Hit", emptyList(), listOf(Effect.Damage(500)))

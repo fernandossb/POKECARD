@@ -64,6 +64,7 @@ import kotlinx.serialization.Serializable
     @Serializable data class HealOwnPokemon(val amount: Int) : Effect
     @Serializable data object CoinKnockOutBasic : Effect
     @Serializable data class StatusCondition(val condition: SpecialCondition, val onHeads: Boolean = false, val minimumHeads: Int = 1, val onSelf: Boolean = false) : Effect
+    @Serializable data class OpponentActiveTypeCondition(val type: EnergyType) : Effect
     @Serializable data class DiscardDefendingEnergy(val count: Int, val onHeads: Boolean = false) : Effect
     @Serializable data class BenchDamage(val amount: Int) : Effect
     @Serializable data class BenchDamageCounters(val count: Int) : Effect

@@ -16,7 +16,7 @@ internal object CatalogRuleCompiler {
     private fun symbolType(symbol: String): EnergyType? {
         val value = when (symbol) {
         "G" -> "Grass"; "R" -> "Fire"; "F" -> "Fighting"; "L" -> "Lightning"; "W" -> "Water"
-        "P" -> "Psychic"; "M" -> "Metal"; "D" -> "Darkness"; "C" -> "Colorless"; else -> return null
+        "P" -> "Psychic"; "M" -> "Metal"; "D" -> "Darkness"; "N" -> "Dragon"; "C" -> "Colorless"; else -> return null
         }
         return type(value)
     }
@@ -233,6 +233,7 @@ internal object CatalogRuleCompiler {
         val attachBasicEnergyFromDeckAny = Regex("Search your deck for up to (\\d+) Basic Energy cards and attach them to your Pokémon in any way you like\\. Then, shuffle your deck\\.").matchEntire(text)
         val coinKnockOutBasic = text == "Flip a coin. If heads, Knock Out your opponent's Active Basic Pokémon. If tails, Knock Out 1 of your opponent's Benched Basic Pokémon."
         val coinStatus = Regex("Flip a coin\\. If heads, your opponent's Active Pokémon is now (Poisoned|Burned|Asleep|Paralyzed|Confused)\\.").matchEntire(text)
+        val opponentTypeStatus = Regex("If your opponent's Active Pokémon is a \\{([GRFLWPMDN])} Pokémon, it is now (Poisoned|Burned|Asleep|Paralyzed|Confused)\\.").matchEntire(text)
         val status = Regex("Your opponent's Active Pokémon is now (Poisoned|Burned|Asleep|Paralyzed|Confused)\\.").matchEntire(text)
         val discardDefendingCoin = Regex("Flip a coin\\. If heads, discard (an|a|1|2) Energy from your opponent's Active Pokémon\\.").matchEntire(text)
         val discardDefending = Regex("Discard (an|a|1|2) Energy from your opponent's Active Pokémon\\.").matchEntire(text)
@@ -463,6 +464,10 @@ internal object CatalogRuleCompiler {
                     effects += Effect.BenchedCountDamage(benchedDamage.groupValues[1].toInt())
                 }
                 (status != null || coinStatus != null) && condition != null -> effects += Effect.StatusCondition(condition, onHeads = coinStatus != null)
+                opponentTypeStatus != null -> {
+                    effects += Effect.OpponentActiveTypeCondition(symbolType(opponentTypeStatus.groupValues[1]) ?: return null)
+                    effects += Effect.StatusCondition(SpecialCondition.valueOf(opponentTypeStatus.groupValues[2].uppercase()))
+                }
                 benchDamage != null -> effects += Effect.BenchDamage(benchDamage.groupValues[1].toInt())
                 benchDamageCounters != null -> effects += Effect.BenchDamageCounters(benchDamageCounters.groupValues[1].toInt())
                 multiTargetDamage != null -> {
