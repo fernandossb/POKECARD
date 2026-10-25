@@ -38,7 +38,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
         fun pokemon(id: String) = (own + o.opponentField).first { it.id == id }
         fun hp(p: PokemonInstance): Int {
             val modifier = input.stadium?.let { d(it).trainerEffect as? TrainerEffect.HpModifier }
-            return effects.effectiveHp(p) + if (modifier?.stage == d(p.top).stage) modifier.amount else 0
+            return effects.effectiveHp(p, opponentPrizeCardsRemaining = o.opponentPrizeCount) + if (modifier?.stage == d(p.top).stage) modifier.amount else 0
         }
         fun missing(p: PokemonInstance, a: AttackDefinition): Int {
             val energy = p.energies.map { d(it).type }.toMutableList()
@@ -81,6 +81,8 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 ignoreResistance = Effect.IgnoreResistance in a.effects, turn = input.turn,
                 ownKnockedOutByAttackLastTurn = o.ownLastKnockedOutByAttackDamageTurn == input.turn-1,
                 friendlyPokemon = o.opponentField,
+                attackerPokemon = o.ownField,
+                allPokemonToolCount = o.ownField.count { it.tool != null } + o.opponentField.count { it.tool != null },
                 friendlyBenchPokemon = o.opponentField.filter { it.id != o.opponentActiveId },
                 opponentDamageCounterCount = o.opponentField.sumOf { it.damage / 10 },
                 opponentActiveRetreatCost = if (targetIsActive) targetRetreatCost else 0,
@@ -144,8 +146,8 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
         if (input.phase == Phase.RESOLVE_CHOICE) {
             val choice = checkNotNull(input.choice)
             fun value(id: String): Double = when (choice.kind) {
-                ChoiceKind.DISCARD, ChoiceKind.ABILITY_ENERGY, ChoiceKind.ABILITY_DISCARD_ENERGY_FROM_DISCARD, ChoiceKind.DISCARD_ATTACK_ENERGY, ChoiceKind.EVOLUTION_METAL_ENERGY -> -keepValue(checkNotNull(card(id)))
-                ChoiceKind.ABILITY_ATTACH_ENERGY -> keepValue(checkNotNull(card(id))) + 10.0
+                ChoiceKind.DISCARD, ChoiceKind.ABILITY_ENERGY, ChoiceKind.ABILITY_DISCARD_ENERGY_FROM_DISCARD, ChoiceKind.DISCARD_ATTACK_ENERGY, ChoiceKind.ATTACK_HAND_ENERGY_DISCARD, ChoiceKind.ATTACK_OWN_ENERGY_DISCARD, ChoiceKind.EVOLUTION_METAL_ENERGY -> 10.0 - keepValue(checkNotNull(card(id)))
+                ChoiceKind.ABILITY_ATTACH_ENERGY, ChoiceKind.ABILITY_ATTACH_MULTIPLE_BASIC_ENERGY -> keepValue(checkNotNull(card(id))) + 10.0
                 ChoiceKind.ABILITY_ATTACH_ENERGY_TARGET, ChoiceKind.ABILITY_DISCARD_ENERGY_TARGET -> {
                     val target = pokemon(id)
                     val energy = checkNotNull(if (choice.kind == ChoiceKind.ABILITY_DISCARD_ENERGY_TARGET)
@@ -154,11 +156,17 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 }
                 ChoiceKind.SEARCH, ChoiceKind.RECOVER, ChoiceKind.SONIA, ChoiceKind.EVOLUTION_RECOVER_NAMED_TRAINER -> keepValue(checkNotNull(card(id)))
                 ChoiceKind.ABILITY_SEARCH_BASIC_ENERGY_TO_HAND -> keepValue(checkNotNull(card(id)))
+                ChoiceKind.ABILITY_TOP_DECK_KEEP_ONE -> keepValue(checkNotNull(card(id)))
+                ChoiceKind.ABILITY_SEARCH_TOP_CARD -> keepValue(checkNotNull(card(id)))
+                ChoiceKind.ATTACK_RECOVER_POKEMON -> 100.0 - keepValue(checkNotNull(card(id)))
+                ChoiceKind.ON_BENCH_DISCARD_OPPONENT_DECK_TOP -> 15.0
+                ChoiceKind.ATTACK_RESTRICT_OPPONENT_ATTACK -> 80.0
                 ChoiceKind.ABILITY_MOVE_ENERGY_TO_SELF -> -keepValue(checkNotNull(card(id)))
                 ChoiceKind.ABILITY_MOVE_BASIC_ENERGY -> 1.0
                 ChoiceKind.ABILITY_MOVE_BASIC_ENERGY_TARGET -> { val target = pokemon(id); val energy = checkNotNull(own.flatMap { it.energies }.find { it.id == choice.selectedEnergy }); potential(target.copy(energies = target.energies + energy)) - potential(target) }
                 ChoiceKind.OPPONENT_SHUFFLES_OWN_HAND -> -keepValue(checkNotNull(card(id)))
                 ChoiceKind.SWITCH_OPPONENT, ChoiceKind.EVOLUTION_SWITCH -> active?.let { attackValue(it, pokemon(id)) } ?: 0.0
+                ChoiceKind.EVOLUTION_CONFUSE_ACTIVE -> 80.0
                 ChoiceKind.SWITCH_OWN -> attackValue(pokemon(id)) - (active?.let(::attackValue) ?: 0.0) + potential(pokemon(id))*.05
                 ChoiceKind.ENERGY_TARGET -> {
                     val p = pokemon(id)

@@ -39,6 +39,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                 val card = p.hand.find { it.id == action.cardId } ?: return illegal("Carta fora da mão.")
                 val d = def(card)
                 val effect = d.trainerEffect ?: return illegal("Efeito de Treinador não suportado.")
+                if (d.trainerType == TrainerType.ITEM && s.turn <= p.itemPlayLockedUntilTurn) return illegal("Você não pode jogar cartas de Item neste turno.")
                 if (d.trainerType == TrainerType.SUPPORTER) {
                     if (s.turn == 1) return illegal("Quem começa não pode usar Apoiador no primeiro turno.")
                     if (p.flags.supporter) return illegal("Você já usou um Apoiador neste turno.")
@@ -77,13 +78,15 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     ability.onEvolveSwitch -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
                     ability.onEvolveDraw > 0 -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
                     ability.onEvolveShuffleRandomOpponentHandPerHeads > 0 -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
+                    ability.onEvolveConfuseOpponentActive -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
                     ability.onEvolveAttachMetalFromDiscardMax > 0 -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
                     ability.onEvolveRecoverNamedTrainerFromDiscard != null -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
                     ability.devolveOpponentPokemonMax > 0 && s.players[1-s.currentPlayer].pokemon().none { it.cards.size > 1 && def(it.top).abilities.none { targetAbility -> targetAbility.preventOpponentEffects } } -> illegal("Não há Pokémon adversário evoluído e sem proteção para desvoluir.")
                     ability.attackDiscountPerOpponentPrize -> illegal("Esta habilidade é aplicada automaticamente ao custo do ataque.")
+                    ability.hpBonusPerOpponentPrizeTaken > 0 || ability.teamDamageReduction > 0 || ability.additionalPokemonTypes.isNotEmpty() || ability.attackDamageBonusAgainstEvolutionActive > 0 || ability.futurePokemonDamageBonus > 0 || ability.freeRetreatWithNoEnergy || ability.attackDiscountPerKofuDiscard -> illegal("Esta habilidade passiva se aplica automaticamente.")
                     ability.alternativeAttackCost.isNotEmpty() -> illegal("Esta habilidade passiva altera o custo do ataque quando a condição é atendida.")
                     ability.opponentActiveEvolutionRetreatCostBonus > 0 -> illegal("Esta habilidade passiva é aplicada automaticamente ao recuo.")
-                    ability.draw <= 0 && ability.drawTo <= 0 && ability.damageCounters <= 0 && ability.attachHandEnergyType == null && ability.searchBasicEnergyTypeToHand == null && !ability.attachBasicEnergyFromDiscard && !ability.moveBasicEnergyBetweenOwnPokemon && ability.alternativeAttackCost.isEmpty() && !ability.shuffleSelfIntoDeck && !ability.moveEnergyFromOtherPokemonToSelf && ability.healDamage <= 0 && ability.recoverBasicPokemonToBenchMaxHp <= 0 && ability.devolveOpponentPokemonMax <= 0 && ability.onEvolveShuffleRandomOpponentHandPerHeads <= 0 -> illegal("Habilidade não suportada.")
+                    ability.draw <= 0 && ability.drawTo <= 0 && ability.damageCounters <= 0 && ability.attachHandEnergyType == null && ability.searchBasicEnergyTypeToHand == null && !ability.attachBasicEnergyFromDiscard && !ability.moveBasicEnergyBetweenOwnPokemon && ability.lookAtTopCardsChooseOne <= 0 && !ability.searchAnyCardToTop && ability.alternativeAttackCost.isEmpty() && !ability.shuffleSelfIntoDeck && !ability.moveEnergyFromOtherPokemonToSelf && ability.healDamage <= 0 && ability.recoverBasicPokemonToBenchMaxHp <= 0 && ability.devolveOpponentPokemonMax <= 0 && ability.onEvolveShuffleRandomOpponentHandPerHeads <= 0 -> illegal("Habilidade não suportada.")
                     ability.damageCounters > 0 && s.players[1-s.currentPlayer].pokemon().count { target -> def(target.top).abilities.none { it.preventOpponentEffects } } < ability.damageTargets -> illegal("Não há Pokémon adversários suficientes para esta habilidade.")
                     !ability.unlimitedUse && abilityUsageKey(pokemon, ability) in p.flags.abilitiesUsed -> illegal("Esta habilidade já foi usada neste turno.")
                     ability.requiresActive && p.active?.id != pokemon.id -> illegal("Esta habilidade só pode ser usada com este Pokémon no Ativo.")
@@ -93,14 +96,19 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     ability.requiresPreviousKnockout && p.lastKnockedOutTurn != s.turn-1 -> illegal("Nenhum dos seus Pokémon foi nocauteado no último turno adversário.")
                     ability.discardEnergyType != null && p.hand.none { def(it).category == Category.ENERGY && def(it).type == ability.discardEnergyType } -> illegal("É preciso descartar uma Energia de Luta Básica da mão.")
                     ability.attachHandEnergyType != null && p.hand.none { def(it).category == Category.ENERGY && def(it).basicEnergy && def(it).type == ability.attachHandEnergyType } -> illegal("Não há Energia Básica do tipo necessário na mão.")
+                    ability.attachHandEnergyToPokemonNamePrefix != null && p.pokemon().none { def(it.top).name.startsWith(ability.attachHandEnergyToPokemonNamePrefix) } -> illegal("Não há Pokémon elegível em jogo para receber a Energia.")
+                    ability.switchOwnActive && p.bench.isEmpty() -> illegal("Não há Pokémon no Banco para trocar com o Ativo.")
                     ability.attachHandEnergyToPokemonType != null && p.pokemon().none { def(it.top).type == ability.attachHandEnergyToPokemonType } -> illegal("Não há Pokémon do tipo necessário em jogo para receber a Energia.")
+                    ability.attachHandEnergyToPokemonNamePrefix != null && p.pokemon().none { def(it.top).name.startsWith(ability.attachHandEnergyToPokemonNamePrefix) } -> illegal("Não há Pokémon elegível em jogo para receber a Energia.")
                     ability.healDamage > 0 && p.pokemon().none { it.damage > 0 } -> illegal("Não há dano para curar.")
                     ability.recoverBasicPokemonToBenchMaxHp > 0 && p.bench.size >= 5 -> illegal("O Banco já tem 5 Pokémon.")
                     ability.recoverBasicPokemonToBenchMaxHp > 0 && p.discard.none { def(it).category == Category.POKEMON && def(it).stage == Stage.BASIC && def(it).hp <= ability.recoverBasicPokemonToBenchMaxHp } -> illegal("Não há Pokémon Básico válido no descarte.")
-                    ability.attachBasicEnergyFromDiscard && p.discard.none { def(it).category == Category.ENERGY && def(it).basicEnergy } -> illegal("Não há Energia Básica no descarte para ligar.")
+                    ability.attachBasicEnergyFromDiscard && p.discard.none { def(it).category == Category.ENERGY && def(it).basicEnergy &&
+                        (ability.attachBasicEnergyFromDiscardType == null || def(it).type == ability.attachBasicEnergyFromDiscardType) } -> illegal("Não há Energia Básica válida no descarte para ligar.")
+                    ability.attachBasicEnergyFromDiscardBenchOnly && p.bench.isEmpty() -> illegal("Não há Pokémon no Banco para receber a Energia.")
                     ability.moveBasicEnergyBetweenOwnPokemon && p.pokemon().none { source -> source.energies.any { def(it).category == Category.ENERGY && def(it).basicEnergy } && p.pokemon().any { it.id != source.id } } -> illegal("Não há Energia Básica para mover entre Pokémon diferentes.")
                     ability.moveEnergyFromOtherPokemonToSelf && p.pokemon().filter { it.id != pokemon.id }.none { it.energies.isNotEmpty() } -> illegal("Não há Energia em outro Pokémon para mover.")
-                    p.deck.isEmpty() && (ability.draw > 0 || ability.drawTo > p.hand.size) -> illegal("Seu deck está vazio.")
+                    p.deck.isEmpty() && (ability.draw > 0 || ability.drawTo > p.hand.size || ability.lookAtTopCardsChooseOne > 0 || ability.searchAnyCardToTop) -> illegal("Seu deck está vazio.")
                     else -> Legality.Legal
                 }
             }
@@ -189,10 +197,12 @@ internal class ContentEngine(private val rules: RulesEngine) {
                 if (!ability.unlimitedUse) update { it.copy(flags = it.flags.copy(abilitiesUsed = it.flags.abilitiesUsed + abilityUsageKey(pokemon, ability))) }
                 events += GameEvent("AbilityUsed", "Usou ${ability.name}.")
                 if (ability.moveBasicEnergyBetweenOwnPokemon) {
-                    val energies = p.pokemon().flatMap { it.energies }.filter { def(it).category == Category.ENERGY && def(it).basicEnergy }
+                    val energies = p.pokemon().flatMap { it.energies }.filter { def(it).category == Category.ENERGY && def(it).basicEnergy && (ability.moveBasicEnergyType == null || def(it).type == ability.moveBasicEnergyType) }
                     begin(Resolution(listOf(ChoiceRequest(ChoiceKind.ABILITY_MOVE_BASIC_ENERGY,
-                        "Escolha uma Energia Básica para mover.", energies.map { it.id }, 1, 1, sourcePokemonId = pokemon.id))))
+                        "Escolha uma Energia Básica para mover.", energies.map { it.id }, 1, 1, sourcePokemonId = pokemon.id, energyType = ability.moveBasicEnergyType))))
                 }
+                else if (ability.switchOwnActive) begin(Resolution(listOf(ChoiceRequest(ChoiceKind.SWITCH_OWN,
+                    "Escolha um Pokémon do Banco para trocar com o Ativo.", p.bench.map { it.id }, 1, 1))))
                 if (ability.moveEnergyFromOtherPokemonToSelf) {
                     val energies = p.pokemon().filter { it.id != pokemon.id }.flatMap { it.energies }
                     begin(Resolution(listOf(ChoiceRequest(ChoiceKind.ABILITY_MOVE_ENERGY_TO_SELF,
@@ -228,18 +238,30 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         eligible.map { it.id }, 0, minOf(ability.searchBasicEnergyMaxToHand, eligible.size), visibleCards = eligible.map { it.id })), shuffleAfter = true))
                 }
                 else if (ability.attachBasicEnergyFromDiscard) {
-                    val eligible = p.discard.filter { def(it).category == Category.ENERGY && def(it).basicEnergy }
+                    val eligible = p.discard.filter { def(it).category == Category.ENERGY && def(it).basicEnergy &&
+                        (ability.attachBasicEnergyFromDiscardType == null || def(it).type == ability.attachBasicEnergyFromDiscardType) }
                     begin(Resolution(listOf(ChoiceRequest(ChoiceKind.ABILITY_DISCARD_ENERGY_FROM_DISCARD,
                         "Você pode ligar uma Energia Básica do descarte a um dos seus Pokémon.",
                         eligible.map { it.id }, 0, minOf(1, eligible.size), sourcePokemonId = pokemon.id))))
+                }
+                else if (ability.lookAtTopCardsChooseOne > 0) {
+                    val top = p.deck.take(ability.lookAtTopCardsChooseOne)
+                    begin(Resolution(listOf(ChoiceRequest(ChoiceKind.ABILITY_TOP_DECK_KEEP_ONE,
+                        "${ability.name}: escolha 1 das cartas do topo para a mão; a outra irá para o fundo do deck.",
+                        top.map { it.id }, 1, 1, visibleCards = top.map { it.id }))))
+                }
+                else if (ability.searchAnyCardToTop) {
+                    begin(Resolution(listOf(ChoiceRequest(ChoiceKind.ABILITY_SEARCH_TOP_CARD,
+                        "${ability.name}: escolha uma carta do deck para colocar no topo.", p.deck.map { it.id }, 1, 1, visibleCards = p.deck.map { it.id }))))
                 }
                 else if (ability.attachHandEnergyType != null) {
                     val candidates = p.hand.filter { def(it).category == Category.ENERGY && def(it).basicEnergy && def(it).type == ability.attachHandEnergyType }.map { it.id }
                     begin(Resolution(listOf(ChoiceRequest(ChoiceKind.ABILITY_ATTACH_ENERGY,
                         if (ability.attachHandEnergyToPokemonType == null) "Você pode ligar uma Energia Básica de ${ability.attachHandEnergyType} da mão a este Pokémon."
                         else "Escolha uma Energia Básica de ${ability.attachHandEnergyType} da mão para ligar a um Pokémon de ${ability.attachHandEnergyToPokemonType}.",
-                        candidates, if (ability.attachHandEnergyToPokemonType == null) 0 else 1, minOf(1, candidates.size),
-                        amount = ability.drawIfAttached, sourcePokemonId = pokemon.id, energyType = ability.attachHandEnergyToPokemonType))))
+                        candidates, if (ability.attachHandEnergyToPokemonType == null && ability.attachHandEnergyToPokemonNamePrefix == null) 0 else 1, minOf(1, candidates.size),
+                        amount = ability.drawIfAttached, sourcePokemonId = pokemon.id, energyType = ability.attachHandEnergyToPokemonType,
+                        targetNamePrefix = ability.attachHandEnergyToPokemonNamePrefix))))
                 }
                 else if (ability.discardEnergyType != null) begin(Resolution(listOf(ChoiceRequest(ChoiceKind.ABILITY_ENERGY,
                     "Descarte uma Energia de Luta Básica para usar ${ability.name}.", p.hand.filter { def(it).category == Category.ENERGY && def(it).type == ability.discardEnergyType }.map { it.id }, 1, 1)), drawCount = ability.draw))
@@ -316,6 +338,22 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                 preventBasicPokemonDamageTurn = -1, weaknessSuppressedTurn = -1) else pokemon }) }
                         events += GameEvent("PokemonDevolved", "${def(returnedEvolution).name} voltou à mão do adversário; Condições Especiais e efeitos foram removidos.")
                     }
+                    ChoiceKind.ABILITY_SEARCH_TOP_CARD -> {
+                        val selected = p.deck.first { it.id == ids.single() }
+                        val rng = SeededRng(s.rng)
+                        val shuffled = rng.shuffle(p.deck)
+                        update { it.copy(deck = listOf(selected) + shuffled.filterNot { card -> card.id == selected.id }) }
+                        s = s.copy(rng = rng.state)
+                        events += GameEvent("AbilityCardPutOnDeck", "Colocou ${def(selected).name} no topo do deck após embaralhá-lo.")
+                    }
+                    ChoiceKind.ABILITY_TOP_DECK_KEEP_ONE -> {
+                        val count = minOf(2, p.deck.size)
+                        val top = p.deck.take(count)
+                        val kept = top.first { it.id == ids.single() }
+                        val putBottom = top.filterNot { it.id == kept.id }
+                        update { it.copy(deck = it.deck.drop(count) + putBottom, hand = it.hand + kept) }
+                        events += GameEvent("AbilityTopDeckSelected", "${def(kept).name} foi para a mão; a outra carta foi para o fundo do deck.")
+                    }
                     ChoiceKind.ABILITY_SEARCH_BASIC_ENERGY_TO_HAND -> {
                         val cards = p.deck.filter { it.id in ids && def(it).category == Category.ENERGY && def(it).basicEnergy }
                         update { it.copy(deck = it.deck - cards.toSet(), hand = it.hand + cards) }
@@ -323,9 +361,11 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     }
                     ChoiceKind.ABILITY_DISCARD_ENERGY_FROM_DISCARD -> if (ids.isNotEmpty()) {
                         val energy = p.discard.first { it.id == ids.single() && def(it).category == Category.ENERGY && def(it).basicEnergy }
+                        val sourceAbility = p.pokemon().find { it.id == choice.sourcePokemonId }?.let { def(it.top).abilities.firstOrNull { a -> a.attachBasicEnergyFromDiscard } }
+                        val targets = if (sourceAbility?.attachBasicEnergyFromDiscardBenchOnly == true) p.bench else p.pokemon()
                         remainingChoices = listOf(ChoiceRequest(ChoiceKind.ABILITY_DISCARD_ENERGY_TARGET,
                             "Escolha um dos seus Pokémon para receber ${def(energy).name}.",
-                            p.pokemon().map { it.id }, 1, 1, selectedEnergy = energy.id, sourcePokemonId = choice.sourcePokemonId)) + remainingChoices
+                            targets.map { it.id }, 1, 1, selectedEnergy = energy.id, sourcePokemonId = choice.sourcePokemonId)) + remainingChoices
                     }
                     ChoiceKind.ABILITY_DISCARD_ENERGY_TARGET -> {
                         val energy = p.discard.first { it.id == choice.selectedEnergy && def(it).category == Category.ENERGY && def(it).basicEnergy }
@@ -337,10 +377,13 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     }
                     ChoiceKind.ABILITY_ATTACH_ENERGY -> if (ids.isNotEmpty()) {
                         val energy = p.hand.first { it.id == ids.single() && def(it).category == Category.ENERGY && def(it).basicEnergy }
-                        if (choice.energyType != null) {
-                            val targets = p.pokemon().filter { def(it.top).type == choice.energyType }.map { it.id }
+                        if (choice.energyType != null || choice.targetNamePrefix != null) {
+                            val targets = p.pokemon().filter { pokemon ->
+                                (choice.energyType == null || def(pokemon.top).type == choice.energyType) &&
+                                    (choice.targetNamePrefix == null || def(pokemon.top).name.startsWith(choice.targetNamePrefix))
+                            }.map { it.id }
                             remainingChoices = listOf(ChoiceRequest(ChoiceKind.ABILITY_ATTACH_ENERGY_TARGET,
-                                "Escolha um Pokémon de ${choice.energyType} para receber a Energia.", targets, 1, 1,
+                                "Escolha um Pokémon elegível para receber a Energia.", targets, 1, 1,
                                 selectedEnergy = energy.id)) + remainingChoices
                         } else {
                             val target = choice.sourcePokemonId ?: error("Pokémon da habilidade ausente")
@@ -350,6 +393,14 @@ internal class ContentEngine(private val rules: RulesEngine) {
                             events += GameEvent("AbilityEnergyAttached", "Ligou ${def(energy).name} ao Pokémon da habilidade.")
                             if (choice.amount > 0) draw(choice.amount)
                         }
+                    }
+                    ChoiceKind.ABILITY_ATTACH_MULTIPLE_BASIC_ENERGY -> if (ids.isNotEmpty()) {
+                        val selected = p.hand.filter { it.id in ids && def(it).category == Category.ENERGY && def(it).basicEnergy }
+                        val targetId = checkNotNull(choice.sourcePokemonId)
+                        update { player -> player.copy(hand = player.hand - selected.toSet(),
+                            active = player.active?.let { if (it.id == targetId) it.copy(energies = it.energies + selected) else it },
+                            bench = player.bench.map { if (it.id == targetId) it.copy(energies = it.energies + selected) else it }) }
+                        events += GameEvent("AbilityEnergyAttached", "Ligou ${selected.size} Energia(s) Básica(s) ao Pokémon.", selected.size)
                     }
                     ChoiceKind.ABILITY_ATTACH_ENERGY_TARGET -> {
                         val energy = p.hand.first { it.id == choice.selectedEnergy && def(it).category == Category.ENERGY && def(it).basicEnergy }
@@ -369,10 +420,10 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         val sourceId = p.pokemon().first { pokemon -> pokemon.energies.any { it.id == energyId } }.id
                         remainingChoices = listOf(ChoiceRequest(ChoiceKind.ABILITY_MOVE_BASIC_ENERGY_TARGET,
                             "Escolha outro Pokémon para receber a Energia Básica.", p.pokemon().filter { it.id != sourceId }.map { it.id }, 1, 1,
-                            selectedEnergy = energyId, sourcePokemonId = sourceId)) + remainingChoices
+                            selectedEnergy = energyId, sourcePokemonId = sourceId, energyType = choice.energyType)) + remainingChoices
                     }
                     ChoiceKind.ABILITY_MOVE_BASIC_ENERGY_TARGET -> {
-                        val energy = p.pokemon().flatMap { it.energies }.first { it.id == choice.selectedEnergy && def(it).category == Category.ENERGY && def(it).basicEnergy }
+                        val energy = p.pokemon().flatMap { it.energies }.first { it.id == choice.selectedEnergy && def(it).category == Category.ENERGY && def(it).basicEnergy && (choice.energyType == null || def(it).type == choice.energyType) }
                         val sourceId = checkNotNull(choice.sourcePokemonId); val targetId = ids.single()
                         update { player -> player.copy(
                             active = player.active?.let { pokemon -> when (pokemon.id) { sourceId -> pokemon.copy(energies = pokemon.energies - energy); targetId -> pokemon.copy(energies = pokemon.energies + energy); else -> pokemon } },
@@ -413,6 +464,13 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         val cards = p.discard.filter { it.id in ids }
                         update { it.copy(discard = it.discard - cards.toSet(), hand = it.hand + cards) }
                         events += GameEvent("CardsRecovered", "Recuperou: ${cards.joinToString { def(it).name }}.")
+                    }
+                    ChoiceKind.EVOLUTION_CONFUSE_ACTIVE -> if (ids.isNotEmpty()) {
+                        val owner = 1-actor; val targetId = ids.single()
+                        update(owner) { player -> player.copy(active = player.active?.let { target ->
+                            if (target.id == targetId) target.copy(conditions = (target.conditions - setOf(SpecialCondition.ASLEEP, SpecialCondition.PARALYZED, SpecialCondition.CONFUSED)) + SpecialCondition.CONFUSED) else target
+                        }) }
+                        events += GameEvent("SpecialCondition", "Pokémon Ativo adversário ficou Confuso.")
                     }
                     ChoiceKind.SWITCH_OWN, ChoiceKind.SWITCH_OPPONENT, ChoiceKind.EVOLUTION_SWITCH -> if (ids.isNotEmpty()) {
                         val owner = if (choice.kind == ChoiceKind.SWITCH_OWN) actor else 1-actor
@@ -458,9 +516,11 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     }
                     ChoiceKind.ATTACK_DECK_BASIC_ENERGY_ANY -> if (ids.isNotEmpty()) {
                         val energy = p.deck.first { it.id == ids.single() && def(it).category == Category.ENERGY && def(it).basicEnergy }
+                        val targets = if (choice.benchedOnly) p.bench else p.pokemon()
                         remainingChoices = listOf(ChoiceRequest(ChoiceKind.ATTACK_DECK_BASIC_ENERGY_TARGET,
-                            "Escolha um dos seus Pokémon para receber ${def(energy).name}.", p.pokemon().map { it.id }, 1, 1,
-                            remaining = choice.remaining, selectedEnergy = energy.id)) + remainingChoices
+                            "Escolha um dos seus Pokémon para receber ${def(energy).name}.", targets.map { it.id }.filter { it !in choice.selectedTargets }, 1, 1,
+                            remaining = choice.remaining, selectedEnergy = energy.id, energyType = choice.energyType, benchedOnly = choice.benchedOnly,
+                            selectedTargets = choice.selectedTargets, eachBenchedPokemon = choice.eachBenchedPokemon)) + remainingChoices
                     }
                     ChoiceKind.ATTACK_DECK_BASIC_ENERGY_TARGET -> {
                         val energy = p.deck.first { it.id == choice.selectedEnergy && def(it).category == Category.ENERGY && def(it).basicEnergy }
@@ -470,15 +530,32 @@ internal class ContentEngine(private val rules: RulesEngine) {
                             bench = player.bench.map { if (it.id == targetId) it.copy(energies = it.energies + energy) else it }) }
                         events += GameEvent("AttackDeckEnergyAttached", "Buscou e ligou ${def(energy).name} a um Pokémon.")
                         val remaining = choice.remaining - 1
-                        val eligible = s.players[actor].deck.filter { def(it).category == Category.ENERGY && def(it).basicEnergy }
+                        val eligible = s.players[actor].deck.filter { def(it).category == Category.ENERGY && def(it).basicEnergy && (choice.energyType == null || def(it).type == choice.energyType) }
+                        val selectedTargets = choice.selectedTargets + targetId
                         if (remaining > 0 && eligible.isNotEmpty()) remainingChoices = listOf(ChoiceRequest(
-                            ChoiceKind.ATTACK_DECK_BASIC_ENERGY_ANY, "Você pode buscar outra Energia Básica ou concluir.",
-                            eligible.map { it.id }, 0, 1, remaining = remaining)) + remainingChoices
+                            ChoiceKind.ATTACK_DECK_BASIC_ENERGY_ANY,
+                            if (choice.eachBenchedPokemon) "Busque uma Energia Básica para outro Pokémon do Banco." else "Você pode buscar outra Energia Básica ou concluir.",
+                            eligible.map { it.id }, if (choice.eachBenchedPokemon) 1 else 0, 1,
+                            remaining = remaining, energyType = choice.energyType, benchedOnly = choice.benchedOnly,
+                            selectedTargets = selectedTargets, eachBenchedPokemon = choice.eachBenchedPokemon)) + remainingChoices
                     }
                     ChoiceKind.ATTACK_BENCH_POKEMON -> {
                         val cards = p.deck.filter { it.id in ids && def(it).category == Category.POKEMON && def(it).stage == Stage.BASIC }
                         update { it.copy(deck = it.deck - cards.toSet(), bench = it.bench + cards.map { card -> PokemonInstance(listOf(card), enteredPlayTurn = s.turn) }) }
                         events += GameEvent("BasicPokemonSearched", "Colocou ${cards.size} Pokémon Básico(s) no Banco pelo ataque.")
+                    }
+                    ChoiceKind.ON_BENCH_DISCARD_OPPONENT_DECK_TOP -> if (ids.isNotEmpty()) {
+                        val opponent = 1-actor
+                        val top = s.players[opponent].deck.firstOrNull()
+                        if (top != null && top.id == ids.single()) {
+                            update(opponent) { it.copy(deck = it.deck.drop(1), discard = it.discard + top) }
+                            events += GameEvent("OpponentDeckDiscarded", "Descartou a carta do topo do deck adversário.", 1)
+                        }
+                    }
+                    ChoiceKind.ATTACK_RECOVER_POKEMON -> {
+                        val cards = p.discard.filter { it.id in ids && def(it).category == Category.POKEMON && def(it).stage == Stage.BASIC }
+                        update { it.copy(discard = it.discard - cards.toSet(), bench = it.bench + cards.map { card -> PokemonInstance(listOf(card), enteredPlayTurn = s.turn) }) }
+                        events += GameEvent("PokemonRecoveredToBench", "Colocou ${cards.size} Pokémon do descarte no Banco.", cards.size)
                     }
                     ChoiceKind.ATTACK_ROTOM_SEARCH -> {
                         val cards = p.deck.filter { it.id in ids && def(it).category == Category.POKEMON && def(it).name.contains("Rotom", ignoreCase = true) }
@@ -552,10 +629,13 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     }
                     ChoiceKind.ATTACK_DAMAGE_COUNTER_TARGET -> {
                         val targetId = ids.single()
-                        update(1-actor) { player -> player.copy(bench = player.bench.map { pokemon ->
-                            if (pokemon.id == targetId) pokemon.copy(damage = pokemon.damage + choice.amount) else pokemon
-                        }) }
-                        events += GameEvent("BenchDamageCountersPlaced", "Colocou ${choice.amount / 10} contadores de dano no Pokémon do Banco adversário.", choice.amount)
+                        update(1-actor) { player -> player.copy(
+                            active = player.active?.let { pokemon -> if (pokemon.id == targetId) pokemon.copy(damage = pokemon.damage + choice.amount) else pokemon },
+                            bench = player.bench.map { pokemon -> if (pokemon.id == targetId) pokemon.copy(damage = pokemon.damage + choice.amount) else pokemon }) }
+                        events += GameEvent("BenchDamageCountersPlaced", "Colocou ${choice.amount / 10} contador(es) de dano no Pokémon do Banco adversário.", choice.amount)
+                        if (choice.remaining > 1) remainingChoices = listOf(choice.copy(
+                            title = "Escolha um Pokémon do Banco adversário para receber 1 dos ${choice.remaining-1} contadores restantes.",
+                            remaining = choice.remaining - 1)) + remainingChoices
                     }
                     ChoiceKind.ATTACK_MULTI_DAMAGE_TARGETS, ChoiceKind.ATTACK_MULTI_DAMAGE_SINGLE_TARGET -> {
                         val attacker = p.active ?: error("Atacante ausente durante a resolução.")
@@ -649,6 +729,52 @@ internal class ContentEngine(private val rules: RulesEngine) {
                             update(1-actor) { opponent -> opponent.copy(active = opponent.active?.copy(damage = opponent.active!!.damage + bonus)) }
                         }
                         events += GameEvent("BenchEnergyDiscarded", "Descartou ${discarded.size} Energia(s) do Banco e causou $bonus de dano adicional.", bonus)
+                    }
+                    ChoiceKind.ATTACK_HAND_ENERGY_DISCARD -> if (ids.isNotEmpty()) {
+                        val discarded = p.hand.filter { it.id in ids && def(it).category == Category.ENERGY }
+                        update(actor) { it.copy(hand = it.hand - discarded.toSet(), discard = it.discard + discarded) }
+                        val attacker = s.players[actor].active ?: error("Atacante ausente durante o descarte de Energia.")
+                        val attack = rules.definition(attacker.top).attacks.firstOrNull { candidate ->
+                            candidate.effects.filterIsInstance<Effect.DiscardHandEnergyDamageBonus>().any { it.perEnergy == choice.amount }
+                        } ?: error("Ataque com descarte de Energias da mão não encontrado.")
+                        val totalPreview = rules.preview(s, attack.id, effectDamage = discarded.size * choice.amount)
+                            ?: error("Não foi possível calcular o dano adicional.")
+                        val basePreview = rules.preview(s, attack.id) ?: error("Não foi possível calcular o dano-base.")
+                        val bonus = (totalPreview.damage - basePreview.damage).coerceAtLeast(0)
+                        val target = s.players[1-actor].active ?: error("Alvo ativo ausente durante o ataque.")
+                        if (bonus > 0 && target.damage < totalPreview.effectiveHp && target.damage + bonus >= totalPreview.effectiveHp)
+                            s = s.copy(pendingAttackDamageKnockoutIds = s.pendingAttackDamageKnockoutIds + target.id)
+                        update(1-actor) { opponent -> opponent.copy(active = opponent.active?.copy(damage = opponent.active!!.damage + bonus)) }
+                        events += GameEvent("HandEnergyDiscardedForDamage", "Descartou ${discarded.size} Energia(s) da mão e causou $bonus de dano adicional.", bonus)
+                    }
+                    ChoiceKind.ATTACK_OWN_ENERGY_DISCARD -> if (ids.isNotEmpty()) {
+                        val discarded = p.pokemon().flatMap { it.energies }.filter { it.id in ids && def(it).category == Category.ENERGY }
+                        update(actor) { player -> player.copy(
+                            active = player.active?.let { pokemon -> pokemon.copy(energies = pokemon.energies - discarded.toSet()) },
+                            bench = player.bench.map { pokemon -> pokemon.copy(energies = pokemon.energies - discarded.toSet()) },
+                            discard = player.discard + discarded)
+                        }
+                        val attacker = s.players[actor].active ?: error("Atacante ausente durante o descarte de Energia.")
+                        val attack = rules.definition(attacker.top).attacks.firstOrNull { candidate ->
+                            candidate.effects.filterIsInstance<Effect.DiscardOwnEnergyDamageBonus>().any { it.perEnergy == choice.amount }
+                        } ?: error("Ataque com descarte de Energias dos seus Pokémon não encontrado.")
+                        val totalPreview = rules.preview(s, attack.id, effectDamage = discarded.size * choice.amount)
+                            ?: error("Não foi possível calcular o dano adicional.")
+                        val basePreview = rules.preview(s, attack.id) ?: error("Não foi possível calcular o dano-base.")
+                        val bonus = (totalPreview.damage - basePreview.damage).coerceAtLeast(0)
+                        val target = s.players[1-actor].active ?: error("Alvo ativo ausente durante o ataque.")
+                        if (bonus > 0 && target.damage < totalPreview.effectiveHp && target.damage + bonus >= totalPreview.effectiveHp)
+                            s = s.copy(pendingAttackDamageKnockoutIds = s.pendingAttackDamageKnockoutIds + target.id)
+                        update(1-actor) { opponent -> opponent.copy(active = opponent.active?.copy(damage = opponent.active!!.damage + bonus)) }
+                        events += GameEvent("PokemonEnergyDiscardedForDamage", "Descartou ${discarded.size} Energia(s) dos seus Pokémon e causou $bonus de dano adicional.", bonus)
+                    }
+                    ChoiceKind.ATTACK_RESTRICT_OPPONENT_ATTACK -> {
+                        val pokemonId = s.players[1-actor].active?.id ?: error("Pokémon ativo adversário ausente.")
+                        val attackId = ids.single()
+                        update(1-actor) { player -> player.copy(active = player.active?.let { target ->
+                            if (target.id == pokemonId) target.copy(restrictions = target.restrictions + AttackRestriction(attackId, s.turn + 1)) else target
+                        }) }
+                        events += GameEvent("OpponentAttackRestricted", "Bloqueou o ataque selecionado do Pokémon Ativo adversário no próximo turno.")
                     }
                     ChoiceKind.HEAL_TARGET -> {
                         val target = ids.single()

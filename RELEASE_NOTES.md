@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.99.30 — Cobertura de mais 202 cartas no TCG Trainer
+
+- Regras reutilizáveis ampliam a cobertura do motor para 1.425 cartas Standard executáveis, 202 a mais que a versão anterior.
+- Foram ampliados efeitos de ataques, habilidades, condições de dano, movimentação de Energia, busca, troca e bloqueios.
+- Os 305 testes do motor passaram; a compilação Android da variante Direct Release foi concluída.
+- APK local sem assinatura; a publicação assinada depende do workflow do GitHub.
 # POKECARD Brasil 5.99.29 — Happy Switch de Blissey ex
 
 - Happy Switch move uma Energia Básica entre dois Pokémon seus diferentes, à sua escolha, uma vez por turno.
