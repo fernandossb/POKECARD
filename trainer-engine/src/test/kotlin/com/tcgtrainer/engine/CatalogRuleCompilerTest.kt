@@ -170,6 +170,11 @@ class CatalogRuleCompilerTest {
             assertEquals(listOf(Effect.Damage(50), Effect.RequiresUndamagedOpponentActive), basculin.attacks.last().effects)
         }
     }
+    @Test fun `Bastiodon Ancient Bulwark compiles Bench damage immunity threshold`() {
+        val bastiodon = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me05-062"), emptyMap())!!
+        assertEquals(2, bastiodon.abilities.single().benchDamageImmunityForAttackerMaxEnergy)
+        assertEquals(listOf(Effect.Damage(160)), bastiodon.attacks.single().effects)
+    }
     @Test fun `Tera card trait identifiers match current rotation catalog prints`() {
         assertEquals(90, CardTraits.teraPokemonIds.size)
         CardTraits.teraPokemonIds.forEach { id ->

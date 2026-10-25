@@ -31,6 +31,8 @@ internal object CatalogRuleCompiler {
         val text = raw.s("effect")?.trim().orEmpty()
         if (text == "All of your Pokémon that have any {W} Energy attached take 50 less damage from attacks from your opponent's Pokémon (after applying Weakness and Resistance). The effect of Tundra Wall doesn't stack.")
             return AbilityDefinition("$id-ability$index", name, text, tundraWallWaterDamageReduction = 50)
+        if (text == "As long as this Pokémon is on your Bench, prevent all damage done to each of your Pokémon by attacks from your opponent's Pokémon that have 2 or less Energy attached.")
+            return AbilityDefinition("$id-ability$index", name, text, benchDamageImmunityForAttackerMaxEnergy = 2)
         if (text == "As often as you like during your turn, you may use this Ability. Move an Energy from 1 of your other Pokémon to this Pokémon.")
             return AbilityDefinition("$id-ability$index", name, text, moveEnergyFromOtherPokemonToSelf = true, unlimitedUse = true)
         val teraAttack = Regex("If you have any Tera Pokémon in play, this Pokémon can use the (.+) attack for \\{([GRFLWPMD])}\\.").matchEntire(text)

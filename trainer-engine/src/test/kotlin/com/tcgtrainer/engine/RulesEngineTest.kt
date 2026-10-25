@@ -17,6 +17,35 @@ class RulesEngineTest {
     }
     private fun play(s: GameState, a: GameAction): GameState = engine.apply(s, a).also { assertEquals(Legality.Legal, it.legality) }.state
 
+    @Test fun `Bastiodon Ancient Bulwark protects team from attacks with at most two attached Energy`() {
+        val bastiodon = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me05-062"), emptyMap())!!
+        val attackerDef = CardDefinition("bulwark-attacker", "Test Attacker", "Test", "1", category = Category.POKEMON,
+            hp = 300, attacks = listOf(AttackDefinition("bulwark-hit", "Hit", emptyList(), listOf(Effect.Damage(100)))))
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            bastiodon.id -> bastiodon; attackerDef.id -> attackerDef; else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        fun card(id: String, def: String) = CardInstance(id, def)
+        fun state(attackerEnergy: Int, bastiodonOnBench: Boolean = true): GameState {
+            val attacker = PokemonInstance(listOf(card("attacker", attackerDef.id)), energies = List(attackerEnergy) { card("energy-$it", "sv01-258") }, enteredPlayTurn = 0)
+            val defender = PokemonInstance(listOf(card("target", "me01-077")), enteredPlayTurn = 0)
+            val bastiodonPokemon = PokemonInstance(listOf(card("bastiodon", bastiodon.id)), enteredPlayTurn = 0)
+            return GameState("bulwark", 12, RngState(12), listOf(
+                PlayerState(deck = List(10) { card("d0-$it", "sv01-258") }, prizes = List(6) { card("p0-$it", "sv01-258") }, active = attacker),
+                PlayerState(deck = List(10) { card("d1-$it", "sv01-258") }, prizes = List(6) { card("p1-$it", "sv01-258") }, active = defender,
+                    bench = if (bastiodonOnBench) listOf(bastiodonPokemon) else emptyList())
+            ), 0, 0, turn = 3, phase = Phase.MAIN)
+        }
+        val attack = attackerDef.attacks.single()
+        val protected = state(2)
+        assertEquals(0, rules.preview(protected, attack.id)!!.damage)
+        val resolved = rules.apply(protected, GameAction.Attack(attack.id))
+        assertEquals(Legality.Legal, resolved.legality)
+        assertEquals(0, resolved.state.players[1].active!!.damage)
+        assertEquals(100, rules.preview(state(3), attack.id)!!.damage)
+        assertEquals(100, rules.preview(state(2, bastiodonOnBench = false), attack.id)!!.damage)
+    }
+
     @Test fun `Resolute Heart prevents attack knockout only at full HP`() {
         val pikachu = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv08-057"), emptyMap())!!
         val hit = AttackDefinition("huge-hit", "Huge Hit", emptyList(), listOf(Effect.Damage(500)))

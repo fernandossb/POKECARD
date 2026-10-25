@@ -139,7 +139,8 @@ import kotlinx.serialization.Serializable
     val alternativeAttackName: String? = null,
     val alternativeAttackCost: List<EnergyType> = emptyList(),
     val requiresTeraInPlay: Boolean = false,
-    val attachHandEnergyToPokemonType: EnergyType? = null
+    val attachHandEnergyToPokemonType: EnergyType? = null,
+    val benchDamageImmunityForAttackerMaxEnergy: Int = 0
 )
 @Serializable data class CardDefinition(
     val id: String, val name: String, val set: String, val number: String, val variant: String = "normal",

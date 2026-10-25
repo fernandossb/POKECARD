@@ -13,11 +13,17 @@ class EffectEngine(private val catalog: CardCatalog) {
         opponentActiveIsEx: Boolean = false, targetIsOpponentActive: Boolean = true, opponentActiveEnergyCount: Int = 0,
         opponentHasSpecialCondition: Boolean = false, opponentHandCount: Int = 0, ownToolCount: Int = 0, ownDamagedPokemonCount: Int = 0,
         ownEnergyCounts: Map<EnergyType, Int> = emptyMap(), ownKnockedOutByAttackLastTurn: Boolean = false,
-        friendlyPokemon: List<PokemonInstance> = listOf(attacker), opponentDamageCounterCount: Int = 0,
+        friendlyPokemon: List<PokemonInstance> = listOf(attacker), friendlyBenchPokemon: List<PokemonInstance> = emptyList(),
+        opponentDamageCounterCount: Int = 0,
         opponentActiveRetreatCost: Int = 0, ownBenchWithEnergyCounts: Map<EnergyType, Int> = emptyMap()): Int {
         if (defender.attackImmunityTurn >= 0 && turn == defender.attackImmunityTurn) return 0
         val source = catalog.get(attacker.top.definitionId)
         val target = catalog.get(defender.top.definitionId)
+        if (friendlyBenchPokemon.any { benchPokemon ->
+                catalog.get(benchPokemon.top.definitionId).abilities.any { ability ->
+                    ability.benchDamageImmunityForAttackerMaxEnergy > 0 && attacker.energies.size <= ability.benchDamageImmunityForAttackerMaxEnergy
+                }
+            }) return 0
         if (defender.preventBasicNonColorlessDamageTurn >= 0 && defender.preventBasicNonColorlessDamageTurn == turn &&
             source.stage == Stage.BASIC && source.type != EnergyType.COLORLESS) return 0
         if (defender.preventBasicPokemonDamageTurn >= 0 && defender.preventBasicPokemonDamageTurn == turn && source.stage == Stage.BASIC) return 0
