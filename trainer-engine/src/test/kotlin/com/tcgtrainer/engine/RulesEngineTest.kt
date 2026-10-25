@@ -46,6 +46,28 @@ class RulesEngineTest {
         assertEquals(100, rules.preview(state(2, bastiodonOnBench = false), attack.id)!!.damage)
     }
 
+    @Test fun `Beautifly Energy Straw reveals opposing hand and damages per Energy card`() {
+        val compiled = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me02.5-013"), emptyMap())!!
+        val energyStraw = compiled.attacks.single { it.name == "Energy Straw" }.copy(cost = emptyList())
+        val beautifly = compiled.copy(attacks = listOf(energyStraw))
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            beautifly.id -> beautifly; else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        val attacker = PokemonInstance(listOf(card("beautifly", beautifly.id)), enteredPlayTurn = 0)
+        val target = field("target", "me01-077")
+        val hand = listOf(card("energy-a", "sv01-258"), card("energy-b", "sv01-258"), card("other", "me01-001"))
+        val state = GameState("energy-straw", 31, RngState(31), listOf(
+            PlayerState(deck = List(10) { card("d0-$it", "sv01-258") }, prizes = List(6) { card("p0-$it", "sv01-258") }, active = attacker),
+            PlayerState(deck = List(10) { card("d1-$it", "sv01-258") }, hand = hand, prizes = List(6) { card("p1-$it", "sv01-258") }, active = target)
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        assertEquals(160, rules.preview(state, energyStraw.id)!!.damage)
+        val result = rules.apply(state, GameAction.Attack(energyStraw.id))
+        assertEquals(Legality.Legal, result.legality)
+        assertEquals(160, result.state.players[1].active!!.damage)
+        assertTrue(result.events.any { it.type == "OpponentHandRevealed" })
+    }
+
     @Test fun `Resolute Heart prevents attack knockout only at full HP`() {
         val pikachu = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv08-057"), emptyMap())!!
         val hit = AttackDefinition("huge-hit", "Huge Hit", emptyList(), listOf(Effect.Damage(500)))

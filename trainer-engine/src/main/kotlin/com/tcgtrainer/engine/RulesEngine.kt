@@ -193,6 +193,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             opponentActiveEnergyCount = state.players[1-state.currentPlayer].active?.energies?.size ?: 0,
             opponentHasSpecialCondition = state.players[1-state.currentPlayer].active?.conditions?.isNotEmpty() == true,
             opponentHandCount = state.players[1-state.currentPlayer].hand.size,
+            opponentHandEnergyCount = state.players[1-state.currentPlayer].hand.count { definition(it).category == Category.ENERGY },
             ownToolCount = state.players[state.currentPlayer].pokemon().count { it.tool != null },
             ownDamagedPokemonCount = state.players[state.currentPlayer].pokemon().count { it.damage > 0 },
             ownEnergyCounts = state.players[state.currentPlayer].pokemon().flatMap { it.energies }
@@ -441,6 +442,10 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 } else false
                 val defender = action.targetId?.let { id -> next.players[opponent].pokemon().first { it.id == id } } ?: next.players[opponent].active!!
                 val defenderEffectsPrevented = defender.attackImmunityTurn == state.turn
+                if (attack.effects.any { it is Effect.OpponentHandEnergyCountDamage }) {
+                    val revealed = next.players[opponent].hand.joinToString(", ") { definition(it).name }
+                    emit("OpponentHandRevealed", "Mão adversária revelada: ${revealed.ifEmpty { "vazia" }}.")
+                }
                 emit("AttackDeclared", "${attack.name}: ${preview.damage} de dano em ${definition(defender.top).name}.", preview.damage)
                 val survivalHp = if (defender.damage == 0) definition(defender.top).abilities.maxOfOrNull { it.surviveAttackKnockoutAtHp } ?: 0 else 0
                 val headsSurvivalHp = definition(defender.top).abilities.maxOfOrNull { it.surviveAttackKnockoutOnHeadsAtHp } ?: 0

@@ -175,6 +175,15 @@ class CatalogRuleCompilerTest {
         assertEquals(2, bastiodon.abilities.single().benchDamageImmunityForAttackerMaxEnergy)
         assertEquals(listOf(Effect.Damage(160)), bastiodon.attacks.single().effects)
     }
+    @Test fun `Beautifly Energy Straw scales with revealed opposing hand Energy`() {
+        for (id in listOf("me02.5-013", "me02.5-219")) {
+            val beautifly = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            val attack = beautifly.attacks.single { it.name == "Energy Straw" }
+            assertTrue(Effect.OpponentHandEnergyCountDamage(80) in attack.effects)
+            assertTrue(EffectEngine(TrainerCatalog).supported(attack))
+            assertTrue(beautifly.attacks.single { it.name == "Stun Spore" }.effects.any { it is Effect.StatusCondition && it.onHeads })
+        }
+    }
     @Test fun `Tera card trait identifiers match current rotation catalog prints`() {
         assertEquals(90, CardTraits.teraPokemonIds.size)
         CardTraits.teraPokemonIds.forEach { id ->

@@ -1,3 +1,8 @@
+# POKECARD Brasil 5.99.21 — Energy Straw de Beautifly
+
+- Energy Straw revela a mão adversária e causa 80 de dano para cada carta de Energia encontrada.
+- As duas impressões de Beautifly também executam Stun Spore, que causa Paralisia em Cara.
+- O motor de regras cobre 1.199 das 3.061 impressões da rotação Padrão.
 # POKECARD Brasil 5.99.20 — Ancient Bulwark de Bastiodon
 
 - Ancient Bulwark impede todo dano de ataques de Pokémon adversários com até duas Energias ligadas enquanto Bastiodon está no Banco.

@@ -82,6 +82,7 @@ import kotlinx.serialization.Serializable
     @Serializable data class OpponentExDamage(val bonus: Int) : Effect
     @Serializable data class OwnEnergyCountDamage(val perEnergy: Int) : Effect
     @Serializable data class OpponentEnergyCountDamage(val perEnergy: Int) : Effect
+    @Serializable data class OpponentHandEnergyCountDamage(val perEnergy: Int) : Effect
     @Serializable data class ReduceDefendingAttackDamageNextTurn(val amount: Int) : Effect
     @Serializable data class OpponentConditionDamage(val bonus: Int) : Effect
     @Serializable data class OwnKnockoutLastTurnDamage(val bonus: Int) : Effect
