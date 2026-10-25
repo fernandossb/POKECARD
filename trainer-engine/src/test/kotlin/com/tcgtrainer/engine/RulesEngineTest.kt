@@ -798,6 +798,38 @@ class RulesEngineTest {
         assertTrue(extended.validate(withoutTera, GameAction.Attack(attack.id)) is Legality.Illegal)
     }
 
+    @Test fun `Banette Cursed Words lets the defending player choose three cards to shuffle`() {
+        val banette = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me02.5-091"), emptyMap())!!
+        val attack = banette.attacks.first().copy(cost = emptyList())
+        val banetteDef = banette.copy(attacks = listOf(attack))
+        val targetDef = CardDefinition("cursed-target", "Target", "Test", "T", category = Category.POKEMON, hp = 300)
+        val rules = RulesEngine(object : CardCatalog { override fun get(id: String) = when (id) {
+            banetteDef.id -> banetteDef; targetDef.id -> targetDef; else -> TrainerCatalog.get(id)
+        } })
+        fun filler(id: String) = CardInstance(id, "sv01-258")
+        val selected = List(3) { CardInstance("opponent-hand-$it", "sv01-258") }
+        val untouched = List(2) { CardInstance("untouched-hand-$it", "sv01-258") }
+        val state = GameState("cursed-words", 99, RngState(99), listOf(
+            PlayerState(deck = List(10) { filler("a-deck-$it") }, prizes = List(6) { filler("a-prize-$it") },
+                active = PokemonInstance(listOf(CardInstance("banette", banetteDef.id)), enteredPlayTurn = 0)),
+            PlayerState(deck = List(10) { filler("b-deck-$it") }, hand = selected + untouched, prizes = List(6) { filler("b-prize-$it") },
+                active = PokemonInstance(listOf(CardInstance("target", targetDef.id)), enteredPlayTurn = 0))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val attacked = rules.apply(state, GameAction.Attack(attack.id))
+        assertEquals(1, rules.actingPlayer(attacked.state))
+        val choice = attacked.state.resolution!!.choices.single()
+        assertEquals(ChoiceKind.OPPONENT_SHUFFLES_OWN_HAND, choice.kind)
+        assertEquals((selected + untouched).map { it.id }.toSet(), choice.candidates.toSet())
+        val result = rules.apply(attacked.state, GameAction.ChooseCards(selected.map { it.id }))
+        assertEquals(Legality.Legal, result.legality)
+        val opponent = result.state.players[1]
+        assertEquals(2, opponent.hand.count { it.id in untouched.map(CardInstance::id) })
+        assertEquals(0, opponent.hand.count { it.id in selected.map(CardInstance::id) })
+        assertEquals(3, (opponent.deck + opponent.hand).count { it.id in selected.map(CardInstance::id) })
+        assertEquals(1, result.state.currentPlayer)
+        assertTrue(result.events.any { it.type == "OpponentHandShuffled" })
+    }
+
     @Test fun `Ampharos Synchro Pulse bonus uses actual hand sizes in attack preview`() {
         val ampharos = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me04-029"), emptyMap())!!
         val attack = ampharos.attacks.first().copy(cost = emptyList())

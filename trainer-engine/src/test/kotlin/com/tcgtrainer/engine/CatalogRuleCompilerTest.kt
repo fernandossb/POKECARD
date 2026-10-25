@@ -149,6 +149,11 @@ class CatalogRuleCompilerTest {
         assertTrue(ability.requiresTeraInPlay)
         assertEquals(listOf(Effect.Damage(230), Effect.Recoil(50)), azumarill.attacks.single().effects)
     }
+    @Test fun `Banette Cursed Words compiles opponent hand choice and shuffle`() {
+        val banette = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me02.5-091"), emptyMap())!!
+        assertEquals(listOf(Effect.OpponentChoosesHandShuffle(3)), banette.attacks.first().effects)
+        assertEquals(listOf(Effect.Damage(70)), banette.attacks.last().effects)
+    }
     @Test fun `Tera card trait identifiers match current rotation catalog prints`() {
         assertEquals(90, CardTraits.teraPokemonIds.size)
         CardTraits.teraPokemonIds.forEach { id ->

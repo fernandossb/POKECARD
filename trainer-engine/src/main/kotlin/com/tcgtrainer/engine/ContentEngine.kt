@@ -23,7 +23,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
         }
     }
     fun validate(s: GameState, action: GameAction): Legality {
-        val p = s.players[s.currentPlayer]
+        val p = s.players[rules.actingPlayer(s)]
         return when (action) {
             is GameAction.ChooseCards -> {
                 val choice = s.resolution?.choices?.firstOrNull() ?: return illegal("Nenhuma escolha pendente.")
@@ -107,7 +107,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
 
     fun apply(state: GameState, action: GameAction): Transition {
         var s = state
-        val actor = s.currentPlayer
+        val actor = rules.actingPlayer(s)
         val events = mutableListOf<GameEvent>()
         fun update(index: Int = actor, transform: (PlayerState) -> PlayerState) { s = s.copy(players = s.players.mapIndexed { i, p -> if (i == index) transform(p) else p }) }
         fun draw(count: Int) {
@@ -340,6 +340,14 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         val cards = p.deck.filter { it.id in ids }
                         update { it.copy(deck = it.deck - cards.toSet(), hand = it.hand + cards) }
                         events += GameEvent("CardsSearched", if (cards.isEmpty()) "Busca sem carta revelada." else "Revelou e buscou: ${cards.joinToString { def(it).name }}.")
+                    }
+                    ChoiceKind.OPPONENT_SHUFFLES_OWN_HAND -> {
+                        val cards = p.hand.filter { it.id in ids }
+                        val rng = SeededRng(s.rng)
+                        update { it.copy(hand = it.hand - cards.toSet(), deck = rng.shuffle(it.deck + cards)) }
+                        s = s.copy(rng = rng.state)
+                        events += GameEvent("OpponentHandShuffled", "Embaralhou ${cards.size} carta(s) da própria mão no deck.", cards.size)
+                        events += GameEvent("DeckShuffled", "Deck embaralhado após Cursed Words.")
                     }
                     ChoiceKind.RECOVER -> {
                         val cards = p.discard.filter { it.id in ids }

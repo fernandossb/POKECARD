@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.99.17 — Cursed Words de Banette
+
+- Cursed Words permite que o adversário escolha três cartas da própria mão para embaralhar no deck.
+- A escolha passa ao jogador defensor e depois retoma a resolução do ataque e o turno corretamente.
+- O motor de regras cobre 1.190 das 3.061 impressões da rotação Padrão.
+
 # POKECARD Brasil 5.99.16 — Glistening Bubbles de Azumarill
 
 - Glistening Bubbles detecta os Pokémon Tera H/I/J em jogo e permite usar Double-Edge por uma Energia Psíquica enquanto a condição for atendida.

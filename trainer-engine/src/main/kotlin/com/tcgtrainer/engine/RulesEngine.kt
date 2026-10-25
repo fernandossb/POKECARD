@@ -27,7 +27,11 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
     }
 
     private fun isBasic(card: CardDefinition) = card.category == Category.POKEMON && card.stage == Stage.BASIC
-    fun actingPlayer(state: GameState): Int = if (state.turn == 0) state.setupPlayer else state.currentPlayer
+    fun actingPlayer(state: GameState): Int = when {
+        state.turn == 0 -> state.setupPlayer
+        state.resolution?.choices?.firstOrNull()?.kind == ChoiceKind.OPPONENT_SHUFFLES_OWN_HAND -> 1-state.currentPlayer
+        else -> state.currentPlayer
+    }
     private fun reason(text: String) = Legality.Illegal(text)
     private fun pokemon(state: GameState, id: String) = state.players[actingPlayer(state)].pokemon().find { it.id == id }
     fun validate(state: GameState, action: GameAction): Legality {
@@ -709,6 +713,13 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     if (eligible.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.SEARCH,
                         "Revele e escolha até ${minOf(effect.max, eligible.size)} Energias Básicas para sua mão.",
                         eligible.map { it.id }, 0, minOf(effect.max, eligible.size), visibleCards = eligible.map { it.id })
+                }
+                attack.effects.filterIsInstance<Effect.OpponentChoosesHandShuffle>().forEach { effect ->
+                    val hand = next.players[opponent].hand
+                    val count = minOf(effect.count, hand.size)
+                    if (count > 0) choices += ChoiceRequest(ChoiceKind.OPPONENT_SHUFFLES_OWN_HAND,
+                        "Escolha $count carta(s) da sua mão para embaralhar no seu deck.", hand.map { it.id }, count, count,
+                        visibleCards = hand.map { it.id })
                 }
                 attack.effects.filterIsInstance<Effect.HealOwnPokemon>().forEach { effect ->
                     val damaged = next.players[actor].pokemon().filter { it.damage > 0 }
