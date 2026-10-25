@@ -240,6 +240,7 @@ internal object CatalogRuleCompiler {
         val confusePoisonThenSwitch = text == "Your opponent's Active Pokémon is now Confused and Poisoned. Switch this Pokémon with 1 of your Benched Pokémon."
         val statusThenRetreat = Regex("Your opponent's Active Pokémon is now (Poisoned|Burned|Asleep|Paralyzed|Confused)\\. During your opponent's next turn, (?:that Pokémon|the Defending Pokémon) can't retreat\\.").matchEntire(text)
         val exactHandSize = Regex("If you don't have exactly (\\d+) cards? in your hand, this attack does nothing\\.").matchEntire(text)
+        val requiresUndamagedOpponentActive = text == "If your opponent's Active Pokémon has no damage counters on it before this attack does damage, this attack does nothing."
         val opponentDeckDiscard = Regex("Discard the top (?:card|([2-5]) cards) of your opponent's deck\\.").matchEntire(text)
         val benchEnergyBonus = Regex("You may discard up to (\\d+) Energy from your Benched Pokémon\\. This attack does (\\d+) more damage for each card you discarded in this way\\.").matchEntire(text)
         val reduceDamage = Regex("During your opponent's next turn, this Pokémon takes (\\d+) less damage from attacks \\(after applying Weakness and Resistance\\)\\.").matchEntire(text)
@@ -348,6 +349,7 @@ internal object CatalogRuleCompiler {
                     effects += Effect.PreventRetreatNextTurn
                 }
                 exactHandSize != null -> effects += Effect.RequiresExactHandSize(exactHandSize.groupValues[1].toInt())
+                requiresUndamagedOpponentActive -> effects += Effect.RequiresUndamagedOpponentActive
                 multiStatus != null -> multiStatus.forEach { effects += Effect.StatusCondition(it) }
                 selfOnly != null && damage == 0 -> effects += Effect.SelfDamage(selfOnly.groupValues[1].toInt())
                 text == "Flip a coin. If tails, this attack does nothing." -> effects += Effect.CoinMiss

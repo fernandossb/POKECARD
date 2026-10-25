@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.99.19 — Bared Fangs de Basculin
+
+- Bared Fangs causa 50 de dano somente se o Ativo adversário começar sem contadores; caso contrário, o ataque falha sem dano ou efeitos.
+- Prévia e resolução aplicam a mesma condição nas duas impressões de Basculin.
+- O motor de regras cobre 1.194 das 3.061 impressões da rotação Padrão.
+
 # POKECARD Brasil 5.99.18 — Stone Arms de Barbaracle
 
 - Stone Arms liga uma Energia de Luta Básica da mão a um Pokémon de Luta escolhido; pode ser usada uma vez por turno.

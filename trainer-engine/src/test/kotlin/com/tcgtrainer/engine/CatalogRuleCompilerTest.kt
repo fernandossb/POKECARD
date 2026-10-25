@@ -164,6 +164,12 @@ class CatalogRuleCompilerTest {
             assertEquals(listOf(Effect.Damage(80)), barbaracle.attacks.single().effects)
         }
     }
+    @Test fun `Basculin Bared Fangs requires an undamaged opposing Active before damage`() {
+        for (id in listOf("sv10.5w-024", "sv10.5w-108")) {
+            val basculin = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            assertEquals(listOf(Effect.Damage(50), Effect.RequiresUndamagedOpponentActive), basculin.attacks.last().effects)
+        }
+    }
     @Test fun `Tera card trait identifiers match current rotation catalog prints`() {
         assertEquals(90, CardTraits.teraPokemonIds.size)
         CardTraits.teraPokemonIds.forEach { id ->

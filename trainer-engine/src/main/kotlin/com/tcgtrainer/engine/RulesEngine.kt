@@ -157,8 +157,10 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         if (!effects.supported(attack)) return null
         val requirement = attack.effects.filterIsInstance<Effect.RequiresBenched>().firstOrNull()
         val exactHandSize = attack.effects.filterIsInstance<Effect.RequiresExactHandSize>().firstOrNull()
+        val undamagedActiveRequirement = Effect.RequiresUndamagedOpponentActive in attack.effects
         val hasRequirement = (requirement == null || state.players[state.currentPlayer].bench.any { it.top.definitionId == requirement.definitionId }) &&
-            (exactHandSize == null || state.players[state.currentPlayer].hand.size == exactHandSize.size)
+            (exactHandSize == null || state.players[state.currentPlayer].hand.size == exactHandSize.size) &&
+            (!undamagedActiveRequirement || defender.id == opponent.active?.id && defender.damage == 0)
         val boost = if (defender.id == opponent.active?.id) state.players[state.currentPlayer].flags.damageBoosts[definition(attacker.top).type] ?: 0 else 0
         val coin = attack.effects.filterIsInstance<Effect.CoinDamage>().firstOrNull()
         val benchEnergyEffect = attack.effects.filterIsInstance<Effect.DiscardBenchEnergyDamage>().firstOrNull()
@@ -359,7 +361,9 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     failed
                 } else false
                 val requiredHandSize = attack.effects.filterIsInstance<Effect.RequiresExactHandSize>().firstOrNull()?.size
-                val attackConditionFails = requiredHandSize != null && p.hand.size != requiredHandSize
+                val requiresUndamagedOpponent = Effect.RequiresUndamagedOpponentActive in attack.effects
+                val attackConditionFails = requiredHandSize != null && p.hand.size != requiredHandSize ||
+                    requiresUndamagedOpponent && (next.players[1-actor].active?.damage != 0)
                 val coinMiss = if (!confusionFailed && !attackConditionFails && Effect.CoinMiss in attack.effects) {
                     val rng = SeededRng(next.rng); val missed = rng.nextInt(2) != 0
                     next = next.copy(rng = rng.state); emit("CoinFlipped", if (missed) "COROA" else "CARA")

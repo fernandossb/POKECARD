@@ -858,6 +858,32 @@ class RulesEngineTest {
         assertEquals(Legality.Illegal("Esta habilidade já foi usada neste turno."), rules.validate(attached.state, GameAction.UseAbility("barbaracle", ability.id)))
     }
 
+    @Test fun `Basculin Bared Fangs deals damage only when opposing Active starts undamaged`() {
+        val basculin = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv10.5w-024"), emptyMap())!!
+        val attack = basculin.attacks.last().copy(cost = emptyList())
+        val basculinDef = basculin.copy(attacks = listOf(attack))
+        val targetDef = CardDefinition("bared-target", "Target", "Test", "T", category = Category.POKEMON, hp = 150)
+        val rules = RulesEngine(object : CardCatalog { override fun get(id: String) = when (id) {
+            basculinDef.id -> basculinDef; targetDef.id -> targetDef; else -> TrainerCatalog.get(id)
+        } })
+        fun filler(id: String) = CardInstance(id, "sv01-258")
+        fun state(targetDamage: Int) = GameState("bared-fangs-$targetDamage", 107, RngState(107), listOf(
+            PlayerState(deck = List(10) { filler("a-deck-$it") }, prizes = List(6) { filler("a-prize-$it") },
+                active = PokemonInstance(listOf(CardInstance("basculin", basculinDef.id)), enteredPlayTurn = 0)),
+            PlayerState(deck = List(10) { filler("b-deck-$it") }, prizes = List(6) { filler("b-prize-$it") },
+                active = PokemonInstance(listOf(CardInstance("target", targetDef.id)), damage = targetDamage, enteredPlayTurn = 0))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val clean = state(0)
+        val damaged = state(10)
+        assertEquals(50, rules.preview(clean, attack.id)!!.damage)
+        assertEquals(0, rules.preview(damaged, attack.id)!!.damage)
+        val hit = rules.apply(clean, GameAction.Attack(attack.id))
+        assertEquals(50, hit.state.players[1].active!!.damage)
+        val miss = rules.apply(damaged, GameAction.Attack(attack.id))
+        assertEquals(10, miss.state.players[1].active!!.damage)
+        assertTrue(miss.events.any { it.type == "AttackEffectFailed" })
+    }
+
     @Test fun `Ampharos Synchro Pulse bonus uses actual hand sizes in attack preview`() {
         val ampharos = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me04-029"), emptyMap())!!
         val attack = ampharos.attacks.first().copy(cost = emptyList())
