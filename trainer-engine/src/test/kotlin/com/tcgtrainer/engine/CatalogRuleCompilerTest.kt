@@ -208,6 +208,12 @@ class CatalogRuleCompilerTest {
             assertTrue(EffectEngine(TrainerCatalog).supported(charger.attacks.first()))
         }
     }
+    @Test fun `Bisharp Finishing Blow compiles an already-damaged Active bonus`() {
+        for (id in listOf("sv10.5b-065", "sv10.5b-143")) {
+            val bisharp = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            assertEquals(listOf(Effect.Damage(60), Effect.OpponentActiveDamagedDamage(60)), bisharp.attacks.last().effects)
+        }
+    }
     @Test fun `Tera card trait identifiers match current rotation catalog prints`() {
         assertEquals(90, CardTraits.teraPokemonIds.size)
         CardTraits.teraPokemonIds.forEach { id ->

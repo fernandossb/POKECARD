@@ -207,6 +207,7 @@ internal object CatalogRuleCompiler {
         val opponentRetreatCostBonus = Regex("This attack does (\\d+) more damage for each \\{C} in your opponent's Active Pokémon's Retreat Cost\\.").matchEntire(text)
         val ownBenchEnergyBonus = Regex("This attack does (\\d+) more damage for each of your Benched Pokémon that has any \\{([GRFLWPMD])} Energy attached\\.").matchEntire(text)
         val opponentConditionBonus = Regex("If your opponent's Active Pokémon is affected by a Special Condition, this attack does (\\d+) more damage\\.").matchEntire(text)
+        val opponentActiveDamagedBonus = Regex("If your opponent's Active Pokémon already has any damage counters on it, this attack does (\\d+) more damage\\.").matchEntire(text)
         val benchedDamage = Regex("This attack does (\\d+) more damage for each Benched Pokémon \\(both yours and your opponent's\\)\\.").matchEntire(text)
         val ownInPlayDamage = Regex("This attack does (\\d+) damage for each of your Pokémon in play\\.").matchEntire(text)
         val ownSpeciesDamage = Regex("This attack does (\\d+) damage for each of your (.+?) and (.+) in play\\.").matchEntire(text)
@@ -326,7 +327,7 @@ internal object CatalogRuleCompiler {
             }
         } else {
             val damage = if (damageText.isEmpty() || opponentHandEnergyDamage != null) 0 else
-                (if (coinBonus != null || coinBonusMultiple != null || coinBonusAllHeads != null || coinBonusUntilTails != null || conditionalEnergy != null || conditionalInPlayEnergy != null || ownKnockoutBonus != null || ownUndamagedBonus != null || opponentExBonus != null || opponentTypeBonus != null || ownEnergyBonus != null || opponentEnergyBonus != null || opponentRetreatCostBonus != null || ownBenchEnergyBonus != null || opponentConditionBonus != null || bothActiveEnergyDamage != null || benchedDamage != null || benchEnergyBonus != null) damageText.removeSuffix("+") else damageText).toIntOrNull() ?: return null
+                (if (coinBonus != null || coinBonusMultiple != null || coinBonusAllHeads != null || coinBonusUntilTails != null || conditionalEnergy != null || conditionalInPlayEnergy != null || ownKnockoutBonus != null || ownUndamagedBonus != null || opponentExBonus != null || opponentTypeBonus != null || ownEnergyBonus != null || opponentEnergyBonus != null || opponentRetreatCostBonus != null || ownBenchEnergyBonus != null || opponentConditionBonus != null || opponentActiveDamagedBonus != null || bothActiveEnergyDamage != null || benchedDamage != null || benchEnergyBonus != null) damageText.removeSuffix("+") else damageText).toIntOrNull() ?: return null
             if (damage < 0) return null
             if (damage > 0) effects += Effect.Damage(damage)
             val draw = Regex("Draw (a|1|2|3) cards?\\.").matchEntire(text)
@@ -413,6 +414,10 @@ internal object CatalogRuleCompiler {
                 opponentConditionBonus != null -> {
                     if (damage <= 0 || !damageText.endsWith("+")) return null
                     effects += Effect.OpponentConditionDamage(opponentConditionBonus.groupValues[1].toInt())
+                }
+                opponentActiveDamagedBonus != null -> {
+                    if (damage <= 0 || !damageText.endsWith("+")) return null
+                    effects += Effect.OpponentActiveDamagedDamage(opponentActiveDamagedBonus.groupValues[1].toInt())
                 }
                 opponentChoosesHandShuffle != null -> effects += Effect.OpponentChoosesHandShuffle(opponentChoosesHandShuffle.groupValues[1].toInt())
                 opponentDiscard != null -> effects += Effect.DiscardRandomOpponentHand(1)

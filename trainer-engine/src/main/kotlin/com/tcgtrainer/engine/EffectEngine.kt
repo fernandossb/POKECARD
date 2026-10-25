@@ -11,7 +11,7 @@ class EffectEngine(private val catalog: CardCatalog) {
         ownInPlayCount: Int = ownBenchCount + 1, ignoreOpponentActiveEffects: Boolean = false,
         ignoreResistance: Boolean = false, turn: Int = -1, ownHandCount: Int = 0,
         opponentActiveIsEx: Boolean = false, targetIsOpponentActive: Boolean = true, opponentActiveEnergyCount: Int = 0,
-        opponentHasSpecialCondition: Boolean = false, opponentHandCount: Int = 0, ownToolCount: Int = 0, ownDamagedPokemonCount: Int = 0,
+        opponentHasSpecialCondition: Boolean = false, opponentActiveDamage: Int = 0, opponentHandCount: Int = 0, ownToolCount: Int = 0, ownDamagedPokemonCount: Int = 0,
         ownEnergyCounts: Map<EnergyType, Int> = emptyMap(), ownKnockedOutByAttackLastTurn: Boolean = false,
         ownPokemonNames: List<String> = emptyList(),
         friendlyPokemon: List<PokemonInstance> = listOf(attacker), friendlyBenchPokemon: List<PokemonInstance> = emptyList(),
@@ -58,6 +58,7 @@ class EffectEngine(private val catalog: CardCatalog) {
             effects.filterIsInstance<Effect.OpponentHandEnergyCountDamage>().sumOf { it.perEnergy * opponentHandEnergyCount } +
             effects.filterIsInstance<Effect.OpponentActiveRetreatCostDamage>().filter { targetIsOpponentActive }.sumOf { it.perCost * opponentActiveRetreatCost } +
             effects.filterIsInstance<Effect.OpponentConditionDamage>().filter { targetIsOpponentActive && opponentHasSpecialCondition }.sumOf { it.bonus } +
+            effects.filterIsInstance<Effect.OpponentActiveDamagedDamage>().filter { targetIsOpponentActive && opponentActiveDamage > 0 }.sumOf { it.bonus } +
             effects.filterIsInstance<Effect.OwnToolCountDamage>().sumOf { it.perTool * ownToolCount } +
             effects.filterIsInstance<Effect.BothActiveEnergyCountDamage>().sumOf { it.perEnergy * (attacker.energies.size + opponentActiveEnergyCount) } +
             effects.filterIsInstance<Effect.ConditionalEnergyDamage>().filter { conditional ->
@@ -97,7 +98,7 @@ class EffectEngine(private val catalog: CardCatalog) {
         is Effect.ReduceDamageNextTurn, is Effect.SelfDamage, Effect.PreventDefendingAttackNextTurn,
         is Effect.OwnHandCounterDamage, is Effect.OpponentExDamage, is Effect.OpponentTypeDamage, is Effect.OwnEnergyCountDamage,
         is Effect.OpponentEnergyCountDamage, is Effect.OpponentHandEnergyCountDamage, is Effect.OpponentActiveRetreatCostDamage, is Effect.ReduceDefendingAttackDamageNextTurn,
-        is Effect.OpponentConditionDamage,
+        is Effect.OpponentConditionDamage, is Effect.OpponentActiveDamagedDamage,
         is Effect.OwnKnockoutLastTurnDamage,
         is Effect.RequiresExactHandSize,
         is Effect.OwnToolCountDamage,

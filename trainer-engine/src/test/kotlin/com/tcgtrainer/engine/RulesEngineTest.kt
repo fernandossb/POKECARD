@@ -177,6 +177,23 @@ class RulesEngineTest {
         assertFalse(attached.state.players[0].deck.any { it.id == water.id })
     }
 
+    @Test fun `Bisharp Finishing Blow adds damage only to an already-damaged Active`() {
+        val bisharp = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv10.5b-065"), emptyMap())!!
+        val attack = bisharp.attacks.last().copy(cost = emptyList())
+        val attacker = PokemonInstance(listOf(card("bisharp", bisharp.id)), enteredPlayTurn = 0)
+        val target = CardDefinition("finishing-target", "Target", "Test", "1", category = Category.POKEMON, hp = 300)
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            bisharp.id -> bisharp.copy(attacks = listOf(attack)); target.id -> target; else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        fun state(damage: Int) = GameState("finishing-blow", 49, RngState(49), listOf(
+            PlayerState(deck = List(10) { card("d0-$it", "sv01-258") }, prizes = List(6) { card("p0-$it", "sv01-258") }, active = attacker),
+            PlayerState(deck = List(10) { card("d1-$it", "sv01-258") }, prizes = List(6) { card("p1-$it", "sv01-258") }, active = PokemonInstance(listOf(card("target", target.id)), damage = damage, enteredPlayTurn = 0))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        assertEquals(60, rules.preview(state(0), attack.id)!!.damage)
+        assertEquals(120, rules.preview(state(10), attack.id)!!.damage)
+    }
+
     @Test fun `Resolute Heart prevents attack knockout only at full HP`() {
         val pikachu = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv08-057"), emptyMap())!!
         val hit = AttackDefinition("huge-hit", "Huge Hit", emptyList(), listOf(Effect.Damage(500)))

@@ -1,3 +1,8 @@
+# POKECARD Brasil 5.99.25 — Finishing Blow de Bisharp
+
+- Finishing Blow acrescenta 60 de dano quando o Pokémon Ativo adversário já tem contadores de dano.
+- As duas impressões de Bisharp executam o efeito; a condição também foi reconhecida em outros ataques do catálogo com o mesmo texto.
+- Cobertura: 1.216 das 3.061 impressões da rotação Padrão.
 # POKECARD Brasil 5.99.24 — Hyper Lariat e Power Charger de Bewear
 
 - Hyper Lariat só recebe 100 de bônus quando as duas moedas caem em Cara.

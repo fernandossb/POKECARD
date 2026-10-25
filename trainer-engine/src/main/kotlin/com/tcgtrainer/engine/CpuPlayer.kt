@@ -71,6 +71,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 ownInPlayCount = own.size,
                 ownHandCount = o.ownHand.size,
                 opponentHandCount = o.opponentHandCount,
+                opponentActiveDamage = enemy?.damage ?: 0,
                 targetIsOpponentActive = target.id == o.opponentActiveId,
                 ownDamagedPokemonCount = own.count { it.damage > 0 },
                 ownEnergyCounts = own.flatMap { it.energies }.mapNotNull { energy -> d(energy).type?.let { it to energy } }
