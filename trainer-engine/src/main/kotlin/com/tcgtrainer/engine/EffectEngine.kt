@@ -13,6 +13,7 @@ class EffectEngine(private val catalog: CardCatalog) {
         opponentActiveIsEx: Boolean = false, targetIsOpponentActive: Boolean = true, opponentActiveEnergyCount: Int = 0,
         opponentHasSpecialCondition: Boolean = false, opponentHandCount: Int = 0, ownToolCount: Int = 0, ownDamagedPokemonCount: Int = 0,
         ownEnergyCounts: Map<EnergyType, Int> = emptyMap(), ownKnockedOutByAttackLastTurn: Boolean = false,
+        friendlyPokemon: List<PokemonInstance> = listOf(attacker),
         opponentActiveRetreatCost: Int = 0, ownBenchWithEnergyCounts: Map<EnergyType, Int> = emptyMap()): Int {
         if (defender.attackImmunityTurn >= 0 && turn == defender.attackImmunityTurn) return 0
         val source = catalog.get(attacker.top.definitionId)
@@ -57,6 +58,10 @@ class EffectEngine(private val catalog: CardCatalog) {
         if (!ignoreWeaknessResistance && !ignoreResistance && target.resistance == source.type) value -= target.resistanceAmount
         val ignoresOpponentActiveEffects = ignoreOpponentActiveEffects || source.abilities.any { it.ignoreOpponentActiveEffects }
         if (!ignoresOpponentActiveEffects) value -= target.abilities.sumOf { it.damageReduction }
+        val tundraWallReduction = if (defender.energies.any { catalog.get(it.definitionId).type == EnergyType.WATER })
+            friendlyPokemon.flatMap { catalog.get(it.top.definitionId).abilities }
+                .maxOfOrNull { it.tundraWallWaterDamageReduction } ?: 0 else 0
+        value -= tundraWallReduction
         if (!ignoresOpponentActiveEffects && turn == defender.damageReductionTurn) value -= defender.incomingDamageReduction
         return value.coerceAtLeast(0) + counterDamage
     }

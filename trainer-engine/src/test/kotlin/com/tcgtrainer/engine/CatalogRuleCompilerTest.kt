@@ -92,6 +92,32 @@ class CatalogRuleCompilerTest {
         assertEquals(listOf(Effect.RecoverSupporterFromDiscard), audino.attacks.first().effects)
         assertEquals(listOf(Effect.Damage(70)), audino.attacks.last().effects)
     }
+    @Test fun `Aurorus Tundra Wall reduces damage once for each own Water Energy Pokemon`() {
+        val aurorus = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me03-024"), emptyMap())!!
+        assertEquals(50, aurorus.abilities.single().tundraWallWaterDamageReduction)
+        assertTrue(aurorus.attacks.single().effects.contains(Effect.PreventDefendingAttackNextTurn))
+        val waterEnergy = CardInstance("water", "sv01-258")
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            aurorus.id -> aurorus
+            "water-energy" -> CardDefinition("water-energy", "Water Energy", "Test", "W", category = Category.ENERGY, type = EnergyType.WATER, basicEnergy = true)
+            else -> TrainerCatalog.get(id)
+        } }
+        val attackerDef = CardDefinition("wall-attacker", "Wall Attacker", "Test", "A", category = Category.POKEMON, hp = 200, type = EnergyType.FIRE)
+        val targetDef = CardDefinition("wall-target", "Wall Target", "Test", "T", category = Category.POKEMON, hp = 200)
+        val extended = object : CardCatalog { override fun get(id: String) = when (id) {
+            aurorus.id -> aurorus
+            attackerDef.id -> attackerDef
+            targetDef.id -> targetDef
+            "water-energy" -> catalog.get("water-energy")
+            else -> TrainerCatalog.get(id)
+        } }
+        val attacker = PokemonInstance(listOf(CardInstance("attacker", attackerDef.id)), enteredPlayTurn = 0)
+        val defender = PokemonInstance(listOf(CardInstance("target", targetDef.id)), energies = listOf(CardInstance(waterEnergy.id, "water-energy")), enteredPlayTurn = 0)
+        val wall = PokemonInstance(listOf(CardInstance("aurorus", aurorus.id)), enteredPlayTurn = 0)
+        val engine = EffectEngine(extended)
+        assertEquals(50, engine.damage(attacker, defender, listOf(Effect.Damage(100)), friendlyPokemon = listOf(defender, wall)))
+        assertEquals(100, engine.damage(attacker, defender, listOf(Effect.Damage(100)), friendlyPokemon = listOf(defender)))
+    }
     @Test fun `healing executes and never creates negative damage`() {
         val move = CatalogRuleCompiler.compileAttack("test", 0, attack("Heal 30 damage from this Pokémon."))!!
         val def = CardDefinition("test", "Test", "T", "1", category = Category.POKEMON, hp = 200, attacks = listOf(move))

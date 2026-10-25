@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.99.11 — Tundra Wall de Aurorus
+
+- Tundra Wall reduz em 50 o dano, após Fraqueza e Resistência, contra cada Pokémon aliado com Energia Água ligada; efeitos repetidos não acumulam.
+- Freezing Chill também reconhece a proibição de ataques ao Defensor no próximo turno.
+- O motor de regras cobre 1.176 das 3.061 impressões da rotação Padrão.
+
 # POKECARD Brasil 5.99.10 — Beckon de Audino
 
 - Beckon recupera um Apoiador do descarte para a mão; outros tipos de carta não podem ser escolhidos.

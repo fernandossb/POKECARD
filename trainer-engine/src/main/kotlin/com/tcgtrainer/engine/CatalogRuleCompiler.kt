@@ -29,6 +29,8 @@ internal object CatalogRuleCompiler {
     private fun compileAbility(id: String, index: Int, raw: JsonObject): AbilityDefinition? {
         val name = raw.s("name") ?: return null
         val text = raw.s("effect")?.trim().orEmpty()
+        if (text == "All of your Pokémon that have any {W} Energy attached take 50 less damage from attacks from your opponent's Pokémon (after applying Weakness and Resistance). The effect of Tundra Wall doesn't stack.")
+            return AbilityDefinition("$id-ability$index", name, text, tundraWallWaterDamageReduction = 50)
         if (text == "All of your Pokémon that have {M} Energy attached have no Retreat Cost.")
             return AbilityDefinition("$id-ability$index", name, text, freeRetreatWithAttachedEnergyType = EnergyType.METAL)
         if (text == "Once during your turn, if this Pokémon is in the Active Spot, you may devolve 1 of your opponent's evolved Pokémon by putting the highest Stage Evolution card on it into your opponent's hand.")
@@ -427,7 +429,8 @@ internal object CatalogRuleCompiler {
                 preventBasicDamage -> effects += Effect.PreventBasicPokemonDamageNextTurn
                 text == "This Pokémon is now Confused." -> effects += Effect.StatusCondition(SpecialCondition.CONFUSED, onSelf = true)
                 text == "Your opponent's Active Pokémon is now Confused." -> effects += Effect.StatusCondition(SpecialCondition.CONFUSED)
-                text == "During your opponent's next turn, the Defending Pokémon can't attack." -> effects += Effect.PreventDefendingAttackNextTurn
+                text == "During your opponent's next turn, the Defending Pokémon can't attack." ||
+                    text == "During your opponent's next turn, the Defending Pokémon can't use attacks." -> effects += Effect.PreventDefendingAttackNextTurn
                 text == "Switch this Pokémon with 1 of your Benched Pokémon." -> effects += Effect.SwitchOwn()
                 text == "You may switch this Pokémon with 1 of your Benched Pokémon." -> effects += Effect.SwitchOwn(optional = true)
                 text == "Switch out your opponent's Active Pokémon to the Bench. (Your opponent chooses the new Active Pokémon.)" -> effects += Effect.SwitchOpponent

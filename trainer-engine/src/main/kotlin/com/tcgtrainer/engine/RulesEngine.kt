@@ -187,6 +187,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             ownEnergyCounts = state.players[state.currentPlayer].pokemon().flatMap { it.energies }
                 .mapNotNull { energy -> definition(energy).type?.let { it to energy } }.groupBy({ it.first }, { it.second }).mapValues { it.value.size },
             ownKnockedOutByAttackLastTurn = state.players[state.currentPlayer].lastKnockedOutByAttackDamageTurn == state.turn-1,
+            friendlyPokemon = state.players[1-state.currentPlayer].pokemon(),
             opponentActiveRetreatCost = if (defender.id == opponent.active?.id)
                 retreatCost(defender, opponent.pokemon(), state.players[state.currentPlayer].pokemon()) else 0,
             ownBenchWithEnergyCounts = EnergyType.entries.associateWith { type ->
