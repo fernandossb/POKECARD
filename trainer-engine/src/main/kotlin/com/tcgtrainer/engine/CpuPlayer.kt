@@ -73,6 +73,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 ignoreResistance = Effect.IgnoreResistance in a.effects, turn = input.turn,
                 ownKnockedOutByAttackLastTurn = o.ownLastKnockedOutByAttackDamageTurn == input.turn-1,
                 friendlyPokemon = o.opponentField,
+                opponentDamageCounterCount = o.opponentField.sumOf { it.damage / 10 },
                 opponentActiveRetreatCost = if (targetIsActive) targetRetreatCost else 0,
                 ownBenchWithEnergyCounts = EnergyType.entries.associateWith { type ->
                     own.filter { it.id != p.id }.count { pokemon -> pokemon.energies.any { d(it).type == type } }

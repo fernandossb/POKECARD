@@ -40,6 +40,7 @@ import kotlinx.serialization.Serializable
     @Serializable data object RecoverSupporterFromDiscard : Effect
     @Serializable data class DiscardTopDeckEnergyDamage(val count: Int, val type: EnergyType, val damagePerEnergy: Int) : Effect
     @Serializable data class SearchBasicEnergyToHand(val max: Int) : Effect
+    @Serializable data class OpponentFieldDamageCounterDamage(val damagePerCounter: Int) : Effect
     @Serializable data class BasicPokemonToBench(val count: Int) : Effect
     @Serializable data object SearchRotomToBench : Effect
     @Serializable data object RestrictIfSecondPlayerFirstTurn : Effect

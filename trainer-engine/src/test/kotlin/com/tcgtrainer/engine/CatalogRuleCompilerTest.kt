@@ -131,6 +131,10 @@ class CatalogRuleCompilerTest {
             assertEquals(listOf(Effect.SearchBasicEnergyToHand(2)), axew.attacks.single().effects)
         }
     }
+    @Test fun `Azelf Neurokinesis compiles bonus for damage counters across opponent field`() {
+        val azelf = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv08-080"), emptyMap())!!
+        assertEquals(listOf(Effect.Damage(10), Effect.OpponentFieldDamageCounterDamage(10)), azelf.attacks.single().effects)
+    }
     @Test fun `healing executes and never creates negative damage`() {
         val move = CatalogRuleCompiler.compileAttack("test", 0, attack("Heal 30 damage from this Pokémon."))!!
         val def = CardDefinition("test", "Test", "T", "1", category = Category.POKEMON, hp = 200, attacks = listOf(move))

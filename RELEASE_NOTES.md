@@ -1,3 +1,8 @@
+# POKECARD Brasil 5.99.14 — Neurokinesis de Azelf
+
+- Neurokinesis soma 10 de dano por contador em todos os Pokémon do campo adversário; a prévia e a resolução usam a mesma contagem.
+- O motor de regras cobre 1.185 das 3.061 impressões da rotação Padrão.
+
 # POKECARD Brasil 5.99.13 — Gather Strength de Axew
 
 - Gather Strength busca até duas Energias Básicas de qualquer tipo do deck para a mão, revela as cartas e embaralha.

@@ -721,6 +721,28 @@ class RulesEngineTest {
         assertTrue(searched.events.any { it.type == "DeckShuffled" })
     }
 
+    @Test fun `Azelf Neurokinesis counts damage counters on every opposing Pokemon`() {
+        val azelf = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv08-080"), emptyMap())!!
+        val attack = azelf.attacks.single().copy(cost = emptyList())
+        val azelfDef = azelf.copy(attacks = listOf(attack))
+        val targetDef = CardDefinition("neuro-target", "Neuro Target", "Test", "T", category = Category.POKEMON, hp = 200)
+        val rules = RulesEngine(object : CardCatalog { override fun get(id: String) = when (id) {
+            azelfDef.id -> azelfDef; targetDef.id -> targetDef; else -> TrainerCatalog.get(id)
+        } })
+        fun card(id: String) = CardInstance(id, "sv01-258")
+        val state = GameState("neurokinesis", 91, RngState(91), listOf(
+            PlayerState(deck = List(10) { card("a-deck-$it") }, prizes = List(6) { card("a-prize-$it") },
+                active = PokemonInstance(listOf(CardInstance("azelf", azelfDef.id)), enteredPlayTurn = 0)),
+            PlayerState(deck = List(10) { card("b-deck-$it") }, prizes = List(6) { card("b-prize-$it") },
+                active = PokemonInstance(listOf(CardInstance("target-active", targetDef.id)), damage = 20, enteredPlayTurn = 0),
+                bench = listOf(PokemonInstance(listOf(CardInstance("target-bench", targetDef.id)), damage = 30, enteredPlayTurn = 0)))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        assertEquals(60, rules.preview(state, attack.id)!!.damage)
+        val result = rules.apply(state, GameAction.Attack(attack.id))
+        assertEquals(Legality.Legal, result.legality)
+        assertEquals(80, result.state.players[1].active!!.damage)
+    }
+
     @Test fun `Ampharos Synchro Pulse bonus uses actual hand sizes in attack preview`() {
         val ampharos = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me04-029"), emptyMap())!!
         val attack = ampharos.attacks.first().copy(cost = emptyList())

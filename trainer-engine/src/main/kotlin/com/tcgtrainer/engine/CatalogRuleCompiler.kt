@@ -195,6 +195,7 @@ internal object CatalogRuleCompiler {
         val ownBenchDamage = Regex("This attack does (\\d+) damage for each of your Benched Pokémon\\.").matchEntire(text)
         val ownDamagedPokemon = Regex("This attack does (\\d+) damage for each of your Pokémon that has any damage counters on it\\.").matchEntire(text)
         val ownDamageCounters = Regex("This attack does (\\d+) damage for each damage counter on this Pokémon\\.").matchEntire(text)
+        val opponentFieldDamageCounters = Regex("This attack does (\\d+) more damage for each damage counter on all of your opponent's Pokémon\\.").matchEntire(text)
         val ownHandCounters = Regex("Place (\\d+) damage counters on your opponent's Active Pokémon for each card in your hand\\.").matchEntire(text)
         val ownToolDamage = Regex("This attack does (\\d+) damage for each Pokémon Tool attached to all of your Pokémon\\.").matchEntire(text)
         val discardTopEnergyDamage = Regex("Discard the top (\\d+) cards of your deck, and this attack does (\\d+) damage for each Basic \\{([GRFLWPMD])} Energy card you discarded in this way\\.").matchEntire(text)
@@ -241,7 +242,13 @@ internal object CatalogRuleCompiler {
             rawParts.mapNotNull { part -> runCatching { SpecialCondition.valueOf(part.uppercase()) }.getOrNull() }
                 .takeIf { parts -> parts.size >= 2 && parts.size == rawParts.size }
         }
-        if (discardTopEnergyDamage != null) {
+        if (opponentFieldDamageCounters != null) {
+            val perCounter = opponentFieldDamageCounters.groupValues[1].toInt()
+            if (!damageText.endsWith("+")) return null
+            val base = damageText.removeSuffix("+").toIntOrNull() ?: return null
+            if (base > 0) effects += Effect.Damage(base)
+            effects += Effect.OpponentFieldDamageCounterDamage(perCounter)
+        } else if (discardTopEnergyDamage != null) {
             val perEnergy = discardTopEnergyDamage.groupValues[2].toInt()
             if (damageText != "${perEnergy}×" && damageText != "${perEnergy}x") return null
             effects += Effect.DiscardTopDeckEnergyDamage(discardTopEnergyDamage.groupValues[1].toInt(),
