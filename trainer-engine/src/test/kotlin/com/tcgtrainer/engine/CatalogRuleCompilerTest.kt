@@ -141,6 +141,23 @@ class CatalogRuleCompilerTest {
         assertTrue(azumarill.abilities.single().unlimitedUse)
         assertEquals(listOf(Effect.Damage(60), Effect.OwnEnergyTypeCountDamage(EnergyType.PSYCHIC, 40)), azumarill.attacks.single().effects)
     }
+    @Test fun `Azumarill Glistening Bubbles compiles a Tera conditioned Psychic attack cost`() {
+        val azumarill = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv08-074"), emptyMap())!!
+        val ability = azumarill.abilities.single()
+        assertEquals("Double-Edge", ability.alternativeAttackName)
+        assertEquals(listOf(EnergyType.PSYCHIC), ability.alternativeAttackCost)
+        assertTrue(ability.requiresTeraInPlay)
+        assertEquals(listOf(Effect.Damage(230), Effect.Recoil(50)), azumarill.attacks.single().effects)
+    }
+    @Test fun `Tera card trait identifiers match current rotation catalog prints`() {
+        assertEquals(90, CardTraits.teraPokemonIds.size)
+        CardTraits.teraPokemonIds.forEach { id ->
+            val row = CatalogRuleCompiler.rows.getValue(id)
+            assertTrue(row["regulationMark"]!!.jsonPrimitive.content in setOf("H", "I", "J"), id)
+        }
+        assertTrue(CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv07-128"), emptyMap())!!.isTera)
+        assertFalse(CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me02.5-084"), emptyMap())!!.isTera)
+    }
     @Test fun `healing executes and never creates negative damage`() {
         val move = CatalogRuleCompiler.compileAttack("test", 0, attack("Heal 30 damage from this Pokémon."))!!
         val def = CardDefinition("test", "Test", "T", "1", category = Category.POKEMON, hp = 200, attacks = listOf(move))

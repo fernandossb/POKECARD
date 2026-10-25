@@ -125,7 +125,7 @@ object TrainerCatalog : CardCatalog {
             retreatCost = en.string("retreat")?.toIntOrNull() ?: 0, prizes = prizes, attacks = attacks,
             verified = true, source = "TCGdex • https://api.tcgdex.net/v2/pt/cards/$id • importado em 22/10/2026",
             artAsset = "cards/$id.webp", text = pt.string("effect").orEmpty(), trainerType = trainerType,
-            trainerEffect = trainer, abilities = abilities, aceSpec = id == "sv06-163",
+            trainerEffect = trainer, abilities = abilities, aceSpec = id == "sv06-163", isTera = id in CardTraits.teraPokemonIds,
             ruleBox = when (prizes) { 3 -> "Quando seu Pokémon Megaevolução ex é Nocauteado, seu oponente pega 3 cartas de Prêmio."; 2 -> "Quando seu Pokémon ${en.string("suffix")} é Nocauteado, seu oponente pega 2 cartas de Prêmio."; else -> "" })
     }
 }

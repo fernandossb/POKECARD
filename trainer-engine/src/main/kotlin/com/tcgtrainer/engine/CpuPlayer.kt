@@ -42,8 +42,12 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
         }
         fun missing(p: PokemonInstance, a: AttackDefinition): Int {
             val energy = p.energies.map { d(it).type }.toMutableList()
+            val teraAlternative = d(p.top).abilities.firstOrNull { ability ->
+                ability.alternativeAttackName == a.name && ability.requiresTeraInPlay && own.any { d(it.top).isTera }
+            }
             var discount = if (d(p.top).abilities.any { it.attackDiscountPerOpponentPrize }) 6-o.opponentPrizeCount else 0
-            val cost = a.cost.filter { if (it == EnergyType.COLORLESS && discount > 0) { discount--; false } else true }
+            val printedCost = teraAlternative?.alternativeAttackCost ?: a.cost
+            val cost = printedCost.filter { if (it == EnergyType.COLORLESS && discount > 0) { discount--; false } else true }
             var missing = 0
             cost.filter { it != EnergyType.COLORLESS }.forEach { if (!energy.remove(it)) missing++ }
             return missing + (cost.count { it == EnergyType.COLORLESS }-energy.size).coerceAtLeast(0)

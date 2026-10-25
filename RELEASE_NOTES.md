@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.99.16 — Glistening Bubbles de Azumarill
+
+- Glistening Bubbles detecta os Pokémon Tera H/I/J em jogo e permite usar Double-Edge por uma Energia Psíquica enquanto a condição for atendida.
+- Double-Edge causa 230 de dano e 50 ao próprio Azumarill.
+- O motor de regras cobre 1.187 das 3.061 impressões da rotação Padrão.
+
 # POKECARD Brasil 5.99.15 — Bubble Gathering de Azumarill ex
 
 - Bubble Gathering move uma Energia de outro Pokémon para Azumarill ex, pode ser usada quantas vezes houver Energias transferíveis no mesmo turno.

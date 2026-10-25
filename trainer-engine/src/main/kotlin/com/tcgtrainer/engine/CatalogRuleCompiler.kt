@@ -33,6 +33,10 @@ internal object CatalogRuleCompiler {
             return AbilityDefinition("$id-ability$index", name, text, tundraWallWaterDamageReduction = 50)
         if (text == "As often as you like during your turn, you may use this Ability. Move an Energy from 1 of your other Pokémon to this Pokémon.")
             return AbilityDefinition("$id-ability$index", name, text, moveEnergyFromOtherPokemonToSelf = true, unlimitedUse = true)
+        val teraAttack = Regex("If you have any Tera Pokémon in play, this Pokémon can use the (.+) attack for \\{([GRFLWPMD])}\\.").matchEntire(text)
+        if (teraAttack != null) return AbilityDefinition("$id-ability$index", name, text,
+            alternativeAttackName = teraAttack.groupValues[1],
+            alternativeAttackCost = listOf(symbolType(teraAttack.groupValues[2]) ?: return null), requiresTeraInPlay = true)
         if (text == "All of your Pokémon that have {M} Energy attached have no Retreat Cost.")
             return AbilityDefinition("$id-ability$index", name, text, freeRetreatWithAttachedEnergyType = EnergyType.METAL)
         if (text == "Once during your turn, if this Pokémon is in the Active Spot, you may devolve 1 of your opponent's evolved Pokémon by putting the highest Stage Evolution card on it into your opponent's hand.")
@@ -152,7 +156,8 @@ internal object CatalogRuleCompiler {
             hp = hp, type = element, weakness = type(weakness?.s("type")),
             resistance = type(resistance?.s("type")), retreatCost = retreat, attacks = attacks,
             prizes = prizes, abilities = abilities, verified = true, source = source,
-            artAsset = image.takeIf(String::isNotBlank)?.let { "remote:$it/high.webp" })
+            artAsset = image.takeIf(String::isNotBlank)?.let { "remote:$it/high.webp" },
+            isTera = id in CardTraits.teraPokemonIds)
     }
 
     fun compileAttack(id: String, index: Int, raw: JsonObject): AttackDefinition? {

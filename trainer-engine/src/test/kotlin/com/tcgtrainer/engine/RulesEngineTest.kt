@@ -775,6 +775,29 @@ class RulesEngineTest {
         assertEquals(Legality.Illegal("Não há Energia em outro Pokémon para mover."), rules.validate(result.state, GameAction.UseAbility("azumarill", ability.id)))
     }
 
+    @Test fun `Azumarill Glistening Bubbles grants Double-Edge for one Psychic only with Tera in play`() {
+        val azumarill = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv08-074"), emptyMap())!!
+        val tera = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv07-128"), emptyMap())!!
+        val psychic = CardDefinition("tera-psychic", "Psychic Energy", "Test", "P", category = Category.ENERGY, type = EnergyType.PSYCHIC, basicEnergy = true)
+        fun filler(id: String) = CardInstance(id, "sv01-258")
+        val energy = CardInstance("one-psychic", psychic.id)
+        val active = PokemonInstance(listOf(CardInstance("azumarill", azumarill.id)), energies = listOf(energy), enteredPlayTurn = 0)
+        val enemyDef = CardDefinition("tera-cost-enemy", "Enemy", "Test", "E", category = Category.POKEMON, hp = 300)
+        val withTera = GameState("glistening-tera", 97, RngState(97), listOf(
+            PlayerState(deck = List(10) { filler("a-deck-$it") }, prizes = List(6) { filler("a-prize-$it") }, active = active,
+                bench = listOf(PokemonInstance(listOf(CardInstance("tera-pokemon", tera.id)), enteredPlayTurn = 0))),
+            PlayerState(deck = List(10) { filler("b-deck-$it") }, prizes = List(6) { filler("b-prize-$it") },
+                active = PokemonInstance(listOf(CardInstance("enemy", enemyDef.id)), enteredPlayTurn = 0))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val extended = RulesEngine(object : CardCatalog { override fun get(id: String) = when (id) {
+            azumarill.id -> azumarill; tera.id -> tera; psychic.id -> psychic; enemyDef.id -> enemyDef; else -> TrainerCatalog.get(id)
+        } })
+        val attack = azumarill.attacks.single()
+        assertEquals(Legality.Legal, extended.validate(withTera, GameAction.Attack(attack.id)))
+        val withoutTera = withTera.copy(players = withTera.players.toMutableList().also { it[0] = it[0].copy(bench = emptyList()) })
+        assertTrue(extended.validate(withoutTera, GameAction.Attack(attack.id)) is Legality.Illegal)
+    }
+
     @Test fun `Ampharos Synchro Pulse bonus uses actual hand sizes in attack preview`() {
         val ampharos = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me04-029"), emptyMap())!!
         val attack = ampharos.attacks.first().copy(cost = emptyList())

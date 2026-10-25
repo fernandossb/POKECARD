@@ -133,7 +133,10 @@ import kotlinx.serialization.Serializable
     val onEvolveRecoverNamedTrainerFromDiscard: String? = null, val onEvolveRecoverNamedTrainerMax: Int = 0,
     val tundraWallWaterDamageReduction: Int = 0,
     val moveEnergyFromOtherPokemonToSelf: Boolean = false,
-    val unlimitedUse: Boolean = false
+    val unlimitedUse: Boolean = false,
+    val alternativeAttackName: String? = null,
+    val alternativeAttackCost: List<EnergyType> = emptyList(),
+    val requiresTeraInPlay: Boolean = false
 )
 @Serializable data class CardDefinition(
     val id: String, val name: String, val set: String, val number: String, val variant: String = "normal",
@@ -146,7 +149,7 @@ import kotlinx.serialization.Serializable
     val trainerEffect: TrainerEffect? = null, val abilities: List<AbilityDefinition> = emptyList(),
     val aceSpec: Boolean = false, val ruleBox: String = "", val implemented: Boolean = true,
     val canonicalName: String = name, val evolvesFromName: String? = null,
-    val basicEnergy: Boolean = false
+    val basicEnergy: Boolean = false, val isTera: Boolean = false
 )
 fun CardDefinition.canEvolveFrom(base: CardDefinition): Boolean = category == Category.POKEMON &&
     base.category == Category.POKEMON && stage != Stage.BASIC && stage.ordinal == base.stage.ordinal + 1 &&

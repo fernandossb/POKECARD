@@ -135,6 +135,11 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         return (base + increase - ((pokemon.tool?.let(::definition)?.trainerEffect as? TrainerEffect.RetreatReduction)?.amount ?: 0)).coerceAtLeast(0)
     }
     fun attackCost(state: GameState, pokemon: PokemonInstance, attack: AttackDefinition): List<EnergyType> {
+        val teraAlternative = definition(pokemon.top).abilities.firstOrNull {
+            it.alternativeAttackName == attack.name && it.requiresTeraInPlay &&
+                state.players[state.currentPlayer].pokemon().any { inPlay -> definition(inPlay.top).isTera }
+        }
+        if (teraAlternative != null) return teraAlternative.alternativeAttackCost
         val discount = if (definition(pokemon.top).abilities.any { it.attackDiscountPerOpponentPrize }) 6-state.players[1-state.currentPlayer].prizes.size else 0
         var remaining = discount
         return attack.cost.filter { if (it == EnergyType.COLORLESS && remaining > 0) { remaining--; false } else true }
