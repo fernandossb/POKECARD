@@ -1174,6 +1174,10 @@ class CatalogRuleCompilerTest {
     @Test fun `energy threshold bonus damage is calculated from attached energies`() {
         val move = CatalogRuleCompiler.compileAttack("attacker", 0,
             attack("If this Pokémon has 2 or more {G} Energy attached, this attack does 120 more damage.", "20+"))!!
+        val inPlay = CatalogRuleCompiler.compileAttack("attacker", 1,
+            attack("If you have at least 2 {G} Energy in play, this attack does 120 more damage.", "20+"))!!
+        val psychic = CatalogRuleCompiler.compileAttack("attacker", 2,
+            attack("This attack does 20 more damage for each {P} Energy attached to this Pokémon.", "20+"))!!
         val attackerDef = CardDefinition("attacker", "Attacker", "T", "1", category = Category.POKEMON)
         val grass = CardDefinition("grass", "Grass Energy", "T", "2", category = Category.ENERGY, type = EnergyType.GRASS)
         val defender = CardDefinition("defender", "Defender", "T", "3", category = Category.POKEMON)
@@ -1184,6 +1188,8 @@ class CatalogRuleCompilerTest {
             energies = listOf(CardInstance("e1", "grass"), CardInstance("e2", "grass")), enteredPlayTurn = 0)
         val target = PokemonInstance(listOf(CardInstance("d", "defender")), enteredPlayTurn = 0)
         assertTrue(move.effects.contains(Effect.ConditionalEnergyDamage(EnergyType.GRASS, 2, 120)))
+        assertTrue(inPlay.effects.contains(Effect.ConditionalInPlayEnergyDamage(EnergyType.GRASS, 2, 120)))
+        assertTrue(psychic.effects.contains(Effect.OwnEnergyTypeCountDamage(EnergyType.PSYCHIC, 20)))
         assertEquals(140, EffectEngine(catalog).damage(attacker, target, move.effects))
     }
     @Test fun `damage bonus counts both players benched Pokemon`() {

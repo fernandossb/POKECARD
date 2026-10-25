@@ -1,3 +1,8 @@
+# POKECARD Brasil 5.99.33 — Correção do início da partida
+
+- Corrigidos padrões de texto de Energia que o runtime Android rejeitava ao compilar as regras.
+- Essa falha aparecia como “Syntax error in regexp pattern” ao tocar em Jogar e impedia a preparação da partida.
+- Adicionados testes para bônus por Energias ligadas, Energias em jogo e Energia Psíquica.
 # POKECARD Brasil 5.99.32 — Partidas e deck da máquina
 
 - A validação de decks e a preparação de partidas agora rodam fora da thread visual, evitando congelamento ao tocar em Jogar.
