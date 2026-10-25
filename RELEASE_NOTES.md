@@ -1,3 +1,8 @@
+# POKECARD Brasil 5.99.24 — Hyper Lariat e Power Charger de Bewear
+
+- Hyper Lariat só recebe 100 de bônus quando as duas moedas caem em Cara.
+- Power Charger busca e liga ao atacante uma Energia Básica de qualquer tipo.
+- As três impressões de Bewear usam as regras; cobertura: 1.207 das 3.061 impressões Padrão.
 # POKECARD Brasil 5.99.23 — Rumbling Bees de Beedrill ex
 
 - Rumbling Bees causa 110 de dano para cada Beedrill ou Beedrill ex do seu campo, sem contar outras espécies.

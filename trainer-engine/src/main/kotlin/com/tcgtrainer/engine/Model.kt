@@ -22,9 +22,10 @@ import kotlinx.serialization.Serializable
     @Serializable data object IgnoreOpponentActiveEffects : Effect
     @Serializable data class TargetedDamage(val damage: Int, val benchedOnly: Boolean = false) : Effect
     @Serializable data class CoinDamage(val coins: Int, val perHeads: Int, val untilTails: Boolean = false,
-        val perEnergy: Boolean = false, val bonusOnly: Boolean = false, val perEnergyBothActive: Boolean = false) : Effect
+        val perEnergy: Boolean = false, val bonusOnly: Boolean = false, val perEnergyBothActive: Boolean = false,
+        val minimumHeads: Int = 0) : Effect
     @Serializable data class DiscardAttackEnergy(val count: Int, val type: EnergyType? = null, val all: Boolean = false) : Effect
-    @Serializable data class EnergyFromDeck(val count: Int, val type: EnergyType) : Effect
+    @Serializable data class EnergyFromDeck(val count: Int, val type: EnergyType?) : Effect
     @Serializable data class SupporterBonus(val damage: Int) : Effect
     @Serializable data object PreventRetreatNextTurn : Effect
     @Serializable data object DiscardDefendingTools : Effect

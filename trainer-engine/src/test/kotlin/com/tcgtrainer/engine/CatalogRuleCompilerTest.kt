@@ -198,6 +198,16 @@ class CatalogRuleCompilerTest {
             assertTrue(EffectEngine(TrainerCatalog).supported(beedrill.attacks.single()))
         }
     }
+    @Test fun `Bewear compiles all-heads threshold and any-type Energy search prints`() {
+        val bewear = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me01-112"), emptyMap())!!
+        val lariat = bewear.attacks.single { it.name == "Hyper Lariat" }
+        assertTrue(Effect.CoinDamage(2, 100, bonusOnly = true, minimumHeads = 2) in lariat.effects)
+        for (id in listOf("sv06.5-053", "sv06.5-079")) {
+            val charger = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            assertTrue(Effect.EnergyFromDeck(1, null) in charger.attacks.first().effects)
+            assertTrue(EffectEngine(TrainerCatalog).supported(charger.attacks.first()))
+        }
+    }
     @Test fun `Tera card trait identifiers match current rotation catalog prints`() {
         assertEquals(90, CardTraits.teraPokemonIds.size)
         CardTraits.teraPokemonIds.forEach { id ->

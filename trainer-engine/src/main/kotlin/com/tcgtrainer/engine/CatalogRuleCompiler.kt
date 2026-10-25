@@ -193,6 +193,7 @@ internal object CatalogRuleCompiler {
         val coin = coinFixed != null || coinUntilTails != null || coinPerEnergy != null || coinPerEnergyBoth != null
         val coinBonus = Regex("Flip a coin\\. If heads, this attack does (\\d+) more damage\\.").matchEntire(text)
         val coinBonusMultiple = Regex("Flip (\\d{1,2}) coins?\\. This attack does (\\d+) more damage for each heads\\.").matchEntire(text)
+        val coinBonusAllHeads = Regex("Flip (\\d{1,2}) coins?\\. If (?:both|all) of them are heads, this attack does (\\d+) more damage\\.").matchEntire(text)
         val coinBonusUntilTails = Regex("Flip a coin until you get tails\\. This attack does (\\d+) more damage for each heads\\.").matchEntire(text)
         val conditionalEnergy = Regex("If this Pokémon has (?:at least )?(\\d+) or more \\{([GRFLWPMD])} Energy attached, this attack does (\\d+) more damage\\.").matchEntire(text)
         val conditionalInPlayEnergy = Regex("If you have (?:at least )?(\\d+)(?: or more)? \\{([GRFLWPMD])} Energy in play, this attack does (\\d+) more damage\\.").matchEntire(text)
@@ -325,7 +326,7 @@ internal object CatalogRuleCompiler {
             }
         } else {
             val damage = if (damageText.isEmpty() || opponentHandEnergyDamage != null) 0 else
-                (if (coinBonus != null || coinBonusMultiple != null || coinBonusUntilTails != null || conditionalEnergy != null || conditionalInPlayEnergy != null || ownKnockoutBonus != null || ownUndamagedBonus != null || opponentExBonus != null || opponentTypeBonus != null || ownEnergyBonus != null || opponentEnergyBonus != null || opponentRetreatCostBonus != null || ownBenchEnergyBonus != null || opponentConditionBonus != null || bothActiveEnergyDamage != null || benchedDamage != null || benchEnergyBonus != null) damageText.removeSuffix("+") else damageText).toIntOrNull() ?: return null
+                (if (coinBonus != null || coinBonusMultiple != null || coinBonusAllHeads != null || coinBonusUntilTails != null || conditionalEnergy != null || conditionalInPlayEnergy != null || ownKnockoutBonus != null || ownUndamagedBonus != null || opponentExBonus != null || opponentTypeBonus != null || ownEnergyBonus != null || opponentEnergyBonus != null || opponentRetreatCostBonus != null || ownBenchEnergyBonus != null || opponentConditionBonus != null || bothActiveEnergyDamage != null || benchedDamage != null || benchEnergyBonus != null) damageText.removeSuffix("+") else damageText).toIntOrNull() ?: return null
             if (damage < 0) return null
             if (damage > 0) effects += Effect.Damage(damage)
             val draw = Regex("Draw (a|1|2|3) cards?\\.").matchEntire(text)
@@ -335,6 +336,7 @@ internal object CatalogRuleCompiler {
             val heal = Regex("Heal (\\d+) damage from this Pokémon\\.").matchEntire(text)
             val healAnyPokemon = Regex("Heal (\\d+) damage from 1 of your Pokémon\\.").matchEntire(text)
             val energySearch = Regex("Search your deck for a Basic \\{([GFRLWPMD])} Energy card and attach it to this Pokémon\\. Then, shuffle your deck\\.").matchEntire(text)
+        val energySearchAnyType = text == "Search your deck for a Basic Energy card and attach it to this Pokémon. Then, shuffle your deck."
         val energySearchUpTo = Regex("Search your deck for up to (\\d+) Basic \\{([GFRLWPMD])} Energy cards and attach them to this Pokémon\\. Then, shuffle your deck\\.").matchEntire(text)
             when {
                 text.isEmpty() -> Unit
@@ -417,16 +419,19 @@ internal object CatalogRuleCompiler {
                 opponentShuffleRandom != null -> effects += Effect.ShuffleRandomOpponentHand(1)
                 opponentDeckDiscard != null -> effects += Effect.DiscardOpponentDeck(opponentDeckDiscard.groupValues[1].toIntOrNull() ?: 1)
                 drawToHand != null -> effects += Effect.DrawToHand(drawToHand.groupValues[1].toInt())
-                coinBonus != null || coinBonusMultiple != null || coinBonusUntilTails != null -> {
+                coinBonus != null || coinBonusMultiple != null || coinBonusAllHeads != null || coinBonusUntilTails != null -> {
                     if (damage <= 0 || !damageText.endsWith("+")) return null
+                    val thresholdCoin = coinBonusAllHeads != null
                     effects += Effect.CoinDamage(when {
                         coinBonusUntilTails != null -> 0
+                        coinBonusAllHeads != null -> coinBonusAllHeads.groupValues[1].toInt()
                         coinBonusMultiple != null -> coinBonusMultiple.groupValues[1].toInt()
                         else -> 1
                     },
                         coinBonus?.groupValues?.get(1)?.toInt() ?: coinBonusMultiple?.groupValues?.get(2)?.toInt()
-                        ?: coinBonusUntilTails?.groupValues?.get(1)?.toInt() ?: return null,
-                        untilTails = coinBonusUntilTails != null, bonusOnly = true)
+                        ?: coinBonusAllHeads?.groupValues?.get(2)?.toInt() ?: coinBonusUntilTails?.groupValues?.get(1)?.toInt() ?: return null,
+                        untilTails = coinBonusUntilTails != null, bonusOnly = true,
+                        minimumHeads = if (thresholdCoin) coinBonusAllHeads!!.groupValues[1].toInt() else 0)
                 }
                 conditionalEnergy != null -> {
                     if (damage <= 0 || !damageText.endsWith("+")) return null
@@ -468,6 +473,7 @@ internal object CatalogRuleCompiler {
                 discardDefendingCoin != null -> effects += Effect.DiscardDefendingEnergy(if (discardDefendingCoin.groupValues[1] in listOf("an", "a")) 1 else discardDefendingCoin.groupValues[1].toInt(), onHeads = true)
                 discardDefending != null -> effects += Effect.DiscardDefendingEnergy(if (discardDefending.groupValues[1] in listOf("an", "a")) 1 else discardDefending.groupValues[1].toInt())
                 draw != null -> effects += Effect.Draw(if (draw.groupValues[1] == "a") 1 else draw.groupValues[1].toInt())
+                energySearchAnyType -> effects += Effect.EnergyFromDeck(1, null)
                 energySearch != null || energySearchUpTo != null -> effects += Effect.EnergyFromDeck(
                     energySearchUpTo?.groupValues?.get(1)?.toInt() ?: 1,
                     symbolType(energySearchUpTo?.groupValues?.get(2) ?: energySearch!!.groupValues[1]) ?: return null)

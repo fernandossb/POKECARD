@@ -133,6 +133,50 @@ class RulesEngineTest {
         assertEquals(110, rules.preview(state(listOf(other)), attack.id)!!.damage)
     }
 
+    @Test fun `Bewear Hyper Lariat adds damage only when both coins are heads`() {
+        val bewear = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me01-112"), emptyMap())!!
+        val attack = bewear.attacks.single { it.name == "Hyper Lariat" }.copy(cost = emptyList())
+        val attacker = PokemonInstance(listOf(card("bewear", bewear.id)), enteredPlayTurn = 0)
+        val target = CardDefinition("coin-target", "Coin Target", "Test", "1", category = Category.POKEMON, hp = 300)
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            bewear.id -> bewear.copy(attacks = listOf(attack)); target.id -> target; else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        val state = GameState("hyper-lariat", 47, RngState(47), listOf(
+            PlayerState(deck = List(10) { card("d0-$it", "sv01-258") }, prizes = List(6) { card("p0-$it", "sv01-258") }, active = attacker),
+            PlayerState(deck = List(10) { card("d1-$it", "sv01-258") }, prizes = List(6) { card("p1-$it", "sv01-258") }, active = PokemonInstance(listOf(card("target", target.id)), enteredPlayTurn = 0))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        assertEquals(100, rules.preview(state, attack.id, rolledHeads = 0)!!.damage)
+        assertEquals(100, rules.preview(state, attack.id, rolledHeads = 1)!!.damage)
+        assertEquals(200, rules.preview(state, attack.id, rolledHeads = 2)!!.damage)
+        val uncertain = rules.preview(state, attack.id)!!
+        assertTrue(uncertain.uncertain)
+        assertEquals(100, uncertain.minDamage)
+        assertEquals(200, uncertain.maxDamage)
+    }
+
+    @Test fun `Bewear Power Charger finds and attaches a Basic Energy of any type`() {
+        val bewear = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv06.5-053"), emptyMap())!!
+        val attack = bewear.attacks.first().copy(cost = emptyList())
+        val attacker = PokemonInstance(listOf(card("bewear", bewear.id)), enteredPlayTurn = 0)
+        val water = card("water-from-deck", "sv01-258")
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            bewear.id -> bewear.copy(attacks = listOf(attack)); else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        val state = GameState("power-charger", 48, RngState(48), listOf(
+            PlayerState(deck = listOf(water) + List(9) { card("d0-$it", "sv01-258") }, prizes = List(6) { card("p0-$it", "sv01-258") }, active = attacker),
+            PlayerState(deck = List(10) { card("d1-$it", "sv01-258") }, prizes = List(6) { card("p1-$it", "sv01-258") }, active = field("target", "me01-077"))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val hit = rules.apply(state, GameAction.Attack(attack.id))
+        assertEquals(Legality.Legal, hit.legality)
+        assertTrue(water.id in hit.state.resolution!!.choices.first().candidates)
+        val attached = rules.apply(hit.state, GameAction.ChooseCards(listOf(water.id)))
+        assertEquals(Legality.Legal, attached.legality)
+        assertTrue(attached.state.players[0].active!!.energies.any { it.id == water.id })
+        assertFalse(attached.state.players[0].deck.any { it.id == water.id })
+    }
+
     @Test fun `Resolute Heart prevents attack knockout only at full HP`() {
         val pikachu = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv08-057"), emptyMap())!!
         val hit = AttackDefinition("huge-hit", "Huge Hit", emptyList(), listOf(Effect.Damage(500)))

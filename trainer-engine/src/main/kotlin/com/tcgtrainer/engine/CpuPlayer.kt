@@ -54,7 +54,9 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
         }
         fun damage(p: PokemonInstance, a: AttackDefinition, target: PokemonInstance): Int {
             if (a.effects.filterIsInstance<Effect.RequiresBenched>().any { req -> own.none { it.id != p.id && it.top.definitionId == req.definitionId } }) return 0
-            val extra = a.effects.filterIsInstance<Effect.CoinDamage>().sumOf { it.coins*it.perHeads/2 } +
+            val extra = a.effects.filterIsInstance<Effect.CoinDamage>().sumOf { coin ->
+                if (coin.minimumHeads > 0) coin.perHeads / (1 shl coin.minimumHeads) else coin.coins*coin.perHeads/2
+            } +
                 if (input.flags.supporter) a.effects.filterIsInstance<Effect.SupporterBonus>().sumOf { it.damage } else 0
             val targetIsActive = target.id == o.opponentActiveId
             val retreatTax = if (targetIsActive && d(target.top).stage != Stage.BASIC) own.sumOf { pokemon ->

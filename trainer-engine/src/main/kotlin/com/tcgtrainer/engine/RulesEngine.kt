@@ -177,7 +177,10 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             it.untilTails -> 1
             else -> coinFlipCount / 2
         } } ?: 0
-        val extra = (coin?.let { expectedHeads*it.perHeads } ?: 0) +
+        val extra = (coin?.let { effect ->
+            if (effect.minimumHeads > 0) if (rolledHeads != null && rolledHeads >= effect.minimumHeads) effect.perHeads else 0
+            else expectedHeads*effect.perHeads
+        } ?: 0) +
             if (state.players[state.currentPlayer].flags.supporter) attack.effects.filterIsInstance<Effect.SupporterBonus>().sumOf { it.damage } else 0
         val resolvedEffects = attack.effects + (if (extra > 0) listOf(Effect.Damage(extra)) else emptyList()) +
             (if (effectDamage > 0) listOf(Effect.Damage(effectDamage)) else emptyList())
@@ -707,7 +710,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     }
                 }
                 attack.effects.filterIsInstance<Effect.EnergyFromDeck>().forEach { effect ->
-                    val eligible = next.players[actor].deck.filter { definition(it).category == Category.ENERGY && definition(it).type == effect.type }
+                    val eligible = next.players[actor].deck.filter { definition(it).category == Category.ENERGY && definition(it).basicEnergy && (effect.type == null || definition(it).type == effect.type) }
                     choices += ChoiceRequest(ChoiceKind.ATTACH_DECK_ENERGY, "Buscar até ${effect.count} Energia(s) e ligar ao atacante.", eligible.map { it.id }, 0, minOf(effect.count, eligible.size))
                 }
                 attack.effects.filterIsInstance<Effect.AttachBasicEnergyFromDeckAny>().forEach { effect ->
