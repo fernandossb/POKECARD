@@ -197,6 +197,7 @@ internal object CatalogRuleCompiler {
         val ownDamageCounters = Regex("This attack does (\\d+) damage for each damage counter on this Pokémon\\.").matchEntire(text)
         val ownHandCounters = Regex("Place (\\d+) damage counters on your opponent's Active Pokémon for each card in your hand\\.").matchEntire(text)
         val ownToolDamage = Regex("This attack does (\\d+) damage for each Pokémon Tool attached to all of your Pokémon\\.").matchEntire(text)
+        val discardTopEnergyDamage = Regex("Discard the top (\\d+) cards of your deck, and this attack does (\\d+) damage for each Basic \\{([GRFLWPMD])} Energy card you discarded in this way\\.").matchEntire(text)
         val bothActiveEnergyDamage = Regex("This attack does (\\d+) more damage for each Energy attached to both Active Pokémon\\.").matchEntire(text)
         val moveOpponentDamageCounters = text == "Your opponent's Active Pokémon is now Confused. You may move any number of damage counters from your opponent's Pokémon to their other Pokémon in any way you like."
         val pullOpponentBench = text == "Switch in 1 of your opponent's Benched Pokémon to the Active Spot."
@@ -239,7 +240,12 @@ internal object CatalogRuleCompiler {
             rawParts.mapNotNull { part -> runCatching { SpecialCondition.valueOf(part.uppercase()) }.getOrNull() }
                 .takeIf { parts -> parts.size >= 2 && parts.size == rawParts.size }
         }
-        if (ownInPlayDamage != null || ownBenchDamage != null || ownDamagedPokemon != null || ownDamageCounters != null || ownHandCounters != null || ownToolDamage != null) {
+        if (discardTopEnergyDamage != null) {
+            val perEnergy = discardTopEnergyDamage.groupValues[2].toInt()
+            if (damageText != "${perEnergy}×" && damageText != "${perEnergy}x") return null
+            effects += Effect.DiscardTopDeckEnergyDamage(discardTopEnergyDamage.groupValues[1].toInt(),
+                symbolType(discardTopEnergyDamage.groupValues[3]) ?: return null, perEnergy)
+        } else if (ownInPlayDamage != null || ownBenchDamage != null || ownDamagedPokemon != null || ownDamageCounters != null || ownHandCounters != null || ownToolDamage != null) {
             val formula = ownInPlayDamage ?: ownBenchDamage ?: ownDamagedPokemon ?: ownDamageCounters ?: ownHandCounters ?: ownToolDamage!!
             val amount = formula.groupValues[1].toInt()
             if (ownHandCounters != null) {

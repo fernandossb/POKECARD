@@ -196,12 +196,20 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         val hp = effects.effectiveHp(defender, state)
         val survivalHp = if (defender.damage == 0) definition(defender.top).abilities.maxOfOrNull { it.surviveAttackKnockoutAtHp } ?: 0 else 0
         val remaining = if (survivalHp > 0 && damage >= hp) survivalHp else (hp - defender.damage - damage).coerceAtLeast(0)
-        val uncertain = coin != null && rolledHeads == null || benchEnergyBonus > 0
+        val topDeckEnergy = attack.effects.filterIsInstance<Effect.DiscardTopDeckEnergyDamage>().firstOrNull()
+        val uncertain = coin != null && rolledHeads == null || benchEnergyBonus > 0 || topDeckEnergy != null
         val minimum = if (coin != null && rolledHeads == null) preview(state, attackId, targetId, 0)!!.damage else damage
         val coinMaximum = if (coin != null && rolledHeads == null) preview(state, attackId, targetId, coinFlipCount)!!.damage else damage
         val bonusAfterWeakness = if (attack.effects.contains(Effect.IgnoreWeaknessResistance) || defender.id != opponent.active?.id) benchEnergyBonus
             else if (!(defender.weaknessSuppressedTurn >= 0 && defender.weaknessSuppressedTurn == state.turn) && definition(defender.top).weakness == definition(attacker.top).type) benchEnergyBonus * 2 else benchEnergyBonus
-        val maximum = coinMaximum + bonusAfterWeakness
+        val topDeckMaxBonus = topDeckEnergy?.let { effect ->
+            val raw = minOf(effect.count, state.players[state.currentPlayer].deck.size) * effect.damagePerEnergy
+            val weakness = !forceIgnoreWeaknessResistance && !attack.effects.contains(Effect.IgnoreWeaknessResistance) &&
+                defender.id == opponent.active?.id && defender.weaknessSuppressedTurn != state.turn &&
+                definition(defender.top).weakness == definition(attacker.top).type
+            raw * if (weakness) 2 else 1
+        } ?: 0
+        val maximum = coinMaximum + bonusAfterWeakness + topDeckMaxBonus
         return AttackPreview(damage, hp, defender.damage, remaining, remaining == 0, if (remaining == 0) definition(defender.top).prizes else 0,
             uncertain, minimum, maximum)
     }
@@ -387,7 +395,16 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     update(opponent) { it.copy(active = it.active?.let { active -> if (active.id == toolTarget.id) active.copy(tool = null) else active }, discard = it.discard + tool) }
                     emit("DefendingToolsDiscarded", "Descartou ${definition(tool).name} do Pokémon Ativo adversário.")
                 }
-                val preview = preview(next, action.attackId, action.targetId, heads)!!
+                val topDeckEffect = attack.effects.filterIsInstance<Effect.DiscardTopDeckEnergyDamage>().firstOrNull()
+                val topDeckEffectDamage = if (topDeckEffect != null) {
+                    val discarded = next.players[actor].deck.take(topDeckEffect.count)
+                    val basicEnergyCount = discarded.count { definition(it).category == Category.ENERGY &&
+                        definition(it).basicEnergy && definition(it).type == topDeckEffect.type }
+                    update(actor) { it.copy(deck = it.deck.drop(discarded.size), discard = it.discard + discarded) }
+                    emit("TopDeckDiscarded", "Descartou ${discarded.size} carta(s) do topo do deck; ${basicEnergyCount} Energia(s) ${topDeckEffect.type} Básica(s) geraram dano.", basicEnergyCount)
+                    basicEnergyCount * topDeckEffect.damagePerEnergy
+                } else 0
+                val preview = preview(next, action.attackId, action.targetId, heads, topDeckEffectDamage)!!
                 val discardCoin = attack.effects.any { it is Effect.DiscardDefendingEnergy && it.onHeads }
                 val discardHeads = if (discardCoin) {
                     val rng = SeededRng(next.rng); val result = rng.nextInt(2) == 0

@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.99.12 — Iceberg Breaker de Avalugg
+
+- Iceberg Breaker descarta até seis cartas do topo do seu deck e causa 60 de dano para cada Energia Água Básica descartada.
+- A prévia apresenta uma faixa de dano possível sem revelar a ordem do deck; na resolução, o dano usa as cartas realmente descartadas.
+- O motor de regras cobre 1.177 das 3.061 impressões da rotação Padrão.
+
 # POKECARD Brasil 5.99.11 — Tundra Wall de Aurorus
 
 - Tundra Wall reduz em 50 o dano, após Fraqueza e Resistência, contra cada Pokémon aliado com Energia Água ligada; efeitos repetidos não acumulam.

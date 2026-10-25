@@ -663,6 +663,32 @@ class RulesEngineTest {
         assertEquals(0, recovered.state.players[1].active!!.damage)
     }
 
+    @Test fun `Avalugg Iceberg Breaker discards six top cards and scales damage by Basic Water Energy`() {
+        val avalugg = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me04-024"), emptyMap())!!
+        val attack = avalugg.attacks.first().copy(cost = emptyList())
+        val avaluggDef = avalugg.copy(attacks = listOf(attack))
+        val targetDef = CardDefinition("iceberg-target", "Iceberg Target", "Test", "T", category = Category.POKEMON, hp = 300)
+        val waterDef = CardDefinition("iceberg-water", "Water Energy", "Test", "W", category = Category.ENERGY, type = EnergyType.WATER, basicEnergy = true)
+        val fillerDef = CardDefinition("iceberg-filler", "Filler", "Test", "F", category = Category.TRAINER, trainerType = TrainerType.ITEM)
+        val rules = RulesEngine(object : CardCatalog { override fun get(id: String) = when (id) {
+            avaluggDef.id -> avaluggDef; targetDef.id -> targetDef; waterDef.id -> waterDef; fillerDef.id -> fillerDef; else -> TrainerCatalog.get(id)
+        } })
+        fun card(id: String) = CardInstance(id, fillerDef.id)
+        val deck = listOf(CardInstance("water-1", waterDef.id), card("filler-1"), CardInstance("water-2", waterDef.id),
+            card("filler-2"), card("filler-3"), card("filler-4"), CardInstance("water-7", waterDef.id))
+        val state = GameState("iceberg", 75, RngState(75), listOf(
+            PlayerState(deck = deck, prizes = List(6) { card("a-prize-$it") },
+                active = PokemonInstance(listOf(CardInstance("avalugg", avaluggDef.id)), enteredPlayTurn = 0)),
+            PlayerState(deck = List(10) { card("b-deck-$it") }, prizes = List(6) { card("b-prize-$it") },
+                active = PokemonInstance(listOf(CardInstance("target", targetDef.id)), enteredPlayTurn = 0))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val result = rules.apply(state, GameAction.Attack(attack.id))
+        assertEquals(Legality.Legal, result.legality)
+        assertEquals(120, result.state.players[1].active!!.damage)
+        assertEquals(deck.take(6).map { it.id }.toSet(), result.state.players[0].discard.map { it.id }.toSet())
+        assertEquals(listOf(card("water-7").id), result.state.players[0].deck.map { it.id })
+    }
+
     @Test fun `Ampharos Synchro Pulse bonus uses actual hand sizes in attack preview`() {
         val ampharos = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me04-029"), emptyMap())!!
         val attack = ampharos.attacks.first().copy(cost = emptyList())

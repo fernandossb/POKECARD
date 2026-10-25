@@ -118,6 +118,13 @@ class CatalogRuleCompilerTest {
         assertEquals(50, engine.damage(attacker, defender, listOf(Effect.Damage(100)), friendlyPokemon = listOf(defender, wall)))
         assertEquals(100, engine.damage(attacker, defender, listOf(Effect.Damage(100)), friendlyPokemon = listOf(defender)))
     }
+    @Test fun `Avalugg Iceberg Breaker compiles top deck Basic Water Energy damage`() {
+        val avalugg = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me04-024"), emptyMap())
+        assertNotNull(avalugg)
+        val attack = avalugg.attacks.first()
+        assertEquals(listOf(Effect.DiscardTopDeckEnergyDamage(6, EnergyType.WATER, 60)), attack.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(attack))
+    }
     @Test fun `healing executes and never creates negative damage`() {
         val move = CatalogRuleCompiler.compileAttack("test", 0, attack("Heal 30 damage from this Pokémon."))!!
         val def = CardDefinition("test", "Test", "T", "1", category = Category.POKEMON, hp = 200, attacks = listOf(move))
