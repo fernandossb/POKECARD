@@ -138,7 +138,7 @@ internal object CatalogRuleCompiler {
             "Stage2" -> Stage.STAGE_TWO
             else -> return null
         }
-        val suffix = raw.s("suffix").orEmpty()
+        val suffix = raw.s("suffix").orEmpty().let { if (it.equals("EX", ignoreCase = true)) "ex" else it }
         if (raw.s("category") != "Pokemon" || suffix !in listOf("", "ex", "V", "VMAX", "VSTAR") ||
             raw.a("rules").isNotEmpty() || !raw.s("effect").isNullOrBlank() ||
             raw.a("types").size != 1 || raw.a("weaknesses").size > 1 || raw.a("resistances").size > 1) return null
@@ -208,6 +208,7 @@ internal object CatalogRuleCompiler {
         val opponentConditionBonus = Regex("If your opponent's Active Pokémon is affected by a Special Condition, this attack does (\\d+) more damage\\.").matchEntire(text)
         val benchedDamage = Regex("This attack does (\\d+) more damage for each Benched Pokémon \\(both yours and your opponent's\\)\\.").matchEntire(text)
         val ownInPlayDamage = Regex("This attack does (\\d+) damage for each of your Pokémon in play\\.").matchEntire(text)
+        val ownSpeciesDamage = Regex("This attack does (\\d+) damage for each of your (.+?) and (.+) in play\\.").matchEntire(text)
         val ownBenchDamage = Regex("This attack does (\\d+) damage for each of your Benched Pokémon\\.").matchEntire(text)
         val ownDamagedPokemon = Regex("This attack does (\\d+) damage for each of your Pokémon that has any damage counters on it\\.").matchEntire(text)
         val ownDamageCounters = Regex("This attack does (\\d+) damage for each damage counter on this Pokémon\\.").matchEntire(text)
@@ -299,6 +300,12 @@ internal object CatalogRuleCompiler {
                 if (ownInPlayDamage != null) effects += Effect.OwnInPlayCountDamage(amount)
                 else effects += Effect.OwnDamageCounterDamage(amount)
             }
+        } else if (ownSpeciesDamage != null) {
+            val species = ownSpeciesDamage.groupValues[2]
+            if (ownSpeciesDamage.groupValues[3] != "$species ex") return null
+            val perPokemon = ownSpeciesDamage.groupValues[1].toInt()
+            if (damageText != "${perPokemon}×" && damageText != "${perPokemon}x") return null
+            effects += Effect.OwnSpeciesCountDamage(species, perPokemon)
         } else if (discardFireTargetedBench != null) {
             if (damageText.isNotEmpty()) return null
             effects += Effect.DiscardAttackEnergy(0, EnergyType.FIRE, all = true)

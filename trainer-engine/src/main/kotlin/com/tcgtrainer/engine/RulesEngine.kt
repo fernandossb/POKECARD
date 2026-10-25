@@ -198,6 +198,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             ownDamagedPokemonCount = state.players[state.currentPlayer].pokemon().count { it.damage > 0 },
             ownEnergyCounts = state.players[state.currentPlayer].pokemon().flatMap { it.energies }
                 .mapNotNull { energy -> definition(energy).type?.let { it to energy } }.groupBy({ it.first }, { it.second }).mapValues { it.value.size },
+            ownPokemonNames = state.players[state.currentPlayer].pokemon().map { definition(it.top).name },
             ownKnockedOutByAttackLastTurn = state.players[state.currentPlayer].lastKnockedOutByAttackDamageTurn == state.turn-1,
             friendlyPokemon = state.players[1-state.currentPlayer].pokemon(),
             friendlyBenchPokemon = state.players[1-state.currentPlayer].bench,

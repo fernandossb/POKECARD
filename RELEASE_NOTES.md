@@ -1,3 +1,8 @@
+# POKECARD Brasil 5.99.23 — Rumbling Bees de Beedrill ex
+
+- Rumbling Bees causa 110 de dano para cada Beedrill ou Beedrill ex do seu campo, sem contar outras espécies.
+- As duas impressões de Beedrill ex usam essa regra; o compilador também reconhece o sufixo `EX` maiúsculo do catálogo.
+- Cobertura: 1.204 das 3.061 impressões da rotação Padrão.
 # POKECARD Brasil 5.99.22 — Hide 'n' Sneak e Puppet Pull de Banette
 
 - Hide 'n' Sneak impede efeitos de ataques e habilidades adversárias direcionados a Banette; o dano de ataque continua normal.

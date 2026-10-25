@@ -113,6 +113,26 @@ class RulesEngineTest {
         assertFalse(SpecialCondition.PARALYZED in result.state.players[1].active!!.conditions)
     }
 
+    @Test fun `Beedrill ex Rumbling Bees scales with Beedrill and ex copies only`() {
+        val beedrill = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me04-003"), emptyMap())!!
+        val basic = CardDefinition("basic-beedrill", "Beedrill", "Test", "2", category = Category.POKEMON, stage = Stage.BASIC, hp = 70)
+        val target = CardDefinition("beedrill-target", "Target", "Test", "1", category = Category.POKEMON, hp = 300)
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            beedrill.id -> beedrill; basic.id -> basic; target.id -> target; else -> TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        val attack = beedrill.attacks.single().copy(cost = emptyList())
+        val active = PokemonInstance(listOf(card("ex", beedrill.id)), enteredPlayTurn = 0)
+        val bench = PokemonInstance(listOf(card("basic-bee", basic.id)), enteredPlayTurn = 0)
+        val other = PokemonInstance(listOf(card("other", target.id)), enteredPlayTurn = 0)
+        fun state(benchPokemon: List<PokemonInstance>) = GameState("rumbling-bees", 46, RngState(46), listOf(
+            PlayerState(deck = List(10) { card("d0-$it", "sv01-258") }, prizes = List(6) { card("p0-$it", "sv01-258") }, active = active, bench = benchPokemon),
+            PlayerState(deck = List(10) { card("d1-$it", "sv01-258") }, prizes = List(6) { card("p1-$it", "sv01-258") }, active = PokemonInstance(listOf(card("target", target.id)), enteredPlayTurn = 0))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        assertEquals(220, rules.preview(state(listOf(bench, other)), attack.id)!!.damage)
+        assertEquals(110, rules.preview(state(listOf(other)), attack.id)!!.damage)
+    }
+
     @Test fun `Resolute Heart prevents attack knockout only at full HP`() {
         val pikachu = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv08-057"), emptyMap())!!
         val hit = AttackDefinition("huge-hit", "Huge Hit", emptyList(), listOf(Effect.Damage(500)))

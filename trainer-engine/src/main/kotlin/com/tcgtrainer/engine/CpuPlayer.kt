@@ -73,6 +73,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 ownDamagedPokemonCount = own.count { it.damage > 0 },
                 ownEnergyCounts = own.flatMap { it.energies }.mapNotNull { energy -> d(energy).type?.let { it to energy } }
                     .groupBy({ it.first }, { it.second }).mapValues { it.value.size },
+                ownPokemonNames = own.map { d(it.top).name },
                 ignoreOpponentActiveEffects = Effect.IgnoreOpponentActiveEffects in a.effects,
                 ignoreResistance = Effect.IgnoreResistance in a.effects, turn = input.turn,
                 ownKnockedOutByAttackLastTurn = o.ownLastKnockedOutByAttackDamageTurn == input.turn-1,

@@ -191,6 +191,13 @@ class CatalogRuleCompilerTest {
         assertTrue(EffectEngine(TrainerCatalog).supported(attack))
         assertTrue(CatalogRuleCompiler.compile(row, emptyMap())!!.abilities.single().preventOpponentEffects)
     }
+    @Test fun `Beedrill ex Rumbling Bees counts Beedrill species only`() {
+        for (id in listOf("me04-003", "me04-098")) {
+            val beedrill = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            assertEquals(listOf(Effect.OwnSpeciesCountDamage("Beedrill", 110)), beedrill.attacks.single().effects)
+            assertTrue(EffectEngine(TrainerCatalog).supported(beedrill.attacks.single()))
+        }
+    }
     @Test fun `Tera card trait identifiers match current rotation catalog prints`() {
         assertEquals(90, CardTraits.teraPokemonIds.size)
         CardTraits.teraPokemonIds.forEach { id ->
