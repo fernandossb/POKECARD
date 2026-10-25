@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.99.13 — Gather Strength de Axew
+
+- Gather Strength busca até duas Energias Básicas de qualquer tipo do deck para a mão, revela as cartas e embaralha.
+- As impressões de Axew com o mesmo ataque usam a mesma regra.
+- O motor de regras cobre 1.184 das 3.061 impressões da rotação Padrão.
+
 # POKECARD Brasil 5.99.12 — Iceberg Breaker de Avalugg
 
 - Iceberg Breaker descarta até seis cartas do topo do seu deck e causa 60 de dano para cada Energia Água Básica descartada.

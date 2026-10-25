@@ -689,6 +689,38 @@ class RulesEngineTest {
         assertEquals(listOf(card("water-7").id), result.state.players[0].deck.map { it.id })
     }
 
+    @Test fun `Axew Gather Strength reveals and searches up to two Basic Energy cards`() {
+        val axew = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv10.5b-068"), emptyMap())!!
+        val attack = axew.attacks.single().copy(cost = emptyList())
+        val axewDef = axew.copy(attacks = listOf(attack))
+        val waterDef = CardDefinition("axew-water", "Water Energy", "Test", "W", category = Category.ENERGY, type = EnergyType.WATER, basicEnergy = true)
+        val fireDef = CardDefinition("axew-fire", "Fire Energy", "Test", "F", category = Category.ENERGY, type = EnergyType.FIRE, basicEnergy = true)
+        val specialDef = CardDefinition("axew-special", "Special Energy", "Test", "S", category = Category.ENERGY, type = EnergyType.COLORLESS)
+        val fillerDef = CardDefinition("axew-filler", "Filler", "Test", "X", category = Category.TRAINER, trainerType = TrainerType.ITEM)
+        val rules = RulesEngine(object : CardCatalog { override fun get(id: String) = when (id) {
+            axewDef.id -> axewDef; waterDef.id -> waterDef; fireDef.id -> fireDef; specialDef.id -> specialDef; fillerDef.id -> fillerDef; else -> TrainerCatalog.get(id)
+        } })
+        val water = CardInstance("basic-water", waterDef.id)
+        val fire = CardInstance("basic-fire", fireDef.id)
+        val special = CardInstance("special-energy", specialDef.id)
+        val filler = CardInstance("filler", fillerDef.id)
+        fun card(id: String) = CardInstance(id, fillerDef.id)
+        val state = GameState("axew-search", 81, RngState(81), listOf(
+            PlayerState(deck = listOf(water, filler, fire, special), prizes = List(6) { card("a-prize-$it") },
+                active = PokemonInstance(listOf(CardInstance("axew", axewDef.id)), enteredPlayTurn = 0)),
+            PlayerState(deck = List(10) { card("b-deck-$it") }, prizes = List(6) { card("b-prize-$it") },
+                active = PokemonInstance(listOf(card("target")), enteredPlayTurn = 0))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val attacked = rules.apply(state, GameAction.Attack(attack.id))
+        val choice = attacked.state.resolution!!.choices.single()
+        assertEquals(setOf(water.id, fire.id), choice.candidates.toSet())
+        assertEquals(2, choice.max)
+        val searched = rules.apply(attacked.state, GameAction.ChooseCards(listOf(water.id, fire.id)))
+        assertEquals(setOf(water.id, fire.id), searched.state.players[0].hand.map { it.id }.toSet())
+        assertEquals(listOf(special.id, filler.id).toSet(), searched.state.players[0].deck.map { it.id }.toSet())
+        assertTrue(searched.events.any { it.type == "DeckShuffled" })
+    }
+
     @Test fun `Ampharos Synchro Pulse bonus uses actual hand sizes in attack preview`() {
         val ampharos = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me04-029"), emptyMap())!!
         val attack = ampharos.attacks.first().copy(cost = emptyList())

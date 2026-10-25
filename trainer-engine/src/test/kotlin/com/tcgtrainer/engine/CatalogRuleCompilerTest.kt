@@ -125,6 +125,12 @@ class CatalogRuleCompilerTest {
         assertEquals(listOf(Effect.DiscardTopDeckEnergyDamage(6, EnergyType.WATER, 60)), attack.effects)
         assertTrue(EffectEngine(TrainerCatalog).supported(attack))
     }
+    @Test fun `Axew Gather Strength compiles Basic Energy search for every print`() {
+        for (id in listOf("sv10.5b-068", "sv10.5b-145")) {
+            val axew = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            assertEquals(listOf(Effect.SearchBasicEnergyToHand(2)), axew.attacks.single().effects)
+        }
+    }
     @Test fun `healing executes and never creates negative damage`() {
         val move = CatalogRuleCompiler.compileAttack("test", 0, attack("Heal 30 damage from this Pokémon."))!!
         val def = CardDefinition("test", "Test", "T", "1", category = Category.POKEMON, hp = 200, attacks = listOf(move))
