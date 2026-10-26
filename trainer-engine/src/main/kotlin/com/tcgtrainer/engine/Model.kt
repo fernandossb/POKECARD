@@ -46,6 +46,7 @@ import kotlinx.serialization.Serializable
     @Serializable data class ConditionalInPlayEnergyDamage(val type: EnergyType, val minimum: Int, val bonus: Int) : Effect
     @Serializable data class SwitchOwn(val optional: Boolean = false) : Effect
     @Serializable data class BenchedCountDamage(val perPokemon: Int) : Effect
+    @Serializable data class OpponentBenchCountDamage(val perPokemon: Int) : Effect
     @Serializable data class OwnInPlayCountDamage(val perPokemon: Int) : Effect
     @Serializable data class OwnSpeciesCountDamage(val speciesName: String, val perPokemon: Int) : Effect
     @Serializable data class OwnAttackNameCountDamage(val attackName: String, val perPokemon: Int) : Effect
