@@ -550,6 +550,19 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     results.count { it }
                 } ?: knockoutHeads
                 val opponent = 1-actor
+                val coinDamageEachPokemon = attack.effects.filterIsInstance<Effect.CoinDamageEachOpponentPokemon>().firstOrNull()
+                val coinDamageTargets = if (coinDamageEachPokemon != null) {
+                    val targets = next.players[opponent].pokemon()
+                    val rng = SeededRng(next.rng)
+                    val results = targets.map { target -> target to (rng.nextInt(2) == 0) }
+                    next = next.copy(rng = rng.state)
+                    if (results.isNotEmpty()) emit("CoinFlipped", results.joinToString { (target, heads) ->
+                        "${definition(target.top).name}: ${if (heads) "CARA" else "COROA"}"
+                    })
+                    results.filter { it.second && it.first.attackImmunityTurn != state.turn &&
+                        definition(it.first.top).abilities.none { ability -> ability.preventOpponentEffects } }
+                        .map { it.first.id }
+                } else emptyList()
                 val toolTarget = next.players[opponent].active
                 if (Effect.DiscardDefendingTools in attack.effects && toolTarget?.tool != null && toolTarget.attackImmunityTurn != state.turn) {
                     val tool = toolTarget.tool
@@ -950,6 +963,11 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                             "Escolha $count Pokémon adversário para receber ${effect.amount} de dano cada.",
                             candidates.map { it.id }, count, count, amount = effect.amount)
                     }
+                }
+                if (coinDamageEachPokemon != null && coinDamageTargets.isNotEmpty()) {
+                    choices += ChoiceRequest(ChoiceKind.ATTACK_MULTI_DAMAGE_TARGETS,
+                        "Causará ${coinDamageEachPokemon.amount} de dano a cada Pokémon adversário que saiu cara.",
+                        coinDamageTargets, coinDamageTargets.size, coinDamageTargets.size, amount = coinDamageEachPokemon.amount)
                 }
                 listOf(TrainerType.SUPPORTER to Effect.SearchSupporterToHand, TrainerType.ITEM to Effect.SearchItemToHand).forEach { (type, effect) ->
                     if (effect in attack.effects) {

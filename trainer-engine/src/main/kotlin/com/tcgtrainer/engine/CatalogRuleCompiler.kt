@@ -460,6 +460,7 @@ internal object CatalogRuleCompiler {
         val placeDamageCounter = text == "Place 1 damage counter on 1 of your opponent's Pokémon."
         val spreadBenchDamageCounters = Regex("Put (\\d+) damage counters on your opponent's Benched Pokémon in any way you like\\.").matchEntire(text)
         val multiTargetDamage = Regex("Discard (\\d+) Energy from this Pokémon, and this attack does (\\d+) damage to each of (\\d+) of your opponent's Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
+        val coinDamageEachPokemon = Regex("For each of your opponent's Pokémon, flip a coin\\. If heads, this attack does (\\d+) damage to that Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
         val multiTargetDamageIgnoringEffects = Regex("This attack does (\\d+) damage to (\\d+) of your opponent's Pokémon\\. This attack's damage isn't affected by Weakness or Resistance, or by any effects on those Pokémon\\.").matchEntire(text)
         val knockOutBothActive = text == "Both Active Pokémon are Knocked Out."
         val repeatedMultiTargetDamage = Regex("Choose 1 of your opponent's Pokémon (\\d+) times\\. \\(You can choose the same Pokémon more than once\\.\\) For each time you chose a Pokémon, do (\\d+) damage to it\\. This damage isn't affected by Weakness or Resistance\\.").matchEntire(text)
@@ -622,6 +623,9 @@ internal object CatalogRuleCompiler {
             if (damageText.isNotEmpty()) return null
             effects += Effect.DiscardAttackEnergy(0, all = true)
             effects += Effect.TargetedDamage((discardAllTargeted ?: discardAllTargetedAfter!!).groupValues[1].toInt())
+        } else if (coinDamageEachPokemon != null) {
+            if (damageText.isNotEmpty()) return null
+            effects += Effect.CoinDamageEachOpponentPokemon(coinDamageEachPokemon.groupValues[1].toInt())
         } else if (coin) {
             if (discardDefendingPerHeads != null) {
                 val count = discardDefendingPerHeads?.groupValues?.get(2) ?: discardDefendingCoin!!.groupValues[1]

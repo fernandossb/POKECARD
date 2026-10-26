@@ -121,6 +121,7 @@ import kotlinx.serialization.Serializable
     @Serializable data class BenchDamageCounters(val count: Int, val distribute: Boolean = false) : Effect
     @Serializable data object PlaceDamageCounter : Effect
     @Serializable data class MultiTargetDamage(val amount: Int, val targets: Int, val allowRepeat: Boolean = false, val ignoreWeaknessResistance: Boolean = false, val discardBeforeDamage: Boolean = false) : Effect
+    @Serializable data class CoinDamageEachOpponentPokemon(val amount: Int) : Effect
     @Serializable data object KnockOutBothActive : Effect
     @Serializable data object RecoverSelfFromSpecialConditions : Effect
     @Serializable data object NoWeaknessNextTurn : Effect

@@ -786,14 +786,18 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     ChoiceKind.ATTACK_MULTI_DAMAGE_TARGETS, ChoiceKind.ATTACK_MULTI_DAMAGE_SINGLE_TARGET -> {
                         val attacker = p.active ?: error("Atacante ausente durante a resolução.")
                         val attack = rules.definition(attacker.top).attacks.firstOrNull { candidate ->
-                            candidate.effects.filterIsInstance<Effect.MultiTargetDamage>().any { it.amount == choice.amount }
+                            candidate.effects.any { effect -> when (effect) {
+                                is Effect.MultiTargetDamage -> effect.amount == choice.amount
+                                is Effect.CoinDamageEachOpponentPokemon -> effect.amount == choice.amount
+                                else -> false
+                            } }
                         } ?: error("Ataque de dano múltiplo não encontrado.")
-                        val multiEffect = attack.effects.filterIsInstance<Effect.MultiTargetDamage>().first { it.amount == choice.amount }
+                        val multiEffect = attack.effects.filterIsInstance<Effect.MultiTargetDamage>().firstOrNull { it.amount == choice.amount }
                         val opponent = 1-actor
                         ids.forEach { targetId ->
                             val target = s.players[opponent].pokemon().first { it.id == targetId }
                             val preview = rules.preview(s, attack.id, targetId, effectDamage = choice.amount,
-                                forceIgnoreWeaknessResistance = multiEffect.ignoreWeaknessResistance)
+                                forceIgnoreWeaknessResistance = multiEffect?.ignoreWeaknessResistance ?: false)
                                 ?: error("Não foi possível calcular o dano ao alvo selecionado.")
                             val damage = preview.damage
                             val hp = preview.effectiveHp
