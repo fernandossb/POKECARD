@@ -33,6 +33,9 @@ internal object CatalogRuleCompiler {
             return AbilityDefinition("$id-ability$index", name, text, changeOpponentNsPokemonWeaknessToPsychic = true)
         if (text == "If 1 of your {D} Pokémon is Knocked Out by damage from an attack from your opponent's Pokémon ex, that player takes 1 fewer Prize card. The effect of Shadowy Concealment doesn't stack.")
             return AbilityDefinition("$id-ability$index", name, text, reducePrizeForDarknessKnockoutByEx = true)
+        if (text == "Once during your turn, if this Pokémon is in the Active Spot, you may discard a Basic {W} Energy card from your hand in order to use this Ability. Place 6 damage counters on 1 of your opponent's Pokémon.")
+            return AbilityDefinition("$id-ability$index", name, text, requiresActive = true, usageKey = name,
+                discardEnergyType = EnergyType.WATER, damageCounters = 6, damageTargets = 1)
         if (text == "During Pokémon Checkup, put 1 damage counter on each Pokémon that has an Ability (both yours and your opponent's), except any Froslass.")
             return AbilityDefinition("$id-ability$index", name, text, checkupDamageCountersPerPokemonWithAbilityExceptFroslass = 1)
         if (text == "If this Pokémon has no Energy attached, it has no Retreat Cost.")

@@ -4,6 +4,18 @@ import kotlinx.serialization.json.*
 import kotlin.test.*
 
 class CatalogRuleCompilerTest {
+    @Test fun `all Mega Greninja prints compile the Active Spot Water Energy damage-counter ability`() {
+        val ids = listOf("me04-022", "me04-100", "me04-116", "me04-122", "mep-081")
+        ids.forEach { id ->
+            val row = CatalogRuleCompiler.rows.getValue(id)
+            val abilityRaw = row["abilities"]!!.jsonArray.single().jsonObject
+            val ability = CatalogRuleCompiler.compileAbility(id, 0, abilityRaw)!!
+            assertEquals(EnergyType.WATER, ability.discardEnergyType, id)
+            assertEquals(6, ability.damageCounters, id)
+            assertEquals(1, ability.damageTargets, id)
+            assertTrue(ability.requiresActive, id)
+        }
+    }
     @Test fun `evolution accepts another print of the same species but preserves owner and stage`() {
         val evolution = TrainerCatalog.get("me01-077")
         val base = TrainerCatalog.get("me01-076").copy(id = "another-riolu-print")

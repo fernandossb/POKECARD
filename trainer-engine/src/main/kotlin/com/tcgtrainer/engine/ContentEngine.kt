@@ -257,10 +257,19 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     "Escolha um Pokémon Básico de até ${ability.recoverBasicPokemonToBenchMaxHp} HP do descarte para colocar no Banco.",
                     p.discard.filter { def(it).category == Category.POKEMON && def(it).stage == Stage.BASIC && def(it).hp <= ability.recoverBasicPokemonToBenchMaxHp }.map { it.id },
                     1, 1))))
-                else if (ability.damageCounters > 0) begin(Resolution(listOf(ChoiceRequest(ChoiceKind.ABILITY_DAMAGE_TARGET,
-                    "Escolha ${ability.damageTargets} Pokémon adversário para receber ${ability.damageCounters} contadores de dano.",
-                    s.players[1-actor].pokemon().filter { pokemon -> def(pokemon.top).abilities.none { it.preventOpponentEffects } }.map { it.id }, ability.damageTargets, ability.damageTargets,
-                    amount = ability.damageCounters*10, sourcePokemonId = pokemon.id))))
+                else if (ability.damageCounters > 0) {
+                    val targetChoice = ChoiceRequest(ChoiceKind.ABILITY_DAMAGE_TARGET,
+                        "Escolha ${ability.damageTargets} Pokémon adversário para receber ${ability.damageCounters} contadores de dano.",
+                        s.players[1-actor].pokemon().filter { target -> def(target.top).abilities.none { it.preventOpponentEffects } }.map { it.id }, ability.damageTargets, ability.damageTargets,
+                        amount = ability.damageCounters*10, sourcePokemonId = pokemon.id)
+                    val choices = if (ability.discardEnergyType != null) listOf(
+                        ChoiceRequest(ChoiceKind.ABILITY_ENERGY,
+                            "Descarte uma Energia Básica de ${ability.discardEnergyType} para usar ${ability.name}.",
+                            p.hand.filter { def(it).category == Category.ENERGY && def(it).basicEnergy && def(it).type == ability.discardEnergyType }.map { it.id }, 1, 1),
+                        targetChoice
+                    ) else listOf(targetChoice)
+                    begin(Resolution(choices))
+                }
                 else if (ability.devolveOpponentPokemonMax > 0) begin(Resolution(listOf(ChoiceRequest(ChoiceKind.ABILITY_DEVOLVE_TARGET,
                     "Escolha 1 Pokémon evoluído do adversário para devolver sua evolução de Estágio mais alto à mão.",
                     s.players[1-actor].pokemon().filter { it.cards.size > 1 && def(it.top).abilities.none { targetAbility -> targetAbility.preventOpponentEffects } }.map { it.id }, 1, 1))))
@@ -321,7 +330,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         targetNamePrefix = ability.attachHandEnergyToPokemonNamePrefix))))
                 }
                 else if (ability.discardEnergyType != null) begin(Resolution(listOf(ChoiceRequest(ChoiceKind.ABILITY_ENERGY,
-                    "Descarte uma Energia de Luta Básica para usar ${ability.name}.", p.hand.filter { def(it).category == Category.ENERGY && def(it).type == ability.discardEnergyType }.map { it.id }, 1, 1)), drawCount = ability.draw))
+                    "Descarte uma Energia Básica de ${ability.discardEnergyType} para usar ${ability.name}.", p.hand.filter { def(it).category == Category.ENERGY && def(it).basicEnergy && def(it).type == ability.discardEnergyType }.map { it.id }, 1, 1)), drawCount = ability.draw))
                 else if (ability.discardHandCount > 0) begin(Resolution(listOf(ChoiceRequest(ChoiceKind.DISCARD,
                     "Descarte ${ability.discardHandCount} carta(s) para usar ${ability.name}.", p.hand.map { it.id }, ability.discardHandCount, ability.discardHandCount)),
                     drawCount = ability.draw, drawTo = ability.drawTo))
