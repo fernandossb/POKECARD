@@ -232,9 +232,12 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                     if (target.damage + choice.amount >= hp(target)) 1200.0 + d(target.top).prizes * 100.0
                     else target.damage.toDouble() / hp(target).coerceAtLeast(1)
                 } ?: 0.0
-                ChoiceKind.ABILITY_DAMAGE_TARGET -> o.opponentField.find { it.id == id }?.let { target ->
+                ChoiceKind.ABILITY_DAMAGE_TARGET, ChoiceKind.EVOLUTION_DAMAGE_TARGETS -> o.opponentField.find { it.id == id }?.let { target ->
                     if (target.damage + choice.amount >= hp(target)) 1200.0 else target.damage.toDouble() / hp(target).coerceAtLeast(1)
                 } ?: 0.0
+                ChoiceKind.ATTACK_OPTIONAL_RETURN_SELF -> own.find { it.id == id }?.let { target ->
+                    if (own.any { it.id != target.id }) target.damage.toDouble() / hp(target).coerceAtLeast(1) * 100.0 - 65.0 else -1.0
+                } ?: -1.0
                 ChoiceKind.ABILITY_DEVOLVE_TARGET, ChoiceKind.ATTACK_DEVOLVE_OPPONENT_ACTIVE -> o.opponentField.find { it.id == id }?.let { target ->
                     val devolved = target.copy(cards = target.cards.dropLast(1))
                     if (target.damage >= hp(devolved)) 1300.0 + d(target.top).prizes * 100.0 else 100.0 + (target.damage.toDouble() / hp(devolved).coerceAtLeast(1))
@@ -272,7 +275,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 return GameAction.ChooseCards(best.sortedByDescending(::value).take(choice.max))
             }
             val ranked = choice.candidates.sortedByDescending(::value)
-            val desired = if (choice.kind == ChoiceKind.SWITCH_OWN || choice.kind == ChoiceKind.EVOLUTION_SWITCH)
+            val desired = if (choice.kind == ChoiceKind.SWITCH_OWN || choice.kind == ChoiceKind.EVOLUTION_SWITCH || choice.kind == ChoiceKind.ATTACK_OPTIONAL_RETURN_SELF)
                 ranked.filter { value(it) > 0 }.size else ranked.size
             return GameAction.ChooseCards(ranked.take(desired.coerceIn(choice.min, choice.max.coerceAtMost(ranked.size))))
         }

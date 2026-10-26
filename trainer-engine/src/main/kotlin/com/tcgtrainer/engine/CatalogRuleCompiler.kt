@@ -139,6 +139,8 @@ internal object CatalogRuleCompiler {
             return AbilityDefinition("$id-ability$index", name, text, futurePokemonDamageBonus = 20)
         if (text == "Once during your turn, when you play this Pokémon from your hand to evolve 1 of your Pokémon, you may use this Ability. Make your opponent's Active Pokémon Confused.")
             return AbilityDefinition("$id-ability$index", name, text, onEvolveConfuseOpponentActive = true)
+        if (text == "When you play this Pokémon from your hand to evolve 1 of your Pokémon during your turn, you may choose 2 of your opponent's Pokémon and put 2 damage counters on each of them.")
+            return AbilityDefinition("$id-ability$index", name, text, damageCounters = 2, damageTargets = 2, onEvolveDamageCounters = true)
         if (text == "Prevent all damage from and effects of attacks done to this Pokémon by your opponent's Pokémon that have any Special Energy attached.")
             return AbilityDefinition("$id-ability$index", name, text, preventDamageFromSpecialEnergyAttacker = true)
         if (text == "Prevent all damage done to this Pokémon by attacks from your opponent's Pokémon ex.")
@@ -456,6 +458,7 @@ internal object CatalogRuleCompiler {
         val devolveOpponentActive = text == "If your opponent's Active Pokémon is an evolved Pokémon, devolve it by putting the highest Stage Evolution card on it into your opponent's hand."
         val discardStadium = text == "Discard a Stadium in play."
         val returnSelfAndAttachments = text == "Put this Pokémon and all attached cards into your hand."
+        val optionalReturnSelf = text == "You may put this Pokémon into your hand. (Discard all cards attached to this Pokémon.)"
         val attachBasicEnergyFromDeckAny = Regex("Search your deck for up to (\\d+) Basic Energy cards and attach them to your Pokémon in any way you like\\. Then, shuffle your deck\\.").matchEntire(text)
         val attachBasicEnergyFromDeckBench = Regex("Search your deck for up to (\\d+) Basic Energy cards and attach them to your Benched Pokémon in any way you like\\. Then, shuffle your deck\\.").matchEntire(text)
         val attachTypedEnergyFromDeckBench = Regex("Search your deck for up to (\\d+) Basic \\{([GRFLWPMD])\\} Energy cards and attach them to your Benched Pokémon in any way you like\\. Then, shuffle your deck\\.").matchEntire(text)
@@ -747,6 +750,7 @@ internal object CatalogRuleCompiler {
                 devolveOpponentActive -> effects += Effect.DevolveOpponentActive
                 discardStadium -> effects += Effect.DiscardStadium
                 returnSelfAndAttachments -> effects += Effect.ReturnSelfAndAttachmentsToHand
+                optionalReturnSelf -> effects += Effect.OptionalReturnSelfAndAttachmentsToHand
                 attachBasicEnergyFromDeckAny != null -> effects += Effect.AttachBasicEnergyFromDeckAny(attachBasicEnergyFromDeckAny.groupValues[1].toInt())
                 attachBasicEnergyFromDeckBench != null -> effects += Effect.AttachBasicEnergyFromDeckAny(attachBasicEnergyFromDeckBench.groupValues[1].toInt(), benchedOnly = true)
                 attachTypedEnergyFromDeckBench != null -> effects += Effect.AttachBasicEnergyFromDeckAny(attachTypedEnergyFromDeckBench.groupValues[1].toInt(), symbolType(attachTypedEnergyFromDeckBench.groupValues[2]) ?: return null, benchedOnly = true)

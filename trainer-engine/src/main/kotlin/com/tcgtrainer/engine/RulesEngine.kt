@@ -568,6 +568,18 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN, resolution = Resolution(listOf(ChoiceRequest(
                         ChoiceKind.EVOLUTION_SWITCH, "Usar habilidade da evolução? Escolha um Pokémon do Banco adversário ou pule.", next.players[1-actor].bench.map { it.id }, 0, 1))))
                 }
+                if (next.phase != Phase.RESOLVE_CHOICE) {
+                    val spreadAbility = definition(card).abilities.firstOrNull { it.onEvolveDamageCounters }
+                    val targets = next.players[1-actor].pokemon().filter { target ->
+                        definition(target.top).abilities.none { it.preventOpponentEffects }
+                    }
+                    if (spreadAbility != null && targets.size >= spreadAbility.damageTargets) {
+                        next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN,
+                            resolution = Resolution(listOf(ChoiceRequest(ChoiceKind.EVOLUTION_DAMAGE_TARGETS,
+                                "${spreadAbility.name}: você pode escolher ${spreadAbility.damageTargets} Pokémon adversários para receber ${spreadAbility.damageCounters} contadores de dano cada.",
+                                targets.map { it.id }, 0, spreadAbility.damageTargets, amount = spreadAbility.damageCounters * 10))))
+                    }
+                }
             }
             is GameAction.Retreat -> {
                 val active = p.active!!
@@ -1298,6 +1310,13 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     val damaged = next.players[actor].pokemon().filter { it.damage > 0 }
                     if (damaged.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.ATTACK_HEAL_TARGET,
                         "Escolha 1 dos seus Pokémon para curar até ${effect.amount} de dano.", damaged.map { it.id }, 1, 1, amount = effect.amount)
+                }
+                if (Effect.OptionalReturnSelfAndAttachmentsToHand in attack.effects) {
+                    next.players[actor].active?.takeIf { it.damage < effects.effectiveHp(it, next) }?.let { attacker ->
+                        choices += ChoiceRequest(ChoiceKind.ATTACK_OPTIONAL_RETURN_SELF,
+                            "Você pode devolver ${definition(attacker.top).name} à mão e descartar as cartas ligadas.",
+                            listOf(attacker.id), 0, 1)
+                    }
                 }
                 attack.effects.filterIsInstance<Effect.SwitchOwn>().forEach { effect ->
                     val bench = next.players[actor].bench

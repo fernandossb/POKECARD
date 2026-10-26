@@ -215,7 +215,7 @@ class EffectEngine(private val catalog: CardCatalog) {
         is Effect.BothActiveEnergyCountDamage,
         Effect.MoveOpponentDamageCounters, Effect.MoveOwnBenchDamageCountersToOpponent, Effect.MoveEnergyBetweenOpponentPokemon, Effect.MoveEnergyFromOpponentActiveToBench,
         is Effect.SearchPokemonMatchingAttachedBasicEnergy,
-        Effect.AttachAnyBasicEnergyFromHand, Effect.AttachOneBasicEnergyFromHand, Effect.ShuffleOwnBenchedPokemonIntoDeck, Effect.DevolveOpponentActive, Effect.DiscardStadium, Effect.ReturnSelfAndAttachmentsToHand, is Effect.AttachBasicEnergyFromDeckAny, is Effect.AttachBasicEnergyFromDiscardAny, Effect.CoinKnockOutBasic,
+        Effect.AttachAnyBasicEnergyFromHand, Effect.AttachOneBasicEnergyFromHand, Effect.ShuffleOwnBenchedPokemonIntoDeck, Effect.DevolveOpponentActive, Effect.DiscardStadium, Effect.ReturnSelfAndAttachmentsToHand, Effect.OptionalReturnSelfAndAttachmentsToHand, is Effect.AttachBasicEnergyFromDeckAny, is Effect.AttachBasicEnergyFromDiscardAny, Effect.CoinKnockOutBasic,
         Effect.PreventAttackDamageNextTurnOnHeads, Effect.CopyBenchedNsAttack, Effect.CopyOpponentActiveAttack, is Effect.OptionalReturnWaterEnergyDamageBonus,
         is Effect.MoveEnergyToBench, Effect.MoveAllEnergyToBench, Effect.ReturnAttachedEnergyToHand, is Effect.DiscardRandomOpponentHand, is Effect.OpponentChoosesHandDiscard, is Effect.ShuffleRandomOpponentHand, is Effect.DiscardOpponentDeck, Effect.DiscardOwnDeckTop, Effect.RevealOpponentHand, is Effect.DelayedDefendingDamageCounters -> true
         is Effect.DiscardBenchEnergyDamage -> true

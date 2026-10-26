@@ -31,6 +31,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     action.cardIds.distinct().size != action.cardIds.size -> illegal("Não repita cartas.")
                     action.cardIds.size !in choice.min..choice.max -> illegal("Escolha de ${choice.min} a ${choice.max} carta(s).")
                     choice.kind == ChoiceKind.ATTACK_OPTIONAL_SHUFFLE_ENERGY && action.cardIds.isNotEmpty() && action.cardIds.size != 3 -> illegal("Escolha zero ou exatamente 3 Energias para pagar o efeito opcional.")
+                    choice.kind == ChoiceKind.EVOLUTION_DAMAGE_TARGETS && action.cardIds.isNotEmpty() && action.cardIds.size != 2 -> illegal("Biting Spree exige escolher exatamente 2 Pokémon, ou nenhum para pular.")
                     !choice.candidates.containsAll(action.cardIds) -> illegal("Alvo inválido para este efeito.")
                     choice.kind == ChoiceKind.SONIA && p.deck.filter { it.id in action.cardIds }.map { def(it).category }.distinct().size > 1 -> illegal("Sonia busca Pokémon Básicos OU Energias Básicas; não misture as categorias.")
                     else -> Legality.Legal
@@ -78,6 +79,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                 when {
                     ability.onEvolveSwitch -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
                     ability.onEvolveDraw > 0 -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
+                    ability.onEvolveDamageCounters -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
                     ability.onEvolveHealAllEvolutionAndDiscardEnergy -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
                     ability.onEvolveShuffleRandomOpponentHandPerHeads > 0 -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
                     ability.onEvolveConfuseOpponentActive -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
@@ -418,6 +420,18 @@ internal class ContentEngine(private val rules: RulesEngine) {
                             player.copy(active = player.active?.let { if (it.id == choice.sourcePokemonId) knockOut(it) else it },
                                 bench = player.bench.map { if (it.id == choice.sourcePokemonId) knockOut(it) else it })
                         }
+                    }
+                    ChoiceKind.EVOLUTION_DAMAGE_TARGETS -> if (ids.isNotEmpty()) {
+                        val opponent = 1-actor
+                        val validTargets = s.players[opponent].pokemon().filter { target ->
+                            target.id in ids && def(target.top).abilities.none { it.preventOpponentEffects }
+                        }
+                        if (validTargets.size != 2) return Transition(state, Legality.Illegal("Os alvos de Biting Spree não estão mais disponíveis."))
+                        update(opponent) { player -> player.copy(
+                            active = player.active?.let { pokemon -> if (pokemon.id in ids) pokemon.copy(damage = pokemon.damage + choice.amount) else pokemon },
+                            bench = player.bench.map { pokemon -> if (pokemon.id in ids) pokemon.copy(damage = pokemon.damage + choice.amount) else pokemon })
+                        }
+                        events += GameEvent("AbilityDamageCountersPlaced", "Biting Spree colocou ${choice.amount / 10} contadores de dano em cada um de ${validTargets.size} Pokémon adversários.", choice.amount / 10 * validTargets.size)
                     }
                     ChoiceKind.ABILITY_DEVOLVE_TARGET, ChoiceKind.ATTACK_DEVOLVE_OPPONENT_ACTIVE -> {
                         val opponent = 1-actor
@@ -830,6 +844,13 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         if (choice.remaining > 1) remainingChoices = listOf(choice.copy(
                             title = "Escolha um Pokémon do Banco adversário para receber 1 dos ${choice.remaining-1} contadores restantes.",
                             remaining = choice.remaining - 1)) + remainingChoices
+                    }
+                    ChoiceKind.ATTACK_OPTIONAL_RETURN_SELF -> if (ids.isNotEmpty()) {
+                        val returning = s.players[actor].active?.takeIf { it.id == ids.single() }
+                            ?: return Transition(state, Legality.Illegal("O Pokémon que retornaria à mão não está mais no Ativo."))
+                        val attached = returning.energies + listOfNotNull(returning.tool)
+                        update(actor) { player -> player.copy(active = null, hand = player.hand + returning.cards, discard = player.discard + attached) }
+                        events += GameEvent("PokemonReturnedToHand", "Devolveu ${def(returning.top).name} à mão e descartou ${attached.size} carta(s) ligada(s).", returning.cards.size)
                     }
                     ChoiceKind.ATTACK_MULTI_DAMAGE_TARGETS, ChoiceKind.ATTACK_MULTI_DAMAGE_SINGLE_TARGET -> {
                         val attacker = p.active ?: error("Atacante ausente durante a resolução.")
