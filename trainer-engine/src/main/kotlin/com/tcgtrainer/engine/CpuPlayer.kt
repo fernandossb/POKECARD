@@ -13,8 +13,9 @@ fun RulesEngine.cpuInput(state: GameState): CpuInput {
     val actor = actingPlayer(state)
     val own = state.players[actor]
     val choice = state.resolution?.choices?.firstOrNull()
+    val revealedOpponentHand = if (choice?.kind == ChoiceKind.ATTACK_CHOOSE_OPPONENT_HAND_DISCARD) state.players[1-actor].hand else emptyList()
     val selectable = if (state.phase == Phase.RESOLVE_CHOICE && choice != null)
-        (own.hand + own.deck + own.discard).filter { it.id in choice.candidates || it.id in choice.visibleCards }.sortedBy { it.id }
+        (own.hand + own.deck + own.discard + revealedOpponentHand).filter { it.id in choice.candidates || it.id in choice.visibleCards }.sortedBy { it.id }
     else emptyList()
     // Sorting prevents eligible deck search results from disclosing their order.
     val safeChoice = choice?.copy(candidates = choice.candidates.sorted(), visibleCards = choice.visibleCards.sorted())
@@ -197,6 +198,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 ChoiceKind.ABILITY_MOVE_BASIC_ENERGY_TARGET -> { val target = pokemon(id); val energy = checkNotNull(own.flatMap { it.energies }.find { it.id == choice.selectedEnergy }); potential(target.copy(energies = target.energies + energy)) - potential(target) }
                 ChoiceKind.OPPONENT_SHUFFLES_OWN_HAND -> -keepValue(checkNotNull(card(id)))
                 ChoiceKind.OPPONENT_DISCARDS_OWN_HAND -> 10.0 - keepValue(checkNotNull(card(id)))
+                ChoiceKind.ATTACK_CHOOSE_OPPONENT_HAND_DISCARD -> keepValue(checkNotNull(card(id)))
                 ChoiceKind.SWITCH_OPPONENT, ChoiceKind.EVOLUTION_SWITCH -> active?.let { attackValue(it, pokemon(id)) } ?: 0.0
                 ChoiceKind.EVOLUTION_CONFUSE_ACTIVE -> 80.0
                 ChoiceKind.SWITCH_OWN -> attackValue(pokemon(id)) - (active?.let(::attackValue) ?: 0.0) + potential(pokemon(id))*.05

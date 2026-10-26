@@ -387,6 +387,8 @@ internal object CatalogRuleCompiler {
         val allOwnBenchedDamagedBonus = Regex("If all of your Benched Pokémon have at least 1 damage counter on them, this attack does (\\d+) more damage\\.").matchEntire(text)
         val anyOwnBenchedDamagedBonus = Regex("If your Benched Pokémon have any damage counters on them, this attack does (\\d+) more damage\\.").matchEntire(text)
         val opponentActiveSpecialConditionKnockout = text == "If your opponent's Active Pokémon is affected by a Special Condition, it is Knocked Out."
+        val opponentActiveExactlySixCountersKnockout = text == "If your opponent's Active Pokémon has exactly 6 damage counters on it, that Pokémon is Knocked Out."
+        val revealAndChooseOpponentHandDiscard = text == "Your opponent reveals their hand, and you discard a card you find there."
         val ownUndamagedBonus = Regex("If this Pokémon has no damage counters on it, this attack does (\\d+) more damage\\.").matchEntire(text)
         val opponentExBonus = Regex("If your opponent's Active Pokémon is a Pokémon ex(?: or Pokémon V)?, this attack does (\\d+) more damage\\.").matchEntire(text)
         val opponentTypeBonus = Regex("If your opponent's Active Pokémon is a \\{([GRFLWPMD])\\} Pokémon, this attack does (\\d+) more damage\\.").matchEntire(text)
@@ -887,6 +889,7 @@ internal object CatalogRuleCompiler {
                 }
                 opponentChoosesHandShuffle != null -> effects += Effect.OpponentChoosesHandShuffle(opponentChoosesHandShuffle.groupValues[1].toInt())
                 opponentChoosesHandDiscard != null -> effects += Effect.OpponentChoosesHandDiscard(opponentChoosesHandDiscard.groupValues[1].toInt())
+                revealAndChooseOpponentHandDiscard -> effects += Effect.RevealAndChooseOpponentHandDiscard
                 opponentDiscard != null -> effects += Effect.DiscardRandomOpponentHand(1)
                 opponentShuffleRandom != null -> effects += Effect.ShuffleRandomOpponentHand(1)
                 opponentDeckDiscard != null -> effects += Effect.DiscardOpponentDeck(opponentDeckDiscard.groupValues[1].toIntOrNull() ?: 1)
@@ -993,6 +996,7 @@ internal object CatalogRuleCompiler {
                 }
                 knockOutBothActive -> effects += Effect.KnockOutBothActive
                 opponentActiveSpecialConditionKnockout -> effects += Effect.KnockOutOpponentActiveIfSpecialCondition
+                opponentActiveExactlySixCountersKnockout -> effects += Effect.KnockOutOpponentActiveAtExactlySixDamageCounters
                 repeatedMultiTargetDamage != null -> effects += Effect.MultiTargetDamage(
                     repeatedMultiTargetDamage.groupValues[2].toInt(), repeatedMultiTargetDamage.groupValues[1].toInt(),
                     allowRepeat = true, ignoreWeaknessResistance = true)

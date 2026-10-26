@@ -608,6 +608,13 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         update { it.copy(hand = it.hand - cards.toSet(), discard = it.discard + cards) }
                         events += GameEvent("OpponentCardsDiscarded", "O adversário descartou ${cards.size} carta(s) da própria mão.", cards.size)
                     }
+                    ChoiceKind.ATTACK_CHOOSE_OPPONENT_HAND_DISCARD -> {
+                        val opponent = s.players[1-actor]
+                        val cards = opponent.hand.filter { it.id in ids && it.id in choice.candidates }
+                        update(1-actor) { it.copy(hand = it.hand - cards.toSet(), discard = it.discard + cards) }
+                        if (cards.isNotEmpty()) events += GameEvent("OpponentCardChosenAndDiscarded",
+                            "Escolheu ${def(cards.single()).name} da mão revelada do adversário para descartar.")
+                    }
                     ChoiceKind.RECOVER -> {
                         val cards = p.discard.filter { it.id in ids }
                         update { it.copy(discard = it.discard - cards.toSet(), hand = it.hand + cards) }

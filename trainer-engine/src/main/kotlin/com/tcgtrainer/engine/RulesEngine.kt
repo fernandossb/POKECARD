@@ -293,7 +293,10 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             })
         val hp = effects.effectiveHp(defender, state)
         val survivalHp = if (defender.damage == 0) definition(defender.top).abilities.maxOfOrNull { it.surviveAttackKnockoutAtHp } ?: 0 else 0
-        val remaining = if (survivalHp > 0 && damage >= hp) survivalHp else (hp - defender.damage - damage).coerceAtLeast(0)
+        val knockoutAtSixCounters = Effect.KnockOutOpponentActiveAtExactlySixDamageCounters in attack.effects &&
+            defender.id == opponent.active?.id && defender.damage == 60 && defender.attackImmunityTurn != state.turn &&
+            definition(defender.top).abilities.none { it.preventOpponentEffects }
+        val remaining = if (knockoutAtSixCounters) 0 else if (survivalHp > 0 && damage >= hp) survivalHp else (hp - defender.damage - damage).coerceAtLeast(0)
         val topDeckEnergy = attack.effects.filterIsInstance<Effect.DiscardTopDeckEnergyDamage>().firstOrNull()
         val uncertain = coin != null && rolledHeads == null || benchEnergyBonus > 0 || topDeckEnergy != null
         val minimum = if (coin != null && rolledHeads == null) preview(state, attackId, targetId, 0)!!.damage else damage
@@ -720,7 +723,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 val defender = primaryTargetId?.let { id -> next.players[opponent].pokemon().first { it.id == id } } ?: next.players[opponent].active!!
                 val defenderEffectsPrevented = defender.attackImmunityTurn == state.turn ||
                     definition(defender.top).abilities.any { it.preventOpponentEffects }
-                if (attack.effects.any { it is Effect.OpponentHandEnergyCountDamage } || Effect.RevealOpponentHand in attack.effects) {
+                if (attack.effects.any { it is Effect.OpponentHandEnergyCountDamage } || Effect.RevealOpponentHand in attack.effects || Effect.RevealAndChooseOpponentHandDiscard in attack.effects) {
                     val revealed = next.players[opponent].hand.joinToString(", ") { definition(it).name }
                     emit("OpponentHandRevealed", "Mão adversária revelada: ${revealed.ifEmpty { "vazia" }}.")
                 }
@@ -787,6 +790,14 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         update(owner) { player -> player.copy(active = player.active?.let { if (it.id == active.id) it.copy(damage = maxOf(it.damage, hp)) else it }) }
                     }
                     emit("AttackEffectKnockout", "O ataque Nocauteou ambos os Pokémon Ativos por efeito.")
+                }
+                if (Effect.KnockOutOpponentActiveAtExactlySixDamageCounters in attack.effects &&
+                    !defenderEffectsPrevented && defender.id == next.players[opponent].active?.id && defender.damage == 60) {
+                    val hp = effects.effectiveHp(defender, next)
+                    update(opponent) { player -> player.copy(active = player.active?.let {
+                        if (it.id == defender.id) it.copy(damage = maxOf(it.damage, hp)) else it
+                    }) }
+                    emit("AttackEffectKnockout", "O Pokémon Ativo adversário foi Nocauteado por ter exatamente 6 contadores de dano.")
                 }
                 if (Effect.KnockOutOpponentActiveIfSpecialCondition in attack.effects &&
                     !defenderEffectsPrevented && defender.id == next.players[opponent].active?.id && defender.conditions.isNotEmpty()) {
@@ -1304,6 +1315,12 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     val count = minOf(effect.count, hand.size)
                     if (count > 0) choices += ChoiceRequest(ChoiceKind.OPPONENT_DISCARDS_OWN_HAND,
                         "Escolha $count carta(s) da sua mão para descartar.", hand.map { it.id }, count, count,
+                        visibleCards = hand.map { it.id })
+                }
+                if (Effect.RevealAndChooseOpponentHandDiscard in attack.effects) {
+                    val hand = next.players[opponent].hand
+                    if (hand.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.ATTACK_CHOOSE_OPPONENT_HAND_DISCARD,
+                        "Escolha uma carta revelada da mão adversária para descartar.", hand.map { it.id }, 1, 1,
                         visibleCards = hand.map { it.id })
                 }
                 attack.effects.filterIsInstance<Effect.HealOwnPokemon>().forEach { effect ->
