@@ -512,6 +512,7 @@ internal object CatalogRuleCompiler {
         val returnSelfAndAttachments = text == "Put this Pokémon and all attached cards into your hand."
         val optionalReturnSelf = text == "You may put this Pokémon into your hand. (Discard all cards attached to this Pokémon.)"
         val attachBasicEnergyFromDeckAny = Regex("Search your deck for up to (\\d+) Basic Energy cards and attach them to your Pokémon in any way you like\\. Then, shuffle your deck\\.").matchEntire(text)
+        val attachEnergyFromTopDeck = text == "Look at the top 20 cards of your deck and attach any number of Energy cards you find there to your Pokémon in any way you like. Shuffle the other cards back into your deck."
         val attachBasicEnergyFromDeckBench = Regex("Search your deck for up to (\\d+) Basic Energy cards and attach them to your Benched Pokémon in any way you like\\. Then, shuffle your deck\\.").matchEntire(text)
         val attachTypedEnergyFromDeckBench = Regex("Search your deck for up to (\\d+) Basic \\{([GRFLWPMD])\\} Energy cards and attach them to your Benched Pokémon in any way you like\\. Then, shuffle your deck\\.").matchEntire(text)
         val attachTypedEnergyFromDiscardBench = Regex("Attach up to (\\d+) Basic \\{([GRFLWPMD])\\} Energy cards from your discard pile to your Benched Pokémon in any way you like\\.").matchEntire(text)
@@ -819,6 +820,7 @@ internal object CatalogRuleCompiler {
                 returnSelfAndAttachments -> effects += Effect.ReturnSelfAndAttachmentsToHand
                 optionalReturnSelf -> effects += Effect.OptionalReturnSelfAndAttachmentsToHand
                 attachBasicEnergyFromDeckAny != null -> effects += Effect.AttachBasicEnergyFromDeckAny(attachBasicEnergyFromDeckAny.groupValues[1].toInt())
+                attachEnergyFromTopDeck -> effects += Effect.AttachEnergyFromTopDeck(20)
                 attachBasicEnergyFromDeckBench != null -> effects += Effect.AttachBasicEnergyFromDeckAny(attachBasicEnergyFromDeckBench.groupValues[1].toInt(), benchedOnly = true)
                 attachTypedEnergyFromDeckBench != null -> effects += Effect.AttachBasicEnergyFromDeckAny(attachTypedEnergyFromDeckBench.groupValues[1].toInt(), symbolType(attachTypedEnergyFromDeckBench.groupValues[2]) ?: return null, benchedOnly = true)
                 attachTypedEnergyFromDiscardBench != null -> effects += Effect.AttachBasicEnergyFromDiscardAny(attachTypedEnergyFromDiscardBench.groupValues[1].toInt(), symbolType(attachTypedEnergyFromDiscardBench.groupValues[2]) ?: return null, benchedOnly = true)

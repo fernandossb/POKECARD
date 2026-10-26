@@ -726,6 +726,44 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         update { it.copy(active = it.active!!.copy(energies = it.active.energies + cards), deck = it.deck - cards.toSet()) }
                         events += GameEvent("EffectEnergyAttached", "Buscou e ligou ${cards.size} Energia(s) ao atacante.")
                     }
+                    ChoiceKind.ATTACK_TOP_DECK_ENERGY -> {
+                        if (ids.size != ids.distinct().size || ids.any { selectedId ->
+                                selectedId !in choice.candidates || selectedId !in choice.visibleCards ||
+                                    p.deck.none { it.id == selectedId && def(it).category == Category.ENERGY }
+                            })
+                            return illegal("Escolha apenas Energias distintas entre as cartas reveladas do topo do deck.")
+                        if (ids.isNotEmpty()) {
+                            val energyName = def(p.deck.first { it.id == ids.first() }).name
+                            remainingChoices = listOf(ChoiceRequest(
+                                ChoiceKind.ATTACK_TOP_DECK_ENERGY_TARGET,
+                                "Escolha um Pokémon seu para receber $energyName.",
+                                p.pokemon().map { it.id }, 1, 1, selectedEnergy = ids.first(),
+                                visibleCards = choice.visibleCards, pendingCards = ids.drop(1))) + remainingChoices
+                        }
+                    }
+                    ChoiceKind.ATTACK_TOP_DECK_ENERGY_TARGET -> {
+                        val energyId = checkNotNull(choice.selectedEnergy)
+                        if (ids.size != 1 || energyId !in choice.visibleCards)
+                            return illegal("A Energia selecionada não pertence às cartas reveladas.")
+                        val energy = p.deck.firstOrNull { it.id == energyId && def(it).category == Category.ENERGY }
+                            ?: return illegal("A Energia selecionada não está mais no deck.")
+                        val targetId = ids.single()
+                        if (p.pokemon().none { it.id == targetId }) return illegal("O Pokémon escolhido não está em jogo.")
+                        update { player -> player.copy(deck = player.deck.filterNot { it.id == energyId },
+                            active = player.active?.let { if (it.id == targetId) it.copy(energies = it.energies + energy) else it },
+                            bench = player.bench.map { if (it.id == targetId) it.copy(energies = it.energies + energy) else it }) }
+                        events += GameEvent("TopDeckEnergyAttached", "Ligou ${def(energy).name} a um dos seus Pokémon.")
+                        val nextEnergy = choice.pendingCards.firstOrNull()
+                        val nextCard = nextEnergy?.let { id -> p.deck.firstOrNull { it.id == id && def(it).category == Category.ENERGY } }
+                        if (nextEnergy != null && nextCard != null) remainingChoices = listOf(ChoiceRequest(
+                            ChoiceKind.ATTACK_TOP_DECK_ENERGY_TARGET,
+                            "Escolha um Pokémon seu para receber ${def(nextCard).name}.",
+                            s.players[actor].pokemon().map { it.id }, 1, 1, selectedEnergy = nextEnergy,
+                            visibleCards = choice.visibleCards, pendingCards = choice.pendingCards.drop(1))) + remainingChoices
+                        else if (choice.pendingCards.drop(1).isNotEmpty()) remainingChoices = listOf(choice.copy(
+                            kind = ChoiceKind.ATTACK_TOP_DECK_ENERGY_TARGET, selectedEnergy = choice.pendingCards.drop(1).first(),
+                            pendingCards = choice.pendingCards.drop(2))) + remainingChoices
+                    }
                     ChoiceKind.ATTACK_DECK_BASIC_ENERGY_ANY -> if (ids.isNotEmpty()) {
                         val energy = p.deck.first { it.id == ids.single() && def(it).category == Category.ENERGY && def(it).basicEnergy }
                         val targets = if (choice.benchedOnly) p.bench else p.pokemon()

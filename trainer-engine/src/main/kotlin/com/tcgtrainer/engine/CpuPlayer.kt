@@ -218,6 +218,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 ChoiceKind.TOOL_TARGET -> if (id == active?.id) 50.0 else 15.0-pokemon(id).energies.size
                 ChoiceKind.ENERGY_FROM_DISCARD -> 10.0
                 ChoiceKind.ATTACH_DECK_ENERGY, ChoiceKind.RECYCLE_ENERGY -> 10.0
+                ChoiceKind.ATTACK_TOP_DECK_ENERGY -> 10.0
                 ChoiceKind.HEAL_TARGET -> minOf(pokemon(id).damage, choice.amount).toDouble()
                 ChoiceKind.ATTACK_HEAL_TARGET -> minOf(pokemon(id).damage, choice.amount).toDouble()
                 ChoiceKind.ATTACK_BENCH_POKEMON, ChoiceKind.ATTACK_NAMED_POKEMON_TO_BENCH, ChoiceKind.ATTACK_ROTOM_SEARCH, ChoiceKind.ATTACK_MATCHING_ENERGY_SEARCH, ChoiceKind.ATTACK_EVOLVE_SELF,
@@ -272,7 +273,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                     val target = pokemon(id)
                     potential(target.copy(energies = target.energies + energies)) - potential(target)
                 } ?: 0.0
-                ChoiceKind.ATTACK_HAND_ENERGY_TARGET, ChoiceKind.ATTACK_DECK_BASIC_ENERGY_TARGET -> {
+                ChoiceKind.ATTACK_HAND_ENERGY_TARGET, ChoiceKind.ATTACK_DECK_BASIC_ENERGY_TARGET, ChoiceKind.ATTACK_TOP_DECK_ENERGY_TARGET -> {
                     val target = pokemon(id)
                     val energy = checkNotNull(card(checkNotNull(choice.selectedEnergy)))
                     potential(target.copy(energies = target.energies + energy))-potential(target)

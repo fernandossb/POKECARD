@@ -1403,6 +1403,13 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     choices += ChoiceRequest(ChoiceKind.ATTACK_DECK_BASIC_ENERGY_ANY,
                         "Você pode buscar até ${effect.max} Energia(s) Básica(s) e ligar aos seus Pokémon.", candidates.map { it.id }, 0, minOf(1, effect.max, candidates.size), remaining = effect.max, energyType = effect.type, benchedOnly = effect.benchedOnly)
                 }
+                attack.effects.filterIsInstance<Effect.AttachEnergyFromTopDeck>().forEach { effect ->
+                    val revealed = next.players[actor].deck.take(effect.count)
+                    val energies = revealed.filter { definition(it).category == Category.ENERGY }
+                    choices += ChoiceRequest(ChoiceKind.ATTACK_TOP_DECK_ENERGY,
+                        "Olhe as ${revealed.size} cartas do topo do seu deck. Escolha as Energias que vai ligar.",
+                        energies.map { it.id }, 0, energies.size, amount = effect.count, visibleCards = revealed.map { it.id })
+                }
                 attack.effects.filterIsInstance<Effect.AttachBasicEnergyFromDiscardAny>().forEach { effect ->
                     val eligible = next.players[actor].discard.filter { definition(it).category == Category.ENERGY && definition(it).basicEnergy && (effect.type == null || definition(it).type == effect.type) }
                     if (next.players[actor].bench.isNotEmpty() && eligible.isNotEmpty()) choices += ChoiceRequest(
@@ -1564,7 +1571,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 }
                 val acceleration = attack.effects.filterIsInstance<Effect.AccelerateEnergy>().firstOrNull()
                 if (choices.isNotEmpty()) next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.ATTACK,
-                    resolution = Resolution(choices, shuffleAfter = attack.effects.any { it is Effect.EnergyFromDeck || it is Effect.AttachBasicEnergyFromDeckAny || it is Effect.AttachBasicEnergyToEachBenchedPokemon || it is Effect.SearchPokemonToHand || it is Effect.SearchPokemonTypeAndStadiumToHand || it == Effect.SearchAnyCardToHand || it == Effect.SearchSupporterToHand || it == Effect.SearchItemToHand || it is Effect.BasicPokemonToBench || it is Effect.NamedPokemonToBench || it == Effect.SearchRotomToBench || it is Effect.SearchPokemonMatchingAttachedBasicEnergy || it is Effect.SearchBasicEnergyToHand || it == Effect.SearchEvolutionForSelfToEvolve || it is Effect.SearchEvolutionForEachBenchedPokemon }))
+                    resolution = Resolution(choices, shuffleAfter = attack.effects.any { it is Effect.EnergyFromDeck || it is Effect.AttachBasicEnergyFromDeckAny || it is Effect.AttachEnergyFromTopDeck || it is Effect.AttachBasicEnergyToEachBenchedPokemon || it is Effect.SearchPokemonToHand || it is Effect.SearchPokemonTypeAndStadiumToHand || it == Effect.SearchAnyCardToHand || it == Effect.SearchSupporterToHand || it == Effect.SearchItemToHand || it is Effect.BasicPokemonToBench || it is Effect.NamedPokemonToBench || it == Effect.SearchRotomToBench || it is Effect.SearchPokemonMatchingAttachedBasicEnergy || it is Effect.SearchBasicEnergyToHand || it == Effect.SearchEvolutionForSelfToEvolve || it is Effect.SearchEvolutionForEachBenchedPokemon }))
                 else if (acceleration != null && p.bench.isNotEmpty()) {
                     val eligible = next.players[actor].discard.filter { definition(it).category == Category.ENERGY && definition(it).type == acceleration.type }.map { it.id }
                     if (eligible.isNotEmpty()) next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.ATTACK,
