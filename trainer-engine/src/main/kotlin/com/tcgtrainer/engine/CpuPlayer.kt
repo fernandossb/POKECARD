@@ -152,6 +152,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
         if (input.phase == Phase.RESOLVE_CHOICE) {
             val choice = checkNotNull(input.choice)
             fun value(id: String): Double = when (choice.kind) {
+                ChoiceKind.EVOLUTION_DISCARD_OPPONENT_DECK, ChoiceKind.KNOCKOUT_DISCARD_OPPONENT_DECK -> 100.0
                 ChoiceKind.DISCARD, ChoiceKind.ABILITY_ENERGY, ChoiceKind.ABILITY_DISCARD_ENERGY_FROM_DISCARD, ChoiceKind.DISCARD_ATTACK_ENERGY, ChoiceKind.ATTACK_HAND_ENERGY_DISCARD, ChoiceKind.ATTACK_OWN_ENERGY_DISCARD, ChoiceKind.EVOLUTION_METAL_ENERGY -> 10.0 - keepValue(checkNotNull(card(id)))
                 ChoiceKind.ABILITY_ATTACH_ENERGY, ChoiceKind.ABILITY_ATTACH_MULTIPLE_BASIC_ENERGY -> keepValue(checkNotNull(card(id))) + 10.0
                 ChoiceKind.ABILITY_ATTACH_ENERGY_TARGET, ChoiceKind.ABILITY_DISCARD_ENERGY_TARGET -> {

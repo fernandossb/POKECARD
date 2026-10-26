@@ -31,6 +31,8 @@ internal object CatalogRuleCompiler {
         val text = raw.s("effect")?.trim().orEmpty()
         if (text == "Pokémon in play (both yours and your opponent's) lose any Ability that requires the Pokémon using it to Knock Out itself.")
             return AbilityDefinition("$id-ability$index", name, text, suppressSelfKnockoutAbilities = true)
+        if (text == "Once during your turn, when you play this Pokémon from your hand to evolve 1 of your Pokémon, you may use this Ability. You may also use this Ability if this Pokémon is in the Active Spot and is Knocked Out by damage from an attack from your opponent's Pokémon. Discard the top 2 cards of your opponent's deck.")
+            return AbilityDefinition("$id-ability$index", name, text, usageKey = name, onEvolveDiscardOpponentDeckCount = 2)
         if (text == "If you go first, this Pokémon can use attacks during your first turn.")
             return AbilityDefinition("$id-ability$index", name, text, mayAttackFirstTurnIfStarting = true)
         if (text == "The Weakness of each of your opponent's {N} Pokémon in play is now {P}. (Apply Weakness as ×2.)")

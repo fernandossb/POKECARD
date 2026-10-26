@@ -650,6 +650,15 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                                 targets.map { it.id }, 0, spreadAbility.damageTargets, amount = spreadAbility.damageCounters * 10))))
                     }
                 }
+                if (next.phase != Phase.RESOLVE_CHOICE) {
+                    val ability = definition(card).abilities.firstOrNull { it.onEvolveDiscardOpponentDeckCount > 0 }
+                    if (ability != null && next.players[1-actor].deck.isNotEmpty()) next = next.copy(phase = Phase.RESOLVE_CHOICE,
+                        afterResolution = ResolutionEnd.MAIN, resolution = Resolution(listOf(ChoiceRequest(
+                            ChoiceKind.EVOLUTION_DISCARD_OPPONENT_DECK,
+                            "Usar ${ability.name} e descartar até ${ability.onEvolveDiscardOpponentDeckCount} cartas do topo do deck adversário?",
+                            listOf("use"), 0, 1, amount = ability.onEvolveDiscardOpponentDeckCount,
+                            optionLabels = mapOf("use" to "Usar habilidade")))))
+                }
             }
             is GameAction.Retreat -> {
                 val active = p.active!!
@@ -1693,12 +1702,17 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             state.stadium?.let { definition(it).name == "Festival Grounds" } == true &&
             state.players[actor].active?.let { attacker -> attacker.damage < effects.effectiveHp(attacker, state) &&
                 definition(attacker.top).abilities.any { it.festivalGroundsMayAttackAgain } } == true
-        val owed = mutableListOf(0, 0)
+        val owed = state.prizesOwed.toMutableList()
         val events = mutableListOf<GameEvent>()
+        val flygonKnockoutTriggers = mutableListOf<Pair<Int, Int>>()
         val players = state.players.mapIndexed { owner, player ->
             val knockedOut = player.pokemon().filter { it.damage >= effects.effectiveHp(it, state) }
             knockedOut.forEach { pokemon ->
                 val attackKo = end == ResolutionEnd.ATTACK && pokemon.id in state.pendingAttackDamageKnockoutIds
+                if (attackKo && player.active?.id == pokemon.id) {
+                    val count = definition(pokemon.top).abilities.maxOfOrNull { it.onEvolveDiscardOpponentDeckCount } ?: 0
+                    if (count > 0 && state.players[1-owner].deck.isNotEmpty()) flygonKnockoutTriggers += (owner to count)
+                }
                 val attackerIsEx = state.players[1-owner].active?.let { definition(it.top).name.endsWith(" ex") } == true
                 val shadowyConcealment = attackKo && definition(pokemon.top).type == EnergyType.DARKNESS && attackerIsEx &&
                     player.pokemon().any { field -> definition(field.top).abilities.any { ability ->
@@ -1719,10 +1733,18 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     state.turn else player.lastKnockedOutByAttackDamageTurn)
         }
         var next = state.copy(players = players, prizesOwed = owed.mapIndexed { i, n -> minOf(n, players[i].prizes.size) },
-            afterResolution = end, resolution = null, resumePlayer = if (end == ResolutionEnd.ATTACK) 1-actor else actor,
+            afterResolution = end, resolution = null, resumePlayer = state.resumePlayer ?: if (end == ResolutionEnd.ATTACK) 1-actor else actor,
             pendingAttackDamageKnockoutIds = emptySet(),
             extraAttackAvailableFor = if (festivalBonusAttack) actor else state.extraAttackAvailableFor,
             extraAttackUsedThisTurn = state.extraAttackUsedThisTurn || festivalBonusAttack)
+        flygonKnockoutTriggers.firstOrNull()?.let { (owner, count) ->
+            next = next.copy(phase = Phase.RESOLVE_CHOICE, currentPlayer = owner, afterResolution = end,
+                resolution = Resolution(listOf(ChoiceRequest(ChoiceKind.KNOCKOUT_DISCARD_OPPONENT_DECK,
+                    "Usar Sandy Flapping: descarte até $count cartas do topo do deck adversário?",
+                    listOf("use"), 0, 1, amount = count, optionLabels = mapOf("use" to "Usar habilidade")))))
+            events += GameEvent("KnockoutAbilityChoice", "Sandy Flapping pode ser usada após o nocaute de Flygon.")
+            return Transition(next, Legality.Legal, events)
+        }
         val conditions = (0..1).map { i -> (if (players[1-i].pokemon().isEmpty()) 1 else 0) + (if (owed[i] >= players[i].prizes.size && owed[i] > 0) 1 else 0) }
         val noPokemonWinner = (0..1).firstOrNull { players[1-it].pokemon().isEmpty() && conditions[it] > conditions[1-it] }
         if (noPokemonWinner != null) return Transition(next.copy(phase = Phase.GAME_OVER, winner = noPokemonWinner,
