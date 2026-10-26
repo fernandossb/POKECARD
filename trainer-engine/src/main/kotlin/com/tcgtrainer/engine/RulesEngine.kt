@@ -616,6 +616,15 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                             eligible.map { it.id }, 0, minOf(namedRecovery.onEvolveRecoverNamedTrainerMax, eligible.size), visibleCards = eligible.map { it.id }))))
                     }
                 }
+                val teraTrainerSearch = definition(card).abilities.firstOrNull { it.onEvolveSearchTrainerIfTeraMax > 0 }
+                val teraPresent = next.players[actor].pokemon().any { definition(it.top).isTera }
+                if (next.phase != Phase.RESOLVE_CHOICE && teraTrainerSearch != null && teraPresent) {
+                    val eligible = next.players[actor].deck.filter { definition(it).category == Category.TRAINER }
+                    next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN,
+                        resolution = Resolution(listOf(ChoiceRequest(ChoiceKind.EVOLUTION_SEARCH_TRAINER,
+                            "${teraTrainerSearch.name}: revele e escolha até ${minOf(teraTrainerSearch.onEvolveSearchTrainerIfTeraMax, eligible.size)} Treinador(es) do deck.",
+                            eligible.map { it.id }, 0, minOf(teraTrainerSearch.onEvolveSearchTrainerIfTeraMax, eligible.size), visibleCards = eligible.map { it.id })), shuffleAfter = true))
+                }
                 if (next.phase != Phase.RESOLVE_CHOICE && definition(card).abilities.any { it.onEvolveConfuseOpponentActive }) {
                     val enemyActive = next.players[1-actor].active
                     if (enemyActive != null && definition(enemyActive.top).abilities.none { it.preventOpponentEffects }) {

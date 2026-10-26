@@ -58,6 +58,8 @@ internal object CatalogRuleCompiler {
             return AbilityDefinition("$id-ability$index", name, text, preventOpponentItemSupporterEffects = true)
         if (text == "When you play this Pokémon from your hand to evolve 1 of your Pokémon during your turn, you may heal all damage from each of your Evolution Pokémon. If you healed any damage in this way, discard all Energy from those Pokémon.")
             return AbilityDefinition("$id-ability$index", name, text, onEvolveHealAllEvolutionAndDiscardEnergy = true)
+        if (text == "Once during your turn, when you play this Pokémon from your hand to evolve 1 of your Pokémon, if you have any Tera Pokémon in play, you may search your deck for up to 2 Trainer cards, reveal them, and put them into your hand. Then, shuffle your deck.")
+            return AbilityDefinition("$id-ability$index", name, text, onEvolveSearchTrainerIfTeraMax = 2)
         if (text == "Once during your turn, if this Pokémon is in the Active Spot, you may have your opponent shuffle their hand into their deck and draw 3 cards.")
             return AbilityDefinition("$id-ability$index", name, text, requiresActive = true, usageKey = name, opponentShuffleHandAndDraw = 3)
         if (text == "You must discard a Basic {L} Energy from this Pokémon in order to use this Ability. Once during your turn, you may draw cards until you have 6 cards in your hand.")

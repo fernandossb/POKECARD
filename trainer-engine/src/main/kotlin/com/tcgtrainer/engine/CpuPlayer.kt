@@ -166,7 +166,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                         .take(choice.amount)
                     potential(target.copy(energies = target.energies + energies)) - potential(target)
                 }
-                ChoiceKind.SEARCH, ChoiceKind.RECOVER, ChoiceKind.SONIA, ChoiceKind.EVOLUTION_RECOVER_NAMED_TRAINER -> keepValue(checkNotNull(card(id)))
+                ChoiceKind.SEARCH, ChoiceKind.RECOVER, ChoiceKind.SONIA, ChoiceKind.EVOLUTION_RECOVER_NAMED_TRAINER, ChoiceKind.EVOLUTION_SEARCH_TRAINER -> keepValue(checkNotNull(card(id)))
                 ChoiceKind.ABILITY_SEARCH_BASIC_ENERGY_TO_HAND -> keepValue(checkNotNull(card(id)))
                 ChoiceKind.ABILITY_SEARCH_COLORLESS_POKEMON_TO_HAND -> keepValue(checkNotNull(card(id)))
                 ChoiceKind.ABILITY_SEARCH_POKEMON_TO_HAND -> keepValue(checkNotNull(card(id)))
