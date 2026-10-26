@@ -369,8 +369,15 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             it.alternativeAttackName == attack.name && it.requiresTeraInPlay &&
                 state.players[state.currentPlayer].pokemon().any { inPlay -> definition(inPlay.top).isTera }
         }
-        if (teraAlternative != null) return teraAlternative.alternativeAttackCost
         val owner = state.players.indexOfFirst { it.active?.id == pokemon.id }.let { if (it < 0) state.currentPlayer else it }
+        val ignoreColorless = activeAbilities.any { ability ->
+            ability.ignoreColorlessAttackCostWhenOpponentHandCountIs > 0 &&
+                state.players[1-owner].hand.size == ability.ignoreColorlessAttackCostWhenOpponentHandCountIs
+        }
+        if (teraAlternative != null) return if (ignoreColorless)
+            teraAlternative.alternativeAttackCost.filterNot { it == EnergyType.COLORLESS }
+        else teraAlternative.alternativeAttackCost
+        if (ignoreColorless) return attack.cost.filterNot { it == EnergyType.COLORLESS }
         val discount = (if (activeAbilities.any { it.attackDiscountPerOpponentPrize }) 6-state.players[1-owner].prizes.size else 0) +
             if (activeAbilities.any { it.attackDiscountPerKofuDiscard }) state.players[owner].discard.count { definition(it).name == "Kofu" } else 0
         var remaining = discount

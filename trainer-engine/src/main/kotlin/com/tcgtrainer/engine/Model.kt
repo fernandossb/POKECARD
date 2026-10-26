@@ -336,6 +336,7 @@ import kotlinx.serialization.Serializable
     val futurePokemonDamageBonus: Int = 0, val retaliateCondition: SpecialCondition? = null,
     val freeRetreatWithNoEnergy: Boolean = false, val switchOwnActive: Boolean = false,
     val attackDiscountPerKofuDiscard: Boolean = false,
+    val ignoreColorlessAttackCostWhenOpponentHandCountIs: Int = 0,
     val searchColorlessPokemonMaxHpToHand: Int = 0, val requiresFirstTurn: Boolean = false,
     val coinFlipPreventAttackDamage: Boolean = false, val coinFlipPreventAttackDamageEnergyType: EnergyType? = null,
     val burnOpponentActive: Boolean = false,

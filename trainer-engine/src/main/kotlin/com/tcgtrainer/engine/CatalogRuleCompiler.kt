@@ -29,6 +29,8 @@ internal object CatalogRuleCompiler {
     internal fun compileAbility(id: String, index: Int, raw: JsonObject): AbilityDefinition? {
         val name = raw.s("name") ?: return null
         val text = raw.s("effect")?.trim().orEmpty()
+        if (text == "If your opponent has exactly 4 cards in their hand, ignore all {C} Energy in the costs of attacks used by this Pokémon.")
+            return AbilityDefinition("$id-ability$index", name, text, ignoreColorlessAttackCostWhenOpponentHandCountIs = 4)
         val benchToActiveEnergySearch = Regex("Once during your turn, when this Pokémon moves from your Bench to the Active Spot, you may use this Ability\\. Search your deck for up to (\\d+) Basic \\{([GRFLWPMD])\\} Energy cards and attach them to this Pokémon\\. Then, shuffle your deck\\.").matchEntire(text)
         if (benchToActiveEnergySearch != null) return AbilityDefinition("$id-ability$index", name, text,
             usageKey = name, usagePerPokemon = true, triggersWhenMovedFromBenchToActive = true,
