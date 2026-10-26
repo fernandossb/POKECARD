@@ -132,6 +132,11 @@ internal object CatalogRuleCompiler {
         if (text == "Once during your turn, you may attach a Basic {L} Energy card from your discard pile to 1 of your Benched Pokémon.")
             return AbilityDefinition("$id-ability$index", name, text, usageKey = name, attachBasicEnergyFromDiscard = true,
                 attachBasicEnergyFromDiscardType = EnergyType.LIGHTNING, attachBasicEnergyFromDiscardBenchOnly = true)
+        if (text == "Once during your turn, you may attach up to 3 Basic Energy cards from your discard pile to your {L} Pokémon in any way you like. If you use this Ability, this Pokémon is Knocked Out.")
+            return AbilityDefinition("$id-ability$index", name, text, usageKey = name,
+                attachBasicEnergyFromDiscard = true, attachBasicEnergyFromDiscardMax = 3,
+                attachBasicEnergyFromDiscardToPokemonType = EnergyType.LIGHTNING, selfKnockout = true,
+                selfKnockoutAfterUse = true)
         if (text == "When you play this Pokémon from your hand onto your Bench during your turn, you may discard the top card of your opponent's deck.")
             return AbilityDefinition("$id-ability$index", name, text, onBenchDiscardOpponentDeckTop = true)
         if (text == "When you play this Pokémon from your hand onto your Bench during your turn, you may discard a Stadium in play.")

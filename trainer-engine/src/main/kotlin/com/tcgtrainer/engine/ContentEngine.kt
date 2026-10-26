@@ -129,6 +129,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     ability.recoverBasicPokemonToBenchMaxHp > 0 && p.discard.none { def(it).category == Category.POKEMON && def(it).stage == Stage.BASIC && def(it).hp <= ability.recoverBasicPokemonToBenchMaxHp } -> illegal("Não há Pokémon Básico válido no descarte.")
                     ability.attachBasicEnergyFromDiscard && p.discard.none { def(it).category == Category.ENERGY && def(it).basicEnergy &&
                         (ability.attachBasicEnergyFromDiscardType == null || def(it).type == ability.attachBasicEnergyFromDiscardType) } -> illegal("Não há Energia Básica válida no descarte para ligar.")
+                    ability.attachBasicEnergyFromDiscardMax > 0 && p.pokemon().none { def(it.top).type == ability.attachBasicEnergyFromDiscardToPokemonType } -> illegal("Não há Pokémon do tipo necessário em jogo para receber a Energia.")
                     ability.attachBasicEnergyFromDiscardBenchOnly && p.bench.isEmpty() -> illegal("Não há Pokémon no Banco para receber a Energia.")
                     ability.moveBasicEnergyBetweenOwnPokemon && p.pokemon().none { source -> source.energies.any { def(it).category == Category.ENERGY && def(it).basicEnergy } && p.pokemon().any { it.id != source.id } } -> illegal("Não há Energia Básica para mover entre Pokémon diferentes.")
                     ability.moveEnergyFromOtherPokemonToSelf && p.pokemon().filter { it.id != pokemon.id }.none { it.energies.isNotEmpty() } -> illegal("Não há Energia em outro Pokémon para mover.")
@@ -157,6 +158,15 @@ internal class ContentEngine(private val rules: RulesEngine) {
             events += GameEvent("DeckShuffled", "Deck embaralhado.")
         }
         fun begin(resolution: Resolution) { s = s.copy(resolution = resolution, phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN) }
+        fun knockOutOwnPokemon(pokemonId: String) {
+            val target = s.players[actor].pokemon().firstOrNull { it.id == pokemonId } ?: return
+            val hp = rules.effects.effectiveHp(target, s)
+            update { player -> player.copy(
+                active = player.active?.let { if (it.id == pokemonId) it.copy(damage = maxOf(it.damage, hp)) else it },
+                bench = player.bench.map { if (it.id == pokemonId) it.copy(damage = maxOf(it.damage, hp)) else it }
+            ) }
+            events += GameEvent("AbilitySelfKnockout", "${def(target.top).name} foi Nocauteado pelo efeito da própria Habilidade.")
+        }
         when (action) {
             is GameAction.PlayTrainer -> {
                 val p = s.players[actor]
@@ -316,6 +326,14 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     begin(Resolution(listOf(ChoiceRequest(ChoiceKind.ABILITY_SEARCH_COLORLESS_POKEMON_TO_HAND,
                         "Revele e escolha até ${minOf(ability.searchColorlessPokemonMaxHpToHand, eligible.size)} Pokémon Incolores de até 100 HP.",
                         eligible.map { it.id }, 0, minOf(ability.searchColorlessPokemonMaxHpToHand, eligible.size), visibleCards = eligible.map { it.id })), shuffleAfter = true))
+                }
+                else if (ability.attachBasicEnergyFromDiscardMax > 0) {
+                    val eligible = p.discard.filter { def(it).category == Category.ENERGY && def(it).basicEnergy }
+                    val remaining = minOf(ability.attachBasicEnergyFromDiscardMax, eligible.size)
+                    begin(Resolution(listOf(ChoiceRequest(ChoiceKind.ABILITY_DISCARD_ENERGY_FROM_DISCARD,
+                        "${ability.name}: escolha uma Energia Básica do descarte para ligar a um Pokémon {L} ou conclua.",
+                        eligible.map { it.id }, 0, 1, remaining = remaining, sourcePokemonId = pokemon.id,
+                        targetPokemonType = ability.attachBasicEnergyFromDiscardToPokemonType))))
                 }
                 else if (ability.attachBasicEnergyFromDiscard) {
                     val eligible = p.discard.filter { def(it).category == Category.ENERGY && def(it).basicEnergy &&
@@ -511,25 +529,50 @@ internal class ContentEngine(private val rules: RulesEngine) {
                             "Escolha até ${minOf(choice.amount, energies.size)} Energia(s) Básica(s) para ligar.",
                             energies.map { it.id }, 0, minOf(choice.amount, energies.size), sourcePokemonId = targetId)) + remainingChoices
                     }
-                    ChoiceKind.ABILITY_DISCARD_ENERGY_FROM_DISCARD -> if (ids.isNotEmpty()) {
-                        val energy = p.discard.first { it.id == ids.single() && def(it).category == Category.ENERGY && def(it).basicEnergy }
+                    ChoiceKind.ABILITY_DISCARD_ENERGY_FROM_DISCARD -> {
                         val sourceAbility = p.pokemon().find { it.id == choice.sourcePokemonId }?.let { def(it.top).abilities.firstOrNull { a -> a.attachBasicEnergyFromDiscard } }
-                        val benchOnly = choice.benchedOnly || sourceAbility?.attachBasicEnergyFromDiscardBenchOnly == true
-                        val targets = if (benchOnly) p.bench else p.pokemon()
-                        remainingChoices = listOf(ChoiceRequest(ChoiceKind.ABILITY_DISCARD_ENERGY_TARGET,
-                            "Escolha um dos seus Pokémon para receber ${def(energy).name}.",
-                            targets.map { it.id }, 1, 1, remaining = choice.remaining, selectedEnergy = energy.id,
-                            energyType = choice.energyType, sourcePokemonId = choice.sourcePokemonId, benchedOnly = benchOnly)) + remainingChoices
+                        if (ids.isNotEmpty()) {
+                            val energy = p.discard.firstOrNull { it.id == ids.single() && def(it).category == Category.ENERGY && def(it).basicEnergy }
+                                ?: return illegal("A Energia selecionada não está mais no descarte.")
+                            val benchOnly = choice.benchedOnly || sourceAbility?.attachBasicEnergyFromDiscardBenchOnly == true
+                            val targets = (if (benchOnly) p.bench else p.pokemon()).filter {
+                                choice.targetPokemonType == null || def(it.top).type == choice.targetPokemonType
+                            }
+                            if (targets.isEmpty()) return illegal("Não há Pokémon elegível para receber a Energia.")
+                            remainingChoices = listOf(ChoiceRequest(ChoiceKind.ABILITY_DISCARD_ENERGY_TARGET,
+                                "Escolha um dos seus Pokémon para receber ${def(energy).name}.",
+                                targets.map { it.id }, 1, 1, remaining = choice.remaining, selectedEnergy = energy.id,
+                                energyType = choice.energyType, sourcePokemonId = choice.sourcePokemonId, benchedOnly = benchOnly,
+                                targetPokemonType = choice.targetPokemonType)) + remainingChoices
+                        } else if (sourceAbility?.selfKnockoutAfterUse == true) {
+                            knockOutOwnPokemon(checkNotNull(choice.sourcePokemonId))
+                        }
                     }
                     ChoiceKind.ABILITY_DISCARD_ENERGY_TARGET -> {
                         val energy = p.discard.first { it.id == choice.selectedEnergy && def(it).category == Category.ENERGY && def(it).basicEnergy }
                         val targetId = ids.single()
+                        val targetPokemon = p.pokemon().firstOrNull { it.id == targetId }
+                            ?: return illegal("O Pokémon escolhido não está mais em jogo.")
+                        if (choice.targetPokemonType != null && def(targetPokemon.top).type != choice.targetPokemonType)
+                            return illegal("O Pokémon escolhido não tem o tipo necessário para receber a Energia.")
+                        val sourceAbility = p.pokemon().find { it.id == choice.sourcePokemonId }?.let { def(it.top).abilities.firstOrNull { a -> a.attachBasicEnergyFromDiscard } }
                         update { player -> player.copy(discard = player.discard - energy,
                             active = player.active?.let { if (it.id == targetId) it.copy(energies = it.energies + energy) else it },
                             bench = player.bench.map { if (it.id == targetId) it.copy(energies = it.energies + energy) else it }) }
                         events += GameEvent("AbilityEnergyAttached", "${def(energy).name} do descarte foi ligada a ${def(p.pokemon().first { it.id == targetId }.top).name}.")
                         val remaining = choice.remaining - 1
-                        if (remaining > 0) {
+                        if (sourceAbility?.attachBasicEnergyFromDiscardMax != null && sourceAbility.attachBasicEnergyFromDiscardMax > 0) {
+                            val eligibleEnergy = s.players[actor].discard.filter { def(it).category == Category.ENERGY && def(it).basicEnergy }
+                            val eligibleTargets = s.players[actor].pokemon().filter { choice.targetPokemonType == null || def(it.top).type == choice.targetPokemonType }
+                            if (remaining > 0 && eligibleEnergy.isNotEmpty() && eligibleTargets.isNotEmpty()) {
+                                remainingChoices = listOf(ChoiceRequest(ChoiceKind.ABILITY_DISCARD_ENERGY_FROM_DISCARD,
+                                    "Você pode ligar outra Energia Básica do descarte (até mais $remaining) ou concluir.",
+                                    eligibleEnergy.map { it.id }, 0, 1, remaining = remaining,
+                                    sourcePokemonId = choice.sourcePokemonId, targetPokemonType = choice.targetPokemonType)) + remainingChoices
+                            } else {
+                                knockOutOwnPokemon(checkNotNull(choice.sourcePokemonId))
+                            }
+                        } else if (remaining > 0) {
                             val energies = s.players[actor].discard.filter { def(it).category == Category.ENERGY && def(it).basicEnergy && (choice.energyType == null || def(it).type == choice.energyType) }
                             if (energies.isNotEmpty() && s.players[actor].bench.isNotEmpty()) remainingChoices = listOf(ChoiceRequest(
                                 ChoiceKind.ABILITY_DISCARD_ENERGY_FROM_DISCARD,
