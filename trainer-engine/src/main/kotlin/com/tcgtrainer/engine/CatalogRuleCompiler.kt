@@ -301,6 +301,13 @@ internal object CatalogRuleCompiler {
     fun compileAttack(id: String, index: Int, raw: JsonObject): AttackDefinition? {
         val cost = raw.a("cost").map { type(it.jsonPrimitive.content) ?: return null }
         val text = raw.s("effect").orEmpty().trim()
+        val prizeBonusWithRecoil = Regex("This attack does (\\d+) more damage for each Prize card your opponent has taken\\. This Pokémon also does (\\d+) damage to itself\\.").matchEntire(text)
+        if (prizeBonusWithRecoil != null) {
+            val prizeBonusText = "This attack does ${prizeBonusWithRecoil.groupValues[1]} more damage for each Prize card your opponent has taken."
+            val rewritten = JsonObject(raw.toMutableMap().apply { put("effect", JsonPrimitive(prizeBonusText)) })
+            val compiled = compileAttack(id, index, rewritten) ?: return null
+            return compiled.copy(effects = compiled.effects + Effect.SelfDamage(prizeBonusWithRecoil.groupValues[2].toInt()), text = text)
+        }
         if (text == "This attack does 60 damage for each of your opponent's Pokémon ex in play." && raw.s("damage") == "60×") {
             val rewritten = JsonObject(raw.toMutableMap().apply {
                 put("effect", JsonPrimitive("")); put("damage", JsonPrimitive(0))
