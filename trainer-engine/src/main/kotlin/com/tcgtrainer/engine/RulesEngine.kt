@@ -370,7 +370,10 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             raw * if (weakness) 2 else 1
         } ?: 0
         val maximum = coinMaximum + bonusAfterWeakness + topDeckMaxBonus
-        return AttackPreview(damage, hp, defender.damage, remaining, remaining == 0, if (remaining == 0) definition(defender.top).prizes else 0,
+        val greedyEaterBonus = if (damage > 0 && remaining == 0 && definition(defender.top).stage == Stage.BASIC &&
+            effectiveAbilities(state, state.currentPlayer, attacker).sumOf { it.extraPrizeForOpponentBasicKnockoutByAttack } > 0) 1 else 0
+        return AttackPreview(damage, hp, defender.damage, remaining, remaining == 0,
+            if (remaining == 0) definition(defender.top).prizes + greedyEaterBonus else 0,
             uncertain, minimum, maximum)
     }
 
@@ -763,6 +766,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     else emit("AttackEffectFailed", "Condição do ataque não atendida; o ataque não causou dano nem aplicou efeitos.")
                     val settled = settle(next, ResolutionEnd.ATTACK); next = settled.state; events += settled.events
                 } else {
+                next = next.copy(pendingAttackDamageSourcePokemonId = p.active!!.id)
                 attack.effects.filterIsInstance<Effect.NextTurnAttackDamageBonus>().forEach { effect ->
                     updatePokemon(p.active!!.id) { it.copy(nextTurnAttackDamageBonusName = effect.attackName,
                         nextTurnAttackDamageBonus = effect.bonus, nextTurnAttackDamageBonusTurn = state.turn + 2) }
@@ -1797,10 +1801,15 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                             player.pokemon().any { definition(it.top).name == "Pecharunt ex" })
                     } }
                 val prizeCount = (definition(pokemon.top).prizes - if (shadowyConcealment) 1 else 0).coerceAtLeast(0)
-                owed[1-owner] += prizeCount
+                val attackSource = state.players[1-owner].pokemon().firstOrNull { it.id == state.pendingAttackDamageSourcePokemonId }
+                val extraPrize = if (attackKo && definition(pokemon.top).stage == Stage.BASIC && attackSource != null)
+                    effectiveAbilities(state, 1-owner, attackSource).sumOf { it.extraPrizeForOpponentBasicKnockoutByAttack }
+                else 0
+                owed[1-owner] += prizeCount + extraPrize
+                val totalPrizeCount = prizeCount + extraPrize
                 events += if (shadowyConcealment) GameEvent("PokemonKnockedOut",
-                    "${definition(pokemon.top).name} foi nocauteado; $prizeCount Prêmio(s) após Shadowy Concealment.", prizeCount)
-                else GameEvent("PokemonKnockedOut", "${definition(pokemon.top).name} foi nocauteado; ${definition(pokemon.top).prizes} Prêmio(s).")
+                    "${definition(pokemon.top).name} foi nocauteado; $totalPrizeCount Prêmio(s) após modificadores.", totalPrizeCount)
+                else GameEvent("PokemonKnockedOut", "${definition(pokemon.top).name} foi nocauteado; $totalPrizeCount Prêmio(s).", totalPrizeCount)
             }
             val ids = knockedOut.map { it.id }.toSet()
             player.copy(active = player.active?.takeUnless { it.id in ids }, bench = player.bench.filterNot { it.id in ids },
@@ -1812,6 +1821,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         var next = state.copy(players = players, prizesOwed = owed.mapIndexed { i, n -> minOf(n, players[i].prizes.size) },
             afterResolution = end, resolution = null, resumePlayer = state.resumePlayer ?: if (end == ResolutionEnd.ATTACK) 1-actor else actor,
             pendingAttackDamageKnockoutIds = emptySet(),
+            pendingAttackDamageSourcePokemonId = null,
             extraAttackAvailableFor = if (festivalBonusAttack) actor else state.extraAttackAvailableFor,
             extraAttackUsedThisTurn = state.extraAttackUsedThisTurn || festivalBonusAttack)
         flygonKnockoutTriggers.firstOrNull()?.let { (owner, count) ->

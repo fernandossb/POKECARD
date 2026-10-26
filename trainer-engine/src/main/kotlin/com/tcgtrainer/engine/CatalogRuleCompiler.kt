@@ -53,6 +53,8 @@ internal object CatalogRuleCompiler {
         if (text == "If this Pokémon is Knocked Out by damage from an attack from your opponent's Pokémon, and if you have any Pecharunt ex in play, your opponent takes 1 fewer Prize card.")
             return AbilityDefinition("$id-ability$index", name, text, reducePrizeForDarknessKnockoutByEx = true,
                 requirePecharuntExForPrizeReduction = true)
+        if (text == "If your opponent's Basic Pokémon is Knocked Out by damage from an attack used by this Pokémon, take 1 more Prize card.")
+            return AbilityDefinition("$id-ability$index", name, text, extraPrizeForOpponentBasicKnockoutByAttack = 1)
         if (text == "Once during your turn, you may switch 1 of your Benched {D} Pokémon, except any Pecharunt ex, with your Active Pokémon. If you do, the new Active Pokémon is now Poisoned. You can't use more than 1 Subjugating Chains Ability each turn.")
             return AbilityDefinition("$id-ability$index", name, text, usageKey = "Subjugating Chains", switchOwnActive = true,
                 switchOwnDarknessExceptPecharunt = true, poisonNewActiveOnSwitch = true)
