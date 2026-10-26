@@ -305,6 +305,21 @@ internal object CatalogRuleCompiler {
     fun compileAttack(id: String, index: Int, raw: JsonObject): AttackDefinition? {
         val cost = raw.a("cost").map { type(it.jsonPrimitive.content) ?: return null }
         val text = raw.s("effect").orEmpty().trim()
+        val revealHandPokemonDamage = Regex("Reveal any number of (.+) from your hand, and this attack does (\\d+) damage for each card you revealed in this way\\.").matchEntire(text)
+        if (revealHandPokemonDamage != null) {
+            val perCard = revealHandPokemonDamage.groupValues[2].toInt()
+            val damage = raw.s("damage")
+            if (damage != "${perCard}×" && damage != "${perCard}x") return null
+            val names = revealHandPokemonDamage.groupValues[1]
+                .split(Regex(",\\s*and\\s+|,\\s*|\\s+and\\s+"))
+                .map(String::trim).filter(String::isNotEmpty)
+            if (names.isEmpty()) return null
+            val rewritten = JsonObject(raw.toMutableMap().apply {
+                put("effect", JsonPrimitive("")); put("damage", JsonPrimitive(0))
+            })
+            val compiled = compileAttack(id, index, rewritten) ?: return null
+            return compiled.copy(effects = compiled.effects + Effect.OwnHandPokemonRevealDamage(perCard, names), text = text)
+        }
         val echoedVoiceBonus = Regex("During your next turn, this Pokémon's (.+) attack does (\\d+) more damage \\(before applying Weakness and Resistance\\)\\.").matchEntire(text)
         if (echoedVoiceBonus != null) {
             if (raw.s("name") != echoedVoiceBonus.groupValues[1]) return null

@@ -40,6 +40,17 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     listOf(Effect.Damage(optionalEnergyBonus.bonus)) else emptyList()
             return printed.copy(effects = effects)
         }
+        val handRevealDamage = printed.effects.filterIsInstance<Effect.OwnHandPokemonRevealDamage>().firstOrNull()
+        if (handRevealDamage != null) {
+            val revealCount = if (state.pendingHandRevealAttackId == attackId) state.pendingHandRevealCount else
+                state.players[state.currentPlayer].hand.count { card ->
+                    val cardDefinition = definition(card)
+                    cardDefinition.category == Category.POKEMON &&
+                        (cardDefinition.canonicalName in handRevealDamage.pokemonNames || cardDefinition.name in handRevealDamage.pokemonNames)
+                }
+            return printed.copy(effects = printed.effects.filterNot { it is Effect.OwnHandPokemonRevealDamage } +
+                if (revealCount > 0) listOf(Effect.Damage(handRevealDamage.perCard * revealCount)) else emptyList())
+        }
         if (state.pendingCopiedAttackId == attackId && state.pendingCopiedAttack != null)
             return printed.copy(effects = state.pendingCopiedAttack.effects, text = state.pendingCopiedAttack.text)
         if (Effect.CopyBenchedNsAttack in printed.effects) {
@@ -345,6 +356,24 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         listOf(GameEvent("OptionalAttackCostChoice", "Escolha se devolve uma Energia {W} antes do dano.")))
                 }
             }
+            val revealHandEffect = printed.effects.filterIsInstance<Effect.OwnHandPokemonRevealDamage>().firstOrNull()
+            if (revealHandEffect != null && state.pendingHandRevealAttackId != action.attackId) {
+                val eligible = state.players[actor].hand.filter { card ->
+                    val cardDefinition = definition(card)
+                    cardDefinition.category == Category.POKEMON &&
+                        (cardDefinition.canonicalName in revealHandEffect.pokemonNames || cardDefinition.name in revealHandEffect.pokemonNames)
+                }
+                if (eligible.isNotEmpty()) {
+                    val request = ChoiceRequest(ChoiceKind.ATTACK_REVEAL_HAND_POKEMON,
+                        "Revele qualquer número de ${revealHandEffect.pokemonNames.joinToString(", ")} da sua mão para causar ${revealHandEffect.perCard} de dano por carta.",
+                        eligible.map { it.id }, 0, eligible.size, visibleCards = eligible.map { it.id })
+                    return Transition(state.copy(phase = Phase.RESOLVE_CHOICE, resolution = Resolution(listOf(request)),
+                        afterResolution = ResolutionEnd.MAIN), Legality.Legal,
+                        listOf(GameEvent("HandRevealChoiceOpened", "Escolha quais Pokémon revelar antes de resolver o ataque.")))
+                }
+                val prepared = state.copy(pendingHandRevealAttackId = action.attackId, pendingHandRevealCount = 0)
+                return apply(prepared, action)
+            }
             if (Effect.CopyBenchedNsAttack in printed.effects && state.pendingCopiedAttackId != action.attackId) {
                 val options = copiedAttackOptions(state, actor)
                 val candidates = options.map { it.first }
@@ -396,6 +425,25 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             prepared = prepared.copy(history = prepared.history + ActionRecord(actor, state.turn, action, choiceEvents))
             val resolved = apply(prepared, GameAction.Attack(attackId))
             return Transition(resolved.state, resolved.legality, choiceEvents + resolved.events)
+        }
+        if (action is GameAction.ChooseCards && state.resolution?.choices?.firstOrNull()?.kind == ChoiceKind.ATTACK_REVEAL_HAND_POKEMON) {
+            val choice = state.resolution!!.choices.first()
+            if (action.cardIds.distinct().size != action.cardIds.size || action.cardIds.size !in choice.min..choice.max ||
+                action.cardIds.any { it !in choice.candidates })
+                return Transition(state, Legality.Illegal("Escolha zero ou mais cartas elegíveis da sua mão."))
+            val active = state.players[actor].active
+                ?: return Transition(state, Legality.Illegal("O atacante não está mais no Campo."))
+            val attack = definition(active.top).attacks.firstOrNull { candidate ->
+                candidate.effects.any { it is Effect.OwnHandPokemonRevealDamage }
+            } ?: return Transition(state, Legality.Illegal("O ataque de revelar Pokémon não está mais disponível."))
+            val selected = state.players[actor].hand.filter { it.id in action.cardIds }
+            val names = selected.joinToString(", ") { definition(it).canonicalName }
+            val revealEvent = GameEvent("HandCardsRevealed", if (selected.isEmpty()) "Não revelou Pokémon; o ataque não recebe dano por este efeito." else "Revelou: $names.", selected.size)
+            val prepared = state.copy(phase = Phase.MAIN, resolution = null,
+                pendingHandRevealAttackId = attack.id, pendingHandRevealCount = selected.size,
+                history = state.history + ActionRecord(actor, state.turn, action, listOf(revealEvent)))
+            val resolved = apply(prepared, GameAction.Attack(attack.id))
+            return Transition(resolved.state, resolved.legality, listOf(revealEvent) + resolved.events)
         }
         if (action is GameAction.ChooseCards && state.resolution?.choices?.firstOrNull()?.kind == ChoiceKind.ATTACK_COPY_BENCHED_N) {
             val key = action.cardIds.single()
@@ -604,6 +652,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             is GameAction.Attack -> {
                 val attack = attackFor(state, p.active!!, action.attackId)!!
                 if (state.pendingCopiedAttackId == action.attackId) next = next.copy(pendingCopiedAttackId = null, pendingCopiedAttack = null)
+                if (state.pendingHandRevealAttackId == action.attackId) next = next.copy(pendingHandRevealAttackId = null, pendingHandRevealCount = 0)
                 if (Effect.CannotRepeatAttackUntilLeavingActive in attack.effects) {
                     updatePokemon(p.active.id) { it.copy(attackIdsUsedWhileActive = it.attackIdsUsedWhileActive + action.attackId) }
                 }
