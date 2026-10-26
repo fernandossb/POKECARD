@@ -647,7 +647,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     update(opponent) { it.copy(active = pulled, bench = it.bench.filterNot { target -> target.id == pulledId } + oldActive) }
                     emit("OpponentPokemonPulled", "${definition(pulled.top).name} entrou no Ativo antes do dano.")
                 }
-                val extraBenchTarget = attack.effects.any { it is Effect.DiscardEnergyThenBenchDamage }
+                val extraBenchTarget = attack.effects.any { it is Effect.DiscardEnergyThenBenchDamage || it is Effect.OptionalShuffleEnergyThenBenchDamage }
                 val primaryTargetId = if (extraBenchTarget || pullSelected) null else action.targetId
                 val preview = preview(next, action.attackId, primaryTargetId, heads, topDeckEffectDamage)!!
                 val discardCoin = attack.effects.any { it is Effect.DiscardDefendingEnergy && it.onHeads } && coin == null
@@ -1085,6 +1085,15 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     if (count > 0) choices += ChoiceRequest(ChoiceKind.DISCARD_ATTACK_ENERGY,
                         "Descarte $count Energia(s) do atacante.", eligible.map { it.id }, count, count,
                         amount = effect.amount)
+                }
+                attack.effects.filterIsInstance<Effect.OptionalShuffleEnergyThenBenchDamage>().forEach { effect ->
+                    val eligible = next.players[actor].active!!.energies
+                    val targets = next.players[opponent].bench.filter { it.attackImmunityTurn != state.turn &&
+                        definition(it.top).abilities.none { ability -> ability.preventOpponentEffects } }
+                    if (eligible.size >= effect.count && targets.isNotEmpty()) choices += ChoiceRequest(
+                        ChoiceKind.ATTACK_OPTIONAL_SHUFFLE_ENERGY,
+                        "Opcional: embaralhe ${effect.count} Energias deste Pokémon no deck para causar ${effect.amount} de dano a um Pokémon do Banco adversário.",
+                        eligible.map { it.id }, 0, effect.count, amount = effect.amount)
                 }
                 attack.effects.filterIsInstance<Effect.BenchDamageCounters>().forEach { effect ->
                     val bench = next.players[opponent].bench.filter { it.attackImmunityTurn != state.turn && definition(it.top).abilities.none { ability -> ability.preventOpponentEffects } }

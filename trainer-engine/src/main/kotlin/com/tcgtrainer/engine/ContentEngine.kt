@@ -30,6 +30,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                 when {
                     action.cardIds.distinct().size != action.cardIds.size -> illegal("Não repita cartas.")
                     action.cardIds.size !in choice.min..choice.max -> illegal("Escolha de ${choice.min} a ${choice.max} carta(s).")
+                    choice.kind == ChoiceKind.ATTACK_OPTIONAL_SHUFFLE_ENERGY && action.cardIds.isNotEmpty() && action.cardIds.size != 3 -> illegal("Escolha zero ou exatamente 3 Energias para pagar o efeito opcional.")
                     !choice.candidates.containsAll(action.cardIds) -> illegal("Alvo inválido para este efeito.")
                     choice.kind == ChoiceKind.SONIA && p.deck.filter { it.id in action.cardIds }.map { def(it).category }.distinct().size > 1 -> illegal("Sonia busca Pokémon Básicos OU Energias Básicas; não misture as categorias.")
                     else -> Legality.Legal
@@ -614,6 +615,23 @@ internal class ContentEngine(private val rules: RulesEngine) {
                             if (targets.isNotEmpty()) remainingChoices = listOf(ChoiceRequest(ChoiceKind.ATTACK_DISCARD_THEN_BENCH_TARGET,
                                 "Escolha um Pokémon do Banco adversário para receber ${effect.amount} de dano.", targets.map { it.id }, 1, 1, amount = effect.amount)) + remainingChoices
                         }
+                    }
+                    ChoiceKind.ATTACK_OPTIONAL_SHUFFLE_ENERGY -> if (ids.isNotEmpty()) {
+                        val attacker = p.active ?: error("Atacante ausente durante o efeito opcional.")
+                        val attack = rules.definition(attacker.top).attacks.first { candidate -> candidate.effects.any {
+                            it is Effect.OptionalShuffleEnergyThenBenchDamage && it.amount == choice.amount
+                        } }
+                        val effect = attack.effects.filterIsInstance<Effect.OptionalShuffleEnergyThenBenchDamage>().first { it.amount == choice.amount }
+                        val energies = attacker.energies.filter { it.id in ids }
+                        check(energies.size == effect.count) { "O efeito exige exatamente ${effect.count} Energias." }
+                        val rng = SeededRng(s.rng)
+                        val shuffledDeck = rng.shuffle(p.deck + energies)
+                        update { player -> player.copy(active = player.active!!.copy(energies = player.active.energies - energies.toSet()), deck = shuffledDeck) }
+                        s = s.copy(rng = rng.state)
+                        events += GameEvent("AttackEnergyShuffled", "Embaralhou ${energies.size} Energias do atacante no deck para ativar o dano ao Banco.", energies.size)
+                        val targets = s.players[1-actor].bench.filter { it.attackImmunityTurn != s.turn && def(it.top).abilities.none { ability -> ability.preventOpponentEffects } }
+                        if (targets.isNotEmpty()) remainingChoices = listOf(ChoiceRequest(ChoiceKind.ATTACK_DISCARD_THEN_BENCH_TARGET,
+                            "Escolha um Pokémon do Banco adversário para receber ${effect.amount} de dano.", targets.map { it.id }, 1, 1, amount = effect.amount)) + remainingChoices
                     }
                     ChoiceKind.ATTACH_DECK_ENERGY -> {
                         val cards = p.deck.filter { it.id in ids }

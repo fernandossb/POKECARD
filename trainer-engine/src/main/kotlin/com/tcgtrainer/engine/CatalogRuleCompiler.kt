@@ -334,6 +334,13 @@ internal object CatalogRuleCompiler {
             return compiled.copy(effects = compiled.effects + Effect.MultiTargetDamage(
                 discardThenMultiTarget.groupValues[2].toInt(), discardThenMultiTarget.groupValues[3].toInt(), discardBeforeDamage = true), text = text)
         }
+        val optionalShuffleBenchDamage = Regex("You may shuffle (\\d+) Energy attached to this Pokémon into your deck\\. If you do, this attack also does (\\d+) damage to 1 of your opponent's Benched Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
+        if (optionalShuffleBenchDamage != null) {
+            val rewritten = JsonObject(raw.toMutableMap().apply { put("effect", JsonPrimitive("")) })
+            val compiled = compileAttack(id, index, rewritten) ?: return null
+            return compiled.copy(effects = compiled.effects + Effect.OptionalShuffleEnergyThenBenchDamage(
+                optionalShuffleBenchDamage.groupValues[1].toInt(), optionalShuffleBenchDamage.groupValues[2].toInt()), text = text)
+        }
         val secondPlayerFirstTurnPrefix = "If you go second, you can't use this attack during your first turn. "
         if (text.startsWith(secondPlayerFirstTurnPrefix)) {
             val rewritten = JsonObject(raw.toMutableMap().apply { put("effect", JsonPrimitive(text.removePrefix(secondPlayerFirstTurnPrefix))) })
