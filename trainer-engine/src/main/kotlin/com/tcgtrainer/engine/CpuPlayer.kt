@@ -219,6 +219,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 }
                 ChoiceKind.ABILITY_SEARCH_COLORLESS_POKEMON_TO_HAND -> keepValue(checkNotNull(card(id)))
                 ChoiceKind.ABILITY_SEARCH_POKEMON_TO_HAND -> keepValue(checkNotNull(card(id)))
+                ChoiceKind.ABILITY_SEARCH_SUPPORTER_FROM_TOP -> keepValue(checkNotNull(card(id)))
                 ChoiceKind.ABILITY_TOP_DECK_KEEP_ONE -> keepValue(checkNotNull(card(id)))
                 ChoiceKind.ABILITY_SEARCH_TOP_CARD -> keepValue(checkNotNull(card(id)))
                 ChoiceKind.ATTACK_RECOVER_POKEMON -> 100.0 - keepValue(checkNotNull(card(id)))

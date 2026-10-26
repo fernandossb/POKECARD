@@ -233,6 +233,9 @@ internal object CatalogRuleCompiler {
             return AbilityDefinition("$id-ability$index", name, text, mayEvolveFirstTurnIfActive = true)
         if (text == "Once during your turn, you may look at the top 2 cards of your deck and put 1 of them into your hand. Put the other card on the bottom of your deck.")
             return AbilityDefinition("$id-ability$index", name, text, usageKey = name, lookAtTopCardsChooseOne = 2)
+        if (text == "Once during your turn, if this Pokémon is in the Active Spot, you may look at the top 6 cards of your deck, reveal a Supporter card you find there, and put it into your hand. Shuffle the other cards back into your deck.")
+            return AbilityDefinition("$id-ability$index", name, text, usageKey = name, requiresActive = true,
+                lookAtTopCardsSupporterToHand = 6)
         if (text == "Once during your turn, if this Pokémon is in the Active Spot, you may use this Ability. Search your deck for a card. Shuffle your deck, then put that card on top of it.")
             return AbilityDefinition("$id-ability$index", name, text, usageKey = name, requiresActive = true, searchAnyCardToTop = true)
         val benchEnergyAttach = Regex("When you play this Pokémon from your hand onto your Bench during your turn, you may attach up to (\\d+) Basic \\{([GRFLWPMD])\\} Energy cards from your hand to this Pokémon\\.").matchEntire(text)
