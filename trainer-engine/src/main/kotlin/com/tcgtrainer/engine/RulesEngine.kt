@@ -387,6 +387,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             opponentHandCount = state.players[1-state.currentPlayer].hand.size,
             stadiumInPlay = state.stadium != null,
             opponentHandEnergyCount = state.players[1-state.currentPlayer].hand.count { definition(it).category == Category.ENERGY },
+            opponentHandTrainerCount = state.players[1-state.currentPlayer].hand.count { definition(it).category == Category.TRAINER },
             sourceAbilityOverride = effectiveAbilities(state, state.currentPlayer, attacker),
             targetAbilityOverride = effectiveAbilities(state, 1-state.currentPlayer, defender),
             ownToolCount = state.players[state.currentPlayer].pokemon().count { it.tool != null },
@@ -942,7 +943,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 val defender = primaryTargetId?.let { id -> next.players[opponent].pokemon().first { it.id == id } } ?: next.players[opponent].active!!
                 val defenderAbilities = effectiveAbilities(next, opponent, defender)
                 val defenderEffectsPrevented = attackTargetEffectsPrevented(next, opponent, defender)
-                if (attack.effects.any { it is Effect.OpponentHandEnergyCountDamage } || Effect.RevealOpponentHand in attack.effects || Effect.RevealAndChooseOpponentHandDiscard in attack.effects) {
+                if (attack.effects.any { it is Effect.OpponentHandEnergyCountDamage || it is Effect.OpponentHandTrainerCountDamage } || Effect.RevealOpponentHand in attack.effects || Effect.RevealAndChooseOpponentHandDiscard in attack.effects) {
                     val revealed = next.players[opponent].hand.joinToString(", ") { definition(it).name }
                     emit("OpponentHandRevealed", "Mão adversária revelada: ${revealed.ifEmpty { "vazia" }}.")
                 }
