@@ -363,6 +363,13 @@ internal object CatalogRuleCompiler {
                     trainerEffect = TrainerEffect.HealEachOwnPokemonOfType(60, EnergyType.LIGHTNING))
             }
             val trainerText = raw.s("effect").orEmpty()
+            if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Supporter" &&
+                trainerText == "Heal all damage from 1 of your Mega Evolution Pokémon ex. If you healed any damage in this way, put all Energy attached to that Pokémon into your hand.") {
+                return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
+                    category = Category.TRAINER, verified = true, source = source,
+                    artAsset = "remote:$image/high.webp", text = trainerText,
+                    trainerType = TrainerType.SUPPORTER, trainerEffect = TrainerEffect.WallyCompassion)
+            }
             if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Item" &&
                 trainerText == "Search your deck for up to 2 Basic Pokémon with 70 HP or less and put them onto your Bench. Then, shuffle your deck.") {
                 return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,

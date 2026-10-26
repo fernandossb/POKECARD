@@ -11,6 +11,8 @@ internal class ContentEngine(private val rules: RulesEngine) {
         card.category == Category.POKEMON && card.type == EnergyType.FIRE && card.name.startsWith("Mega ") &&
             card.name.endsWith(" ex") && card.prizes == 3
     }
+    private fun isMegaEvolutionEx(card: CardDefinition) = card.category == Category.POKEMON &&
+        card.name.startsWith("Mega ") && card.name.endsWith(" ex")
     fun matches(card: CardInstance, filter: CardFilter): Boolean {
         val d = def(card)
         return when (filter) {
@@ -55,6 +57,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     choice.kind == ChoiceKind.TRAINER_SEARCH_EVOLUTION_LINE && (action.cardIds.any { id -> p.deck.none { it.id == id && def(it).category == Category.POKEMON } } || action.cardIds.mapNotNull { id -> p.deck.find { it.id == id }?.let { def(it).stage } }.distinct().size != action.cardIds.size) -> illegal("Escolha no máximo um Pokémon de cada estágio que ainda esteja no deck.")
                     choice.kind == ChoiceKind.TRAINER_BASIC_POKEMON_TO_BENCH && action.cardIds.size > (5-p.bench.size).coerceAtLeast(0) -> illegal("O Banco não tem espaço para tantos Pokémon Básicos.")
                     choice.kind == ChoiceKind.TRAINER_BASIC_POKEMON_TO_BENCH && action.cardIds.any { id -> p.deck.none { it.id == id && def(it).category == Category.POKEMON && def(it).stage == Stage.BASIC && def(it).hp <= 70 } } -> illegal("Escolha apenas Pokémon Básicos de até 70 HP que ainda estejam no deck.")
+                    choice.kind == ChoiceKind.TRAINER_WALLY_COMPASSION_TARGET && action.cardIds.any { id -> p.pokemon().none { it.id == id && isMegaEvolutionEx(def(it.top)) } } -> illegal("Escolha um Mega Evolution Pokémon ex seu que ainda esteja em jogo.")
                     choice.kind == ChoiceKind.PALAFIN_ZERO_TO_HERO && action.cardIds.isNotEmpty() && action.cardIds.any { id ->
                         p.deck.none { it.id == id && def(it).name == "Palafin ex" }
                     } -> illegal("Escolha um Palafin ex que ainda esteja no deck.")
@@ -117,6 +120,9 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         p.deck.none { def(it).category == Category.POKEMON && def(it).stage == Stage.BASIC && def(it).hp <= 70 } -> illegal("Não há Pokémon Básicos de até 70 HP no deck.")
                         else -> Legality.Legal
                     }
+                    TrainerEffect.WallyCompassion -> if (p.pokemon().none { isMegaEvolutionEx(def(it.top)) })
+                        illegal("Você não tem um Mega Evolution Pokémon ex em jogo.")
+                    else Legality.Legal
                     is TrainerEffect.DiscardOpponentItemsFromHand -> Legality.Legal
                     TrainerEffect.Briar -> if (s.players[1-actor].prizes.size == 2) Legality.Legal else illegal("Briar só pode ser jogada quando o oponente tem exatamente 2 Prêmios restantes.")
                     is TrainerEffect.HealEachOwnPokemonOfType -> Legality.Legal
@@ -308,6 +314,12 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         begin(Resolution(listOf(ChoiceRequest(ChoiceKind.TRAINER_BASIC_POKEMON_TO_BENCH,
                             "Buddy-Buddy Poffin: escolha até $max Pokémon Básicos de até 70 HP para colocar no Banco.",
                             eligible.map { it.id }, 0, max, visibleCards = eligible.map { it.id })), shuffleAfter = true))
+                    }
+                    TrainerEffect.WallyCompassion -> {
+                        val targets = p.pokemon().filter { isMegaEvolutionEx(def(it.top)) }
+                        begin(Resolution(listOf(ChoiceRequest(ChoiceKind.TRAINER_WALLY_COMPASSION_TARGET,
+                            "Wally's Compassion: escolha um Mega Evolution Pokémon ex para curar todo o dano.",
+                            targets.map { it.id }, 1, 1))))
                     }
                     is TrainerEffect.DiscardOpponentItemsFromHand -> {
                         val opponentHand = s.players[1-actor].hand
@@ -953,6 +965,21 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         update { player -> player.copy(deck = player.deck - cards.toSet(),
                             bench = player.bench + cards.map { PokemonInstance(listOf(it), enteredPlayTurn = s.turn) }) }
                         events += GameEvent("PokemonSearchedToBench", "Buscou ${cards.size} Pokémon Básico(s) de até 70 HP e colocou no Banco.", cards.size)
+                    }
+                    ChoiceKind.TRAINER_WALLY_COMPASSION_TARGET -> {
+                        val targetId = ids.single()
+                        val target = p.pokemon().firstOrNull { it.id == targetId && isMegaEvolutionEx(def(it.top)) }
+                            ?: return illegal("O alvo de Wally's Compassion não está mais em jogo.")
+                        val healed = target.damage
+                        val energies = if (healed > 0) target.energies else emptyList()
+                        update { player ->
+                            player.copy(hand = player.hand + energies,
+                                active = player.active?.let { pokemon -> if (pokemon.id == targetId) pokemon.copy(damage = 0, energies = pokemon.energies - energies.toSet()) else pokemon },
+                                bench = player.bench.map { pokemon -> if (pokemon.id == targetId) pokemon.copy(damage = 0, energies = pokemon.energies - energies.toSet()) else pokemon })
+                        }
+                        if (healed > 0) events += GameEvent("PokemonHealed", "Curou $healed de dano de ${def(target.top).name} com Wally's Compassion.", healed)
+                        else events += GameEvent("TrainerEffectResolved", "Wally's Compassion não encontrou dano para curar.")
+                        if (energies.isNotEmpty()) events += GameEvent("EnergyReturnedToHand", "Devolveu ${energies.size} Energia(s) ligada(s) a ${def(target.top).name} para a mão.", energies.size)
                     }
                     ChoiceKind.ABILITY_MOVE_BASIC_ENERGY -> {
                         val energyId = ids.single()

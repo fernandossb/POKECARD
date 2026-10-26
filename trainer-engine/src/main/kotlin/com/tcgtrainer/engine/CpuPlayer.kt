@@ -315,6 +315,9 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 ChoiceKind.TRAINER_MOVE_BENCH_ENERGY -> 1.0
                 ChoiceKind.TRAINER_SEARCH_EVOLUTION_LINE -> setupValue(checkNotNull(card(id)))
                 ChoiceKind.TRAINER_BASIC_POKEMON_TO_BENCH -> setupValue(checkNotNull(card(id)))
+                ChoiceKind.TRAINER_WALLY_COMPASSION_TARGET -> own.firstOrNull { it.id == id }?.let { target ->
+                    target.damage.toDouble() + if (target.damage > 0) target.energies.sumOf { keepValue(it) + 12.0 } else 0.0
+                } ?: 0.0
                 ChoiceKind.ATTACK_OPPONENT_ENERGY -> o.opponentField.firstOrNull { source -> source.energies.any { it.id == id } }?.let { source ->
                     (if (source.id == o.opponentActiveId) 120.0 else 20.0) + source.energies.size
                 } ?: 0.0
@@ -453,6 +456,9 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 TrainerEffect.ForestOfVitality -> 30.0
                 TrainerEffect.MysteryGarden -> -5.0
                 TrainerEffect.BuddyBuddyPoffin -> if (own.size < 6) 105.0 else -5.0
+                TrainerEffect.WallyCompassion -> own.filter { d(it.top).name.startsWith("Mega ") && d(it.top).name.endsWith(" ex") }
+                    .maxOfOrNull { it.damage.toDouble() + if (it.damage > 0) it.energies.sumOf { energy -> keepValue(energy) + 12.0 } else 0.0 }
+                    ?.takeIf { it > 0.0 }?.plus(55.0) ?: -5.0
                 is TrainerEffect.DiscardOpponentItemsFromHand -> if (o.opponentHandCount > 0) 45.0 else 15.0
                 TrainerEffect.Briar -> if (o.opponentPrizeCount == 2) 115.0 else -5.0
                 is TrainerEffect.HealEachOwnPokemonOfType -> own.filter { d(it.top).type == effect.type }
