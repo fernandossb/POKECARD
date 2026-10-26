@@ -1979,6 +1979,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 effectiveAbilities(state, actor, attacker).any { it.festivalGroundsMayAttackAgain } } == true
         val owed = state.prizesOwed.toMutableList()
         val events = mutableListOf<GameEvent>()
+        val prizeRng = SeededRng(state.rng)
         val flygonKnockoutTriggers = mutableListOf<Pair<Int, Int>>()
         val players = state.players.mapIndexed { owner, player ->
             val knockedOut = player.pokemon().filter { it.id in state.pendingAttackEffectKnockoutIds || it.damage >= effectiveHp(state, it) }
@@ -1999,8 +2000,13 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 val extraPrize = if (attackKo && definition(pokemon.top).stage == Stage.BASIC && attackSource != null)
                     effectiveAbilities(state, 1-owner, attackSource).sumOf { it.extraPrizeForOpponentBasicKnockoutByAttack }
                 else 0
-                owed[1-owner] += prizeCount + extraPrize
-                val totalPrizeCount = prizeCount + extraPrize
+                val wonderKiss = player.active?.id == pokemon.id && state.players[1-owner].pokemon().any { field ->
+                    effectiveAbilities(state, 1-owner, field).any { it.wonderKissPrizeOnActiveKnockout }
+                }
+                val wonderKissBonus = if (wonderKiss && prizeRng.nextInt(2) == 0) 1 else 0
+                if (wonderKiss) events += GameEvent("WonderKissFlip", if (wonderKissBonus > 0) "Wonder Kiss: cara; recebe 1 Prêmio adicional." else "Wonder Kiss: coroa; sem Prêmio adicional.", wonderKissBonus)
+                owed[1-owner] += prizeCount + extraPrize + wonderKissBonus
+                val totalPrizeCount = prizeCount + extraPrize + wonderKissBonus
                 events += if (shadowyConcealment) GameEvent("PokemonKnockedOut",
                     "${definition(pokemon.top).name} foi nocauteado; $totalPrizeCount Prêmio(s) após modificadores.", totalPrizeCount)
                 else GameEvent("PokemonKnockedOut", "${definition(pokemon.top).name} foi nocauteado; $totalPrizeCount Prêmio(s).", totalPrizeCount)
@@ -2012,7 +2018,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 lastKnockedOutByAttackDamageTurn = if (end == ResolutionEnd.ATTACK && knockedOut.any { it.id in state.pendingAttackDamageKnockoutIds })
                     state.turn else player.lastKnockedOutByAttackDamageTurn)
         }
-        var next = state.copy(players = players, prizesOwed = owed.mapIndexed { i, n -> minOf(n, players[i].prizes.size) },
+        var next = state.copy(players = players, rng = prizeRng.state, prizesOwed = owed.mapIndexed { i, n -> minOf(n, players[i].prizes.size) },
             afterResolution = end, resolution = null, resumePlayer = state.resumePlayer ?: if (end == ResolutionEnd.ATTACK) 1-actor else actor,
             pendingAttackDamageKnockoutIds = emptySet(),
             pendingAttackDamageSourcePokemonId = null,pendingAttackEffectKnockoutIds = emptySet(),

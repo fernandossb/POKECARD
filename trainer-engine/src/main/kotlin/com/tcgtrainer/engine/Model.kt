@@ -298,6 +298,7 @@ import kotlinx.serialization.Serializable
     val changeOpponentNsPokemonWeaknessToPsychic: Boolean = false,
     val reducePrizeForDarknessKnockoutByEx: Boolean = false,
     val extraPrizeForOpponentBasicKnockoutByAttack: Int = 0,
+    val wonderKissPrizeOnActiveKnockout: Boolean = false,
     val teamDamageReduction: Int = 0,
     val onEvolveConfuseOpponentActive: Boolean = false,
     val hpBonusPerOpponentPrizeTaken: Int = 0,
