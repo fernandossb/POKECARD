@@ -224,6 +224,7 @@ import kotlinx.serialization.Serializable
     val retaliateDamageCounters: Int = 0, val requiresTeamRocketPokemonCount: Int = 0,
     val ignoreOpponentActiveEffects: Boolean = false, val damageCounters: Int = 0,
     val damageTargets: Int = 0, val selfKnockout: Boolean = false,
+    val suppressSelfKnockoutAbilities: Boolean = false,
     val attachHandEnergyType: EnergyType? = null, val drawIfAttached: Int = 0,
     val healIfAttached: Int = 0,
     val attachHandEnergyMax: Int = 1, val attachHandEnergyBenchOnly: Boolean = false,

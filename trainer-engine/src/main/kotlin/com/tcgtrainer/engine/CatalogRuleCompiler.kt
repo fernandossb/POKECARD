@@ -29,6 +29,8 @@ internal object CatalogRuleCompiler {
     internal fun compileAbility(id: String, index: Int, raw: JsonObject): AbilityDefinition? {
         val name = raw.s("name") ?: return null
         val text = raw.s("effect")?.trim().orEmpty()
+        if (text == "Pokémon in play (both yours and your opponent's) lose any Ability that requires the Pokémon using it to Knock Out itself.")
+            return AbilityDefinition("$id-ability$index", name, text, suppressSelfKnockoutAbilities = true)
         if (text == "If you go first, this Pokémon can use attacks during your first turn.")
             return AbilityDefinition("$id-ability$index", name, text, mayAttackFirstTurnIfStarting = true)
         if (text == "The Weakness of each of your opponent's {N} Pokémon in play is now {P}. (Apply Weakness as ×2.)")
