@@ -160,6 +160,7 @@ class EffectEngine(private val catalog: CardCatalog) {
             effects.filterIsInstance<Effect.ConditionalEnergyDamage>().filter { conditional ->
                 attacker.energies.count { catalog.get(it.definitionId).type == conditional.type } >= conditional.minimum
             }.sumOf { it.bonus } +
+            effects.filterIsInstance<Effect.ConditionalAttachedEnergyDamage>().filter { attacker.energies.size >= it.minimum }.sumOf { it.bonus } +
             effects.filterIsInstance<Effect.ConditionalInPlayEnergyDamage>().filter { conditional ->
                 (ownEnergyCounts[conditional.type] ?: 0) >= conditional.minimum
             }.sumOf { it.bonus } +
@@ -195,7 +196,7 @@ class EffectEngine(private val catalog: CardCatalog) {
         is Effect.RestrictNamedAttackNextTurn, Effect.CannotRepeatAttackUntilLeavingActive, Effect.LockOpponentItemsNextTurn, Effect.LockOpponentEvolutionNextTurn,
         is Effect.ReduceEvolutionDamageNextTurn,
         is Effect.CoinDamage, is Effect.DiscardAttackEnergy, is Effect.EnergyFromDeck, is Effect.SupporterBonus, is Effect.Draw, is Effect.EachPlayerDraw,
-        Effect.PreventRetreatNextTurn, Effect.DiscardDefendingTools, is Effect.ConditionalEnergyDamage, is Effect.ConditionalInPlayEnergyDamage, is Effect.SwitchOwn,
+        Effect.PreventRetreatNextTurn, Effect.DiscardDefendingTools, is Effect.ConditionalEnergyDamage, is Effect.ConditionalAttachedEnergyDamage, is Effect.ConditionalInPlayEnergyDamage, is Effect.SwitchOwn,
         is Effect.BenchedCountDamage, is Effect.OpponentBenchCountDamage, is Effect.OwnBenchWithEnergyDamage, is Effect.OwnInPlayCountDamage, is Effect.OwnSpeciesCountDamage, is Effect.OwnAttackNameCountDamage, is Effect.BenchPokemonPresenceDamageBonus, is Effect.BenchTypePresenceDamageBonus, is Effect.AnyOwnBenchedPokemonDamagedBonus, is Effect.AllOwnBenchedPokemonDamagedBonus, is Effect.OwnDamagedBenchedPokemonCountDamage, is Effect.SameTypePokemonInPlayDamageBonus, is Effect.SameHandSizeDamageBonus, is Effect.OpponentExCountDamage, is Effect.OwnNamedBenchDamageCounterDamage, is Effect.OwnBenchTypeDamageCounterDamage, Effect.IgnoreWeakness, is Effect.OwnDamageCounterDamage, is Effect.ConditionalOwnDamageCounterBonus, is Effect.OwnUndamagedDamageBonus, is Effect.OwnAnyDamageCounterBonus,
         Effect.SwitchOpponent, Effect.PullOpponentBench, Effect.PullSelectedBenchBeforeDamage, Effect.RecoverSupporterFromDiscard, is Effect.DiscardTopDeckEnergyDamage,
         is Effect.SearchBasicEnergyToHand, is Effect.OpponentFieldDamageCounterDamage, is Effect.OwnEnergyTypeCountDamage,

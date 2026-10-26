@@ -43,6 +43,7 @@ import kotlinx.serialization.Serializable
     @Serializable data object PreventRetreatNextTurn : Effect
     @Serializable data object DiscardDefendingTools : Effect
     @Serializable data class ConditionalEnergyDamage(val type: EnergyType, val minimum: Int, val bonus: Int) : Effect
+    @Serializable data class ConditionalAttachedEnergyDamage(val minimum: Int, val bonus: Int) : Effect
     @Serializable data class ConditionalInPlayEnergyDamage(val type: EnergyType, val minimum: Int, val bonus: Int) : Effect
     @Serializable data class SwitchOwn(val optional: Boolean = false) : Effect
     @Serializable data class BenchedCountDamage(val perPokemon: Int) : Effect
