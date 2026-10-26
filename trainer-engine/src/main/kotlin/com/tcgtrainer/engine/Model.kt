@@ -264,6 +264,7 @@ import kotlinx.serialization.Serializable
     val searchBasicEnergyTypeToHand: EnergyType? = null, val searchBasicEnergyMaxToHand: Int = 0,
     val attachBasicEnergyFromDeckToBenchedType: EnergyType? = null, val damageCountersToEnergyTarget: Int = 0,
     val moveDamageCountersMax: Int = 0, val moveDamageCountersEnergyType: EnergyType? = null,
+    val requiresInPlayName: String? = null,
     val onEvolveRecoverNamedTrainerFromDiscard: String? = null, val onEvolveRecoverNamedTrainerMax: Int = 0,
     val tundraWallWaterDamageReduction: Int = 0,
     val moveEnergyFromOtherPokemonToSelf: Boolean = false,

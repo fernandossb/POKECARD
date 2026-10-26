@@ -135,6 +135,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     ability.shuffleSelfIntoDeck && p.bench.isEmpty() -> illegal("É preciso ter um Pokémon no Banco para usar esta habilidade.")
                     p.hand.size < ability.discardHandCount -> illegal("Falta uma carta na mão para pagar o custo da habilidade.")
                     ability.requiresInPlay != null && p.pokemon().none { it.top.definitionId == ability.requiresInPlay } -> illegal("É preciso ter ${rules.catalog.get(ability.requiresInPlay).name} em jogo.")
+                    ability.requiresInPlayName != null && p.pokemon().none { def(it.top).canonicalName == ability.requiresInPlayName } -> illegal("É preciso ter ${ability.requiresInPlayName} em jogo.")
                     ability.requiresPreviousKnockout && p.lastKnockedOutTurn != s.turn-1 -> illegal("Nenhum dos seus Pokémon foi nocauteado no último turno adversário.")
                     ability.requiresFirstTurn && !((s.turn == 1 && s.currentPlayer == s.startingPlayer) || (s.turn == 2 && s.currentPlayer != s.startingPlayer)) -> illegal("Fan Call só pode ser usado no primeiro turno deste jogador.")
                     ability.searchColorlessPokemonMaxHpToHand > 0 && p.deck.none { def(it).category == Category.POKEMON && def(it).type == EnergyType.COLORLESS && def(it).hp <= 100 } -> illegal("Não há Pokémon Incolor de até 100 HP no deck.")
@@ -144,7 +145,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                             (ability.searchPokemonNamePrefixToHand?.let { cardDef.name.startsWith(it) } ?: true) &&
                             (ability.searchPokemonEvolutionTypeToHand?.let { cardDef.type == it && cardDef.stage != Stage.BASIC } ?: true)
                     } -> illegal("Não há Pokémon elegível no deck para esta habilidade.")
-                    ability.discardEnergyType != null && p.hand.none { def(it).category == Category.ENERGY && def(it).type == ability.discardEnergyType } -> illegal("É preciso descartar uma Energia de Luta Básica da mão.")
+                    ability.discardEnergyType != null && p.hand.none { def(it).category == Category.ENERGY && def(it).basicEnergy && def(it).type == ability.discardEnergyType } -> illegal("É preciso descartar uma Energia Básica do tipo necessário da mão.")
                     ability.discardAttachedBasicEnergyType != null && pokemon.energies.none { def(it).category == Category.ENERGY && def(it).basicEnergy && def(it).type == ability.discardAttachedBasicEnergyType } -> illegal("É preciso descartar uma Energia Básica de Raio ligada a este Pokémon.")
                     ability.attachHandEnergyType != null && p.hand.none { def(it).category == Category.ENERGY && def(it).basicEnergy && def(it).type == ability.attachHandEnergyType } -> illegal("Não há Energia Básica do tipo necessário na mão.")
                     ability.attachHandEnergyTypesMax > 0 && p.hand.none { def(it).category == Category.ENERGY && def(it).basicEnergy && def(it).type in ability.attachHandEnergyTypes } -> illegal("Não há Energia Básica de Fogo ou Luta na mão.")

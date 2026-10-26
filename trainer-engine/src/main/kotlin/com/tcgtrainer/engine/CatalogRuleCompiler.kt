@@ -69,6 +69,9 @@ internal object CatalogRuleCompiler {
         if (text == "Once during your turn, if this Pokémon is in the Active Spot, you may discard a Basic {W} Energy card from your hand in order to use this Ability. Place 6 damage counters on 1 of your opponent's Pokémon.")
             return AbilityDefinition("$id-ability$index", name, text, requiresActive = true, usageKey = name,
                 discardEnergyType = EnergyType.WATER, damageCounters = 6, damageTargets = 1)
+        if (text == "Once during your turn, if you have Solrock in play, you may discard a Basic {F} Energy card from your hand in order to use this Ability. Draw 3 cards. You can't use more than 1 Lunar Cycle Ability each turn.")
+            return AbilityDefinition("$id-ability$index", name, text, requiresInPlayName = "Solrock", usageKey = "Lunar Cycle",
+                discardEnergyType = EnergyType.FIGHTING, draw = 3)
         if (text == "During Pokémon Checkup, put 1 damage counter on each Pokémon that has an Ability (both yours and your opponent's), except any Froslass.")
             return AbilityDefinition("$id-ability$index", name, text, checkupDamageCountersPerPokemonWithAbilityExceptFroslass = 1)
         if (text == "If this Pokémon has no Energy attached, it has no Retreat Cost.")
