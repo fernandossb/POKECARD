@@ -249,7 +249,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 val target = pokemon(state, action.pokemonId) ?: return reason("Pokémon fora de jogo.")
                 val evolution = hand(action.cardId)?.let(::definition) ?: return reason("Carta fora da mão.")
                 val canEvolveImmediately = target.id == state.players[state.currentPlayer].active?.id && effectiveAbilities(state, state.currentPlayer, target).any { it.mayEvolveFirstTurnIfActive }
-                val forestOfVitalityAllowsSameTurn = state.turn > 2 && target.type == EnergyType.GRASS && evolution.type == EnergyType.GRASS &&
+                val forestOfVitalityAllowsSameTurn = state.turn > 2 && definition(target.top).type == EnergyType.GRASS && evolution.type == EnergyType.GRASS &&
                     state.stadium?.let(::definition)?.trainerEffect == TrainerEffect.ForestOfVitality
                 when {
                     state.turn <= p.evolutionLockedUntilTurn -> reason("O adversário impediu evoluções neste turno.")
@@ -265,7 +265,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 val active = p.active ?: return reason("Não há Pokémon Ativo.")
                 val attack = attackFor(state, active, action.attackId) ?: return reason("Ataque inexistente.")
                 val printedAttack = definition(active.top).attacks.first { it.id == action.attackId }
-                val activeAbilities = effectiveAbilities(state, actor, active)
+                val activeAbilities = effectiveAbilities(state, state.currentPlayer, active)
                 val rocketRequirement = activeAbilities.maxOfOrNull { it.requiresTeamRocketPokemonCount } ?: 0
                 val rocketCount = p.pokemon().count { definition(it.top).name.startsWith("Team Rocket's ") }
                 when {
@@ -283,8 +283,8 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     attack.effects.any { it is Effect.DiscardEnergyThenBenchDamage } && state.players[1-state.currentPlayer].bench.none { it.id == action.targetId } -> reason("Escolha um Pokémon do Banco adversário como alvo.")
                     attack.effects.filterIsInstance<Effect.TargetedDamage>().any { it.benchedOnly } && state.players[1-state.currentPlayer].bench.none { it.id == action.targetId } -> reason("Escolha um Pokémon do Banco adversário como alvo.")
                     attack.effects.any { it is Effect.TargetedDamage } && state.players[1-state.currentPlayer].pokemon().none { it.id == action.targetId } -> reason("Escolha um Pokémon adversário como alvo.")
-                    action.targetId?.let { id -> state.players[1-actor].bench.firstOrNull { it.id == id } }
-                        ?.let { attackTargetEffectsPrevented(state, 1-actor, it) } == true -> reason("Este Pokémon no Banco está protegido contra ataques.")
+                    action.targetId?.let { id -> state.players[1-state.currentPlayer].bench.firstOrNull { it.id == id } }
+                        ?.let { attackTargetEffectsPrevented(state, 1-state.currentPlayer, it) } == true -> reason("Este Pokémon no Banco está protegido contra ataques.")
                     state.pendingOptionalEnergyAttackId == action.attackId -> Legality.Legal
                     else -> energyCost(active, attackCost(state, active, attack))
                 }
@@ -491,7 +491,6 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             opponentPrizeCardsRemaining = opponent.prizes.size,
             ownPrizeCardsRemaining = state.players[state.currentPlayer].prizes.size,
             allPokemonToolCount = state.players.flatMap { it.pokemon() }.sumOf { it.tools.size },
-            attackerPokemon = state.players[state.currentPlayer].pokemon(),
             targetIsOpponentBench = state.players[1-state.currentPlayer].bench.any { it.id == defender.id },
             ownBenchWithEnergyCounts = EnergyType.entries.associateWith { type ->
                 state.players[state.currentPlayer].bench.count { pokemon -> pokemon.energies.any { definition(it).type == type } }
@@ -1133,6 +1132,8 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 val defender = primaryTargetId?.let { id -> next.players[opponent].pokemon().first { it.id == id } } ?: next.players[opponent].active!!
                 val defenderAbilities = effectiveAbilities(next, opponent, defender)
                 val defenderEffectsPrevented = attackTargetEffectsPrevented(next, opponent, defender)
+                val teraAttackImmune = definition(next.players[actor].active!!.top).isTera &&
+                    defenderAbilities.any { it.preventDamageAndEffectsFromTeraAttacks }
                 if (attack.effects.any { it is Effect.OpponentHandEnergyCountDamage || it is Effect.OpponentHandTrainerCountDamage } || Effect.RevealOpponentHand in attack.effects || Effect.RevealAndChooseOpponentHandDiscard in attack.effects) {
                     val revealed = next.players[opponent].hand.joinToString(", ") { definition(it).name }
                     emit("OpponentHandRevealed", "Mão adversária revelada: ${revealed.ifEmpty { "vazia" }}.")
@@ -1688,7 +1689,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     if (lightning.size >= effect.count && target != null && !attackTargetEffectsPrevented(next, opponent, target)) {
                         choices += ChoiceRequest(ChoiceKind.ATTACK_OPTIONAL_PARALYSIS_DISCARD,
                             "Opcional: descarte ${effect.count} Energias {L} deste Pokémon para Paralisar o Ativo adversário.",
-                            lightning.map { it.id }, 0, effect.count, sourcePokemonId = attacker.id)
+                            lightning.map { it.id }, 0, effect.count, sourcePokemonId = attacker?.id)
                     }
                 }
                 if (coinDamageEachPokemon != null && coinDamageTargets.isNotEmpty()) {
@@ -1784,7 +1785,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         amount = if (effect.distribute) 10 else effect.count * 10)
                 }
                 if (Effect.GrassDiscardEnergyTargetCounters in attack.effects) {
-                    val grass = next.players[actor].discard.filter { card -> definition(card).energyType == EnergyType.GRASS && definition(card).basicEnergy }
+                    val grass = next.players[actor].discard.filter { card -> definition(card).type == EnergyType.GRASS && definition(card).basicEnergy }
                     val targets = next.players[opponent].pokemon().filter { !attackTargetEffectsPrevented(next, opponent, it) }
                     if (grass.isNotEmpty() && targets.isNotEmpty()) choices += ChoiceRequest(
                         ChoiceKind.ATTACK_DAMAGE_COUNTER_TARGET, "Escolha um Pokémon adversário para receber 2 contadores por Energia Planta descartada.",
