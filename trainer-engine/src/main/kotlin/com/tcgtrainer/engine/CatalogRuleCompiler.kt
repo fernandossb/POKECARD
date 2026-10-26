@@ -32,6 +32,9 @@ internal object CatalogRuleCompiler {
         if (text == "Once during your turn, you may attach a Basic {R} Energy card, a Basic {F} Energy card, or 1 of each from your hand to your Pokémon in any way you like.")
             return AbilityDefinition("$id-ability$index", name, text, usageKey = name, usagePerPokemon = true,
                 attachHandEnergyTypes = listOf(EnergyType.FIRE, EnergyType.FIGHTING), attachHandEnergyTypesMax = 2)
+        if (text == "Once during your turn, you may use this Ability. Search your deck for a Basic {D} Energy card and attach it to 1 of your Benched {D} Pokémon. Then, shuffle your deck. If you attached Energy to a Pokémon in this way, place 2 damage counters on that Pokémon.")
+            return AbilityDefinition("$id-ability$index", name, text, usageKey = name,
+                attachBasicEnergyFromDeckToBenchedType = EnergyType.DARKNESS, damageCountersToEnergyTarget = 2)
         if (text == "As often as you like during your turn, if you have any {R} Mega Evolution Pokémon ex in play, you may use this Ability. Attach a Basic {R} Energy card from your hand to 1 of your Benched {R} Pokémon.")
             return AbilityDefinition("$id-ability$index", name, text, attachHandEnergyType = EnergyType.FIRE,
                 unlimitedUse = true, attachHandEnergyToPokemonType = EnergyType.FIRE,
