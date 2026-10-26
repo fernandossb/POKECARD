@@ -23,6 +23,13 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         }
     private fun attackFor(state: GameState, active: PokemonInstance, attackId: String): AttackDefinition? {
         val printed = definition(active.top).attacks.find { it.id == attackId } ?: return null
+        val optionalEnergyBonus = printed.effects.filterIsInstance<Effect.OptionalReturnWaterEnergyDamageBonus>().firstOrNull()
+        if (optionalEnergyBonus != null) {
+            val effects = printed.effects.filterNot { it is Effect.OptionalReturnWaterEnergyDamageBonus } +
+                if (state.pendingOptionalEnergyAttackId == attackId && state.pendingOptionalEnergyBonus > 0)
+                    listOf(Effect.Damage(optionalEnergyBonus.bonus)) else emptyList()
+            return printed.copy(effects = effects)
+        }
         if (state.pendingCopiedAttackId == attackId && state.pendingCopiedAttack != null)
             return printed.copy(effects = state.pendingCopiedAttack.effects, text = state.pendingCopiedAttack.text)
         if (Effect.CopyBenchedNsAttack in printed.effects) {
@@ -128,6 +135,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     attack.effects.any { it is Effect.DiscardEnergyThenBenchDamage } && state.players[1-state.currentPlayer].bench.none { it.id == action.targetId } -> reason("Escolha um Pokémon do Banco adversário como alvo.")
                     attack.effects.filterIsInstance<Effect.TargetedDamage>().any { it.benchedOnly } && state.players[1-state.currentPlayer].bench.none { it.id == action.targetId } -> reason("Escolha um Pokémon do Banco adversário como alvo.")
                     attack.effects.any { it is Effect.TargetedDamage } && state.players[1-state.currentPlayer].pokemon().none { it.id == action.targetId } -> reason("Escolha um Pokémon adversário como alvo.")
+                    state.pendingOptionalEnergyAttackId == action.attackId -> Legality.Legal
                     else -> energyCost(active, attackCost(state, active, attack))
                 }
             }
@@ -302,6 +310,18 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         if (action is GameAction.Attack) {
             val active = state.players[actor].active!!
             val printed = definition(active.top).attacks.first { it.id == action.attackId }
+            val optionalWaterEnergy = printed.effects.filterIsInstance<Effect.OptionalReturnWaterEnergyDamageBonus>().firstOrNull()
+            if (optionalWaterEnergy != null && state.pendingOptionalEnergyAttackId != action.attackId) {
+                val energies = active.energies.filter { definition(it).category == Category.ENERGY && definition(it).type == EnergyType.WATER }
+                if (energies.isNotEmpty()) {
+                    val request = ChoiceRequest(ChoiceKind.OPTIONAL_ATTACK_ENERGY_BONUS,
+                        "Ninja Spinner: você pode devolver 1 Energia {W} do atacante à mão para causar ${optionalWaterEnergy.bonus} a mais.",
+                        energies.map { it.id }, 0, 1)
+                    return Transition(state.copy(phase = Phase.RESOLVE_CHOICE, resolution = Resolution(listOf(request)),
+                        afterResolution = ResolutionEnd.MAIN), Legality.Legal,
+                        listOf(GameEvent("OptionalAttackCostChoice", "Escolha se devolve uma Energia {W} antes do dano.")))
+                }
+            }
             if (Effect.CopyBenchedNsAttack in printed.effects && state.pendingCopiedAttackId != action.attackId) {
                 val options = copiedAttackOptions(state, actor)
                 val candidates = options.map { it.first }
@@ -315,6 +335,32 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     afterResolution = ResolutionEnd.MAIN,
                     history = state.history + ActionRecord(actor, state.turn, action, listOf(event))), Legality.Legal, listOf(event))
             }
+        }
+        if (action is GameAction.ChooseCards && state.resolution?.choices?.firstOrNull()?.kind == ChoiceKind.OPTIONAL_ATTACK_ENERGY_BONUS) {
+            val active = state.players[actor].active
+                ?: return Transition(state, Legality.Illegal("O atacante não está mais no Campo."))
+            val attackId = definition(active.top).attacks.firstOrNull { it.effects.any { effect -> effect is Effect.OptionalReturnWaterEnergyDamageBonus } }?.id
+                ?: return Transition(state, Legality.Illegal("Ninja Spinner não está mais disponível."))
+            val bonus = definition(active.top).attacks.first { it.id == attackId }.effects
+                .filterIsInstance<Effect.OptionalReturnWaterEnergyDamageBonus>().single().bonus
+            val selected = action.cardIds.singleOrNull()?.let { id -> active.energies.firstOrNull { it.id == id } }
+            if (action.cardIds.isNotEmpty() && (selected == null || definition(selected).type != EnergyType.WATER || definition(selected).category != Category.ENERGY))
+                return Transition(state, Legality.Illegal("Escolha uma Energia {W} ligada ao atacante, ou nenhuma."))
+            var prepared = state.copy(phase = Phase.MAIN, resolution = null,
+                pendingOptionalEnergyAttackId = attackId,
+                pendingOptionalEnergyBonus = if (selected != null) bonus else 0)
+            val choiceEvents = mutableListOf<GameEvent>()
+            if (selected != null) {
+                prepared = prepared.copy(players = prepared.players.mapIndexed { index, player ->
+                    if (index != actor) player else player.copy(
+                        active = player.active?.copy(energies = player.active!!.energies - selected),
+                        hand = player.hand + selected)
+                })
+                choiceEvents += GameEvent("OptionalWaterEnergyReturned", "Devolveu uma Energia {W} à mão; Ninja Spinner causa $bonus de dano adicional.", bonus)
+            } else choiceEvents += GameEvent("OptionalWaterEnergyKept", "Manteve as Energias ligadas; Ninja Spinner causa o dano base.")
+            prepared = prepared.copy(history = prepared.history + ActionRecord(actor, state.turn, action, choiceEvents))
+            val resolved = apply(prepared, GameAction.Attack(attackId))
+            return Transition(resolved.state, resolved.legality, choiceEvents + resolved.events)
         }
         if (action is GameAction.ChooseCards && state.resolution?.choices?.firstOrNull()?.kind == ChoiceKind.ATTACK_COPY_BENCHED_N) {
             val key = action.cardIds.single()
@@ -927,6 +973,8 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         emit("PokemonReturnedToHand", "Devolveu ${definition(returning.top).name} e todas as cartas ligadas à mão.", cards.size)
                     }
                 }
+                if (next.pendingOptionalEnergyAttackId == action.attackId)
+                    next = next.copy(pendingOptionalEnergyAttackId = null, pendingOptionalEnergyBonus = 0)
                 val choices = mutableListOf<ChoiceRequest>()
                 if (Effect.ChooseOpponentAttackToRestrict in attack.effects && !defenderEffectsPrevented) {
                     val opponentAttacks = next.players[opponent].active?.let { definition(it.top).attacks }.orEmpty()
