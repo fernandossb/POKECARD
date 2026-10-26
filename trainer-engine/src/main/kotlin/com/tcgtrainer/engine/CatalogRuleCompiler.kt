@@ -428,6 +428,7 @@ internal object CatalogRuleCompiler {
         val ownDiscardAbilityBonus = Regex("If you have (\\d+) or more Pokémon that have the (.+) Ability in your discard pile, this attack does (\\d+) more damage\\.").matchEntire(text)
         val ownInPlayEnergyDamage = Regex("This attack does (\\d+) damage for each Energy attached to all Pokémon\\.").matchEntire(text)
         val ownSpecialEnergyDamage = Regex("This attack does (\\d+) damage for each Special Energy card attached to this Pokémon\\.").matchEntire(text)
+        val ownTypedEnergyDamage = Regex("This attack does (\\d+) damage for each \\{([GRFLWPMD])\\} Energy attached to this Pokémon\\.").matchEntire(text)
         val ownEnergyDamage = Regex("This attack does (\\d+) damage for each Energy attached to this Pokémon\\.").matchEntire(text)
         val opponentPrizeTakenDamage = Regex("This attack does (\\d+) more damage for each Prize card your opponent has taken\\.").matchEntire(text)
         val opponentPrizeTakenDamageWithDiscard = Regex("This attack does (\\d+) more damage for each Prize card your opponent has taken\\. Discard an Energy from this Pokémon\\.").matchEntire(text)
@@ -630,14 +631,15 @@ internal object CatalogRuleCompiler {
             val base = damageText.removeSuffix("+").toIntOrNull() ?: return null
             if (base > 0) effects += Effect.Damage(base)
             effects += Effect.OwnDamageCounterDamage(ownDamageCounterBonus.groupValues[1].toInt())
-        } else if (ownInPlayEnergyDamage != null || ownSpecialEnergyDamage != null || ownEnergyDamage != null || ownTeamEnergyTypeDamage != null) {
-            val formula = ownInPlayEnergyDamage ?: ownSpecialEnergyDamage ?: ownEnergyDamage ?: ownTeamEnergyTypeDamage!!
+        } else if (ownInPlayEnergyDamage != null || ownSpecialEnergyDamage != null || ownEnergyDamage != null || ownTypedEnergyDamage != null || ownTeamEnergyTypeDamage != null) {
+            val formula = ownInPlayEnergyDamage ?: ownSpecialEnergyDamage ?: ownEnergyDamage ?: ownTypedEnergyDamage ?: ownTeamEnergyTypeDamage!!
             val perEnergy = formula.groupValues[1].toInt()
             if (damageText != "${perEnergy}×" && damageText != "${perEnergy}x") return null
             when {
                 ownInPlayEnergyDamage != null -> effects += Effect.OwnInPlayEnergyDamage(perEnergy)
                 ownSpecialEnergyDamage != null -> effects += Effect.OwnSpecialEnergyDamage(perEnergy)
                 ownTeamEnergyTypeDamage != null -> effects += Effect.OwnEnergyTypeCountDamage(symbolType(ownTeamEnergyTypeDamage.groupValues[2]) ?: return null, perEnergy, allPokemon = true)
+                ownTypedEnergyDamage != null -> effects += Effect.OwnEnergyTypeCountDamage(symbolType(ownTypedEnergyDamage.groupValues[2]) ?: return null, perEnergy)
                 else -> effects += Effect.OwnEnergyCountDamage(perEnergy)
             }
         } else if (ownTeamEnergyTypeBonus != null) {
