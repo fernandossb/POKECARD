@@ -116,6 +116,8 @@ internal object CatalogRuleCompiler {
             return AbilityDefinition("$id-ability$index", name, text, tundraWallWaterDamageReduction = 50)
         if (text == "As long as this Pokémon is on your Bench, prevent all damage done to each of your Pokémon by attacks from your opponent's Pokémon that have 2 or less Energy attached.")
             return AbilityDefinition("$id-ability$index", name, text, benchDamageImmunityForAttackerMaxEnergy = 2)
+        if (text == "As long as this Pokémon is in the Active Spot, Pokémon with a Rule Box in play (both yours and your opponent's) have no Abilities, except for Future Pokémon. (Pokémon ex, Pokémon V, etc. have Rule Boxes.)")
+            return AbilityDefinition("$id-ability$index", name, text, suppressRuleBoxAbilitiesExceptFuture = true)
         if (text == "As often as you like during your turn, you may use this Ability. Move an Energy from 1 of your other Pokémon to this Pokémon.")
             return AbilityDefinition("$id-ability$index", name, text, moveEnergyFromOtherPokemonToSelf = true, unlimitedUse = true)
         val teraAttack = Regex("If you have any Tera Pokémon in play, this Pokémon can use the (.+) attack for \\{([GRFLWPMD])\\}\\.").matchEntire(text)

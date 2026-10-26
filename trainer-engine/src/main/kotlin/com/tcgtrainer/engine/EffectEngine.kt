@@ -1,7 +1,8 @@
 package com.tcgtrainer.engine
 
 class EffectEngine(private val catalog: CardCatalog) {
-    fun effectiveHp(pokemon: PokemonInstance, state: GameState? = null, opponentPrizeCardsRemaining: Int = 6): Int {
+    fun effectiveHp(pokemon: PokemonInstance, state: GameState? = null, opponentPrizeCardsRemaining: Int = 6,
+        abilityOverride: List<AbilityDefinition>? = null): Int {
         val def = catalog.get(pokemon.top.definitionId)
         val stadiumEffect = state?.stadium?.let { catalog.get(it.definitionId).trainerEffect } as? TrainerEffect.HpModifier
         val owner = state?.players?.indexOfFirst { player -> player.pokemon().any { it.id == pokemon.id } } ?: -1
@@ -9,7 +10,7 @@ class EffectEngine(private val catalog: CardCatalog) {
         val suppressor = if (owner >= 0 && state!!.players[owner].active?.id == pokemon.id) {
             state.players[1-owner].active?.let { catalog.get(it.top.definitionId).abilities.firstOrNull { ability -> ability.opponentActiveAbilityException != null } }
         } else null
-        val abilities = if (suppressor == null) def.abilities else def.abilities.filter { it.name == suppressor.opponentActiveAbilityException }
+        val abilities = abilityOverride ?: if (suppressor == null) def.abilities else def.abilities.filter { it.name == suppressor.opponentActiveAbilityException }
         val prizeBonus = abilities.sumOf { it.hpBonusPerOpponentPrizeTaken } * (6-prizesRemaining).coerceAtLeast(0)
         val energyBonus = abilities.sumOf { ability -> ability.hpBonusPerAttachedEnergy * pokemon.energies.count {
             ability.hpBonusPerAttachedEnergyType != null && catalog.get(it.definitionId).type == ability.hpBonusPerAttachedEnergyType
@@ -42,7 +43,8 @@ class EffectEngine(private val catalog: CardCatalog) {
         ownBenchPokemonTypeDetails: List<Pair<EnergyType, Int>> = emptyList(),
         sourceAbilityOverride: List<AbilityDefinition>? = null, targetAbilityOverride: List<AbilityDefinition>? = null,
         allPokemonToolCount: Int = 0, attackerPokemon: List<PokemonInstance> = listOf(attacker),
-        targetIsOpponentBench: Boolean = false): Int {
+        targetIsOpponentBench: Boolean = false,
+        abilityOverrides: Map<String, List<AbilityDefinition>> = emptyMap()): Int {
         if (defender.attackImmunityTurn >= 0 && turn == defender.attackImmunityTurn) return 0
         val source = catalog.get(attacker.top.definitionId)
         val target = catalog.get(defender.top.definitionId)
@@ -52,7 +54,7 @@ class EffectEngine(private val catalog: CardCatalog) {
         fun abilitiesOf(pokemon: PokemonInstance): List<AbilityDefinition> = when (pokemon.id) {
             attacker.id -> sourceAbilities
             defender.id -> targetAbilities
-            else -> catalog.get(pokemon.top.definitionId).abilities
+            else -> abilityOverrides[pokemon.id] ?: catalog.get(pokemon.top.definitionId).abilities
         }
         if (Effect.RequiresOpponentBurned in effects && (!targetIsOpponentActive || SpecialCondition.BURNED !in defender.conditions)) return 0
         if (targetAbilities.any { it.preventDamageFromPokemonWithAbilities } && sourceAbilities.isNotEmpty()) return 0
@@ -62,7 +64,7 @@ class EffectEngine(private val catalog: CardCatalog) {
         if (targetAbilities.any { it.preventDamageFromOpponentEx } && source.name.endsWith(" ex")) return 0
         if (targetAbilities.any { it.preventDamageFromBasicPokemonEx } && source.stage == Stage.BASIC && source.name.endsWith(" ex")) return 0
         if (friendlyBenchPokemon.any { benchPokemon ->
-                catalog.get(benchPokemon.top.definitionId).abilities.any { ability ->
+                abilitiesOf(benchPokemon).any { ability ->
                     ability.benchDamageImmunityForAttackerMaxEnergy > 0 && attacker.energies.size <= ability.benchDamageImmunityForAttackerMaxEnergy
                 }
             }) return 0

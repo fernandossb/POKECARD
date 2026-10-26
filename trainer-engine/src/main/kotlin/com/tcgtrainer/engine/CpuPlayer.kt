@@ -5,7 +5,7 @@ data class CpuInput(
     val observation: PlayerObservation, val phase: Phase, val turn: Int, val flags: TurnFlags,
     val choice: ChoiceRequest?, val selectableCards: List<CardInstance>,
     val actions: List<GameAction>, val previews: Map<GameAction.Attack, AttackPreview>,
-    val stadium: CardInstance?
+    val stadium: CardInstance?, val effectiveAbilities: Map<String, List<AbilityDefinition>> = emptyMap()
 )
 
 /** Controller adapter: reveals search results only while the rules permit that search. */
@@ -25,7 +25,8 @@ fun RulesEngine.cpuInput(state: GameState): CpuInput {
         visibleCards = if (preserveOrder) choice.visibleCards else choice.visibleCards.sorted())
     val actions = if (safeChoice != null && state.phase == Phase.RESOLVE_CHOICE) emptyList() else legalActions(state)
     return CpuInput(PlayerObservation.from(state, actor), state.phase, state.turn, own.flags, safeChoice,
-        selectable, actions, actions.filterIsInstance<GameAction.Attack>().associateWith { checkNotNull(preview(state, it.attackId, it.targetId)) }, state.stadium)
+        selectable, actions, actions.filterIsInstance<GameAction.Attack>().associateWith { checkNotNull(preview(state, it.attackId, it.targetId)) }, state.stadium,
+        state.players.flatMap { it.pokemon() }.associate { pokemon -> pokemon.id to effectiveAbilities(state, state.players.indexOfFirst { player -> player.pokemon().any { it.id == pokemon.id } }, pokemon) })
 }
 
 /** Deterministic, public-information heuristic CPU. No fabricated hidden draws or random tie breaks. */
@@ -41,20 +42,21 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
         input.previews.entries.firstOrNull { it.value.knockout && it.value.prizes >= o.ownPrizeCount && !it.value.uncertain }?.let { return it.key }
         fun card(id: String) = (o.ownHand + input.selectableCards + o.ownDiscard + own.flatMap { it.energies }).firstOrNull { it.id == id }
         fun pokemon(id: String) = (own + o.opponentField).first { it.id == id }
+        fun abilities(p: PokemonInstance) = input.effectiveAbilities[p.id] ?: d(p.top).abilities
         fun hp(p: PokemonInstance): Int {
             val modifier = input.stadium?.let { d(it).trainerEffect as? TrainerEffect.HpModifier }
-            val conditionalEnergyBonus = d(p.top).abilities.sumOf { ability ->
+            val conditionalEnergyBonus = abilities(p).sumOf { ability ->
                 val requiredType = ability.hpAndAttackBonusWithAttachedEnergyType
                 if (requiredType != null && p.energies.any { d(it).type == requiredType }) ability.hpAndAttackBonusWithAttachedEnergy else 0
             }
-            return effects.effectiveHp(p, opponentPrizeCardsRemaining = o.opponentPrizeCount) + conditionalEnergyBonus + if (modifier?.stage == d(p.top).stage) modifier.amount else 0
+            return effects.effectiveHp(p, opponentPrizeCardsRemaining = o.opponentPrizeCount, abilityOverride = abilities(p)) + conditionalEnergyBonus + if (modifier?.stage == d(p.top).stage) modifier.amount else 0
         }
         fun missing(p: PokemonInstance, a: AttackDefinition): Int {
             val energy = p.energies.map { d(it).type }.toMutableList()
-            val teraAlternative = d(p.top).abilities.firstOrNull { ability ->
+            val teraAlternative = abilities(p).firstOrNull { ability ->
                 ability.alternativeAttackName == a.name && ability.requiresTeraInPlay && own.any { d(it.top).isTera }
             }
-            var discount = if (d(p.top).abilities.any { it.attackDiscountPerOpponentPrize }) 6-o.opponentPrizeCount else 0
+            var discount = if (abilities(p).any { it.attackDiscountPerOpponentPrize }) 6-o.opponentPrizeCount else 0
             val printedCost = teraAlternative?.alternativeAttackCost ?: a.cost
             val cost = printedCost.filter { if (it == EnergyType.COLORLESS && discount > 0) { discount--; false } else true }
             var missing = 0
@@ -69,18 +71,18 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 if (input.flags.supporter) a.effects.filterIsInstance<Effect.SupporterBonus>().sumOf { it.damage } else 0
             val targetIsActive = target.id == o.opponentActiveId
             val retreatTax = if (targetIsActive) own.sumOf { pokemon ->
-                val abilities = d(pokemon.top).abilities
-                abilities.sumOf { it.opponentActiveRetreatCostBonus } +
-                    if (d(target.top).stage != Stage.BASIC) abilities.sumOf { it.opponentActiveEvolutionRetreatCostBonus } else 0
+                val sourceAbilities = abilities(pokemon)
+                sourceAbilities.sumOf { it.opponentActiveRetreatCostBonus } +
+                    if (d(target.top).stage != Stage.BASIC) sourceAbilities.sumOf { it.opponentActiveEvolutionRetreatCostBonus } else 0
             } else 0
             val targetToolReduction = (target.tool?.let(::d)?.trainerEffect as? TrainerEffect.RetreatReduction)?.amount ?: 0
             val latiasFreeRetreat = d(target.top).stage == Stage.BASIC && own.any { pokemon ->
-                d(pokemon.top).abilities.any { it.basicPokemonHaveFreeRetreat }
+                abilities(pokemon).any { it.basicPokemonHaveFreeRetreat }
             }
             val targetRetreatCost = (if (latiasFreeRetreat) 0 else d(target.top).retreatCost + retreatTax - targetToolReduction).coerceAtLeast(0)
-            val nWeaknessChanged = own.any { pokemon -> d(pokemon.top).abilities.any { it.changeOpponentNsPokemonWeaknessToPsychic } } && d(target.top).name.startsWith("N's ")
+            val nWeaknessChanged = own.any { pokemon -> abilities(pokemon).any { it.changeOpponentNsPokemonWeaknessToPsychic } } && d(target.top).name.startsWith("N's ")
             val effectiveTarget = if (nWeaknessChanged) target.copy(weaknessOverride = EnergyType.PSYCHIC) else target
-            val sourceAbilities = d(p.top).abilities.filter { ability ->
+            val sourceAbilities = abilities(p).filter { ability ->
                 val requiredType = ability.hpAndAttackBonusWithAttachedEnergyType
                 requiredType == null || p.energies.any { d(it).type == requiredType }
             }
@@ -109,7 +111,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 opponentActiveRetreatCost = if (targetIsActive) targetRetreatCost else 0,
                 ownBenchWithEnergyCounts = EnergyType.entries.associateWith { type ->
                     own.filter { it.id != p.id }.count { pokemon -> pokemon.energies.any { d(it).type == type } }
-                }, sourceAbilityOverride = sourceAbilities)
+                }, sourceAbilityOverride = sourceAbilities, abilityOverrides = input.effectiveAbilities)
             val discardEffect = a.effects.filterIsInstance<Effect.DiscardBenchEnergyDamage>().firstOrNull()
             val discarded = minOf(discardEffect?.max ?: 0, own.filter { it.id != o.ownActiveId }.sumOf { it.energies.size })
             val multiplier = if (target.id == enemy?.id && !(target.weaknessSuppressedTurn >= 0 && target.weaknessSuppressedTurn == input.turn) && Effect.IgnoreWeaknessResistance !in a.effects && (effectiveTarget.weaknessOverride ?: d(target.top).weakness) == d(p.top).type) 2 else 1
@@ -140,7 +142,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                     def.stage != Stage.BASIC -> 12.0
                     own.none { it.top.definitionId == def.id } && own.any { pokemon ->
                         d(pokemon.top).attacks.any { attack -> attack.effects.any { it is Effect.RequiresBenched && it.definitionId == def.id } } ||
-                            d(pokemon.top).abilities.any { it.requiresInPlay == def.id }
+                            abilities(pokemon).any { it.requiresInPlay == def.id }
                     } -> 120.0
                     o.ownHand.any { d(it).canEvolveFrom(def) } -> 90.0
                     own.size < 3 -> 80.0
@@ -361,7 +363,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
             }
             is GameAction.UseAbility -> {
                 val source = pokemon(a.pokemonId)
-                val ability = d(source.top).abilities.firstOrNull { it.id == a.abilityId }
+                val ability = abilities(source).firstOrNull { it.id == a.abilityId }
                 if ((ability?.recoverBasicPokemonToBenchMaxHp ?: 0) > 0) {
                     if (own.size >= 6) -5.0 else {
                         val best = o.ownDiscard.filter { d(it).category == Category.POKEMON && d(it).stage == Stage.BASIC && d(it).hp <= checkNotNull(ability).recoverBasicPokemonToBenchMaxHp }

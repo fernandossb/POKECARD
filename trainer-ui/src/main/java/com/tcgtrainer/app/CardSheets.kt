@@ -46,7 +46,7 @@ import com.tcgtrainer.engine.*
             Text(d.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Text("${d.set} ${d.number} · ${d.variant}", color = Aqua, fontSize = 11.sp)
             if (pokemon != null) {
-                val hp = engine.effects.effectiveHp(pokemon, state)
+                val hp = engine.effectiveHp(state, pokemon)
                 Text("${(hp-pokemon.damage).coerceAtLeast(0)} / $hp HP  ·  Dano: ${pokemon.damage}", fontWeight = FontWeight.Bold)
                 Text("Energias: ${pokemon.energies.groupingBy { engine.definition(it).type }.eachCount().entries.joinToString { "${energyLabel(it.key)} ×${it.value}" }.ifEmpty { "nenhuma" }}", fontSize = 12.sp)
                 Text("Ferramenta: ${pokemon.tool?.let { engine.definition(it).name } ?: "nenhuma"} · Condição: nenhuma", fontSize = 12.sp)
@@ -66,7 +66,10 @@ import com.tcgtrainer.engine.*
                 HorizontalDivider()
                 Text("HABILIDADE · ${ability.name}", color = Aqua, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 Text(ability.text, fontSize = 12.sp)
-                if (humanTurn && ownPokemon != null && !ability.attackDiscountPerOpponentPrize && !ability.onEvolveSwitch) {
+                val pokemonOwner = state.players.indexOfFirst { player -> player.pokemon().any { it.id == pokemon?.id } }
+                val abilitySuppressed = pokemon != null && engine.effectiveAbilities(state, pokemonOwner, pokemon).none { it.id == ability.id }
+                if (abilitySuppressed) Text("Habilidade suprimida enquanto estiver em jogo.", color = Coral, fontSize = 11.sp)
+                if (!abilitySuppressed && humanTurn && ownPokemon != null && !ability.attackDiscountPerOpponentPrize && !ability.onEvolveSwitch) {
                     val legality = engine.validate(state, GameAction.UseAbility(ownPokemon.id, ability.id))
                     if (legality is Legality.Illegal) Text(legality.reason, color = Coral, fontSize = 11.sp)
                 }

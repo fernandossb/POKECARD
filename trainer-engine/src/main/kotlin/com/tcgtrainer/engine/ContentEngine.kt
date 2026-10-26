@@ -98,7 +98,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                 val pokemon = p.pokemon().find { it.id == action.pokemonId } ?: return illegal("Pokémon fora de jogo.")
                 val ability = def(pokemon.top).abilities.find { it.id == action.abilityId } ?: return illegal("Habilidade inexistente.")
                 when {
-                    rules.effectiveAbilities(s, rules.actingPlayer(s), pokemon).none { it.id == ability.id } -> illegal("Esta Habilidade está suprimida enquanto o Pokémon Ativo adversário tiver Midnight Fluttering.")
+                    rules.effectiveAbilities(s, rules.actingPlayer(s), pokemon).none { it.id == ability.id } -> illegal("Esta Habilidade está suprimida por uma Habilidade em jogo.")
                     ability.onEvolveSwitch -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
                     ability.onEvolveDraw > 0 -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
                     ability.onEvolveSearchTrainerIfTeraMax > 0 -> illegal("Esta habilidade só pode ser usada ao evoluir da mão com um Pokémon Tera em jogo.")
@@ -114,8 +114,9 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     ability.devolveOpponentPokemonMax > 0 && s.players[1-s.currentPlayer].pokemon().none { it.cards.size > 1 && rules.effectiveAbilities(s, 1-rules.actingPlayer(s), it).none { targetAbility -> targetAbility.preventOpponentEffects } } -> illegal("Não há Pokémon adversário evoluído e sem proteção para desvoluir.")
                     ability.attackDiscountPerOpponentPrize -> illegal("Esta habilidade é aplicada automaticamente ao custo do ataque.")
                     ability.hpBonusPerOpponentPrizeTaken > 0 || ability.hpBonusPerAttachedEnergyType != null || ability.teamDamageReduction > 0 || ability.additionalPokemonTypes.isNotEmpty() || ability.attackDamageBonusAgainstEvolutionActive > 0 || ability.futurePokemonDamageBonus > 0 || ability.teamAttackDamageBonusType != null || ability.freeRetreatWithNoEnergy || ability.attackDiscountPerKofuDiscard || ability.coinFlipPreventAttackDamage || ability.preventOpponentItemSupporterEffects || ability.preventOpponentItemAndToolPlayFromHand || ability.changeOpponentNsPokemonWeaknessToPsychic || ability.reducePrizeForDarknessKnockoutByEx || ability.mayAttackFirstTurnIfStarting || ability.suppressSelfKnockoutAbilities || ability.opponentActiveAbilityException != null -> illegal("Esta habilidade passiva se aplica automaticamente.")
+                    ability.hpBonusPerOpponentPrizeTaken > 0 || ability.hpBonusPerAttachedEnergyType != null || ability.teamDamageReduction > 0 || ability.additionalPokemonTypes.isNotEmpty() || ability.attackDamageBonusAgainstEvolutionActive > 0 || ability.futurePokemonDamageBonus > 0 || ability.teamAttackDamageBonusType != null || ability.freeRetreatWithNoEnergy || ability.attackDiscountPerKofuDiscard || ability.coinFlipPreventAttackDamage || ability.preventOpponentItemSupporterEffects || ability.preventOpponentItemAndToolPlayFromHand || ability.changeOpponentNsPokemonWeaknessToPsychic || ability.reducePrizeForDarknessKnockoutByEx || ability.mayAttackFirstTurnIfStarting || ability.suppressSelfKnockoutAbilities || ability.suppressRuleBoxAbilitiesExceptFuture || ability.opponentActiveAbilityException != null -> illegal("Esta habilidade passiva se aplica automaticamente.")
                     ability.selfKnockout && s.players.any { player -> player.pokemon().any { source ->
-                        def(source.top).abilities.any { it.suppressSelfKnockoutAbilities }
+                        rules.effectiveAbilities(s, s.players.indexOf(player), source).any { it.suppressSelfKnockoutAbilities }
                     } } -> illegal("Habilidades que nocauteiam o próprio Pokémon estão desativadas enquanto Damp estiver em jogo.")
                     ability.alternativeAttackCost.isNotEmpty() -> illegal("Esta habilidade passiva altera o custo do ataque quando a condição é atendida.")
                     ability.opponentActiveEvolutionRetreatCostBonus > 0 || ability.opponentActiveRetreatCostBonus > 0 -> illegal("Esta habilidade passiva é aplicada automaticamente ao recuo.")
@@ -182,7 +183,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
         fun begin(resolution: Resolution) { s = s.copy(resolution = resolution, phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN) }
         fun knockOutOwnPokemon(pokemonId: String) {
             val target = s.players[actor].pokemon().firstOrNull { it.id == pokemonId } ?: return
-            val hp = rules.effects.effectiveHp(target, s)
+            val hp = rules.effectiveHp(s, target)
             update { player -> player.copy(
                 active = player.active?.let { if (it.id == pokemonId) it.copy(damage = maxOf(it.damage, hp)) else it },
                 bench = player.bench.map { if (it.id == pokemonId) it.copy(damage = maxOf(it.damage, hp)) else it }
@@ -496,7 +497,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         ) }
                         events += GameEvent("AbilityDamage", "Causou ${choice.amount} de dano em ${ids.size} Pokémon adversário.", choice.amount)
                         if (choice.sourcePokemonId != null) update(actor) { player ->
-                            fun knockOut(pokemon: PokemonInstance) = pokemon.copy(damage = maxOf(pokemon.damage, rules.effects.effectiveHp(pokemon, s)))
+                            fun knockOut(pokemon: PokemonInstance) = pokemon.copy(damage = maxOf(pokemon.damage, rules.effectiveHp(s, pokemon)))
                             player.copy(active = player.active?.let { if (it.id == choice.sourcePokemonId) knockOut(it) else it },
                                 bench = player.bench.map { if (it.id == choice.sourcePokemonId) knockOut(it) else it })
                         }
@@ -879,7 +880,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                 discard = player.discard + energies
                             ) }
                             val target = s.players[1-actor].active
-                            if (target != null && target.damage < rules.effects.effectiveHp(target, s) && target.attackImmunityTurn != s.turn &&
+                            if (target != null && target.damage < rules.effectiveHp(s, target) && target.attackImmunityTurn != s.turn &&
                                 rules.effectiveAbilities(s, 1-rules.actingPlayer(s), target).none { it.preventOpponentEffects }) {
                                 update(1-actor) { player -> player.copy(active = player.active?.let { active ->
                                     if (active.id == target.id) active.copy(conditions = (active.conditions - setOf(SpecialCondition.ASLEEP, SpecialCondition.CONFUSED, SpecialCondition.PARALYZED)) + SpecialCondition.PARALYZED)
@@ -1106,7 +1107,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                             val onEvolveSwitch = evolvedAbilities.firstOrNull { it.onEvolveSwitch }
                             val switchCandidates = onEvolveSwitch?.let { ability -> s.players[1 - actor].bench.filter { pokemon ->
                                 ability.onEvolveSwitchOpponentBenchMaxRemainingHp <= 0 ||
-                                    rules.effects.effectiveHp(pokemon, s) - pokemon.damage <= ability.onEvolveSwitchOpponentBenchMaxRemainingHp
+                                    rules.effectiveHp(s, pokemon) - pokemon.damage <= ability.onEvolveSwitchOpponentBenchMaxRemainingHp
                             } }.orEmpty()
                             if (onEvolveSwitch != null && switchCandidates.isNotEmpty()) remainingChoices = listOf(ChoiceRequest(
                                 ChoiceKind.EVOLUTION_SWITCH, "${onEvolveSwitch.name}: escolha um Pokémon do Banco adversário ou pule.",
@@ -1179,7 +1180,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                             ?: return illegal("O Pokémon escolhido não está mais no Banco adversário.")
                         if (rules.attackTargetEffectsPrevented(s, 1-actor, target)) return illegal("Este Pokémon no Banco está protegido contra ataques.")
                         update(1-actor) { player -> player.copy(bench = player.bench.map { pokemon ->
-                            if (pokemon.id == targetId && def(pokemon.top).stage == Stage.BASIC) pokemon.copy(damage = maxOf(pokemon.damage, rules.effects.effectiveHp(pokemon, s))) else pokemon
+                            if (pokemon.id == targetId && def(pokemon.top).stage == Stage.BASIC) pokemon.copy(damage = maxOf(pokemon.damage, rules.effectiveHp(s, pokemon))) else pokemon
                         }) }
                         events += GameEvent("AttackEffectKnockout", "Nocauteou um Pokémon Básico do Banco adversário pelo efeito do ataque.")
                     }
@@ -1187,7 +1188,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         val owner = 1-actor
                         val target = s.players[owner].bench.first { it.id == ids.single() }
                         if (rules.attackTargetEffectsPrevented(s, owner, target)) return illegal("Este Pokémon no Banco está protegido contra ataques.")
-                        val hp = rules.effects.effectiveHp(target, s)
+                        val hp = rules.effectiveHp(s, target)
                         if (choice.amount > 0 && target.damage < hp && target.damage+choice.amount >= hp)
                             s = s.copy(pendingAttackDamageKnockoutIds = s.pendingAttackDamageKnockoutIds + target.id)
                         update(owner) { it.copy(bench = it.bench.map { pokemon ->
@@ -1199,7 +1200,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         val owner = 1-actor; val targetId = ids.single()
                         val target = s.players[owner].bench.first { it.id == targetId }
                         if (rules.attackTargetEffectsPrevented(s, owner, target)) return illegal("Este Pokémon no Banco está protegido contra ataques.")
-                        val hp = rules.effects.effectiveHp(target, s)
+                        val hp = rules.effectiveHp(s, target)
                         if (target.damage < hp && target.damage + choice.amount >= hp)
                             s = s.copy(pendingAttackDamageKnockoutIds = s.pendingAttackDamageKnockoutIds + target.id)
                         update(owner) { player -> player.copy(bench = player.bench.map { if (it.id == targetId) it.copy(damage = it.damage + choice.amount) else it }) }
@@ -1394,7 +1395,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         val bonus = discarded.size * choice.amount * choice.damageMultiplier
                         if (bonus > 0) {
                             val target = s.players[1-actor].active!!
-                            val hp = rules.effects.effectiveHp(target, s)
+                            val hp = rules.effectiveHp(s, target)
                             if (target.damage < hp && target.damage+bonus >= hp)
                                 s = s.copy(pendingAttackDamageKnockoutIds = s.pendingAttackDamageKnockoutIds + target.id)
                             update(1-actor) { opponent -> opponent.copy(active = opponent.active?.copy(damage = opponent.active!!.damage + bonus)) }

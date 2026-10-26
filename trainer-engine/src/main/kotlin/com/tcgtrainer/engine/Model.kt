@@ -281,6 +281,7 @@ import kotlinx.serialization.Serializable
     val selfKnockoutAfterUse: Boolean = false,
     val onBenchDiscardStadium: Boolean = false,
     val onBenchDiscardOpponentDeckTop: Boolean = false,
+    val suppressRuleBoxAbilitiesExceptFuture: Boolean = false,
     val onBenchSwitchAndMoveEnergy: Boolean = false,
     val changeOpponentNsPokemonWeaknessToPsychic: Boolean = false,
     val reducePrizeForDarknessKnockoutByEx: Boolean = false,
@@ -330,7 +331,10 @@ import kotlinx.serialization.Serializable
     val aceSpec: Boolean = false, val ruleBox: String = "", val implemented: Boolean = true,
     val canonicalName: String = name, val evolvesFromName: String? = null,
     val basicEnergy: Boolean = false, val isTera: Boolean = false
-)
+){
+    val hasRuleBox: Boolean get() = ruleBox.isNotBlank() || prizes > 1 || canonicalName.startsWith("Radiant ")
+    val isFuturePokemon: Boolean get() = canonicalName.startsWith("Iron ") || canonicalName.startsWith("Miraidon")
+}
 fun CardDefinition.canEvolveFrom(base: CardDefinition): Boolean = category == Category.POKEMON &&
     base.category == Category.POKEMON && stage != Stage.BASIC &&
     ((stage.ordinal == base.stage.ordinal + 1 && (if (evolvesFromName != null) evolvesFromName == base.canonicalName else evolvesFrom == base.id)) ||
