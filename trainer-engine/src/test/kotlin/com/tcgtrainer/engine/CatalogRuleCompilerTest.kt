@@ -22,6 +22,442 @@ class CatalogRuleCompilerTest {
         assertNull(CatalogRuleCompiler.compileAttack("test", 0, attack("Flip 2 coins. This attack does 20 damage for each heads.", "30×")))
         assertNotNull(CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me01-006"), emptyMap()))
     }
+    @Test fun `Festival Lead is executable and recognizes Festival Grounds attacks`() {
+        val row = CatalogRuleCompiler.rows.values.first { card ->
+            card["abilities"]?.jsonArray?.any { ability -> ability.jsonObject["effect"]?.jsonPrimitive?.contentOrNull
+                ?.startsWith("If Festival Grounds is in play,") == true } == true
+        }
+        val card = CatalogRuleCompiler.compile(row, emptyMap())!!
+        assertTrue(card.abilities.any { it.festivalGroundsMayAttackAgain })
+    }
+    @Test fun `attack damage bonus checks equal hand sizes`() {
+        val compiled = CatalogRuleCompiler.compileAttack("hand-size", 0,
+            attack("If you have the same number of cards in your hand as your opponent, this attack does 90 more damage.", "30+"))!!
+        assertTrue(Effect.SameHandSizeDamageBonus(90) in compiled.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(compiled))
+    }
+    @Test fun `attack damage bonus counts damaged Benched Pokemon only`() {
+        val compiled = CatalogRuleCompiler.compileAttack("bench-damage", 0,
+            attack("This attack does 50 more damage for each of your Benched Pokémon that has any damage counters on it.", "50+"))!!
+        assertTrue(Effect.OwnDamagedBenchedPokemonCountDamage(50) in compiled.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(compiled))
+    }
+    @Test fun `Dynamic Blaze scales against an evolved Active and discards all attacker Energy`() {
+        val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv06-040"), emptyMap())!!
+        val attack = card.attacks.first { it.name == "Dynamic Blaze" }
+        assertTrue(Effect.OpponentEvolutionActiveDamageBonus(140) in attack.effects)
+        assertTrue(attack.effects.any { it == Effect.DiscardAttackEnergy(0, all = true) })
+        assertTrue(EffectEngine(TrainerCatalog).supported(attack))
+    }
+    @Test fun `Slight Shift compiles opponent Energy transfer between their Pokemon`() {
+        val row = CatalogRuleCompiler.rows.getValue("sv10.5b-040")
+        val index = row["attacks"]!!.jsonArray.indexOfFirst { it.jsonObject["name"]?.jsonPrimitive?.content == "Slight Shift" }
+        val attack = CatalogRuleCompiler.compileAttack(row["id"]!!.jsonPrimitive.content, index, row["attacks"]!!.jsonArray[index].jsonObject)!!
+        assertTrue(Effect.MoveEnergyBetweenOpponentPokemon in attack.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(attack))
+    }
+    @Test fun `Mirage Barrage discards Energy before selecting two damage targets`() {
+        val row = CatalogRuleCompiler.rows.getValue("sv06-106")
+        val index = row["attacks"]!!.jsonArray.indexOfFirst { it.jsonObject["name"]?.jsonPrimitive?.content == "Mirage Barrage" }
+        val attack = CatalogRuleCompiler.compileAttack(row["id"]!!.jsonPrimitive.content, index, row["attacks"]!!.jsonArray[index].jsonObject)!!
+        assertTrue(attack.effects.any { it == Effect.DiscardAttackEnergy(2) })
+        assertTrue(attack.effects.any { it is Effect.MultiTargetDamage && it.amount == 120 && it.targets == 2 && it.discardBeforeDamage })
+        assertTrue(EffectEngine(TrainerCatalog).supported(attack))
+    }
+    @Test fun `Extended Damagriiigus moves all own Bench counters onto an opponent Pokemon`() {
+        val row = CatalogRuleCompiler.rows.getValue("sv10.5w-040")
+        val index = row["attacks"]!!.jsonArray.indexOfFirst { it.jsonObject["name"]?.jsonPrimitive?.content == "Extended Damagriiigus" }
+        val attack = CatalogRuleCompiler.compileAttack(row["id"]!!.jsonPrimitive.content, index, row["attacks"]!!.jsonArray[index].jsonObject)!!
+        assertTrue(Effect.MoveOwnBenchDamageCountersToOpponent in attack.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(attack))
+    }
+    @Test fun `Snow Camouflage recognizes Item and Supporter effect protection`() {
+        val row = CatalogRuleCompiler.rows.values.first { card ->
+            card["abilities"]?.jsonArray?.any { ability -> ability.jsonObject["effect"]?.jsonPrimitive?.contentOrNull ==
+                "Whenever your opponent plays an Item or Supporter card from their hand, prevent all effects of that card done to this Pokémon." } == true
+        }
+        val card = CatalogRuleCompiler.compile(row, emptyMap())!!
+        assertTrue(card.abilities.any { it.preventOpponentItemSupporterEffects })
+    }
+    @Test fun `Whirling Envy uses damage counter threshold and ignores Weakness`() {
+        val attack = CatalogRuleCompiler.compileAttack("test", 0, attack(
+            "If this Pokémon has 2 or more damage counters on it, this attack does 90 more damage. This attack's damage isn't affected by Weakness.", "30+"))!!
+        assertTrue(Effect.ConditionalOwnDamageCounterBonus(2, 90) in attack.effects)
+        assertTrue(Effect.IgnoreWeakness in attack.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(attack))
+    }
+    @Test fun `Coiling Crush compiles a shared coin pool for defender Energy discards`() {
+        val compiled = CatalogRuleCompiler.compileAttack("coiling-crush", 0,
+            attack("Flip 2 coins. For each heads, discard an Energy from your opponent's Active Pokémon.", "20"))!!
+        assertTrue(Effect.CoinDamage(2, 0) in compiled.effects)
+        assertTrue(Effect.DiscardDefendingEnergy(1, onHeads = true, perHeads = true) in compiled.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(compiled))
+    }
+    @Test fun `Lucky Attachment compiles as a mandatory single Basic Energy attachment`() {
+        val compiled = CatalogRuleCompiler.compileAttack("lucky-attachment", 0,
+            attack("Attach a Basic Energy card from your hand to 1 of your Pokémon.", "20"))!!
+        assertTrue(Effect.AttachOneBasicEnergyFromHand in compiled.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(compiled))
+    }
+    @Test fun `Homeward Chime compiles the attached bench Pokemon shuffle effect`() {
+        val compiled = CatalogRuleCompiler.compileAttack("homeward-chime", 0,
+            attack("Shuffle 1 of your Benched Pokémon and all attached cards into your deck.", "20"))!!
+        assertTrue(Effect.ShuffleOwnBenchedPokemonIntoDeck in compiled.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(compiled))
+    }
+    @Test fun `Parallel Placement compiles a named Pokemon search to the Bench`() {
+        val compiled = CatalogRuleCompiler.compileAttack("parallel-placement", 0,
+            attack("Search your deck for up to 3 Charjabug and put them onto your Bench. Then, shuffle your deck.", "20"))!!
+        assertTrue(Effect.NamedPokemonToBench("Charjabug", 3) in compiled.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(compiled))
+    }
+    @Test fun `Turbo Flare compiles to bench-only Basic Energy acceleration`() {
+        val compiled = CatalogRuleCompiler.compileAttack("turbo-flare", 0,
+            attack("Search your deck for up to 3 Basic Energy cards and attach them to your Benched Pokémon in any way you like. Then, shuffle your deck.", "20"))!!
+        assertTrue(Effect.AttachBasicEnergyFromDeckAny(3, benchedOnly = true) in compiled.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(compiled))
+    }
+    @Test fun `Flower Shower compiles the shared draw effect`() {
+        val compiled = CatalogRuleCompiler.compileAttack("flower-shower", 0,
+            attack("Each player draws 3 cards.", "20"))!!
+        assertTrue(Effect.EachPlayerDraw(3) in compiled.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(compiled))
+    }
+    @Test fun `Devolution Ray compiles the active evolution removal effect`() {
+        val compiled = CatalogRuleCompiler.compileAttack("devolution-ray", 0,
+            attack("If your opponent's Active Pokémon is an evolved Pokémon, devolve it by putting the highest Stage Evolution card on it into your opponent's hand.", "20"))!!
+        assertTrue(Effect.DevolveOpponentActive in compiled.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(compiled))
+    }
+    @Test fun `an attack can discard a Stadium in play`() {
+        val compiled = CatalogRuleCompiler.compileAttack("discard-stadium", 0, attack("Discard a Stadium in play.", "20"))!!
+        assertTrue(Effect.DiscardStadium in compiled.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(compiled))
+    }
+    @Test fun `damage formula counts Prizes taken by the opponent`() {
+        val compiled = CatalogRuleCompiler.compileAttack("opponent-prizes", 0,
+            attack("This attack does 60 damage for each Prize card your opponent has taken.", "60×"))!!
+        assertTrue(Effect.OpponentPrizeTakenDamage(60) in compiled.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(compiled))
+    }
+    @Test fun `search up to three Pokemon into hand compiles with its printed maximum`() {
+        val compiled = CatalogRuleCompiler.compileAttack("search-three-pokemon", 0,
+            attack("Search your deck for up to 3 Pokémon, reveal them, and put them into your hand. Then, shuffle your deck.", "20"))!!
+        assertTrue(Effect.SearchPokemonToHand(3) in compiled.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(compiled))
+    }
+    @Test fun `return this Pokemon and all attached cards to hand compiles`() {
+        val compiled = CatalogRuleCompiler.compileAttack("return-self", 0,
+            attack("Put this Pokémon and all attached cards into your hand.", "20"))!!
+        assertTrue(Effect.ReturnSelfAndAttachmentsToHand in compiled.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(compiled))
+    }
+    @Test fun `on evolution healing and energy discard ability compiles`() {
+        val row = CatalogRuleCompiler.rows.values.first { card ->
+            card["abilities"]?.jsonArray?.any { ability -> ability.jsonObject["effect"]?.jsonPrimitive?.contentOrNull
+                ?.contains("you may heal all damage from each of your Evolution Pokémon") == true } == true
+        }
+        val abilityIndex = row["abilities"]!!.jsonArray.indexOfFirst { ability ->
+            ability.jsonObject["effect"]?.jsonPrimitive?.contentOrNull
+                ?.contains("you may heal all damage from each of your Evolution Pokémon") == true
+        }
+        val compiled = CatalogRuleCompiler.compileAbility(row["id"]!!.jsonPrimitive.content, abilityIndex,
+            row["abilities"]!!.jsonArray[abilityIndex].jsonObject)
+        assertNotNull(compiled, "Ability text did not compile: ${row["abilities"]!!.jsonArray[abilityIndex].jsonObject["effect"]}")
+        assertTrue(compiled.onEvolveHealAllEvolutionAndDiscardEnergy)
+    }
+    @Test fun `Chien-Pao returns one attached Energy to hand after attacking`() {
+        val attack = CatalogRuleCompiler.compileAttack("chien-pao", 0,
+            attack("Put an Energy attached to this Pokémon into your hand.", "120"))!!
+        assertTrue(Effect.ReturnAttachedEnergyToHand in attack.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(attack))
+        for (id in listOf("sv08-056", "svp-152")) {
+            val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            assertTrue(card.abilities.single().onBenchDiscardStadium)
+            assertTrue(Effect.ReturnAttachedEnergyToHand in card.attacks.single { it.name == "Icicle Loop" }.effects)
+        }
+    }
+    @Test fun `Duraludon Raging Hammer scales from its own damage counters`() {
+        for (id in listOf("sv07-106", "sv08.5-069")) {
+            val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            val attack = card.attacks.single { it.name == "Raging Hammer" }
+            assertTrue(Effect.OwnDamageCounterDamage(10) in attack.effects)
+        }
+    }
+    @Test fun `Cinccino Do the Wave scales from the player's bench`() {
+        for (id in listOf("sv10.5b-076", "sv10.5b-153")) {
+            val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            val attack = card.attacks.single { it.name == "Do the Wave" }
+            assertTrue(Effect.OwnBenchCountDamage(20) in attack.effects)
+        }
+    }
+    @Test fun `Exeggutor Stomping Wood counts attached Grass Energy`() {
+        for (id in listOf("me01-005", "me01-135")) {
+            val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            val attack = card.attacks.single { it.name == "Stomping Wood" }
+            assertTrue(Effect.OwnEnergyTypeCountDamage(EnergyType.GRASS, 30) in attack.effects)
+        }
+    }
+    @Test fun `Ceruledge Cursed Edge removes opponent Special Energy`() {
+        for (id in listOf("sv08-035", "sv08-197")) {
+            val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            val attack = card.attacks.single { it.name == "Cursed Edge" }
+            assertTrue(Effect.DiscardAllOpponentSpecialEnergy in attack.effects)
+            assertTrue(EffectEngine(TrainerCatalog).supported(attack))
+        }
+    }
+    @Test fun `opponent Energy discard clauses preserve type and Special restrictions`() {
+        val fire = CatalogRuleCompiler.compileAttack("ducklett", 0, attack(
+            "Discard a {R} Energy from your opponent's Active Pokémon."))!!
+        assertTrue(Effect.DiscardDefendingEnergy(1, type = EnergyType.FIRE) in fire.effects)
+        val special = CatalogRuleCompiler.compileAttack("cobalion", 0, attack(
+            "Discard a Special Energy from your opponent's Active Pokémon."))!!
+        assertTrue(Effect.DiscardDefendingEnergy(1, specialOnly = true) in special.effects)
+    }
+    @Test fun `team healing attack heals every Pokémon`() {
+        val attack = CatalogRuleCompiler.compileAttack("ho-oh", 0,
+            attack("Heal 50 damage from each of your Pokémon.", ""))!!
+        assertTrue(Effect.HealEachOwnPokemon(50) in attack.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(attack))
+    }
+    @Test fun `Fan Rotom implements its first-turn search and Stadium-gated attack`() {
+        for (id in listOf("me02.5-171", "me02.5-250", "sv07-118", "sv08.5-085")) {
+            val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            val fanCall = card.abilities.single()
+            assertEquals(3, fanCall.searchColorlessPokemonMaxHpToHand)
+            assertTrue(fanCall.requiresFirstTurn)
+            assertTrue(Effect.RequiresStadium in card.attacks.single().effects)
+        }
+    }
+    @Test fun `Durant Bite Together checks for Durant on the Bench`() {
+        for (id in listOf("sv10.5w-070", "sv10.5w-150")) {
+            val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            val attack = card.attacks.single { it.name == "Bite Together" }
+            assertTrue(Effect.BenchPokemonPresenceDamageBonus("Durant", 20) in attack.effects)
+        }
+    }
+    @Test fun `Excadrill Piercing Drill only targets damaged Benched Pokemon`() {
+        for (id in listOf("sv10.5b-046", "sv10.5b-160", "sv10.5b-168")) {
+            val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            val effect = card.attacks.single { it.name == "Piercing Drill" }.effects.filterIsInstance<Effect.BenchDamage>().single()
+            assertEquals(60, effect.amount)
+            assertTrue(effect.requiresDamageCounters)
+        }
+    }
+    @Test fun `Ethan Ho-Oh Golden Flame attaches up to two Fire Energy to a Benched Ethan Pokemon`() {
+        for (id in listOf("me02.5-026", "sv10-039", "sv10-209", "sv10-230", "sv10-239")) {
+            val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            val ability = card.abilities.single()
+            assertEquals(EnergyType.FIRE, ability.attachHandEnergyType)
+            assertEquals(2, ability.attachHandEnergyMax)
+            assertEquals("Ethan's", ability.attachHandEnergyToPokemonNamePrefix)
+            assertTrue(ability.attachHandEnergyBenchOnly)
+            assertTrue(card.attacks.any { Effect.HealEachOwnPokemon(50) in it.effects })
+        }
+    }
+    @Test fun `Dhelmise counts Pokémon with Hide 'n' Sneak in discard`() {
+        for (id in listOf("me05-039", "me05-091", "mep-084")) {
+            val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            val attack = card.attacks.single()
+            assertTrue(Effect.OwnDiscardAbilityCountBonus("Hide 'n' Sneak", 4, 140) in attack.effects)
+            val attacker = PokemonInstance(listOf(CardInstance("attacker", id)), enteredPlayTurn = 0)
+            val defender = PokemonInstance(listOf(CardInstance("defender", id)), enteredPlayTurn = 0)
+            val damage = EffectEngine(TrainerCatalog).damage(attacker, defender, attack.effects,
+                ignoreWeaknessResistance = true, ownDiscardPokemonAbilityNames = List(4) { "Hide 'n' Sneak" })
+            assertEquals(170, damage)
+        }
+    }
+    @Test fun `Cynthia's Spiritomb counts damage counters on Benched Cynthia's Pokémon`() {
+        for (id in listOf("me02.5-133", "me02.5-244", "sv10-129")) {
+            val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            val attack = card.attacks.single()
+            assertTrue(Effect.OwnNamedBenchDamageCounterDamage("Cynthia's", 10) in attack.effects)
+            assertTrue(Effect.IgnoreWeakness in attack.effects)
+            val pokemon = PokemonInstance(listOf(CardInstance("p", id)), enteredPlayTurn = 0)
+            val damage = EffectEngine(TrainerCatalog).damage(pokemon, pokemon, attack.effects,
+                ownBenchPokemonDetails = listOf("Cynthia's Gible" to 40))
+            assertEquals(40, damage)
+        }
+    }
+    @Test fun `Fezandipiti and Cinccino compile coin based attack damage prevention`() {
+        for (id in listOf("sv06-096", "sv06.5-073", "sv08.5-045")) {
+            val ability = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!.abilities.single()
+            assertTrue(ability.coinFlipPreventAttackDamage)
+            assertEquals(EnergyType.DARKNESS, ability.coinFlipPreventAttackDamageEnergyType)
+        }
+        for (id in listOf("me04-073", "me04-105", "me04-119")) {
+            val ability = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!.abilities.single()
+            assertTrue(ability.coinFlipPreventAttackDamage)
+            assertNull(ability.coinFlipPreventAttackDamageEnergyType)
+        }
+    }
+
+    @Test fun `Castform Sunny Assist moves all attached Energy to a Benched Pokemon`() {
+        val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv08-020"), emptyMap())!!
+        assertTrue(Effect.MoveAllEnergyToBench in card.attacks.single { it.name == "Sunny Assist" }.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(card.attacks.single { it.name == "Sunny Assist" }))
+    }
+
+    @Test fun `all Froslass prints compile the shared checkup damage ability`() {
+        listOf("sv06-053", "sv06-174", "svp-117").forEach { id ->
+            val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            assertEquals(1, card.abilities.single().checkupDamageCountersPerPokemonWithAbilityExceptFroslass)
+        }
+    }
+
+    @Test fun `all bench damage self side clause compiles and is executable`() {
+        val row = CatalogRuleCompiler.rows.getValue("sv08-028")
+        val card = CatalogRuleCompiler.compile(row, emptyMap())!!
+        assertTrue(card.attacks.any { attack -> attack.effects.any { it is Effect.OwnBenchDamage } })
+    }
+
+    @Test fun `Metal bench presence bonus compiles for all matching attacks`() {
+        listOf("sv05-019", "sv08-109").forEach { id ->
+            val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            assertTrue(card.attacks.any { it.effects.any { effect -> effect is Effect.BenchTypePresenceDamageBonus && effect.type == EnergyType.METAL } })
+        }
+    }
+
+    @Test fun `both Drampa prints compile damaged bench bonus`() {
+        listOf("sv05-138", "sv05-184").forEach { id ->
+            val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            assertTrue(card.attacks.any { it.effects.any { effect -> effect is Effect.AllOwnBenchedPokemonDamagedBonus } })
+        }
+    }
+
+    @Test fun `all Galvantula ex Fulgurite prints combine damage discard and Item lock`() {
+        listOf("sv07-051", "sv07-159", "sv07-168").forEach { id ->
+            val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            val attack = card.attacks.single { it.name == "Fulgurite" }
+            val conditional = card.attacks.single { it.name == "Charged Web" }
+            assertTrue(conditional.effects.any { it is Effect.OpponentExDamage })
+            assertTrue(attack.effects.any { it is Effect.DiscardAttackEnergy && it.all })
+            assertTrue(Effect.LockOpponentItemsNextTurn in attack.effects)
+        }
+    }
+
+    @Test fun `all Fraxure and Goodra Dragon Pulse prints discard own deck top`() {
+        listOf("sv06.5-045", "sv06.5-077", "me04-068", "mep-077").forEach { id ->
+            val row = CatalogRuleCompiler.rows.getValue(id)
+            val attacks = row["attacks"]!!.jsonArray.map { it.jsonObject }
+            val index = attacks.indexOfFirst { it["name"]!!.jsonPrimitive.content == "Dragon Pulse" }
+            val attack = CatalogRuleCompiler.compileAttack(id, index, attacks[index])
+            assertNotNull(attack, id)
+            assertTrue(Effect.DiscardOwnDeckTop in attack.effects, id)
+        }
+    }
+
+    @Test fun `Farigiraf ex Armor Tail compiles against Basic Pokemon ex`() {
+        listOf("sv05-108", "sv05-194").forEach { id ->
+            val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            assertTrue(card.abilities.single().preventDamageFromBasicPokemonEx)
+        }
+    }
+
+    @Test fun `both Chandelure prints compile Basic Fire discard threshold damage`() {
+        listOf("sv10.5w-018", "sv10.5w-103").forEach { id ->
+            val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            assertTrue(card.attacks.single { it.name == "Incendiary Pillar" }.effects.any {
+                it is Effect.DiscardEnergyThresholdDamage && it.type == EnergyType.FIRE && it.minimum == 10 && it.bonus == 100
+            })
+        }
+    }
+
+    @Test fun `all Glaceon Permeating Chill prints schedule delayed damage counters`() {
+        listOf("sv06-054", "sv08.5-025", "svp-171").forEach { id ->
+            val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            assertTrue(card.attacks.single { it.name == "Permeating Chill" }.effects.any {
+                it == Effect.DelayedDefendingDamageCounters(9)
+            })
+        }
+    }
+
+    @Test fun `Delibird and Exeggcute first turn attacks search any card`() {
+        listOf("me01-105", "me01-152", "sv08-001", "sv08-192").forEach { id ->
+            val row = CatalogRuleCompiler.rows.getValue(id)
+            val attacks = row["attacks"]!!.jsonArray.map { it.jsonObject }
+            val index = attacks.indexOfFirst { it["effect"]?.jsonPrimitive?.content?.startsWith("If you go first,") == true }
+            val attack = CatalogRuleCompiler.compileAttack(id, index, attacks[index])!!
+            assertTrue(Effect.MayAttackFirstTurnIfStarting in attack.effects)
+            if (id.startsWith("me01")) assertTrue(Effect.SearchAnyCardToHand in attack.effects)
+            else assertTrue(Effect.SearchEvolutionForSelfToEvolve in attack.effects)
+        }
+    }
+
+    @Test fun `all Garganacl prints compile Fighting attack damage aura`() {
+        listOf("me01-084", "me01-147").forEach { id ->
+            val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            assertTrue(card.abilities.single().teamAttackDamageBonusType == EnergyType.FIGHTING)
+            assertEquals(30, card.abilities.single().teamAttackDamageBonus)
+        }
+    }
+
+    @Test fun `all simple hand reveal attack prints compile`() {
+        listOf("sv05-126", "sv06-066", "sv06.5-016", "sv08-084", "sv10.5b-071", "sv10.5b-148", "svp-185")
+            .forEach { id ->
+                val row = CatalogRuleCompiler.rows.getValue(id)
+                row["attacks"]!!.jsonArray.map { it.jsonObject }.forEachIndexed { index, raw ->
+                    if (raw["effect"]?.jsonPrimitive?.content == "Your opponent reveals their hand.") {
+                        val attack = CatalogRuleCompiler.compileAttack(id, index, raw)
+                        assertNotNull(attack, id)
+                        assertTrue(Effect.RevealOpponentHand in attack.effects, id)
+                    }
+                }
+            }
+    }
+
+    @Test fun `both Conkeldurr prints gain HP for attached Fighting Energy`() {
+        val energy = CardDefinition("test-fighting-energy", "Fighting Energy", "test", "1", category = Category.ENERGY,
+            type = EnergyType.FIGHTING, basicEnergy = true)
+        listOf("sv10.5b-049", "sv10.5b-127").forEach { id ->
+            val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            val catalog = object : CardCatalog {
+                override fun get(id: String) = when (id) { card.id -> card; energy.id -> energy; else -> TrainerCatalog.get(id) }
+            }
+            val pokemon = PokemonInstance(listOf(CardInstance("conk", card.id)), energies = List(2) { CardInstance("f$it", energy.id) }, enteredPlayTurn = 0)
+            assertEquals(card.hp + 80, EffectEngine(catalog).effectiveHp(pokemon))
+        }
+    }
+
+    @Test fun `both Enamorus prints compile same type in play damage bonus`() {
+        listOf("sv06-093", "sv06-180").forEach { id ->
+            val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            assertTrue(card.attacks.single { it.name == "Love Resonance" }.effects.contains(Effect.SameTypePokemonInPlayDamageBonus(120)))
+        }
+    }
+
+    @Test fun `both Cramorant prints compile Spit Shot target damage after energy discard`() {
+        listOf("sv06-058", "sv06-176").forEach { id ->
+            val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            val attack = card.attacks.single { it.name == "Spit Shot" }
+            assertTrue(attack.effects.any { it is Effect.DiscardAttackEnergy && it.all })
+            assertTrue(attack.effects.contains(Effect.TargetedDamage(120)))
+        }
+    }
+
+    @Test fun `Cynthia and Genesect abilities search their named evolution Pokemon`() {
+        listOf("me02.5-110", "sv10-103", "sv10.5b-067", "sv10.5b-161", "sv10.5b-169").forEach { id ->
+            val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            val ability = card.abilities.single()
+            assertEquals(if (id.startsWith("sv10.5b")) 2 else 1, ability.searchPokemonMaxToHand)
+            if (id.startsWith("sv10.5b")) assertEquals(EnergyType.METAL, ability.searchPokemonEvolutionTypeToHand)
+            else assertEquals("Cynthia's", ability.searchPokemonNamePrefixToHand)
+        }
+    }
+
+    @Test fun `both Dudunsparce ex prints scale damage by opponent ex count`() {
+        listOf("sv09-121", "sv09-178").forEach { id ->
+            val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            assertTrue(card.attacks.single { it.name == "Tenacious Tail" }.effects.contains(Effect.OpponentExCountDamage(60)))
+        }
+    }
+
+    @Test fun `both Cyclizar ex prints may draw five after Zircon Road`() {
+        listOf("sv08-159", "sv08-228").forEach { id ->
+            val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
+            assertTrue(Effect.Draw(5) in card.attacks.single { it.name == "Zircon Road" }.effects)
+        }
+    }
     @Test fun `Blaziken Inferno Kick Flurry compiles base damage energy discard and bench shot`() {
         for (id in listOf("sv10-042", "sv10-192")) {
             val blaziken = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!!
@@ -1394,5 +1830,45 @@ class CatalogRuleCompilerTest {
             }
             "${card.id} | ${card.name} | ${card.category} | mark ${card.regulation.orEmpty()}\n${details.joinToString("\n")}"
         })
+        java.io.File("build/rules-uncovered-causes.txt").writeText("First 200 uncovered cards, with independently compiled components:\n" + unsupported.take(200).joinToString("\n\n") { card ->
+            val raw = CatalogRuleCompiler.rows[card.id] ?: TrainerCatalog.sourceData(card.id)
+            val attacks = raw["attacks"]?.jsonArray.orEmpty().mapIndexed { index, item ->
+                val attack = item.jsonObject
+                val name = attack["name"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                val result = CatalogRuleCompiler.compileAttack(card.id, index, attack)
+                "Attack $name: ${if (result == null) "UNSUPPORTED" else "supported"} — ${attack["effect"]?.jsonPrimitive?.contentOrNull.orEmpty()}"
+            }
+            val abilities = raw["abilities"]?.jsonArray.orEmpty().mapIndexed { index, item ->
+                val ability = item.jsonObject
+                val name = ability["name"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                val result = CatalogRuleCompiler.compileAbility(card.id, index, ability)
+                "Ability $name: ${if (result == null) "UNSUPPORTED" else "supported"} — ${ability["effect"]?.jsonPrimitive?.contentOrNull.orEmpty()}"
+            }
+            val cardResult = CatalogRuleCompiler.compile(raw, emptyMap())
+            "${card.id} | ${card.name} | ${card.category} | full card: ${if (cardResult == null) "UNSUPPORTED" else "supported"}\n${(attacks + abilities).joinToString("\n")}"
+        })
+        val patternCards = linkedMapOf<String, MutableSet<String>>()
+        unsupported.forEach { card ->
+            val raw = CatalogRuleCompiler.rows[card.id] ?: TrainerCatalog.sourceData(card.id)
+            raw["attacks"]?.jsonArray.orEmpty().forEachIndexed { index, item ->
+                val attack = item.jsonObject
+                if (CatalogRuleCompiler.compileAttack(card.id, index, attack) == null) {
+                    val text = attack["effect"]?.jsonPrimitive?.contentOrNull.orEmpty().ifBlank { "(sem efeito impresso)" }
+                    patternCards.getOrPut("Ataque — $text") { linkedSetOf() } += "${card.id} ${card.name}"
+                }
+            }
+            raw["abilities"]?.jsonArray.orEmpty().forEachIndexed { index, item ->
+                val ability = item.jsonObject
+                if (CatalogRuleCompiler.compileAbility(card.id, index, ability) == null) {
+                    val text = ability["effect"]?.jsonPrimitive?.contentOrNull.orEmpty().ifBlank { "(sem efeito impresso)" }
+                    patternCards.getOrPut("Habilidade — $text") { linkedSetOf() } += "${card.id} ${card.name}"
+                }
+            }
+        }
+        java.io.File("build/rules-uncovered-patterns.txt").writeText(
+            "Unsupported effect text grouped by distinct Standard prints, highest coverage first:\n" +
+                patternCards.entries.sortedByDescending { it.value.size }.take(200).joinToString("\n\n") { (pattern, prints) ->
+                    "${prints.size} prints\n$pattern\n${prints.joinToString() }"
+                })
     }
 }

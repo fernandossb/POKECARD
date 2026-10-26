@@ -29,20 +29,38 @@ internal object CatalogRuleCompiler {
     internal fun compileAbility(id: String, index: Int, raw: JsonObject): AbilityDefinition? {
         val name = raw.s("name") ?: return null
         val text = raw.s("effect")?.trim().orEmpty()
+        if (text == "During Pokémon Checkup, put 1 damage counter on each Pokémon that has an Ability (both yours and your opponent's), except any Froslass.")
+            return AbilityDefinition("$id-ability$index", name, text, checkupDamageCountersPerPokemonWithAbilityExceptFroslass = 1)
         if (text == "If this Pokémon has no Energy attached, it has no Retreat Cost.")
             return AbilityDefinition("$id-ability$index", name, text, freeRetreatWithNoEnergy = true)
         if (text == "Once during your turn, you may use this Ability. Switch your Active Pokémon with 1 of your Benched Pokémon.")
             return AbilityDefinition("$id-ability$index", name, text, usageKey = name, switchOwnActive = true)
         if (text == "Attacks used by this Pokémon cost {C} less for each Kofu card in your discard pile.")
             return AbilityDefinition("$id-ability$index", name, text, attackDiscountPerKofuDiscard = true)
+        if (text == "If Festival Grounds is in play, this Pokémon may use an attack it has twice. If the first attack Knocks Out your opponent's Active Pokémon, you may attack again after your opponent chooses a new Active Pokémon.")
+            return AbilityDefinition("$id-ability$index", name, text, festivalGroundsMayAttackAgain = true)
+        if (text == "Whenever your opponent plays an Item or Supporter card from their hand, prevent all effects of that card done to this Pokémon.")
+            return AbilityDefinition("$id-ability$index", name, text, preventOpponentItemSupporterEffects = true)
+        if (text == "When you play this Pokémon from your hand to evolve 1 of your Pokémon during your turn, you may heal all damage from each of your Evolution Pokémon. If you healed any damage in this way, discard all Energy from those Pokémon.")
+            return AbilityDefinition("$id-ability$index", name, text, onEvolveHealAllEvolutionAndDiscardEnergy = true)
+        if (text == "Once during your turn, if this Pokémon is in the Active Spot, you may have your opponent shuffle their hand into their deck and draw 3 cards.")
+            return AbilityDefinition("$id-ability$index", name, text, requiresActive = true, usageKey = name, opponentShuffleHandAndDraw = 3)
         val flipTheScript = Regex("Once during your turn, if any of your Pokémon were Knocked Out during your opponent's last turn, you may draw (\\d+) cards?\\. You can't use more than 1 Flip the Script Ability each turn\\.").matchEntire(text)
         if (flipTheScript != null) return AbilityDefinition("$id-ability$index", name, text, draw = flipTheScript.groupValues[1].toInt(),
             requiresPreviousKnockout = true, usageKey = "Flip the Script")
+        if (text == "Once during your first turn, you may search your deck for up to 3 {C} Pokémon with 100 HP or less, reveal them, and put them into your hand. Then, shuffle your deck. You can't use more than 1 Fan Call Ability during your turn.")
+            return AbilityDefinition("$id-ability$index", name, text, usageKey = "Fan Call", requiresFirstTurn = true,
+                searchColorlessPokemonMaxHpToHand = 3)
         if (text == "Prevent all effects of your opponent's Pokémon's attacks and Abilities done to this Pokémon. (Damage is not an effect.)")
             return AbilityDefinition("$id-ability$index", name, text, preventOpponentEffects = true)
         if (text == "Prevent all effects of attacks used by your opponent's Pokémon done to this Pokémon. (Damage is not an effect.)" ||
             text == "Prevent all effects of your opponent's Pokémon's Abilities done to this Pokémon.")
             return AbilityDefinition("$id-ability$index", name, text, preventOpponentEffects = true)
+        if (text == "If any damage is done to this Pokémon by attacks, flip a coin. If heads, prevent that damage.")
+            return AbilityDefinition("$id-ability$index", name, text, coinFlipPreventAttackDamage = true)
+        val energyShield = Regex("If this Pokémon has any \\{([GRFLWPMD])\\} Energy attached and is damaged by an attack, flip a coin\\. If heads, prevent that damage\\.").matchEntire(text)
+        if (energyShield != null) return AbilityDefinition("$id-ability$index", name, text, coinFlipPreventAttackDamage = true,
+            coinFlipPreventAttackDamageEnergyType = symbolType(energyShield.groupValues[1]) ?: return null)
         val retaliationCondition = Regex("If this Pokémon is in the Active Spot and is damaged by an attack from your opponent's Pokémon \\(even if this Pokémon is Knocked Out\\), the Attacking Pokémon is now (Poisoned|Burned)\\.").matchEntire(text)
         if (retaliationCondition != null) return AbilityDefinition("$id-ability$index", name, text,
             retaliateCondition = SpecialCondition.valueOf(retaliationCondition.groupValues[1].uppercase()))
@@ -69,6 +87,11 @@ internal object CatalogRuleCompiler {
                 moveBasicEnergyBetweenOwnPokemon = true, moveBasicEnergyType = EnergyType.GRASS)
         if (text == "Once during your turn, you may attach a Basic Energy card from your discard pile to 1 of your Pokémon.")
             return AbilityDefinition("$id-ability$index", name, text, usageKey = name, attachBasicEnergyFromDiscard = true)
+        val ethanEnergy = Regex("Once during your turn, you may attach up to (\\d+) Basic \\{([GRFLWPMD])\\} Energy cards from your hand to 1 of your Benched (.+) Pokémon\\.").matchEntire(text)
+        if (ethanEnergy != null) return AbilityDefinition("$id-ability$index", name, text, usageKey = name,
+            attachHandEnergyType = symbolType(ethanEnergy.groupValues[2]) ?: return null,
+            attachHandEnergyMax = ethanEnergy.groupValues[1].toInt(), attachHandEnergyBenchOnly = true,
+            attachHandEnergyToPokemonNamePrefix = ethanEnergy.groupValues[3])
         if (text == "As often as you like during your turn, you may attach a Basic {L} Energy card from your hand to 1 of your Iono's Pokémon.")
             return AbilityDefinition("$id-ability$index", name, text, usageKey = name, unlimitedUse = true,
                 attachHandEnergyType = EnergyType.LIGHTNING, attachHandEnergyToPokemonNamePrefix = "Iono's")
@@ -77,6 +100,10 @@ internal object CatalogRuleCompiler {
                 attachBasicEnergyFromDiscardType = EnergyType.LIGHTNING, attachBasicEnergyFromDiscardBenchOnly = true)
         if (text == "When you play this Pokémon from your hand onto your Bench during your turn, you may discard the top card of your opponent's deck.")
             return AbilityDefinition("$id-ability$index", name, text, onBenchDiscardOpponentDeckTop = true)
+        if (text == "When you play this Pokémon from your hand onto your Bench during your turn, you may discard a Stadium in play.")
+            return AbilityDefinition("$id-ability$index", name, text, onBenchDiscardStadium = true)
+        if (text == "When you play this Pokémon from your hand onto your Bench during your turn, you may switch it with your Active Pokémon. If you do, you may move any amount of Energy from your other Pokémon to this Pokémon.")
+            return AbilityDefinition("$id-ability$index", name, text, onBenchSwitchAndMoveEnergy = true)
         if (text == "Blood Moon used by this Pokémon costs {C} less for each Prize card your opponent has taken.")
             return AbilityDefinition("$id-ability$index", name, text, attackDiscountPerOpponentPrize = true)
         if (text == "Prevent all damage from attacks done to this Pokémon by your opponent's Pokémon that have an Ability.")
@@ -97,6 +124,18 @@ internal object CatalogRuleCompiler {
             return AbilityDefinition("$id-ability$index", name, text, preventDamageFromSpecialEnergyAttacker = true)
         if (text == "Prevent all damage done to this Pokémon by attacks from your opponent's Pokémon ex.")
             return AbilityDefinition("$id-ability$index", name, text, preventDamageFromOpponentEx = true)
+        if (text == "Prevent all damage done to this Pokémon by attacks from your opponent's Basic Pokémon ex.")
+            return AbilityDefinition("$id-ability$index", name, text, preventDamageFromBasicPokemonEx = true)
+        if (text == "Attacks used by your {F} Pokémon do 30 more damage to your opponent's Active Pokémon (before applying Weakness and Resistance).")
+            return AbilityDefinition("$id-ability$index", name, text, teamAttackDamageBonusType = EnergyType.FIGHTING, teamAttackDamageBonus = 30)
+        if (text == "Once during your turn, you may search your deck for a Cynthia's Pokémon, reveal it, and put it into your hand. Then, shuffle your deck.")
+            return AbilityDefinition("$id-ability$index", name, text, usageKey = name, searchPokemonNamePrefixToHand = "Cynthia's", searchPokemonMaxToHand = 1)
+        if (text == "Once during your turn, you may search your deck for up to 2 Evolution {M} Pokémon, reveal them, and put them into your hand. Then, shuffle your deck.")
+            return AbilityDefinition("$id-ability$index", name, text, usageKey = name, searchPokemonEvolutionTypeToHand = EnergyType.METAL, searchPokemonMaxToHand = 2)
+        val hpPerEnergy = Regex("This Pokémon gets \\+(\\d+) HP for each \\{([GRFLWPMD])\\} Energy attached to it\\.").matchEntire(text)
+        if (hpPerEnergy != null) return AbilityDefinition("$id-ability$index", name, text,
+            hpBonusPerAttachedEnergyType = symbolType(hpPerEnergy.groupValues[2]) ?: return null,
+            hpBonusPerAttachedEnergy = hpPerEnergy.groupValues[1].toInt())
         val typeReduction = Regex("This Pokémon takes (\\d+) less damage from attacks from your opponent's \\{([RW])\\} or \\{([RW])\\} Pokémon \\(after applying Weakness and Resistance\\)\\.").matchEntire(text)
         if (typeReduction != null) return AbilityDefinition("$id-ability$index", name, text,
             damageReduction = typeReduction.groupValues[1].toInt(),
@@ -168,6 +207,8 @@ internal object CatalogRuleCompiler {
             requiresTeamRocketPokemonCount = rocketCount.groupValues[1].toInt(), usageKey = name)
         if (text == "Damage from attacks used by this Pokémon isn't affected by any effects on your opponent's Active Pokémon.")
             return AbilityDefinition("$id-ability$index", name, text, ignoreOpponentActiveEffects = true, usageKey = name)
+        if (text == "Once during your turn, you may have each player draw a card.")
+            return AbilityDefinition("$id-ability$index", name, text, eachPlayerDraw = 1, usageKey = name)
         val selfKnockoutDamage = Regex("Once during your turn, you may put (\\d+) damage counters on (\\d+) of your opponent's Pokémon\\. If you use this Ability, this Pokémon is Knocked Out\\.").matchEntire(text)
         if (selfKnockoutDamage != null) return AbilityDefinition("$id-ability$index", name, text,
             damageCounters = selfKnockoutDamage.groupValues[1].toInt(), damageTargets = selfKnockoutDamage.groupValues[2].toInt(),
@@ -239,6 +280,44 @@ internal object CatalogRuleCompiler {
     fun compileAttack(id: String, index: Int, raw: JsonObject): AttackDefinition? {
         val cost = raw.a("cost").map { type(it.jsonPrimitive.content) ?: return null }
         val text = raw.s("effect").orEmpty().trim()
+        if (text == "This attack does 60 damage for each of your opponent's Pokémon ex in play." && raw.s("damage") == "60×") {
+            val rewritten = JsonObject(raw.toMutableMap().apply {
+                put("effect", JsonPrimitive("")); put("damage", JsonPrimitive(0))
+            })
+            val compiled = compileAttack(id, index, rewritten) ?: return null
+            return compiled.copy(effects = compiled.effects + Effect.OpponentExCountDamage(60), text = text)
+        }
+        if (text == "If you go first, you can use this attack during your first turn. Search your deck for a card and put it into your hand. Then, shuffle your deck.") {
+            val rewritten = JsonObject(raw.toMutableMap().apply { put("effect", JsonPrimitive("You may search your deck for a card and put it into your hand. Then, shuffle your deck.")) })
+            val compiled = compileAttack(id, index, rewritten) ?: return null
+            return compiled.copy(effects = listOf(Effect.MayAttackFirstTurnIfStarting) + compiled.effects, text = text)
+        }
+        if (text == "If you go first, you can use this attack during your first turn. Search your deck for a card that evolves from this Pokémon and put it onto this Pokémon to evolve it. Then, shuffle your deck.") {
+            val rewritten = JsonObject(raw.toMutableMap().apply { put("effect", JsonPrimitive("Search your deck for a card that evolves from this Pokémon and put it onto this Pokémon to evolve it. Then, shuffle your deck.")) })
+            val compiled = compileAttack(id, index, rewritten) ?: return null
+            return compiled.copy(effects = listOf(Effect.MayAttackFirstTurnIfStarting) + compiled.effects, text = text)
+        }
+        val itemLockDiscardAll = text == "Discard all Energy from this Pokémon. During your opponent's next turn, they can't play any Item cards from their hand."
+        if (itemLockDiscardAll) {
+            val rewritten = JsonObject(raw.toMutableMap().apply { put("effect", JsonPrimitive("")) })
+            val compiled = compileAttack(id, index, rewritten) ?: return null
+            return compiled.copy(effects = compiled.effects + Effect.DiscardAttackEnergy(0, all = true) + Effect.LockOpponentItemsNextTurn, text = text)
+        }
+        val evolutionActiveBonusDiscard = Regex("If your opponent's Active Pokémon is an Evolution Pokémon, this attack does (\\d+) more damage, and discard all Energy from this Pokémon\\.").matchEntire(text)
+        if (evolutionActiveBonusDiscard != null) {
+            val bonusText = "If your opponent's Active Pokémon is an Evolution Pokémon, this attack does ${evolutionActiveBonusDiscard.groupValues[1]} more damage."
+            val rewritten = JsonObject(raw.toMutableMap().apply { put("effect", JsonPrimitive(bonusText)) })
+            val compiled = compileAttack(id, index, rewritten) ?: return null
+            return compiled.copy(effects = compiled.effects + Effect.DiscardAttackEnergy(0, all = true), text = text)
+        }
+        val discardThenMultiTarget = Regex("Discard (\\d+) Energy from this Pokémon\\. This attack does (\\d+) damage to (\\d+) of your opponent's Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
+        if (discardThenMultiTarget != null) {
+            val discardText = "Discard ${discardThenMultiTarget.groupValues[1]} Energy from this Pokémon."
+            val rewritten = JsonObject(raw.toMutableMap().apply { put("effect", JsonPrimitive(discardText)) })
+            val compiled = compileAttack(id, index, rewritten) ?: return null
+            return compiled.copy(effects = compiled.effects + Effect.MultiTargetDamage(
+                discardThenMultiTarget.groupValues[2].toInt(), discardThenMultiTarget.groupValues[3].toInt(), discardBeforeDamage = true), text = text)
+        }
         val secondPlayerFirstTurnPrefix = "If you go second, you can't use this attack during your first turn. "
         if (text.startsWith(secondPlayerFirstTurnPrefix)) {
             val rewritten = JsonObject(raw.toMutableMap().apply { put("effect", JsonPrimitive(text.removePrefix(secondPlayerFirstTurnPrefix))) })
@@ -258,7 +337,6 @@ internal object CatalogRuleCompiler {
         val coinUntilTails = Regex("Flip a coin until you get tails\\. This attack does (\\d+) damage for each heads\\.").matchEntire(text)
         val coinPerEnergy = Regex("Flip a coin for each Energy attached to this Pokémon\\. This attack does (\\d+) damage for each heads\\.").matchEntire(text)
         val coinPerEnergyBoth = Regex("Flip a coin for each Energy attached to both Active Pokémon\\. This attack does (\\d+) damage for each heads\\.").matchEntire(text)
-        val coin = coinFixed != null || coinUntilTails != null || coinPerEnergy != null || coinPerEnergyBoth != null
         val coinBonus = Regex("Flip a coin\\. If heads, this attack does (\\d+) more damage\\.").matchEntire(text)
         val coinBonusMultiple = Regex("Flip (\\d{1,2}) coins?\\. This attack does (\\d+) more damage for each heads\\.").matchEntire(text)
         val coinBonusAllHeads = Regex("Flip (\\d{1,2}) coins?\\. If (?:both|all) of them are heads, this attack does (\\d+) more damage\\.").matchEntire(text)
@@ -266,10 +344,16 @@ internal object CatalogRuleCompiler {
         val conditionalEnergy = Regex("If this Pokémon has (?:at least )?(\\d+) or more \\{([GRFLWPMD])\\} Energy attached, this attack does (\\d+) more damage\\.").matchEntire(text)
         val conditionalInPlayEnergy = Regex("If you have (?:at least )?(\\d+)(?: or more)? \\{([GRFLWPMD])\\} Energy in play, this attack does (\\d+) more damage\\.").matchEntire(text)
         val ownKnockoutBonus = Regex("If any of your Pokémon were Knocked Out by damage from an attack during your opponent's last turn, this attack does (\\d+) more damage\\.").matchEntire(text)
+        val ownBenchNameBonus = Regex("If (.+) is on your Bench, this attack does (\\d+) more damage\\.").matchEntire(text)
+        val ownBenchTypeBonus = Regex("If you have any \\{([GRFLWPMD])\\} Pokémon on your Bench, this attack does (\\d+) more damage\\.").matchEntire(text)
+        val sameTypePokemonBonus = text == "If any of your Pokémon in play are the same type as any of your opponent's Pokémon in play, this attack does 120 more damage."
+        val sameHandSizeDamageBonus = Regex("If you have the same number of cards in your hand as your opponent, this attack does (\\d+) more damage\\.").matchEntire(text)
+        val allOwnBenchedDamagedBonus = Regex("If all of your Benched Pokémon have at least 1 damage counter on them, this attack does (\\d+) more damage\\.").matchEntire(text)
         val ownUndamagedBonus = Regex("If this Pokémon has no damage counters on it, this attack does (\\d+) more damage\\.").matchEntire(text)
         val opponentExBonus = Regex("If your opponent's Active Pokémon is a Pokémon ex(?: or Pokémon V)?, this attack does (\\d+) more damage\\.").matchEntire(text)
         val opponentTypeBonus = Regex("If your opponent's Active Pokémon is a \\{([GRFLWPMD])\\} Pokémon, this attack does (\\d+) more damage\\.").matchEntire(text)
-        val ownEnergyBonus = Regex("This attack does (\\d+) more damage for each Energy attached to this Pokémon\\.").matchEntire(text)
+        val opponentEvolutionBonus = Regex("If your opponent's Active Pokémon is an Evolution Pokémon, this attack does (\\d+) more damage\\.").matchEntire(text)
+        val ownEnergyBonus = Regex("This attack does (\\d+) more damage for each (?:\\{([GRFLWPMD])\\} )?Energy attached to this Pokémon\\.").matchEntire(text)
         val opponentEnergyBonus = Regex("This attack does (\\d+) more damage for each Energy attached to your opponent's Active Pokémon\\.").matchEntire(text)
         val opponentHandEnergyDamage = Regex("Your opponent reveals their hand, and this attack does (\\d+) damage for each Energy card you find there\\.").matchEntire(text)
         val opponentRetreatCostBonus = Regex("This attack does (\\d+) more damage for each \\{C\\} in your opponent's Active Pokémon's Retreat Cost\\.").matchEntire(text)
@@ -278,12 +362,16 @@ internal object CatalogRuleCompiler {
         val opponentActiveDamagedBonus = Regex("If your opponent's Active Pokémon already has any damage counters on it, this attack does (\\d+) more damage\\.").matchEntire(text)
         val opponentActiveDamageCounters = Regex("This attack does (\\d+) more damage for each damage counter on your opponent's Active Pokémon\\.").matchEntire(text)
         val opponentActiveDamageCountersTimes = Regex("This attack does (\\d+) damage for each damage counter on your opponent's Active Pokémon\\.").matchEntire(text)
+        val opponentHandCountDamage = Regex("This attack does (\\d+) damage for each card in your opponent's hand\\.").matchEntire(text)
         val healSelfByDamageDealt = text == "Heal from this Pokémon the same amount of damage you did to your opponent's Active Pokémon."
         val ownDiscardEnergyDamage = Regex("This attack does (\\d+) more damage for each Energy card in your discard pile\\.").matchEntire(text)
+        val discardEnergyThresholdDamage = Regex("If you have (\\d+) or more Basic \\{([GRFLWPMD])\\} Energy cards? in your discard pile, this attack does (\\d+) more damage\\.").matchEntire(text)
+        val ownDiscardAbilityBonus = Regex("If you have (\\d+) or more Pokémon that have the (.+) Ability in your discard pile, this attack does (\\d+) more damage\\.").matchEntire(text)
         val ownInPlayEnergyDamage = Regex("This attack does (\\d+) damage for each Energy attached to all Pokémon\\.").matchEntire(text)
         val ownSpecialEnergyDamage = Regex("This attack does (\\d+) damage for each Special Energy card attached to this Pokémon\\.").matchEntire(text)
         val ownEnergyDamage = Regex("This attack does (\\d+) damage for each Energy attached to this Pokémon\\.").matchEntire(text)
         val opponentPrizeTakenDamage = Regex("This attack does (\\d+) more damage for each Prize card your opponent has taken\\.").matchEntire(text)
+        val opponentPrizeTakenDamageTimes = Regex("This attack does (\\d+) damage for each Prize card your opponent has taken\\.").matchEntire(text)
         val opponentPrizeCountDamage = Regex("If your opponent has (\\d+) or fewer Prize cards remaining, this attack does (\\d+) more damage\\.").matchEntire(text)
         val opponentNoRetreatDamage = Regex("If your opponent's Active Pokémon has no Retreat Cost, this attack does (\\d+) more damage\\.").matchEntire(text)
         val opponentResistanceDamage = Regex("If your opponent's Active Pokémon has \\{([GRFLWPMD])\\} Resistance, this attack does (\\d+) more damage\\.").matchEntire(text)
@@ -292,8 +380,14 @@ internal object CatalogRuleCompiler {
         val ownInPlayDamage = Regex("This attack does (\\d+) damage for each of your Pokémon in play\\.").matchEntire(text)
         val ownSpeciesDamage = Regex("This attack does (\\d+) damage for each of your (.+?) and (.+) in play\\.").matchEntire(text)
         val ownBenchDamage = Regex("This attack does (\\d+) damage for each of your Benched Pokémon\\.").matchEntire(text)
+        val ownBenchDamageBonus = Regex("This attack does (\\d+) more damage for each of your Benched Pokémon\\.").matchEntire(text)
         val ownDamagedPokemon = Regex("This attack does (\\d+) damage for each of your Pokémon that has any damage counters on it\\.").matchEntire(text)
+        val ownDamagedBenchedPokemonBonus = Regex("This attack does (\\d+) more damage for each of your Benched Pokémon that has any damage counters on it\\.").matchEntire(text)
         val ownDamageCounters = Regex("This attack does (\\d+) damage for each damage counter on this Pokémon\\.").matchEntire(text)
+        val ownDamageCounterBonus = Regex("This attack does (\\d+) more damage for each damage counter on this Pokémon\\.").matchEntire(text)
+        val conditionalOwnDamageCounterBonus = Regex("If this Pokémon has (\\d+) or more damage counters on it, this attack does (\\d+) more damage\\. This attack's damage isn't affected by Weakness\\.").matchEntire(text)
+        val ownCynthiaBenchCounterDamage = Regex("This attack does (\\d+) damage for each damage counter on all of your Benched Cynthia's Pokémon\\. This attack's damage isn't affected by Weakness\\.").matchEntire(text)
+        val ownFightingBenchCounterDamage = Regex("This attack does (\\d+) damage for each damage counter on all of your Benched \\{F\\} Pokémon\\.").matchEntire(text)
         val ownDamageCounterPenalty = Regex("This attack does (\\d+) less damage for each damage counter on this Pokémon\\.").matchEntire(text)
         val opponentFieldDamageCounters = Regex("This attack does (\\d+) more damage for each damage counter on all of your opponent's Pokémon\\.").matchEntire(text)
         val ownPsychicEnergyDamage = Regex("This attack does (\\d+) more damage for each \\{P\\} Energy attached to this Pokémon\\.").matchEntire(text)
@@ -308,18 +402,26 @@ internal object CatalogRuleCompiler {
         val dragOff = Regex("Switch in 1 of your opponent's Benched Pokémon to the Active Spot\\. This attack does (\\d+) damage to the new Active Pokémon\\.").matchEntire(text)
         val recoverSupporter = text == "Put a Supporter card from your discard pile into your hand."
         val benchSearch = Regex("Search your deck for up to (\\d+) Basic Pokémon and put them onto your Bench\\. Then, shuffle your deck\\.|Search your deck for a Basic Pokémon and put it onto your Bench\\. Then, shuffle your deck\\.").matchEntire(text)
+        val namedPokemonBenchSearch = Regex("Search your deck for up to (\\d+) (.+?) and put them onto your Bench\\. Then, shuffle your deck\\.").matchEntire(text)
         val recoverNamedPokemon = Regex("Put up to (\\d+) (.+?) from your discard pile onto your Bench\\.").matchEntire(text)
         val rotomSearch = Regex("""You may search your deck for any number of Pokémon that have "Rotom" in their name and put them onto your Bench\. Then, shuffle your deck\.""").matchEntire(text)
         val matchingEnergySearch = Regex("Search your deck for up to (\\d+) Pokémon that are the same type as any Basic Energy attached to this Pokémon, reveal them, and put them into your hand\\. Then, shuffle your deck\\.").matchEntire(text)
         val basicEnergyToHandSearch = Regex("Search your deck for up to (\\d+) Basic Energy cards, reveal them, and put them into your hand\\. Then, shuffle your deck\\.").matchEntire(text)
         val pokemonSearchToHand = Regex("Search your deck for a Pokémon, reveal it, and put it into your hand\\. Then, shuffle your deck\\.").matchEntire(text)
+        val pokemonSearchUpToToHand = Regex("Search your deck for up to (\\d+) Pokémon, reveal them, and put them into your hand\\. Then, shuffle your deck\\.").matchEntire(text)
         val typePokemonAndStadiumSearch = Regex("Search your deck for up to (\\d+) in any combination of \\{([GRFLWPMD])\\} Pokémon and Stadium cards, reveal them, and put them into your hand\\. Then, shuffle your deck\\.").matchEntire(text)
         val anyCardSearchToHand = text == "You may search your deck for a card and put it into your hand. Then, shuffle your deck."
         val supporterSearchToHand = text == "Search your deck for a Supporter card, reveal it, and put it into your hand. Then, shuffle your deck."
         val itemSearchToHand = text == "Search your deck for an Item card, reveal it, and put it into your hand. Then, shuffle your deck."
         val chooseOpponentAttackToRestrict = text == "Choose 1 of your opponent's Active Pokémon's attacks. During your opponent's next turn, that Pokémon can't use that attack."
         val attachAnyBasicEnergy = text == "You may attach any number of Basic Energy cards from your hand to your Pokémon in any way you like."
+        val attachOneBasicEnergy = text == "Attach a Basic Energy card from your hand to 1 of your Pokémon."
+        val shuffleOwnBenchIntoDeck = text == "Shuffle 1 of your Benched Pokémon and all attached cards into your deck."
+        val devolveOpponentActive = text == "If your opponent's Active Pokémon is an evolved Pokémon, devolve it by putting the highest Stage Evolution card on it into your opponent's hand."
+        val discardStadium = text == "Discard a Stadium in play."
+        val returnSelfAndAttachments = text == "Put this Pokémon and all attached cards into your hand."
         val attachBasicEnergyFromDeckAny = Regex("Search your deck for up to (\\d+) Basic Energy cards and attach them to your Pokémon in any way you like\\. Then, shuffle your deck\\.").matchEntire(text)
+        val attachBasicEnergyFromDeckBench = Regex("Search your deck for up to (\\d+) Basic Energy cards and attach them to your Benched Pokémon in any way you like\\. Then, shuffle your deck\\.").matchEntire(text)
         val attachTypedEnergyFromDeckBench = Regex("Search your deck for up to (\\d+) Basic \\{([GRFLWPMD])\\} Energy cards and attach them to your Benched Pokémon in any way you like\\. Then, shuffle your deck\\.").matchEntire(text)
         val attachEnergyToEachBench = Regex("For each of your Benched Pokémon, search your deck for a Basic \\{([GRFLWPMD])\\} Energy card and attach it to that Pokémon\\. Then, shuffle your deck\\.").matchEntire(text)
         val coinKnockOutBasic = text == "Flip a coin. If heads, Knock Out your opponent's Active Basic Pokémon. If tails, Knock Out 1 of your opponent's Benched Basic Pokémon."
@@ -327,12 +429,18 @@ internal object CatalogRuleCompiler {
         val opponentTypeStatus = Regex("If your opponent's Active Pokémon is a \\{([GRFLWPMDN])\\} Pokémon, it is now (Poisoned|Burned|Asleep|Paralyzed|Confused)\\.").matchEntire(text)
         val status = Regex("Your opponent's Active Pokémon is now (Poisoned|Burned|Asleep|Paralyzed|Confused)\\.").matchEntire(text)
         val discardDefendingCoin = Regex("Flip a coin\\. If heads, discard (an|a|1|2) Energy from your opponent's Active Pokémon\\.").matchEntire(text)
-        val discardDefending = Regex("Discard (an|a|1|2) Energy from your opponent's Active Pokémon\\.").matchEntire(text)
+        val discardDefendingPerHeads = Regex("Flip (\\d+) coins?\\. For each heads, discard (an|a|1|2) Energy from your opponent's Active Pokémon\\.").matchEntire(text)
+        val coin = coinFixed != null || coinUntilTails != null || coinPerEnergy != null || coinPerEnergyBoth != null || discardDefendingPerHeads != null
+        val discardDefending = Regex("Discard (an|a|1|2) (?:(\\{[GRFLWPMD]\\}|Special) )?Energy from your opponent's Active Pokémon\\.").matchEntire(text)
+        val discardAllOpponentSpecialEnergy = text == "Discard all Special Energy from all of your opponent's Pokémon."
         val benchDamage = Regex("This attack also does (\\d+) damage to 1 of your opponent's Benched Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
+        val ownBenchAttackDamage = Regex("This attack also does (\\d+) damage to each of your Benched Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
+        val damagedBenchDamage = Regex("This attack also does (\\d+) damage to 1 of your opponent's Benched Pokémon that has any damage counters on it\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
         val selectedPokemonDamage = Regex("This attack does (\\d+) damage to 1 of your opponent's Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
         val discardEnergyBenchDamage = Regex("Discard (\\d+) Energy from this Pokémon\\. This attack also does (\\d+) damage to 1 of your opponent's Benched Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
         val discardFireTargetedBench = Regex("Discard all \\{R\\} Energy from this Pokémon, and this attack does (\\d+) damage to 1 of your opponent's Benched Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
         val discardAllTargeted = Regex("Discard all Energy from this Pokémon, and this attack does (\\d+) damage to 1 of your opponent's Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
+        val discardAllTargetedAfter = Regex("Discard all Energy from this Pokémon\\. This attack does (\\d+) damage to 1 of your opponent's Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
         val benchDamageCounters = Regex("Place (\\d+) damage counters on 1 of your opponent's Benched Pokémon\\.").matchEntire(text)
         val placeDamageCounter = text == "Place 1 damage counter on 1 of your opponent's Pokémon."
         val spreadBenchDamageCounters = Regex("Put (\\d+) damage counters on your opponent's Benched Pokémon in any way you like\\.").matchEntire(text)
@@ -344,12 +452,19 @@ internal object CatalogRuleCompiler {
         val opponentChoosesHandShuffle = Regex("Your opponent chooses (\\d+) cards from their hand and shuffles those cards into their deck\\.").matchEntire(text)
         val opponentShuffleRandom = Regex("Choose a random card from your opponent's hand(?:, and your opponent reveals that card and shuffles it into their deck|\\. Your opponent reveals that card and shuffles it into their deck)\\.").matchEntire(text)
         val moveEnergy = Regex("Move an Energy from this Pokémon to (\\d+) of your Benched Pokémon\\.").matchEntire(text)
+        val moveAllEnergyToBench = text == "Move all Energy from this Pokémon to 1 of your Benched Pokémon."
+        val returnEnergyToHand = text == "Put an Energy attached to this Pokémon into your hand."
         val confusePoisonThenSwitch = text == "Your opponent's Active Pokémon is now Confused and Poisoned. Switch this Pokémon with 1 of your Benched Pokémon."
         val statusThenRetreat = Regex("Your opponent's Active Pokémon is now (Poisoned|Burned|Asleep|Paralyzed|Confused)\\. During your opponent's next turn, (?:that Pokémon|the Defending Pokémon) can't retreat\\.").matchEntire(text)
         val exactHandSize = Regex("If you don't have exactly (\\d+) cards? in your hand, this attack does nothing\\.").matchEntire(text)
         val requiresUndamagedOpponentActive = text == "If your opponent's Active Pokémon has no damage counters on it before this attack does damage, this attack does nothing."
         val requiresOpponentBurned = text == "If your opponent's Active Pokémon isn't Burned, this attack does nothing."
+        val requiresStadium = text == "If there is no Stadium in play, this attack does nothing."
         val opponentDeckDiscard = Regex("Discard the top (?:card|([2-5]) cards) of your opponent's deck\\.").matchEntire(text)
+        val discardOwnDeckTop = text == "Discard the top card of your deck."
+        val searchEvolutionSelf = text == "Search your deck for a card that evolves from this Pokémon and put it onto this Pokémon to evolve it. Then, shuffle your deck."
+        val revealOpponentHand = text == "Your opponent reveals their hand."
+        val delayedDefendingCounters = Regex("At the end of your opponent's next turn, put (\\d+) damage counters on the Defending Pokémon\\.").matchEntire(text)
         val benchEnergyBonus = Regex("You may discard up to (\\d+) Energy from your Benched Pokémon\\. This attack does (\\d+) more damage for each card you discarded in this way\\.").matchEntire(text)
         val handEnergyBonus = Regex("You may discard up to (\\d+) Energy cards from your hand, and this attack does (\\d+) more damage for each card you discarded in this way\\.").matchEntire(text)
         val discardTypedAttackerEnergy = Regex("Discard up to (\\d+) \\{([GRFLWPMD])\\} Energy from this Pokémon\\. This attack does (\\d+) damage for each card you discarded in this way\\.").matchEntire(text)
@@ -382,6 +497,10 @@ internal object CatalogRuleCompiler {
             val base = damageText.removeSuffix("+").toIntOrNull() ?: return null
             if (base > 0) effects += Effect.Damage(base)
             effects += Effect.OpponentFieldDamageCounterDamage(perCounter)
+        } else if (opponentPrizeTakenDamageTimes != null) {
+            val perPrize = opponentPrizeTakenDamageTimes.groupValues[1].toInt()
+            if (damageText != "${perPrize}×" && damageText != "${perPrize}x") return null
+            effects += Effect.OpponentPrizeTakenDamage(perPrize)
         } else if (opponentActiveDamageCountersTimes != null) {
             val perCounter = opponentActiveDamageCountersTimes.groupValues[1].toInt()
             if (damageText != "${perCounter}×" && damageText != "${perCounter}x") return null
@@ -392,6 +511,35 @@ internal object CatalogRuleCompiler {
             if (!damageText.endsWith("+") || base <= 0) return null
             effects += Effect.Damage(base)
             effects += Effect.OpponentActiveDamageCounterDamage(perCounter)
+        } else if (opponentHandCountDamage != null) {
+            val perCard = opponentHandCountDamage.groupValues[1].toInt()
+            if (damageText != "${perCard}×" && damageText != "${perCard}x") return null
+            effects += Effect.OpponentHandCountDamage(perCard)
+        } else if (ownBenchDamageBonus != null) {
+            if (!damageText.endsWith("+")) return null
+            val base = damageText.removeSuffix("+").toIntOrNull() ?: return null
+            if (base > 0) effects += Effect.Damage(base)
+            effects += Effect.OwnBenchCountDamage(ownBenchDamageBonus.groupValues[1].toInt())
+        } else if (ownCynthiaBenchCounterDamage != null) {
+            val perCounter = ownCynthiaBenchCounterDamage.groupValues[1].toInt()
+            if (damageText != "${perCounter}×" && damageText != "${perCounter}x") return null
+            effects += Effect.OwnNamedBenchDamageCounterDamage("Cynthia's", perCounter)
+            effects += Effect.IgnoreWeakness
+        } else if (ownFightingBenchCounterDamage != null) {
+            val perCounter = ownFightingBenchCounterDamage.groupValues[1].toInt()
+            if (damageText != "${perCounter}×" && damageText != "${perCounter}x") return null
+            effects += Effect.OwnBenchTypeDamageCounterDamage(EnergyType.FIGHTING, perCounter)
+        } else if (conditionalOwnDamageCounterBonus != null) {
+            if (!damageText.endsWith("+")) return null
+            val base = damageText.removeSuffix("+").toIntOrNull() ?: return null
+            if (base > 0) effects += Effect.Damage(base)
+            effects += Effect.ConditionalOwnDamageCounterBonus(conditionalOwnDamageCounterBonus.groupValues[1].toInt(), conditionalOwnDamageCounterBonus.groupValues[2].toInt())
+            effects += Effect.IgnoreWeakness
+        } else if (ownDamageCounterBonus != null) {
+            if (!damageText.endsWith("+")) return null
+            val base = damageText.removeSuffix("+").toIntOrNull() ?: return null
+            if (base > 0) effects += Effect.Damage(base)
+            effects += Effect.OwnDamageCounterDamage(ownDamageCounterBonus.groupValues[1].toInt())
         } else if (ownInPlayEnergyDamage != null || ownSpecialEnergyDamage != null || ownEnergyDamage != null || ownTeamEnergyTypeDamage != null) {
             val formula = ownInPlayEnergyDamage ?: ownSpecialEnergyDamage ?: ownEnergyDamage ?: ownTeamEnergyTypeDamage!!
             val perEnergy = formula.groupValues[1].toInt()
@@ -454,11 +602,20 @@ internal object CatalogRuleCompiler {
             if (damageText.isNotEmpty()) return null
             effects += Effect.TargetedDamage(dragOff.groupValues[1].toInt(), benchedOnly = true)
             effects += Effect.PullSelectedBenchBeforeDamage
-        } else if (discardAllTargeted != null) {
+        } else if (discardAllTargeted != null || discardAllTargetedAfter != null) {
             if (damageText.isNotEmpty()) return null
             effects += Effect.DiscardAttackEnergy(0, all = true)
-            effects += Effect.TargetedDamage(discardAllTargeted.groupValues[1].toInt())
+            effects += Effect.TargetedDamage((discardAllTargeted ?: discardAllTargetedAfter!!).groupValues[1].toInt())
         } else if (coin) {
+            if (discardDefendingPerHeads != null) {
+                val count = discardDefendingPerHeads?.groupValues?.get(2) ?: discardDefendingCoin!!.groupValues[1]
+                val coinCount = discardDefendingPerHeads?.groupValues?.get(1)?.toInt() ?: 1
+                val baseDamage = damageText.toIntOrNull()
+                if (baseDamage == null && damageText.isNotEmpty()) return null
+                if ((baseDamage ?: 0) > 0) effects += Effect.Damage(baseDamage!!)
+                effects += Effect.CoinDamage(coinCount, 0)
+                effects += Effect.DiscardDefendingEnergy(if (count in listOf("an", "a")) 1 else count.toInt(), onHeads = true, perHeads = true)
+            } else {
             val amount = coinFixed?.groupValues?.get(2)?.toInt()
                 ?: coinUntilTails?.groupValues?.get(1)?.toInt()
                 ?: coinPerEnergy?.groupValues?.get(1)?.toInt()
@@ -471,13 +628,15 @@ internal object CatalogRuleCompiler {
                 val condition = runCatching { SpecialCondition.valueOf(coinFixed.groupValues[4].uppercase()) }.getOrNull() ?: return null
                 effects += Effect.StatusCondition(condition, onHeads = true, minimumHeads = count.toInt())
             }
+            }
         } else {
             val discardOwnEnergyDamage = discardTypedAttackerEnergy != null || discardAnyBasicEnergyFromTeam != null || discardTypedEnergyFromTeam != null
-            val damage = if (damageText.isEmpty() || opponentHandEnergyDamage != null || discardOwnEnergyDamage || opponentActiveDamageCountersTimes != null) 0 else
-                (if (coinBonus != null || coinBonusMultiple != null || coinBonusAllHeads != null || coinBonusUntilTails != null || conditionalEnergy != null || conditionalInPlayEnergy != null || ownKnockoutBonus != null || ownUndamagedBonus != null || opponentExBonus != null || opponentTypeBonus != null || ownEnergyBonus != null || opponentEnergyBonus != null || opponentRetreatCostBonus != null || ownBenchEnergyBonus != null || opponentConditionBonus != null || opponentActiveDamagedBonus != null || opponentActiveDamageCounters != null || ownDiscardEnergyDamage != null || opponentPrizeTakenDamage != null || opponentPrizeCountDamage != null || opponentNoRetreatDamage != null || opponentResistanceDamage != null || ownToolAttachedDamage != null || bothActiveEnergyDamage != null || benchedDamage != null || benchEnergyBonus != null || handEnergyBonus != null) damageText.removeSuffix("+") else damageText).toIntOrNull() ?: return null
+            val damage = if (damageText.isEmpty() || opponentHandEnergyDamage != null || discardOwnEnergyDamage || opponentActiveDamageCountersTimes != null || opponentHandCountDamage != null) 0 else
+                (if (coinBonus != null || coinBonusMultiple != null || coinBonusAllHeads != null || coinBonusUntilTails != null || conditionalEnergy != null || conditionalInPlayEnergy != null || ownKnockoutBonus != null || ownBenchNameBonus != null || ownBenchTypeBonus != null || sameTypePokemonBonus || sameHandSizeDamageBonus != null || allOwnBenchedDamagedBonus != null || ownDamagedBenchedPokemonBonus != null || ownUndamagedBonus != null || opponentExBonus != null || opponentTypeBonus != null || opponentEvolutionBonus != null || ownEnergyBonus != null || opponentEnergyBonus != null || opponentRetreatCostBonus != null || ownBenchEnergyBonus != null || opponentConditionBonus != null || opponentActiveDamagedBonus != null || opponentActiveDamageCounters != null || ownDiscardEnergyDamage != null || discardEnergyThresholdDamage != null || ownDiscardAbilityBonus != null || opponentPrizeTakenDamage != null || opponentPrizeCountDamage != null || opponentNoRetreatDamage != null || opponentResistanceDamage != null || ownToolAttachedDamage != null || bothActiveEnergyDamage != null || benchedDamage != null || benchEnergyBonus != null || handEnergyBonus != null) damageText.removeSuffix("+") else damageText).toIntOrNull() ?: return null
             if (damage < 0) return null
             if (damage > 0) effects += Effect.Damage(damage)
-            val draw = Regex("Draw (a|1|2|3|4|5) cards?\\.").matchEntire(text)
+            val draw = Regex("(?:You may )?[Dd]raw (a|1|2|3|4|5) cards?\\.").matchEntire(text)
+            val eachPlayerDraw = Regex("Each player draws (\\d+) cards?\\.").matchEntire(text)
             val shuffleHandDraw = Regex("Shuffle your hand into your deck\\. Then, draw (\\d+) cards?\\.").matchEntire(text)
             val drawToHand = Regex("You may draw cards until you have (\\d+) cards in your hand\\.").matchEntire(text)
             val discardHandDraw = Regex("Discard your hand and draw (\\d+) cards?\\.").matchEntire(text)
@@ -485,11 +644,13 @@ internal object CatalogRuleCompiler {
             val selfOnly = Regex("This Pokémon does (\\d+) damage to itself\\.").matchEntire(text)
             val heal = Regex("Heal (\\d+) damage from this Pokémon\\.").matchEntire(text)
             val healAnyPokemon = Regex("Heal (\\d+) damage from 1 of your Pokémon\\.").matchEntire(text)
+            val healEachPokemon = Regex("Heal (\\d+) damage from each of your Pokémon\\.").matchEntire(text)
             val energySearch = Regex("Search your deck for a Basic \\{([GFRLWPMD])\\} Energy card and attach it to this Pokémon\\. Then, shuffle your deck\\.").matchEntire(text)
         val energySearchAnyType = text == "Search your deck for a Basic Energy card and attach it to this Pokémon. Then, shuffle your deck."
         val energySearchUpTo = Regex("Search your deck for up to (\\d+) Basic \\{([GFRLWPMD])\\} Energy cards and attach them to this Pokémon\\. Then, shuffle your deck\\.").matchEntire(text)
             when {
                 text.isEmpty() -> Unit
+                healEachPokemon != null -> effects += Effect.HealEachOwnPokemon(healEachPokemon.groupValues[1].toInt())
                 healAnyPokemon != null -> effects += Effect.HealOwnPokemon(healAnyPokemon.groupValues[1].toInt())
                 confusePoisonThenSwitch -> {
                     effects += Effect.StatusCondition(SpecialCondition.CONFUSED)
@@ -504,7 +665,7 @@ internal object CatalogRuleCompiler {
                 recoverSupporter -> effects += Effect.RecoverSupporterFromDiscard
                 matchingEnergySearch != null -> effects += Effect.SearchPokemonMatchingAttachedBasicEnergy(matchingEnergySearch.groupValues[1].toInt())
                 basicEnergyToHandSearch != null -> effects += Effect.SearchBasicEnergyToHand(basicEnergyToHandSearch.groupValues[1].toInt())
-                pokemonSearchToHand != null -> effects += Effect.SearchPokemonToHand()
+                pokemonSearchToHand != null || pokemonSearchUpToToHand != null -> effects += Effect.SearchPokemonToHand(pokemonSearchUpToToHand?.groupValues?.get(1)?.toInt() ?: 1)
                 typePokemonAndStadiumSearch != null -> effects += Effect.SearchPokemonTypeAndStadiumToHand(typePokemonAndStadiumSearch.groupValues[1].toInt(), symbolType(typePokemonAndStadiumSearch.groupValues[2]) ?: return null)
                 anyCardSearchToHand -> effects += Effect.SearchAnyCardToHand
                 supporterSearchToHand -> effects += Effect.SearchSupporterToHand
@@ -512,7 +673,13 @@ internal object CatalogRuleCompiler {
                 chooseOpponentAttackToRestrict -> effects += Effect.ChooseOpponentAttackToRestrict
                 healSelfByDamageDealt -> effects += Effect.HealSelfByDamageDealt
                 attachAnyBasicEnergy -> effects += Effect.AttachAnyBasicEnergyFromHand
+                attachOneBasicEnergy -> effects += Effect.AttachOneBasicEnergyFromHand
+                shuffleOwnBenchIntoDeck -> effects += Effect.ShuffleOwnBenchedPokemonIntoDeck
+                devolveOpponentActive -> effects += Effect.DevolveOpponentActive
+                discardStadium -> effects += Effect.DiscardStadium
+                returnSelfAndAttachments -> effects += Effect.ReturnSelfAndAttachmentsToHand
                 attachBasicEnergyFromDeckAny != null -> effects += Effect.AttachBasicEnergyFromDeckAny(attachBasicEnergyFromDeckAny.groupValues[1].toInt())
+                attachBasicEnergyFromDeckBench != null -> effects += Effect.AttachBasicEnergyFromDeckAny(attachBasicEnergyFromDeckBench.groupValues[1].toInt(), benchedOnly = true)
                 attachTypedEnergyFromDeckBench != null -> effects += Effect.AttachBasicEnergyFromDeckAny(attachTypedEnergyFromDeckBench.groupValues[1].toInt(), symbolType(attachTypedEnergyFromDeckBench.groupValues[2]) ?: return null, benchedOnly = true)
                 attachEnergyToEachBench != null -> effects += Effect.AttachBasicEnergyToEachBenchedPokemon(symbolType(attachEnergyToEachBench.groupValues[1]) ?: return null)
                 coinKnockOutBasic -> effects += Effect.CoinKnockOutBasic
@@ -529,6 +696,7 @@ internal object CatalogRuleCompiler {
                 text == "Flip a coin. If heads, during your opponent's next turn, prevent all damage from and effects of attacks done to this Pokémon." ||
                     text == "Flip a coin. If heads, during your opponent's next turn, prevent all damage done to this Pokémon by attacks." -> effects += Effect.PreventAttackDamageNextTurnOnHeads
                 moveEnergy != null -> effects += Effect.MoveEnergyToBench(moveEnergy.groupValues[1].toInt())
+                moveAllEnergyToBench -> effects += Effect.MoveAllEnergyToBench
                 benchEnergyBonus != null -> {
                     if (damage <= 0 || !damageText.endsWith("+")) return null
                     effects += Effect.DiscardBenchEnergyDamage(benchEnergyBonus.groupValues[1].toInt(), benchEnergyBonus.groupValues[2].toInt())
@@ -562,9 +730,15 @@ internal object CatalogRuleCompiler {
                     if (damage <= 0 || !damageText.endsWith("+")) return null
                     effects += Effect.OpponentTypeDamage(symbolType(opponentTypeBonus.groupValues[1]) ?: return null, opponentTypeBonus.groupValues[2].toInt())
                 }
+                opponentEvolutionBonus != null -> {
+                    if (damage <= 0 || !damageText.endsWith("+")) return null
+                    effects += Effect.OpponentEvolutionActiveDamageBonus(opponentEvolutionBonus.groupValues[1].toInt())
+                }
                 ownEnergyBonus != null -> {
                     if (damage <= 0 || !damageText.endsWith("+")) return null
-                    effects += Effect.OwnEnergyCountDamage(ownEnergyBonus.groupValues[1].toInt())
+                    val energyType = ownEnergyBonus.groupValues[2].takeIf(String::isNotEmpty)?.let(::symbolType)
+                    if (energyType == null) effects += Effect.OwnEnergyCountDamage(ownEnergyBonus.groupValues[1].toInt())
+                    else effects += Effect.OwnEnergyTypeCountDamage(energyType, ownEnergyBonus.groupValues[1].toInt())
                 }
                 opponentEnergyBonus != null -> {
                     if (damage <= 0 || !damageText.endsWith("+")) return null
@@ -600,6 +774,11 @@ internal object CatalogRuleCompiler {
                     if (damage <= 0 || !damageText.endsWith("+")) return null
                     effects += Effect.OwnDiscardEnergyDamage(ownDiscardEnergyDamage.groupValues[1].toInt())
                 }
+                discardEnergyThresholdDamage != null -> {
+                    if (damage <= 0 || !damageText.endsWith("+")) return null
+                    effects += Effect.DiscardEnergyThresholdDamage(symbolType(discardEnergyThresholdDamage.groupValues[2]) ?: return null,
+                        discardEnergyThresholdDamage.groupValues[1].toInt(), discardEnergyThresholdDamage.groupValues[3].toInt())
+                }
                 opponentPrizeTakenDamage != null -> {
                     if (damage <= 0 || !damageText.endsWith("+")) return null
                     effects += Effect.OpponentPrizeTakenDamage(opponentPrizeTakenDamage.groupValues[1].toInt())
@@ -624,6 +803,10 @@ internal object CatalogRuleCompiler {
                 opponentDiscard != null -> effects += Effect.DiscardRandomOpponentHand(1)
                 opponentShuffleRandom != null -> effects += Effect.ShuffleRandomOpponentHand(1)
                 opponentDeckDiscard != null -> effects += Effect.DiscardOpponentDeck(opponentDeckDiscard.groupValues[1].toIntOrNull() ?: 1)
+                discardOwnDeckTop -> effects += Effect.DiscardOwnDeckTop
+                revealOpponentHand -> effects += Effect.RevealOpponentHand
+                searchEvolutionSelf -> effects += Effect.SearchEvolutionForSelfToEvolve
+                delayedDefendingCounters != null -> effects += Effect.DelayedDefendingDamageCounters(delayedDefendingCounters.groupValues[1].toInt())
                 drawToHand != null -> effects += Effect.DrawToHand(drawToHand.groupValues[1].toInt())
                 discardHandDraw != null -> effects += Effect.DiscardHandDraw(discardHandDraw.groupValues[1].toInt())
                 coinBonus != null || coinBonusMultiple != null || coinBonusAllHeads != null || coinBonusUntilTails != null -> {
@@ -656,6 +839,35 @@ internal object CatalogRuleCompiler {
                     if (damage <= 0 || !damageText.endsWith("+")) return null
                     effects += Effect.OwnKnockoutLastTurnDamage(ownKnockoutBonus.groupValues[1].toInt())
                 }
+                ownBenchNameBonus != null -> {
+                    if (damage <= 0 || !damageText.endsWith("+")) return null
+                    effects += Effect.BenchPokemonPresenceDamageBonus(ownBenchNameBonus.groupValues[1], ownBenchNameBonus.groupValues[2].toInt())
+                }
+                ownBenchTypeBonus != null -> {
+                    if (damage <= 0 || !damageText.endsWith("+")) return null
+                    effects += Effect.BenchTypePresenceDamageBonus(symbolType(ownBenchTypeBonus.groupValues[1]) ?: return null, ownBenchTypeBonus.groupValues[2].toInt())
+                }
+                allOwnBenchedDamagedBonus != null -> {
+                    if (damage <= 0 || !damageText.endsWith("+")) return null
+                    effects += Effect.AllOwnBenchedPokemonDamagedBonus(allOwnBenchedDamagedBonus.groupValues[1].toInt())
+                }
+                ownDamagedBenchedPokemonBonus != null -> {
+                    if (damage <= 0 || !damageText.endsWith("+")) return null
+                    effects += Effect.OwnDamagedBenchedPokemonCountDamage(ownDamagedBenchedPokemonBonus.groupValues[1].toInt())
+                }
+                sameTypePokemonBonus -> {
+                    if (damage <= 0 || !damageText.endsWith("+")) return null
+                    effects += Effect.SameTypePokemonInPlayDamageBonus(120)
+                }
+                sameHandSizeDamageBonus != null -> {
+                    if (damage <= 0 || !damageText.endsWith("+")) return null
+                    effects += Effect.SameHandSizeDamageBonus(sameHandSizeDamageBonus.groupValues[1].toInt())
+                }
+                ownDiscardAbilityBonus != null -> {
+                    if (damage <= 0 || !damageText.endsWith("+")) return null
+                    effects += Effect.OwnDiscardAbilityCountBonus(ownDiscardAbilityBonus.groupValues[2],
+                        ownDiscardAbilityBonus.groupValues[1].toInt(), ownDiscardAbilityBonus.groupValues[3].toInt())
+                }
                 ownUndamagedBonus != null -> {
                     if (damage <= 0 || !damageText.endsWith("+")) return null
                     effects += Effect.OwnUndamagedDamageBonus(ownUndamagedBonus.groupValues[1].toInt())
@@ -671,7 +883,9 @@ internal object CatalogRuleCompiler {
                 }
                 discardEnergyBenchDamage != null -> effects += Effect.DiscardEnergyThenBenchDamage(discardEnergyBenchDamage.groupValues[1].toInt(), discardEnergyBenchDamage.groupValues[2].toInt())
                 selectedPokemonDamage != null -> effects += Effect.TargetedDamage(selectedPokemonDamage.groupValues[1].toInt())
-                benchDamage != null -> effects += Effect.BenchDamage(benchDamage.groupValues[1].toInt())
+                ownBenchAttackDamage != null -> effects += Effect.OwnBenchDamage(ownBenchAttackDamage.groupValues[1].toInt())
+                benchDamage != null || damagedBenchDamage != null -> effects += Effect.BenchDamage(
+                    (damagedBenchDamage ?: benchDamage!!).groupValues[1].toInt(), requiresDamageCounters = damagedBenchDamage != null)
                 benchDamageCounters != null || spreadBenchDamageCounters != null -> effects += Effect.BenchDamageCounters(
                     (benchDamageCounters ?: spreadBenchDamageCounters!!).groupValues[1].toInt(), distribute = spreadBenchDamageCounters != null)
                 placeDamageCounter -> effects += Effect.PlaceDamageCounter
@@ -689,21 +903,30 @@ internal object CatalogRuleCompiler {
                     effects += Effect.IgnoreOpponentActiveEffects
                 }
                 text == "This Pokémon recovers from all Special Conditions." -> effects += Effect.RecoverSelfFromSpecialConditions
+                text == "Move an Energy from 1 of your opponent's Pokémon to another of their Pokémon." -> effects += Effect.MoveEnergyBetweenOpponentPokemon
+                text == "Move all damage counters from 1 of your Benched Pokémon to 1 of your opponent's Pokémon." -> effects += Effect.MoveOwnBenchDamageCountersToOpponent
                 text == "During your opponent's next turn, this Pokémon has no Weakness." -> effects += Effect.NoWeaknessNextTurn
                 discardDefendingCoin != null -> effects += Effect.DiscardDefendingEnergy(if (discardDefendingCoin.groupValues[1] in listOf("an", "a")) 1 else discardDefendingCoin.groupValues[1].toInt(), onHeads = true)
-                discardDefending != null -> effects += Effect.DiscardDefendingEnergy(if (discardDefending.groupValues[1] in listOf("an", "a")) 1 else discardDefending.groupValues[1].toInt())
+                discardDefending != null -> effects += Effect.DiscardDefendingEnergy(
+                    if (discardDefending.groupValues[1] in listOf("an", "a")) 1 else discardDefending.groupValues[1].toInt(),
+                    type = discardDefending.groupValues[2].takeIf { it.startsWith("{") }?.let { symbolType(it.removeSurrounding("{", "}")) },
+                    specialOnly = discardDefending.groupValues[2] == "Special")
+                discardAllOpponentSpecialEnergy -> effects += Effect.DiscardAllOpponentSpecialEnergy
                 draw != null -> effects += Effect.Draw(if (draw.groupValues[1] == "a") 1 else draw.groupValues[1].toInt())
+                eachPlayerDraw != null -> effects += Effect.EachPlayerDraw(eachPlayerDraw.groupValues[1].toInt())
                 shuffleHandDraw != null -> effects += Effect.ShuffleHandDraw(shuffleHandDraw.groupValues[1].toInt())
                 energySearchAnyType -> effects += Effect.EnergyFromDeck(1, null)
                 energySearch != null || energySearchUpTo != null -> effects += Effect.EnergyFromDeck(
                     energySearchUpTo?.groupValues?.get(1)?.toInt() ?: 1,
                     symbolType(energySearchUpTo?.groupValues?.get(2) ?: energySearch!!.groupValues[1]) ?: return null)
+                namedPokemonBenchSearch != null && namedPokemonBenchSearch.groupValues[2] != "Basic Pokémon" -> effects += Effect.NamedPokemonToBench(namedPokemonBenchSearch.groupValues[2], namedPokemonBenchSearch.groupValues[1].toInt())
                 benchSearch != null -> effects += Effect.BasicPokemonToBench(benchSearch.groupValues[1].toIntOrNull() ?: 1)
                 recoverNamedPokemon != null -> effects += Effect.RecoverNamedPokemonToBench(recoverNamedPokemon.groupValues[2], recoverNamedPokemon.groupValues[1].toInt())
                 rotomSearch != null -> effects += Effect.SearchRotomToBench
                 recoil != null -> effects += Effect.Recoil(recoil.groupValues[1].toInt())
                 heal != null -> effects += Effect.Heal(heal.groupValues[1].toInt())
                 Regex("During your next turn, this Pokémon can't use (.+)\\.").matchEntire(text) != null -> effects += Effect.RestrictNamedAttackNextTurn(Regex("During your next turn, this Pokémon can't use (.+)\\.").matchEntire(text)!!.groupValues[1])
+                Regex("This Pokémon can't use (.+) again until it leaves the Active Spot\\.").matchEntire(text)?.groupValues?.get(1) == raw.s("name") -> effects += Effect.CannotRepeatAttackUntilLeavingActive
                 text == "During your next turn, this Pokémon can't attack." -> effects += Effect.RestrictNextTurn()
                 text == "During your next turn, this Pokémon can't use attacks." -> effects += Effect.RestrictNextTurn()
                 text == "During your opponent's next turn, they can't play any Item cards from their hand." -> effects += Effect.LockOpponentItemsNextTurn
@@ -722,11 +945,13 @@ internal object CatalogRuleCompiler {
                     text == "During your opponent's next turn, the Defending Pokémon can't use attacks." -> effects += Effect.PreventDefendingAttackNextTurn
                 text == "Switch this Pokémon with 1 of your Benched Pokémon." -> effects += Effect.SwitchOwn()
                 text == "You may switch this Pokémon with 1 of your Benched Pokémon." -> effects += Effect.SwitchOwn(optional = true)
+                returnEnergyToHand -> effects += Effect.ReturnAttachedEnergyToHand
                 text == "Switch out your opponent's Active Pokémon to the Bench. (Your opponent chooses the new Active Pokémon.)" -> effects += Effect.SwitchOpponent
                 text == "This attack's damage isn't affected by Weakness or Resistance." -> effects += Effect.IgnoreWeaknessResistance
                 text == "This attack's damage isn't affected by Resistance." -> effects += Effect.IgnoreResistance
                 text == "This attack's damage isn't affected by any effects on your opponent's Active Pokémon." -> effects += Effect.IgnoreOpponentActiveEffects
                 requiresOpponentBurned -> effects += Effect.RequiresOpponentBurned
+                requiresStadium -> effects += Effect.RequiresStadium
                 text == "This attack's damage isn't affected by Weakness or Resistance, or by any effects on your opponent's Active Pokémon." -> {
                     effects += Effect.IgnoreWeaknessResistance
                     effects += Effect.IgnoreOpponentActiveEffects
