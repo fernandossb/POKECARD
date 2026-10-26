@@ -973,21 +973,31 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         events += GameEvent("DamageHealed", "Curou até ${choice.amount} de dano do Pokémon escolhido.")
                     }
                     ChoiceKind.ATTACK_HAND_ENERGY -> if (ids.isNotEmpty()) {
-                        val energy = p.hand.first { it.id == ids.single() && def(it).category == Category.ENERGY && def(it).basicEnergy }
+                        val energy = p.hand.first { it.id == ids.single() && def(it).category == Category.ENERGY && def(it).basicEnergy &&
+                            (choice.energyType == null || def(it).type == choice.energyType) }
+                        val targets = if (choice.benchedOnly) p.bench else p.pokemon()
                         remainingChoices = listOf(ChoiceRequest(ChoiceKind.ATTACK_HAND_ENERGY_TARGET,
-                            "Escolha um dos seus Pokémon para receber ${def(energy).name}.",
-                            p.pokemon().map { it.id }, 1, 1, remaining = choice.remaining, selectedEnergy = energy.id)) + remainingChoices
+                            "Escolha ${if (choice.benchedOnly) "um Pokémon do Banco" else "um dos seus Pokémon"} para receber ${def(energy).name}.",
+                            targets.map { it.id }, 1, 1, remaining = choice.remaining, selectedEnergy = energy.id,
+                            energyType = choice.energyType, benchedOnly = choice.benchedOnly, healAll = choice.healAll)) + remainingChoices
                     }
                     ChoiceKind.ATTACK_HAND_ENERGY_TARGET -> {
-                        val energy = p.hand.first { it.id == choice.selectedEnergy && def(it).category == Category.ENERGY && def(it).basicEnergy }
+                        val energy = p.hand.first { it.id == choice.selectedEnergy && def(it).category == Category.ENERGY && def(it).basicEnergy &&
+                            (choice.energyType == null || def(it).type == choice.energyType) }
                         val targetId = ids.single()
+                        val targetIsBench = p.bench.any { it.id == targetId }
+                        require(if (choice.benchedOnly) targetIsBench else p.pokemon().any { it.id == targetId })
                         update { player -> player.copy(hand = player.hand - energy,
-                            active = player.active?.let { if (it.id == targetId) it.copy(energies = it.energies + energy) else it },
-                            bench = player.bench.map { if (it.id == targetId) it.copy(energies = it.energies + energy) else it }) }
-                        events += GameEvent("AttackHandEnergyAttached", "Ligou ${def(energy).name} a um Pokémon pelo ataque.")
-                        val eligible = s.players[actor].hand.filter { def(it).category == Category.ENERGY && def(it).basicEnergy }
+                            active = player.active?.let { if (it.id == targetId) it.copy(energies = it.energies + energy,
+                                damage = if (choice.healAll) 0 else it.damage) else it },
+                            bench = player.bench.map { if (it.id == targetId) it.copy(energies = it.energies + energy,
+                                damage = if (choice.healAll) 0 else it.damage) else it }) }
+                        events += GameEvent("AttackHandEnergyAttached", "Ligou ${def(energy).name} a um Pokémon pelo ataque.${if (choice.healAll) " Todo o dano desse Pokémon foi curado." else ""}")
+                        val eligible = s.players[actor].hand.filter { def(it).category == Category.ENERGY && def(it).basicEnergy &&
+                            (choice.energyType == null || def(it).type == choice.energyType) }
                         if (eligible.isNotEmpty() && choice.remaining > 0) remainingChoices = listOf(ChoiceRequest(ChoiceKind.ATTACK_HAND_ENERGY,
-                            "Você pode ligar outra Energia Básica da mão ou concluir.", eligible.map { it.id }, 0, 1)) + remainingChoices
+                            "Você pode ligar outra Energia Básica da mão ou concluir.", eligible.map { it.id }, 0, 1,
+                            energyType = choice.energyType, benchedOnly = choice.benchedOnly, healAll = choice.healAll)) + remainingChoices
                     }
                     ChoiceKind.ATTACK_SHUFFLE_OWN_BENCH -> {
                         val targetId = ids.single()

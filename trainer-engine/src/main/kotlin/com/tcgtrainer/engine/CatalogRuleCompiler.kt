@@ -436,6 +436,7 @@ internal object CatalogRuleCompiler {
         val opponentActiveSpecialConditionKnockout = text == "If your opponent's Active Pokémon is affected by a Special Condition, it is Knocked Out."
         val opponentActiveExactlySixCountersKnockout = text == "If your opponent's Active Pokémon has exactly 6 damage counters on it, that Pokémon is Knocked Out."
         val revealAndChooseOpponentHandDiscard = text == "Your opponent reveals their hand, and you discard a card you find there."
+        val attachBasicGrassAndHealBenched = text == "Attach a Basic {G} Energy card from your hand to 1 of your Benched Pokémon. If you do, heal all damage from that Pokémon."
         val ownUndamagedBonus = Regex("If this Pokémon has no damage counters on it, this attack does (\\d+) more damage\\.").matchEntire(text)
         val ownAnyDamageCounterBonus = Regex("If this Pokémon has any damage counters on it, this attack does (\\d+) more damage\\.").matchEntire(text)
         val opponentExBonus = Regex("If your opponent's Active Pokémon is a Pokémon ex(?: or Pokémon V)?, this attack does (\\d+) more damage\\.").matchEntire(text)
@@ -795,6 +796,7 @@ internal object CatalogRuleCompiler {
         val energySearchUpTo = Regex("Search your deck for up to (\\d+) Basic \\{([GFRLWPMD])\\} Energy cards and attach them to this Pokémon\\. Then, shuffle your deck\\.").matchEntire(text)
             when {
                 text.isEmpty() -> Unit
+                attachBasicGrassAndHealBenched -> effects += Effect.AttachBasicEnergyFromHandToBenchedThenHealAll(EnergyType.GRASS)
                 healEachPokemonBoth != null -> effects += Effect.HealEachPokemon(healEachPokemonBoth.groupValues[1].toInt())
                 healEachPokemon != null -> effects += Effect.HealEachOwnPokemon(healEachPokemon.groupValues[1].toInt())
                 healAnyPokemon != null -> effects += Effect.HealOwnPokemon(healAnyPokemon.groupValues[1].toInt())

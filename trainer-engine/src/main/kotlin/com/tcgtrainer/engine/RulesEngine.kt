@@ -1314,13 +1314,21 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                             eligible.map { it.id }, 1, 1, visibleCards = eligible.map { it.id })
                     }
                 }
-                if (Effect.AttachAnyBasicEnergyFromHand in attack.effects || Effect.AttachOneBasicEnergyFromHand in attack.effects) {
-                    val eligible = next.players[actor].hand.filter { definition(it).category == Category.ENERGY && definition(it).basicEnergy }
-                    if (eligible.isNotEmpty()) {
+                val attachAndHeal = attack.effects.filterIsInstance<Effect.AttachBasicEnergyFromHandToBenchedThenHealAll>().firstOrNull()
+                if (Effect.AttachAnyBasicEnergyFromHand in attack.effects || Effect.AttachOneBasicEnergyFromHand in attack.effects || attachAndHeal != null) {
+                    val eligible = next.players[actor].hand.filter { definition(it).category == Category.ENERGY && definition(it).basicEnergy &&
+                        (attachAndHeal == null || definition(it).type == attachAndHeal.type) }
+                    val canAttachAndHeal = attachAndHeal == null || next.players[actor].bench.isNotEmpty()
+                    if (eligible.isNotEmpty() && canAttachAndHeal) {
                         val repeatable = Effect.AttachAnyBasicEnergyFromHand in attack.effects
                         choices += ChoiceRequest(ChoiceKind.ATTACK_HAND_ENERGY,
-                            if (repeatable) "Você pode ligar Energias Básicas da mão aos seus Pokémon, uma por vez." else "Escolha uma Energia Básica da mão para ligar a um dos seus Pokémon.",
-                            eligible.map { it.id }, if (repeatable) 0 else 1, 1, remaining = if (repeatable) 1 else 0)
+                            when {
+                                attachAndHeal != null -> "Escolha uma Energia Básica de Grass da mão para ligar a um Pokémon do Banco; cure todo o dano dele."
+                                repeatable -> "Você pode ligar Energias Básicas da mão aos seus Pokémon, uma por vez."
+                                else -> "Escolha uma Energia Básica da mão para ligar a um dos seus Pokémon."
+                            }, eligible.map { it.id }, if (repeatable || attachAndHeal != null) 0 else 1, 1,
+                            remaining = if (repeatable) 1 else 0, energyType = attachAndHeal?.type,
+                            benchedOnly = attachAndHeal != null, healAll = attachAndHeal != null)
                     }
                 }
                 if (!defenderEffectsPrevented && knockoutHeads == 0 && Effect.CoinKnockOutBasic in attack.effects) {
