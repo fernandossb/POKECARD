@@ -256,6 +256,7 @@ import kotlinx.serialization.Serializable
     val benchDamageImmunityForAttackerMaxEnergy: Int = 0,
     val attachBasicEnergyFromDiscard: Boolean = false,
     val preventOpponentEffects: Boolean = false,
+    val preventOpponentAttackDamageEffectsWhileOnBench: Boolean = false,
     val moveBasicEnergyBetweenOwnPokemon: Boolean = false, val moveBasicEnergyType: EnergyType? = null,
     val onBenchAttachBasicEnergyType: EnergyType? = null, val onBenchAttachBasicEnergyMax: Int = 0,
     val preventDamageFromPokemonWithAbilities: Boolean = false,

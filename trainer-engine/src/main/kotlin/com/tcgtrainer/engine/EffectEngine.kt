@@ -36,12 +36,14 @@ class EffectEngine(private val catalog: CardCatalog) {
         ownBenchPokemonDetails: List<Pair<String, Int>> = emptyList(),
         ownBenchPokemonTypeDetails: List<Pair<EnergyType, Int>> = emptyList(),
         sourceAbilityOverride: List<AbilityDefinition>? = null, targetAbilityOverride: List<AbilityDefinition>? = null,
-        allPokemonToolCount: Int = 0, attackerPokemon: List<PokemonInstance> = listOf(attacker)): Int {
+        allPokemonToolCount: Int = 0, attackerPokemon: List<PokemonInstance> = listOf(attacker),
+        targetIsOpponentBench: Boolean = false): Int {
         if (defender.attackImmunityTurn >= 0 && turn == defender.attackImmunityTurn) return 0
         val source = catalog.get(attacker.top.definitionId)
         val target = catalog.get(defender.top.definitionId)
         val sourceAbilities = sourceAbilityOverride ?: source.abilities
         val targetAbilities = targetAbilityOverride ?: target.abilities
+        if (targetIsOpponentBench && targetAbilities.any { it.preventOpponentAttackDamageEffectsWhileOnBench }) return 0
         fun abilitiesOf(pokemon: PokemonInstance): List<AbilityDefinition> = when (pokemon.id) {
             attacker.id -> sourceAbilities
             defender.id -> targetAbilities

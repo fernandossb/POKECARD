@@ -15,6 +15,12 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         } ?: return abilities
         return abilities.filter { it.name == suppressor.opponentActiveAbilityException }
     }
+    fun attackTargetEffectsPrevented(state: GameState, owner: Int, pokemon: PokemonInstance): Boolean {
+        val isBenched = state.players[owner].bench.any { it.id == pokemon.id }
+        return pokemon.attackImmunityTurn == state.turn || effectiveAbilities(state, owner, pokemon).any { ability ->
+            ability.preventOpponentEffects || isBenched && ability.preventOpponentAttackDamageEffectsWhileOnBench
+        }
+    }
     private fun abilityNames(card: CardInstance): List<String> {
         val compiled = definition(card).abilities.map { it.name }
         if (compiled.isNotEmpty()) return compiled
@@ -169,6 +175,8 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     attack.effects.any { it is Effect.DiscardEnergyThenBenchDamage } && state.players[1-state.currentPlayer].bench.none { it.id == action.targetId } -> reason("Escolha um Pokémon do Banco adversário como alvo.")
                     attack.effects.filterIsInstance<Effect.TargetedDamage>().any { it.benchedOnly } && state.players[1-state.currentPlayer].bench.none { it.id == action.targetId } -> reason("Escolha um Pokémon do Banco adversário como alvo.")
                     attack.effects.any { it is Effect.TargetedDamage } && state.players[1-state.currentPlayer].pokemon().none { it.id == action.targetId } -> reason("Escolha um Pokémon adversário como alvo.")
+                    action.targetId?.let { id -> state.players[1-actor].bench.firstOrNull { it.id == id } }
+                        ?.let { attackTargetEffectsPrevented(state, 1-actor, it) } == true -> reason("Este Pokémon no Banco está protegido contra ataques.")
                     state.pendingOptionalEnergyAttackId == action.attackId -> Legality.Legal
                     else -> energyCost(active, attackCost(state, active, attack))
                 }
@@ -250,6 +258,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         val attack = attackFor(state, attacker, attackId) ?: return null
         if (Effect.PullSelectedBenchBeforeDamage in attack.effects && targetId != null) {
             val pulled = opponent.bench.find { it.id == targetId } ?: return null
+            if (attackTargetEffectsPrevented(state, 1-state.currentPlayer, pulled)) return null
             val oldActive = opponent.active ?: return null
             val switched = state.copy(players = state.players.mapIndexed { index, player ->
                 if (index != 1-state.currentPlayer) player else player.copy(active = pulled,
@@ -335,6 +344,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             opponentPrizeCardsRemaining = opponent.prizes.size,
             allPokemonToolCount = state.players.flatMap { it.pokemon() }.count { it.tool != null },
             attackerPokemon = state.players[state.currentPlayer].pokemon(),
+            targetIsOpponentBench = state.players[1-state.currentPlayer].bench.any { it.id == defender.id },
             ownBenchWithEnergyCounts = EnergyType.entries.associateWith { type ->
                 state.players[state.currentPlayer].bench.count { pokemon -> pokemon.energies.any { definition(it).type == type } }
             })
@@ -343,7 +353,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         val survivalHp = if (defender.damage == 0) defenderAbilities.maxOfOrNull { it.surviveAttackKnockoutAtHp } ?: 0 else 0
         val knockoutAtSixCounters = Effect.KnockOutOpponentActiveAtExactlySixDamageCounters in attack.effects &&
             defender.id == opponent.active?.id && defender.damage == 60 && defender.attackImmunityTurn != state.turn &&
-            defenderAbilities.none { it.preventOpponentEffects }
+            !attackTargetEffectsPrevented(state, 1-state.currentPlayer, defender)
         val remaining = if (knockoutAtSixCounters) 0 else if (survivalHp > 0 && damage >= hp) survivalHp else (hp - defender.damage - damage).coerceAtLeast(0)
         val topDeckEnergy = attack.effects.filterIsInstance<Effect.DiscardTopDeckEnergyDamage>().firstOrNull()
         val uncertain = coin != null && rolledHeads == null || benchEnergyBonus > 0 || topDeckEnergy != null
@@ -793,8 +803,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     if (results.isNotEmpty()) emit("CoinFlipped", results.joinToString { (target, heads) ->
                         "${definition(target.top).name}: ${if (heads) "CARA" else "COROA"}"
                     })
-                    results.filter { it.second && it.first.attackImmunityTurn != state.turn &&
-                        effectiveAbilities(next, opponent, it.first).none { ability -> ability.preventOpponentEffects } }
+                    results.filter { it.second && !attackTargetEffectsPrevented(next, opponent, it.first) }
                         .map { it.first.id }
                 } else emptyList()
                 val toolTarget = next.players[opponent].active
@@ -850,10 +859,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 } else false
                 val defender = primaryTargetId?.let { id -> next.players[opponent].pokemon().first { it.id == id } } ?: next.players[opponent].active!!
                 val defenderAbilities = effectiveAbilities(next, opponent, defender)
-                val teraAttackImmune = definition(p.active.top).isTera &&
-                    defenderAbilities.any { it.preventDamageAndEffectsFromTeraAttacks }
-                val defenderEffectsPrevented = defender.attackImmunityTurn == state.turn ||
-                    defenderAbilities.any { it.preventOpponentEffects } || teraAttackImmune
+                val defenderEffectsPrevented = attackTargetEffectsPrevented(next, opponent, defender)
                 if (attack.effects.any { it is Effect.OpponentHandEnergyCountDamage } || Effect.RevealOpponentHand in attack.effects || Effect.RevealAndChooseOpponentHandDiscard in attack.effects) {
                     val revealed = next.players[opponent].hand.joinToString(", ") { definition(it).name }
                     emit("OpponentHandRevealed", "Mão adversária revelada: ${revealed.ifEmpty { "vazia" }}.")
@@ -905,8 +911,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 emit("DamageDealt", "HP restante: $remainingHpAfterDamage.")
                 if (Effect.DevolveOpponentPokemonIntoDeck in attack.effects) {
                     val evolvedTargets = next.players[opponent].pokemon().filter { pokemon ->
-                        pokemon.cards.size > 1 && pokemon.attackImmunityTurn != state.turn &&
-                            effectiveAbilities(next, opponent, pokemon).none { it.preventOpponentEffects }
+                        pokemon.cards.size > 1 && !attackTargetEffectsPrevented(next, opponent, pokemon)
                     }
                     if (evolvedTargets.isNotEmpty()) {
                         val targetIds = evolvedTargets.map { it.id }.toSet()
@@ -1090,7 +1095,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 }
                 if (Effect.DiscardAllOpponentSpecialEnergy in attack.effects) {
                     val field = next.players[opponent].pokemon().filter { pokemon ->
-                        effectiveAbilities(next, opponent, pokemon).none { it.preventOpponentEffects }
+                        !attackTargetEffectsPrevented(next, opponent, pokemon)
                     }
                     val discarded = field.flatMap { pokemon -> pokemon.energies.filter { energy ->
                         definition(energy).category == Category.ENERGY && !definition(energy).basicEnergy
@@ -1106,7 +1111,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 }
                 if (Effect.DiscardOpponentToolsAndSpecialEnergy in attack.effects) {
                     val affected = next.players[opponent].pokemon().filter { pokemon ->
-                        effectiveAbilities(next, opponent, pokemon).none { it.preventOpponentEffects }
+                        !attackTargetEffectsPrevented(next, opponent, pokemon)
                     }
                     val affectedIds = affected.mapTo(mutableSetOf()) { it.id }
                     val discardedEnergies = affected.flatMap { pokemon -> pokemon.energies.filter { energy ->
@@ -1187,7 +1192,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     next.players.indices.forEach { owner ->
                         next.players[owner].pokemon().filter { pokemon ->
                             pokemon.damage > 0 && (owner == actor ||
-                                (pokemon.attackImmunityTurn != state.turn && effectiveAbilities(next, opponent, pokemon).none { it.preventOpponentEffects }))
+                                !attackTargetEffectsPrevented(next, owner, pokemon))
                         }.forEach { pokemon ->
                             val healed = minOf(heal.amount, pokemon.damage)
                             update(owner) { player ->
@@ -1293,8 +1298,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         eligible.map { it.id }, 0, minOf(effect.max, eligible.size), amount = effect.perEnergy)
                 }
                 attack.effects.filterIsInstance<Effect.MultiTargetDamage>().forEach { effect ->
-                    val candidates = next.players[opponent].pokemon().filter { it.attackImmunityTurn != state.turn &&
-                        effectiveAbilities(next, opponent, it).none { ability -> ability.preventOpponentEffects } }
+                    val candidates = next.players[opponent].pokemon().filter { !attackTargetEffectsPrevented(next, opponent, it) }
                     if (effect.allowRepeat) {
                         if (candidates.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.ATTACK_MULTI_DAMAGE_SINGLE_TARGET,
                             "Escolha 1 Pokémon adversário para receber ${effect.amount} de dano (${effect.targets} escolhas no total).",
@@ -1310,8 +1314,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     val attacker = next.players[actor].active
                     val target = next.players[opponent].active
                     val lightning = attacker?.energies?.filter { definition(it).category == Category.ENERGY && definition(it).type == EnergyType.LIGHTNING }.orEmpty()
-                    if (lightning.size >= effect.count && target != null && target.attackImmunityTurn != state.turn &&
-                        effectiveAbilities(next, opponent, target).none { it.preventOpponentEffects }) {
+                    if (lightning.size >= effect.count && target != null && !attackTargetEffectsPrevented(next, opponent, target)) {
                         choices += ChoiceRequest(ChoiceKind.ATTACK_OPTIONAL_PARALYSIS_DISCARD,
                             "Opcional: descarte ${effect.count} Energias {L} deste Pokémon para Paralisar o Ativo adversário.",
                             lightning.map { it.id }, 0, effect.count, sourcePokemonId = attacker.id)
@@ -1348,40 +1351,40 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     }
                 }
                 if (!defenderEffectsPrevented && knockoutHeads == 0 && Effect.CoinKnockOutBasic in attack.effects) {
-                    val targets = next.players[opponent].bench.filter { definition(it.top).stage == Stage.BASIC && it.attackImmunityTurn != state.turn && effectiveAbilities(next, opponent, it).none { ability -> ability.preventOpponentEffects } }
+                    val targets = next.players[opponent].bench.filter { definition(it.top).stage == Stage.BASIC && !attackTargetEffectsPrevented(next, opponent, it) }
                     if (targets.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.ATTACK_KNOCKOUT_BASIC_BENCH,
                         "Escolha um Pokémon Básico do Banco adversário para Nocautear.", targets.map { it.id }, 1, 1)
                 }
                 if (!defenderEffectsPrevented && Effect.MoveOpponentDamageCounters in attack.effects) {
-                    val field = next.players[opponent].pokemon().filter { effectiveAbilities(next, opponent, it).none { ability -> ability.preventOpponentEffects } }
+                    val field = next.players[opponent].pokemon().filter { !attackTargetEffectsPrevented(next, opponent, it) }
                     val sources = field.filter { source -> source.damage >= 10 && field.any { it.id != source.id } }
                     if (sources.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.ATTACK_MOVE_DAMAGE_SOURCE,
                         "Você pode mover contadores de dano entre Pokémon adversários.", sources.map { it.id }, 0, 1)
                 }
                 if (!defenderEffectsPrevented && Effect.MoveOwnBenchDamageCountersToOpponent in attack.effects) {
                     val sources = next.players[actor].bench.filter { it.damage >= 10 }
-                    val targets = next.players[opponent].pokemon().filter { effectiveAbilities(next, opponent, it).none { ability -> ability.preventOpponentEffects } }
+                    val targets = next.players[opponent].pokemon().filter { !attackTargetEffectsPrevented(next, opponent, it) }
                     if (sources.isNotEmpty() && targets.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.ATTACK_MOVE_OWN_DAMAGE_SOURCE,
                         "Escolha um Pokémon do seu Banco para mover todos os contadores de dano.", sources.map { it.id }, 1, 1)
                 }
                 if (!defenderEffectsPrevented && Effect.MoveEnergyBetweenOpponentPokemon in attack.effects) {
-                    val field = next.players[opponent].pokemon().filter { effectiveAbilities(next, opponent, it).none { ability -> ability.preventOpponentEffects } }
+                    val field = next.players[opponent].pokemon().filter { !attackTargetEffectsPrevented(next, opponent, it) }
                     val energies = field.flatMap { it.energies }
                     if (energies.isNotEmpty() && field.size >= 2) choices += ChoiceRequest(ChoiceKind.ATTACK_OPPONENT_ENERGY,
                         "Escolha uma Energia ligada ao Pokémon adversário que será movida.", energies.map { it.id }, 1, 1)
                 }
                 if (!defenderEffectsPrevented && Effect.MoveEnergyFromOpponentActiveToBench in attack.effects) {
                     val active = next.players[opponent].active
-                    val bench = next.players[opponent].bench.filter { effectiveAbilities(next, opponent, it).none { ability -> ability.preventOpponentEffects } }
+                    val bench = next.players[opponent].bench.filter { !attackTargetEffectsPrevented(next, opponent, it) }
                     if (active != null && active.energies.isNotEmpty() && bench.isNotEmpty() &&
-                        effectiveAbilities(next, opponent, active).none { it.preventOpponentEffects }) {
+                        !attackTargetEffectsPrevented(next, opponent, active)) {
                         choices += ChoiceRequest(ChoiceKind.ATTACK_OPPONENT_ENERGY,
                             "Opcional: mova uma Energia do Ativo adversário para um Pokémon do Banco dele.",
                             active.energies.map { it.id }, 0, 1)
                     }
                 }
                 attack.effects.filterIsInstance<Effect.BenchDamage>().forEach { effect ->
-                    val bench = next.players[opponent].bench.filter { it.attackImmunityTurn != state.turn &&
+                    val bench = next.players[opponent].bench.filter { !attackTargetEffectsPrevented(next, opponent, it) &&
                         (!effect.requiresDamageCounters || it.damage > 0) }
                     if (bench.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.ATTACK_DAMAGE_TARGET,
                         "Escolha um Pokémon do Banco adversário para receber ${effect.amount} de dano.", bench.map { it.id }, 1, 1, amount = effect.amount)
@@ -1395,15 +1398,14 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 }
                 attack.effects.filterIsInstance<Effect.OptionalShuffleEnergyThenBenchDamage>().forEach { effect ->
                     val eligible = next.players[actor].active!!.energies
-                    val targets = next.players[opponent].bench.filter { it.attackImmunityTurn != state.turn &&
-                        effectiveAbilities(next, opponent, it).none { ability -> ability.preventOpponentEffects } }
+                    val targets = next.players[opponent].bench.filter { !attackTargetEffectsPrevented(next, opponent, it) }
                     if (eligible.size >= effect.count && targets.isNotEmpty()) choices += ChoiceRequest(
                         ChoiceKind.ATTACK_OPTIONAL_SHUFFLE_ENERGY,
                         "Opcional: embaralhe ${effect.count} Energias deste Pokémon no deck para causar ${effect.amount} de dano a um Pokémon do Banco adversário.",
                         eligible.map { it.id }, 0, effect.count, amount = effect.amount)
                 }
                 attack.effects.filterIsInstance<Effect.BenchDamageCounters>().forEach { effect ->
-                    val bench = next.players[opponent].bench.filter { it.attackImmunityTurn != state.turn && effectiveAbilities(next, opponent, it).none { ability -> ability.preventOpponentEffects } }
+                    val bench = next.players[opponent].bench.filter { !attackTargetEffectsPrevented(next, opponent, it) }
                     if (bench.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.ATTACK_DAMAGE_COUNTER_TARGET,
                         if (effect.distribute) "Escolha um Pokémon do Banco adversário para receber 1 dos ${effect.count} contadores de dano."
                         else "Escolha um Pokémon do Banco adversário para receber ${effect.count} contadores de dano.",
@@ -1411,7 +1413,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         amount = if (effect.distribute) 10 else effect.count * 10)
                 }
                 if (Effect.PlaceDamageCounter in attack.effects) {
-                    val targets = next.players[opponent].pokemon().filter { it.attackImmunityTurn != state.turn && effectiveAbilities(next, opponent, it).none { ability -> ability.preventOpponentEffects } }
+                    val targets = next.players[opponent].pokemon().filter { !attackTargetEffectsPrevented(next, opponent, it) }
                     if (targets.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.ATTACK_DAMAGE_COUNTER_TARGET,
                         "Escolha 1 Pokémon adversário para receber 1 contador de dano.", targets.map { it.id }, 1, 1, amount = 10)
                 }
@@ -1590,7 +1592,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         bench.map { it.id }, if (effect.optional) 0 else 1, 1)
                 }
                 if (!defenderEffectsPrevented && (Effect.SwitchOpponent in attack.effects || Effect.PullOpponentBench in attack.effects)) {
-                    val opponentBench = next.players[1-actor].bench
+                    val opponentBench = next.players[1-actor].bench.filter { !attackTargetEffectsPrevented(next, 1-actor, it) }
                     if (opponentBench.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.SWITCH_OPPONENT,
                         "Seu oponente escolhe o Pokémon que entra no Ativo.", opponentBench.map { it.id }, 1, 1)
                 }
@@ -1868,9 +1870,9 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         (0..minOf(p.bonusDraws, p.deck.size)).forEach { candidates += GameAction.MulliganDraw(it) }
         p.active?.let { active ->
             definition(active.top).attacks.forEach { attack ->
-                if (attack.effects.any { it is Effect.DiscardEnergyThenBenchDamage }) state.players[1-state.currentPlayer].bench.forEach { candidates += GameAction.Attack(attack.id, it.id) }
-                else if (attack.effects.filterIsInstance<Effect.TargetedDamage>().any { it.benchedOnly }) state.players[1-state.currentPlayer].bench.forEach { candidates += GameAction.Attack(attack.id, it.id) }
-                else if (attack.effects.any { it is Effect.TargetedDamage }) state.players[1-state.currentPlayer].pokemon().forEach { candidates += GameAction.Attack(attack.id, it.id) }
+                if (attack.effects.any { it is Effect.DiscardEnergyThenBenchDamage }) state.players[1-state.currentPlayer].bench.filter { !attackTargetEffectsPrevented(state, 1-state.currentPlayer, it) }.forEach { candidates += GameAction.Attack(attack.id, it.id) }
+                else if (attack.effects.filterIsInstance<Effect.TargetedDamage>().any { it.benchedOnly }) state.players[1-state.currentPlayer].bench.filter { !attackTargetEffectsPrevented(state, 1-state.currentPlayer, it) }.forEach { candidates += GameAction.Attack(attack.id, it.id) }
+                else if (attack.effects.any { it is Effect.TargetedDamage }) state.players[1-state.currentPlayer].pokemon().filter { !attackTargetEffectsPrevented(state, 1-state.currentPlayer, it) }.forEach { candidates += GameAction.Attack(attack.id, it.id) }
                 else candidates += GameAction.Attack(attack.id)
             }
             val cost = retreatCost(active, p.pokemon(), state.players[1-state.currentPlayer].pokemon())

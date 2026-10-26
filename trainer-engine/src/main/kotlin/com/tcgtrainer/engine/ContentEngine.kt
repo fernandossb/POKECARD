@@ -749,7 +749,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                             val attacker = s.players[actor].active ?: error("Atacante ausente durante dano ao Banco.")
                             val attack = rules.definition(attacker.top).attacks.first { candidate -> candidate.effects.any { it is Effect.DiscardEnergyThenBenchDamage && it.amount == choice.amount } }
                             val effect = attack.effects.filterIsInstance<Effect.DiscardEnergyThenBenchDamage>().first { it.amount == choice.amount }
-                            val targets = s.players[1-actor].bench.filter { it.attackImmunityTurn != s.turn && rules.effectiveAbilities(s, 1-rules.actingPlayer(s), it).none { ability -> ability.preventOpponentEffects } }
+                            val targets = s.players[1-actor].bench.filter { !rules.attackTargetEffectsPrevented(s, 1-actor, it) }
                             if (targets.isNotEmpty()) remainingChoices = listOf(ChoiceRequest(ChoiceKind.ATTACK_DISCARD_THEN_BENCH_TARGET,
                                 "Escolha um Pokémon do Banco adversário para receber ${effect.amount} de dano.", targets.map { it.id }, 1, 1, amount = effect.amount)) + remainingChoices
                         }
@@ -767,7 +767,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         update { player -> player.copy(active = player.active!!.copy(energies = player.active.energies - energies.toSet()), deck = shuffledDeck) }
                         s = s.copy(rng = rng.state)
                         events += GameEvent("AttackEnergyShuffled", "Embaralhou ${energies.size} Energias do atacante no deck para ativar o dano ao Banco.", energies.size)
-                        val targets = s.players[1-actor].bench.filter { it.attackImmunityTurn != s.turn && rules.effectiveAbilities(s, 1-rules.actingPlayer(s), it).none { ability -> ability.preventOpponentEffects } }
+                        val targets = s.players[1-actor].bench.filter { !rules.attackTargetEffectsPrevented(s, 1-actor, it) }
                         if (targets.isNotEmpty()) remainingChoices = listOf(ChoiceRequest(ChoiceKind.ATTACK_DISCARD_THEN_BENCH_TARGET,
                             "Escolha um Pokémon do Banco adversário para receber ${effect.amount} de dano.", targets.map { it.id }, 1, 1, amount = effect.amount)) + remainingChoices
                     }
@@ -1078,6 +1078,9 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     }
                     ChoiceKind.ATTACK_KNOCKOUT_BASIC_BENCH -> {
                         val targetId = ids.single()
+                        val target = s.players[1-actor].bench.firstOrNull { it.id == targetId }
+                            ?: return illegal("O Pokémon escolhido não está mais no Banco adversário.")
+                        if (rules.attackTargetEffectsPrevented(s, 1-actor, target)) return illegal("Este Pokémon no Banco está protegido contra ataques.")
                         update(1-actor) { player -> player.copy(bench = player.bench.map { pokemon ->
                             if (pokemon.id == targetId && def(pokemon.top).stage == Stage.BASIC) pokemon.copy(damage = maxOf(pokemon.damage, rules.effects.effectiveHp(pokemon, s))) else pokemon
                         }) }
@@ -1086,6 +1089,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     ChoiceKind.ATTACK_DAMAGE_TARGET -> {
                         val owner = 1-actor
                         val target = s.players[owner].bench.first { it.id == ids.single() }
+                        if (rules.attackTargetEffectsPrevented(s, owner, target)) return illegal("Este Pokémon no Banco está protegido contra ataques.")
                         val hp = rules.effects.effectiveHp(target, s)
                         if (choice.amount > 0 && target.damage < hp && target.damage+choice.amount >= hp)
                             s = s.copy(pendingAttackDamageKnockoutIds = s.pendingAttackDamageKnockoutIds + target.id)
@@ -1097,6 +1101,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     ChoiceKind.ATTACK_DISCARD_THEN_BENCH_TARGET -> {
                         val owner = 1-actor; val targetId = ids.single()
                         val target = s.players[owner].bench.first { it.id == targetId }
+                        if (rules.attackTargetEffectsPrevented(s, owner, target)) return illegal("Este Pokémon no Banco está protegido contra ataques.")
                         val hp = rules.effects.effectiveHp(target, s)
                         if (target.damage < hp && target.damage + choice.amount >= hp)
                             s = s.copy(pendingAttackDamageKnockoutIds = s.pendingAttackDamageKnockoutIds + target.id)
@@ -1105,6 +1110,9 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     }
                     ChoiceKind.ATTACK_DAMAGE_COUNTER_TARGET -> {
                         val targetId = ids.single()
+                        val target = s.players[1-actor].pokemon().firstOrNull { it.id == targetId }
+                            ?: return illegal("O Pokémon escolhido não está mais em jogo.")
+                        if (rules.attackTargetEffectsPrevented(s, 1-actor, target)) return illegal("Este Pokémon está protegido contra ataques.")
                         update(1-actor) { player -> player.copy(
                             active = player.active?.let { pokemon -> if (pokemon.id == targetId) pokemon.copy(damage = pokemon.damage + choice.amount) else pokemon },
                             bench = player.bench.map { pokemon -> if (pokemon.id == targetId) pokemon.copy(damage = pokemon.damage + choice.amount) else pokemon }) }
@@ -1133,6 +1141,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         val opponent = 1-actor
                         ids.forEach { targetId ->
                             val target = s.players[opponent].pokemon().first { it.id == targetId }
+                            if (rules.attackTargetEffectsPrevented(s, opponent, target)) return illegal("Este Pokémon está protegido contra ataques.")
                             val preview = rules.preview(s, attack.id, targetId, effectDamage = choice.amount,
                                 forceIgnoreWeaknessResistance = multiEffect?.ignoreWeaknessResistance ?: false)
                                 ?: error("Não foi possível calcular o dano ao alvo selecionado.")
@@ -1147,7 +1156,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                             events += GameEvent("MultiTargetAttackDamage", "Causou $damage de dano a ${def(target.top).name}.", damage)
                         }
                         if (choice.kind == ChoiceKind.ATTACK_MULTI_DAMAGE_SINGLE_TARGET && choice.remaining > 1) {
-                            val candidates = s.players[opponent].pokemon().map { it.id }
+                            val candidates = s.players[opponent].pokemon().filter { !rules.attackTargetEffectsPrevented(s, opponent, it) }.map { it.id }
                             if (candidates.isNotEmpty()) remainingChoices = listOf(ChoiceRequest(
                                 ChoiceKind.ATTACK_MULTI_DAMAGE_SINGLE_TARGET,
                                 "Escolha mais 1 Pokémon adversário (${choice.remaining-1} escolhas restantes).",
@@ -1157,15 +1166,21 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     ChoiceKind.ATTACK_MOVE_DAMAGE_SOURCE -> if (ids.isNotEmpty()) {
                         val opponent = 1-actor
                         val source = s.players[opponent].pokemon().first { it.id == ids.single() }
+                        if (rules.attackTargetEffectsPrevented(s, opponent, source)) return illegal("Este Pokémon está protegido contra ataques.")
                         remainingChoices = listOf(ChoiceRequest(ChoiceKind.ATTACK_MOVE_DAMAGE_DESTINATION,
                             "Escolha outro Pokémon adversário para receber 1 contador de dano.",
-                            s.players[opponent].pokemon().map { it.id }.filter { it != source.id }, 1, 1,
+                            s.players[opponent].pokemon().filter { it.id != source.id && !rules.attackTargetEffectsPrevented(s, opponent, it) }.map { it.id }, 1, 1,
                             sourcePokemonId = source.id)) + remainingChoices
                     }
                     ChoiceKind.ATTACK_MOVE_DAMAGE_DESTINATION -> {
                         val opponent = 1-actor
                         val sourceId = checkNotNull(choice.sourcePokemonId)
                         val destinationId = ids.single()
+                        val source = s.players[opponent].pokemon().first { it.id == sourceId }
+                        val destination = s.players[opponent].pokemon().firstOrNull { it.id == destinationId }
+                            ?: return illegal("O Pokémon escolhido não está mais em jogo.")
+                        if (rules.attackTargetEffectsPrevented(s, opponent, source) || rules.attackTargetEffectsPrevented(s, opponent, destination))
+                            return illegal("Este Pokémon está protegido contra ataques.")
                         update(opponent) { player ->
                             fun move(pokemon: PokemonInstance) = when (pokemon.id) {
                                 sourceId -> pokemon.copy(damage = (pokemon.damage-10).coerceAtLeast(0))
@@ -1176,14 +1191,14 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         }
                         events += GameEvent("DamageCounterMoved", "Moveu 1 contador de dano entre Pokémon adversários.", 10)
                         val field = s.players[opponent].pokemon()
-                        val sources = field.filter { source -> source.damage >= 10 && field.any { it.id != source.id } }
+                        val sources = field.filter { source -> !rules.attackTargetEffectsPrevented(s, opponent, source) && source.damage >= 10 && field.any { it.id != source.id && !rules.attackTargetEffectsPrevented(s, opponent, it) } }
                         if (sources.isNotEmpty()) remainingChoices = listOf(ChoiceRequest(ChoiceKind.ATTACK_MOVE_DAMAGE_SOURCE,
                             "Você pode mover outro contador de dano ou concluir.", sources.map { it.id }, 0, 1)) + remainingChoices
                     }
                     ChoiceKind.ATTACK_MOVE_OWN_DAMAGE_SOURCE -> if (ids.isNotEmpty()) {
                         val sourceId = ids.single()
                         val source = p.bench.first { it.id == sourceId }
-                        val targets = s.players[1-actor].pokemon().filter { rules.effectiveAbilities(s, 1-rules.actingPlayer(s), it).none { ability -> ability.preventOpponentEffects } }
+                        val targets = s.players[1-actor].pokemon().filter { !rules.attackTargetEffectsPrevented(s, 1-actor, it) }
                         if (targets.isNotEmpty()) remainingChoices = listOf(ChoiceRequest(
                             ChoiceKind.ATTACK_MOVE_OWN_DAMAGE_TARGET,
                             "Escolha um Pokémon adversário para receber todos os contadores movidos.", targets.map { it.id }, 1, 1,
@@ -1194,6 +1209,9 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         val targetId = ids.single()
                         val opponent = 1-actor
                         val source = p.bench.first { it.id == sourceId }
+                        val target = s.players[opponent].pokemon().firstOrNull { it.id == targetId }
+                            ?: return illegal("O Pokémon escolhido não está mais em jogo.")
+                        if (rules.attackTargetEffectsPrevented(s, opponent, target)) return illegal("Este Pokémon está protegido contra ataques.")
                         val movedDamage = source.damage
                         update(actor) { player -> player.copy(bench = player.bench.map { pokemon ->
                             if (pokemon.id == sourceId) pokemon.copy(damage = 0) else pokemon
@@ -1208,8 +1226,9 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         val opponent = 1-actor
                         val energyId = ids.single()
                         val source = s.players[opponent].pokemon().first { pokemon -> pokemon.energies.any { it.id == energyId } }
+                        if (rules.attackTargetEffectsPrevented(s, opponent, source)) return illegal("Este Pokémon está protegido contra ataques.")
                         val targets = s.players[opponent].pokemon().filter { it.id != source.id &&
-                            rules.effectiveAbilities(s, 1-rules.actingPlayer(s), it).none { ability -> ability.preventOpponentEffects } }
+                            !rules.attackTargetEffectsPrevented(s, opponent, it) }
                         if (targets.isNotEmpty()) remainingChoices = listOf(ChoiceRequest(
                             ChoiceKind.ATTACK_OPPONENT_ENERGY_TARGET,
                             "Escolha outro Pokémon adversário para receber a Energia.", targets.map { it.id }, 1, 1,
@@ -1221,6 +1240,10 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         val sourceId = checkNotNull(choice.sourcePokemonId)
                         val targetId = ids.single()
                         val source = s.players[opponent].pokemon().first { it.id == sourceId }
+                        val target = s.players[opponent].pokemon().firstOrNull { it.id == targetId }
+                            ?: return illegal("O Pokémon escolhido não está mais em jogo.")
+                        if (rules.attackTargetEffectsPrevented(s, opponent, source) || rules.attackTargetEffectsPrevented(s, opponent, target))
+                            return illegal("Este Pokémon está protegido contra ataques.")
                         val energy = source.energies.first { it.id == energyId }
                         update(opponent) { player ->
                             fun move(pokemon: PokemonInstance) = when (pokemon.id) {

@@ -91,6 +91,8 @@ internal object CatalogRuleCompiler {
         if (text == "Prevent all effects of attacks used by your opponent's Pokémon done to this Pokémon. (Damage is not an effect.)" ||
             text == "Prevent all effects of your opponent's Pokémon's Abilities done to this Pokémon.")
             return AbilityDefinition("$id-ability$index", name, text, preventOpponentEffects = true)
+        if (text == "As long as this Pokémon is on your Bench, prevent all damage from and effects of attacks from your opponent's Pokémon done to this Pokémon.")
+            return AbilityDefinition("$id-ability$index", name, text, preventOpponentAttackDamageEffectsWhileOnBench = true)
         if (text == "If any damage is done to this Pokémon by attacks, flip a coin. If heads, prevent that damage.")
             return AbilityDefinition("$id-ability$index", name, text, coinFlipPreventAttackDamage = true)
         val energyShield = Regex("If this Pokémon has any \\{([GRFLWPMD])\\} Energy attached and is damaged by an attack, flip a coin\\. If heads, prevent that damage\\.").matchEntire(text)
