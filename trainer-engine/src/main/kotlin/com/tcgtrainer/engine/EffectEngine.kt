@@ -189,7 +189,7 @@ class EffectEngine(private val catalog: CardCatalog) {
         Effect.RestrictIfSecondPlayerFirstTurn, Effect.PreventBasicNonColorlessDamageNextTurn, Effect.PreventBasicPokemonDamageNextTurn, is Effect.OwnBenchCountDamage,
         is Effect.OwnDamagedPokemonCountDamage,
         is Effect.StatusCondition, is Effect.OpponentActiveTypeCondition, is Effect.DiscardDefendingEnergy, Effect.DiscardAllOpponentSpecialEnergy, is Effect.BenchDamage, is Effect.OwnBenchDamage, is Effect.DiscardEnergyThenBenchDamage, is Effect.BenchDamageCounters, Effect.PlaceDamageCounter, is Effect.MultiTargetDamage, is Effect.CoinDamageEachOpponentPokemon, Effect.KnockOutBothActive, Effect.RecoverSelfFromSpecialConditions, Effect.NoWeaknessNextTurn, Effect.CoinMiss, is Effect.HealEachOwnPokemon,
-        is Effect.ReduceDamageNextTurn, is Effect.SelfDamage, Effect.PreventDefendingAttackNextTurn,
+        is Effect.ReduceDamageNextTurn, is Effect.SelfDamage, Effect.PreventDefendingAttackNextTurn, Effect.DefendingAttackFailsOnTailsNextTurn,
         is Effect.OwnHandCounterDamage, is Effect.OpponentHandCountDamage, is Effect.OpponentExDamage, is Effect.OpponentTypeDamage, is Effect.OpponentEvolutionActiveDamageBonus, is Effect.OwnEnergyCountDamage,
         is Effect.OpponentEnergyCountDamage, is Effect.OpponentHandEnergyCountDamage, is Effect.OpponentActiveRetreatCostDamage, is Effect.ReduceDefendingAttackDamageNextTurn,
         is Effect.OpponentConditionDamage, is Effect.OpponentActiveDamagedDamage, is Effect.OpponentActiveDamageCounterDamage,

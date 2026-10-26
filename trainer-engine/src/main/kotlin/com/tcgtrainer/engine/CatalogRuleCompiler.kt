@@ -977,6 +977,7 @@ internal object CatalogRuleCompiler {
                 text == "Your opponent's Active Pokémon is now Confused." -> effects += Effect.StatusCondition(SpecialCondition.CONFUSED)
                 text == "During your opponent's next turn, the Defending Pokémon can't attack." ||
                     text == "During your opponent's next turn, the Defending Pokémon can't use attacks." -> effects += Effect.PreventDefendingAttackNextTurn
+                text == "During your opponent's next turn, if the Defending Pokémon tries to use an attack, your opponent flips a coin. If tails, that attack doesn't happen." -> effects += Effect.DefendingAttackFailsOnTailsNextTurn
                 text == "Switch this Pokémon with 1 of your Benched Pokémon." -> effects += Effect.SwitchOwn()
                 text == "You may switch this Pokémon with 1 of your Benched Pokémon." -> effects += Effect.SwitchOwn(optional = true)
                 returnEnergyToHand -> effects += Effect.ReturnAttachedEnergyToHand

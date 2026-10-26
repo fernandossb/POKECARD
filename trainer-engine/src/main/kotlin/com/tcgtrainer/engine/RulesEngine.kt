@@ -463,7 +463,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             }
             is GameAction.Evolve -> {
                 val card = p.hand.first { it.id == action.cardId }
-                updatePokemon(action.pokemonId) { it.copy(cards = it.cards + card, lastEvolutionTurn = state.turn, restrictions = emptyList(), conditions = emptySet(), attackImmunityTurn = -1, incomingDamageReduction = 0, damageReductionTurn = -1, incomingDamageReductionEvolutionOnly = false, outgoingDamageReduction = 0, outgoingDamageReductionTurn = -1, preventBasicNonColorlessDamageTurn = -1, preventBasicPokemonDamageTurn = -1) }
+                updatePokemon(action.pokemonId) { it.copy(cards = it.cards + card, lastEvolutionTurn = state.turn, restrictions = emptyList(), conditions = emptySet(), defendingAttackFailsOnTailsTurn = -1, attackImmunityTurn = -1, incomingDamageReduction = 0, damageReductionTurn = -1, incomingDamageReductionEvolutionOnly = false, outgoingDamageReduction = 0, outgoingDamageReductionTurn = -1, preventBasicNonColorlessDamageTurn = -1, preventBasicPokemonDamageTurn = -1) }
                 update(actor) { it.copy(hand = it.hand - card) }
                 emit("PokemonEvolved", "Evoluiu para ${definition(card).name}; dano e Energias preservados.")
                 definition(card).abilities.filter { it.onEvolveDraw > 0 }.forEach { ability ->
@@ -548,7 +548,15 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 if (Effect.CannotRepeatAttackUntilLeavingActive in attack.effects) {
                     updatePokemon(p.active.id) { it.copy(attackIdsUsedWhileActive = it.attackIdsUsedWhileActive + action.attackId) }
                 }
-                val confusionFailed = if (SpecialCondition.CONFUSED in p.active!!.conditions) {
+                val preventedByCoinFlip = if (p.active!!.defendingAttackFailsOnTailsTurn == state.turn) {
+                    val rng = SeededRng(next.rng)
+                    val tails = rng.nextInt(2) != 0
+                    next = next.copy(rng = rng.state)
+                    updatePokemon(p.active.id) { it.copy(defendingAttackFailsOnTailsTurn = -1) }
+                    emit("CoinFlipped", if (tails) "COROA — o ataque do Pokémon Defensor não acontece." else "CARA — o ataque do Pokémon Defensor acontece.")
+                    tails
+                } else false
+                val confusionFailed = if (!preventedByCoinFlip && SpecialCondition.CONFUSED in p.active!!.conditions) {
                     val rng = SeededRng(next.rng); val failed = rng.nextInt(2) != 0
                     next = next.copy(rng = rng.state); emit("CoinFlipped", if (failed) "COROA — confusão" else "CARA — confusão")
                     failed
@@ -562,8 +570,9 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     next = next.copy(rng = rng.state); emit("CoinFlipped", if (missed) "COROA" else "CARA")
                     missed
                 } else false
-                if (confusionFailed || coinMiss || attackConditionFails) {
-                    if (confusionFailed) {
+                if (preventedByCoinFlip || confusionFailed || coinMiss || attackConditionFails) {
+                    if (preventedByCoinFlip) emit("AttackStoppedByCoin", "A moeda caiu em coroa; o ataque não aconteceu.")
+                    else if (confusionFailed) {
                         update(actor) { player -> player.copy(active = player.active?.copy(damage = player.active!!.damage + 30)) }
                         emit("ConfusionDamage", "O ataque falhou por confusão; o atacante recebeu 30 de dano.", 30)
                     } else if (coinMiss) emit("AttackMissed", "A moeda caiu em coroa; o ataque não causou dano nem aplicou efeitos.")
@@ -762,6 +771,13 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         bench = player.bench.map { target -> if (target.id == defender.id) target.copy(restrictions = target.restrictions + AttackRestriction(null, state.turn + 1)) else target }
                     ) }
                     emit("AttackBlocked", "${definition(defender.top).name} não pode atacar no próximo turno.")
+                }
+                if (!defenderEffectsPrevented && Effect.DefendingAttackFailsOnTailsNextTurn in attack.effects) {
+                    update(opponent) { player -> player.copy(
+                        active = player.active?.let { target -> if (target.id == defender.id) target.copy(defendingAttackFailsOnTailsTurn = state.turn + 1) else target },
+                        bench = player.bench.map { target -> if (target.id == defender.id) target.copy(defendingAttackFailsOnTailsTurn = state.turn + 1) else target }
+                    ) }
+                    emit("AttackCoinLock", "No próximo turno, ${definition(defender.top).name} deverá lançar uma moeda antes de atacar.")
                 }
                 attack.effects.filterIsInstance<Effect.SelfDamage>().forEach { effect ->
                     val ownActive = next.players[actor].active!!
@@ -1330,10 +1346,12 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         }
         val checked = state.copy(players = state.players.mapIndexed { owner, value ->
             fun applyDelayedDamage(pokemon: PokemonInstance): PokemonInstance {
-                if (pokemon.delayedDamageTurn != state.turn) return pokemon
+                val clearedCoinLockTurn = if (pokemon.defendingAttackFailsOnTailsTurn in 0..state.turn) -1 else pokemon.defendingAttackFailsOnTailsTurn
+                if (pokemon.delayedDamageTurn != state.turn) return pokemon.copy(defendingAttackFailsOnTailsTurn = clearedCoinLockTurn)
                 val amount = pokemon.delayedDamageCounters * 10
                 if (amount > 0) events += GameEvent("DelayedDamageApplied", "${definition(pokemon.top).name} recebeu $amount de dano do efeito adiado.", amount)
-                return pokemon.copy(damage = pokemon.damage + amount, delayedDamageCounters = 0, delayedDamageTurn = -1)
+                return pokemon.copy(damage = pokemon.damage + amount, delayedDamageCounters = 0, delayedDamageTurn = -1,
+                    defendingAttackFailsOnTailsTurn = clearedCoinLockTurn)
             }
             fun checkupDamage(pokemon: PokemonInstance): Int = if (froslassTriggers > 0 &&
                 definition(pokemon.top).name != "Froslass" && definition(pokemon.top).abilities.isNotEmpty()) froslassTriggers * 10 else 0
