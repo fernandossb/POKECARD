@@ -318,6 +318,13 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 ChoiceKind.TRAINER_WALLY_COMPASSION_TARGET -> own.firstOrNull { it.id == id }?.let { target ->
                     target.damage.toDouble() + if (target.damage > 0) target.energies.sumOf { keepValue(it) + 12.0 } else 0.0
                 } ?: 0.0
+                ChoiceKind.TRAINER_N_DISCARD_ENERGY -> 1.0
+                ChoiceKind.TRAINER_N_DISCARD_ENERGY_TARGET -> {
+                    val target = own.firstOrNull { it.id == id }
+                    val energy = o.ownDiscard.firstOrNull { it.id == choice.selectedEnergy }
+                    if (target == null || energy == null) 0.0
+                    else potential(target.copy(energies = target.energies + energy)) - potential(target)
+                }
                 ChoiceKind.ATTACK_OPPONENT_ENERGY -> o.opponentField.firstOrNull { source -> source.energies.any { it.id == id } }?.let { source ->
                     (if (source.id == o.opponentActiveId) 120.0 else 20.0) + source.energies.size
                 } ?: 0.0
@@ -459,6 +466,8 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 TrainerEffect.WallyCompassion -> own.filter { d(it.top).name.startsWith("Mega ") && d(it.top).name.endsWith(" ex") }
                     .maxOfOrNull { it.damage.toDouble() + if (it.damage > 0) it.energies.sumOf { energy -> keepValue(energy) + 12.0 } else 0.0 }
                     ?.takeIf { it > 0.0 }?.plus(55.0) ?: -5.0
+                TrainerEffect.AttachBasicEnergyFromDiscardToNBench -> if (own.any { d(it.top).name.startsWith("N's ") } &&
+                    o.ownDiscard.any { d(it).category == Category.ENERGY && d(it).basicEnergy }) 80.0 else -5.0
                 is TrainerEffect.DiscardOpponentItemsFromHand -> if (o.opponentHandCount > 0) 45.0 else 15.0
                 TrainerEffect.Briar -> if (o.opponentPrizeCount == 2) 115.0 else -5.0
                 is TrainerEffect.HealEachOwnPokemonOfType -> own.filter { d(it.top).type == effect.type }

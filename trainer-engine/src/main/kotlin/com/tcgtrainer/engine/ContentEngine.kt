@@ -59,6 +59,9 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     choice.kind == ChoiceKind.TRAINER_BASIC_POKEMON_TO_BENCH && action.cardIds.size > (5-p.bench.size).coerceAtLeast(0) -> illegal("O Banco não tem espaço para tantos Pokémon Básicos.")
                     choice.kind == ChoiceKind.TRAINER_BASIC_POKEMON_TO_BENCH && action.cardIds.any { id -> p.deck.none { it.id == id && def(it).category == Category.POKEMON && def(it).stage == Stage.BASIC && def(it).hp <= 70 } } -> illegal("Escolha apenas Pokémon Básicos de até 70 HP que ainda estejam no deck.")
                     choice.kind == ChoiceKind.TRAINER_WALLY_COMPASSION_TARGET && action.cardIds.any { id -> p.pokemon().none { it.id == id && isMegaEvolutionEx(def(it.top)) } } -> illegal("Escolha um Mega Evolution Pokémon ex seu que ainda esteja em jogo.")
+                    choice.kind == ChoiceKind.TRAINER_N_DISCARD_ENERGY && action.cardIds.any { id -> p.discard.none { it.id == id && def(it).category == Category.ENERGY && def(it).basicEnergy } } -> illegal("Escolha uma Energia Básica ainda no descarte.")
+                    choice.kind == ChoiceKind.TRAINER_N_DISCARD_ENERGY_TARGET && action.cardIds.any { id -> p.bench.none { it.id == id && def(it.top).name.startsWith("N's ") } } -> illegal("Escolha um Pokémon N's do seu Banco.")
+                    choice.kind == ChoiceKind.TRAINER_N_DISCARD_ENERGY_TARGET && p.discard.none { it.id == choice.selectedEnergy && def(it).category == Category.ENERGY && def(it).basicEnergy } -> illegal("A Energia Básica escolhida não está mais no descarte.")
                     choice.kind == ChoiceKind.PALAFIN_ZERO_TO_HERO && action.cardIds.isNotEmpty() && action.cardIds.any { id ->
                         p.deck.none { it.id == id && def(it).name == "Palafin ex" }
                     } -> illegal("Escolha um Palafin ex que ainda esteja no deck.")
@@ -124,6 +127,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     TrainerEffect.WallyCompassion -> if (p.pokemon().none { isMegaEvolutionEx(def(it.top)) })
                         illegal("Você não tem um Mega Evolution Pokémon ex em jogo.")
                     else Legality.Legal
+                    TrainerEffect.AttachBasicEnergyFromDiscardToNBench -> Legality.Legal
                     is TrainerEffect.DiscardOpponentItemsFromHand -> Legality.Legal
                     TrainerEffect.Briar -> if (s.players[1-actor].prizes.size == 2) Legality.Legal else illegal("Briar só pode ser jogada quando o oponente tem exatamente 2 Prêmios restantes.")
                     is TrainerEffect.HealEachOwnPokemonOfType -> Legality.Legal
@@ -321,6 +325,15 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         begin(Resolution(listOf(ChoiceRequest(ChoiceKind.TRAINER_WALLY_COMPASSION_TARGET,
                             "Wally's Compassion: escolha um Mega Evolution Pokémon ex para curar todo o dano.",
                             targets.map { it.id }, 1, 1))))
+                    }
+                    TrainerEffect.AttachBasicEnergyFromDiscardToNBench -> {
+                        val energies = if (p.bench.any { def(it.top).name.startsWith("N's ") })
+                            p.discard.filter { def(it).category == Category.ENERGY && def(it).basicEnergy }
+                        else emptyList()
+                        val required = energies.isNotEmpty()
+                        begin(Resolution(listOf(ChoiceRequest(ChoiceKind.TRAINER_N_DISCARD_ENERGY,
+                            "N's PP Up: escolha uma Energia Básica do descarte para ligar a um Pokémon N's do Banco.",
+                            energies.map { it.id }, if (required) 1 else 0, if (required) 1 else 0))))
                     }
                     is TrainerEffect.DiscardOpponentItemsFromHand -> {
                         val opponentHand = s.players[1-actor].hand
@@ -981,6 +994,26 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         if (healed > 0) events += GameEvent("PokemonHealed", "Curou $healed de dano de ${def(target.top).name} com Wally's Compassion.", healed)
                         else events += GameEvent("TrainerEffectResolved", "Wally's Compassion não encontrou dano para curar.")
                         if (energies.isNotEmpty()) events += GameEvent("EnergyReturnedToHand", "Devolveu ${energies.size} Energia(s) ligada(s) a ${def(target.top).name} para a mão.", energies.size)
+                    }
+                    ChoiceKind.TRAINER_N_DISCARD_ENERGY -> if (ids.isNotEmpty()) {
+                        val energy = p.discard.firstOrNull { it.id == ids.single() && it.id in choice.candidates &&
+                            def(it).category == Category.ENERGY && def(it).basicEnergy }
+                            ?: return illegal("A Energia Básica escolhida não está mais no descarte.")
+                        val targets = p.bench.filter { def(it.top).name.startsWith("N's ") }
+                        if (targets.isEmpty()) return illegal("Não há Pokémon N's no Banco para receber Energia.")
+                        remainingChoices = listOf(ChoiceRequest(ChoiceKind.TRAINER_N_DISCARD_ENERGY_TARGET,
+                            "Escolha um Pokémon N's do Banco para receber a Energia Básica.",
+                            targets.map { it.id }, 1, 1, selectedEnergy = energy.id)) + remainingChoices
+                    }
+                    ChoiceKind.TRAINER_N_DISCARD_ENERGY_TARGET -> {
+                        val targetId = ids.single()
+                        val energy = p.discard.firstOrNull { it.id == choice.selectedEnergy && def(it).category == Category.ENERGY && def(it).basicEnergy }
+                            ?: return illegal("A Energia Básica escolhida não está mais no descarte.")
+                        val target = p.bench.firstOrNull { it.id == targetId && def(it.top).name.startsWith("N's ") }
+                            ?: return illegal("O Pokémon N's escolhido não está mais no Banco.")
+                        update { player -> player.copy(discard = player.discard - energy,
+                            bench = player.bench.map { pokemon -> if (pokemon.id == target.id) pokemon.copy(energies = pokemon.energies + energy) else pokemon }) }
+                        events += GameEvent("TrainerEnergyAttached", "Ligou uma Energia Básica do descarte a ${def(target.top).name} com N's PP Up.")
                     }
                     ChoiceKind.ABILITY_MOVE_BASIC_ENERGY -> {
                         val energyId = ids.single()
