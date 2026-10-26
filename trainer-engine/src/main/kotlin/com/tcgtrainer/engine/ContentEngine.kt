@@ -495,6 +495,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                 }
             }
             is GameAction.UseStadiumAbility -> {
+                val p = s.players[actor]
                 val psychicCount = p.pokemon().count { def(it.top).type == EnergyType.PSYCHIC }
                 update { it.copy(flags = it.flags.copy(mysteryGardenUsed = true)) }
                 events += GameEvent("StadiumAbilityUsed", "Usou Mystery Garden.")
@@ -2072,6 +2073,8 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     }
                     ChoiceKind.ATTACK_COPY_BENCHED_N -> error("A escolha do ataque copiado deve ser consumida pelo RulesEngine antes do ContentEngine.")
                     ChoiceKind.ATTACK_COPY_OPPONENT_ACTIVE -> error("A escolha do ataque adversário copiado deve ser consumida pelo RulesEngine antes do ContentEngine.")
+                    ChoiceKind.OPTIONAL_ATTACK_ENERGY_BONUS -> error("A escolha de bônus opcional de Energia deve ser consumida pelo RulesEngine antes do ContentEngine.")
+                    ChoiceKind.ATTACK_COPY_OPPONENT_DECK_TOP -> error("A escolha do ataque do topo do deck adversário deve ser consumida pelo RulesEngine antes do ContentEngine.")
                     ChoiceKind.ATTACK_REVEAL_HAND_POKEMON -> error("A escolha de revelar Pokémon da mão é consumida pelo RulesEngine antes do ContentEngine.")
                     ChoiceKind.ATTACK_REQUIRED_HAND_ENERGY_DISCARD -> error("A escolha de descarte obrigatório de Energia da mão é consumida pelo RulesEngine antes do ContentEngine.")
                 }
