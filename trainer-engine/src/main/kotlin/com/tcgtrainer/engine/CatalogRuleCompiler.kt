@@ -710,6 +710,7 @@ internal object CatalogRuleCompiler {
         val attachBasicFightingEnergyFromDiscardToSelf = Regex("Attach up to (\\d+) Basic \\{F\\} Energy cards from your discard pile to this Pokémon\\.").matchEntire(text)
         val attachEnergyToEachBench = Regex("For each of your Benched Pokémon, search your deck for a Basic \\{([GRFLWPMD])\\} Energy card and attach it to that Pokémon\\. Then, shuffle your deck\\.").matchEntire(text)
         val coinKnockOutBasic = text == "Flip a coin. If heads, Knock Out your opponent's Active Basic Pokémon. If tails, Knock Out 1 of your opponent's Benched Basic Pokémon."
+        val opponentBasicKnockout = text == "If your opponent's Active Pokémon is a Basic Pokémon, it is Knocked Out."
         val coinStatus = Regex("Flip a coin\\. If heads, your opponent's Active Pokémon is now (Poisoned|Burned|Asleep|Paralyzed|Confused)\\.").matchEntire(text)
         val opponentTypeStatus = Regex("If your opponent's Active Pokémon is a \\{([GRFLWPMDN])\\} Pokémon, it is now (Poisoned|Burned|Asleep|Paralyzed|Confused)\\.").matchEntire(text)
         val strongPoison = Regex("Your opponent's Active Pokémon is now Poisoned\\. During Pokémon Checkup, put (\\d+) damage counters on that Pokémon instead of 1\\.").matchEntire(text)
@@ -1327,6 +1328,7 @@ internal object CatalogRuleCompiler {
                 splitBombDamage != null -> effects += Effect.MultiTargetDamage(
                     splitBombDamage.groupValues[1].toInt(), splitBombDamage.groupValues[2].toInt())
                 knockOutBothActive -> effects += Effect.KnockOutBothActive
+                opponentBasicKnockout -> effects += Effect.KnockOutOpponentActiveIfBasic
                 opponentActiveSpecialConditionKnockout -> effects += Effect.KnockOutOpponentActiveIfSpecialCondition
                 opponentActiveExactlySixCountersKnockout -> effects += Effect.KnockOutOpponentActiveAtExactlySixDamageCounters
                 knockOutLeastHpPokemon -> effects += Effect.KnockOutPokemonWithLeastHpRemainingExceptAttacker

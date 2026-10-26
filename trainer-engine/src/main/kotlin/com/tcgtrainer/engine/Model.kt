@@ -160,6 +160,7 @@ import kotlinx.serialization.Serializable
     @Serializable data object KnockOutBothActive : Effect
     @Serializable data object KnockOutOpponentActiveIfSpecialCondition : Effect
     @Serializable data object KnockOutOpponentActiveAtExactlySixDamageCounters : Effect
+    @Serializable data object KnockOutOpponentActiveIfBasic : Effect
     @Serializable data object KnockOutPokemonWithLeastHpRemainingExceptAttacker : Effect
     @Serializable data object ProtectAttackerNextTurnIfKnocksOutByDamage : Effect
     @Serializable data object RecoverSelfFromSpecialConditions : Effect

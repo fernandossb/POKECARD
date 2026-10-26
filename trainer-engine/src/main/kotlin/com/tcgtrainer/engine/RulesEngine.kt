@@ -463,7 +463,10 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         val knockoutAtSixCounters = Effect.KnockOutOpponentActiveAtExactlySixDamageCounters in attack.effects &&
             defender.id == opponent.active?.id && defender.damage == 60 && defender.attackImmunityTurn != state.turn &&
             !attackTargetEffectsPrevented(state, 1-state.currentPlayer, defender)
-        val remaining = if (knockoutAtSixCounters) 0 else if (survivalHp > 0 && damage >= hp) survivalHp else (hp - defender.damage - damage).coerceAtLeast(0)
+        val knockoutBasic = Effect.KnockOutOpponentActiveIfBasic in attack.effects &&
+            defender.id == opponent.active?.id && definition(defender.top).stage == Stage.BASIC &&
+            !attackTargetEffectsPrevented(state, 1-state.currentPlayer, defender)
+        val remaining = if (knockoutAtSixCounters || knockoutBasic) 0 else if (survivalHp > 0 && damage >= hp) survivalHp else (hp - defender.damage - damage).coerceAtLeast(0)
         val topDeckEnergy = attack.effects.filterIsInstance<Effect.DiscardTopDeckEnergyDamage>().firstOrNull()
         val uncertain = coin != null && rolledHeads == null || benchEnergyBonus > 0 || topDeckEnergy != null
         val minimum = if (coin != null && rolledHeads == null) preview(state, attackId, targetId, 0)!!.damage else damage
@@ -1203,6 +1206,15 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         if (it.id == defender.id) it.copy(damage = maxOf(it.damage, hp)) else it
                     }) }
                     emit("AttackEffectKnockout", "O Pokémon Ativo adversário foi Nocauteado pela Condição Especial.")
+                }
+                if (Effect.KnockOutOpponentActiveIfBasic in attack.effects &&
+                    !defenderEffectsPrevented && defender.id == next.players[opponent].active?.id &&
+                    definition(defender.top).stage == Stage.BASIC) {
+                    val hp = effectiveHp(next, defender)
+                    update(opponent) { player -> player.copy(active = player.active?.let {
+                        if (it.id == defender.id) it.copy(damage = maxOf(it.damage, hp)) else it
+                    }) }
+                    emit("AttackEffectKnockout", "O Pokémon Básico Ativo adversário foi Nocauteado pelo efeito do ataque.")
                 }
                 val retaliation = if (appliedDamage > 0 && defender.id == state.players[opponent].active?.id)
                     defenderAbilities.sumOf { it.retaliateDamageCounters * 10 } +
