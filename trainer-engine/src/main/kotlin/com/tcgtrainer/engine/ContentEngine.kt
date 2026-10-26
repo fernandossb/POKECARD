@@ -278,6 +278,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
         val events = mutableListOf<GameEvent>()
         var remainingChoices: List<ChoiceRequest> = emptyList()
         var shuffleAfterResolution: Boolean = false
+        lateinit var resolution: Resolution
         fun update(index: Int = actor, transform: (PlayerState) -> PlayerState) { s = s.copy(players = s.players.mapIndexed { i, p -> if (i == index) transform(p) else p }) }
         fun draw(count: Int) {
             val n = minOf(count.coerceAtLeast(0), s.players[actor].deck.size)
@@ -722,7 +723,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
             return null
         }
         fun chooseCards(state: GameState, action: GameAction.ChooseCards): Transition? {
-            val resolution = s.resolution!!; val choice = resolution.choices.first(); val ids = action.cardIds
+            resolution = s.resolution!!; val choice = resolution.choices.first(); val ids = action.cardIds
             remainingChoices = resolution.choices.drop(1)
             shuffleAfterResolution = resolution.shuffleAfter
             val p = s.players[actor]
