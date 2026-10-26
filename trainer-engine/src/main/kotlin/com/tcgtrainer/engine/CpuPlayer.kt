@@ -60,8 +60,10 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
             } +
                 if (input.flags.supporter) a.effects.filterIsInstance<Effect.SupporterBonus>().sumOf { it.damage } else 0
             val targetIsActive = target.id == o.opponentActiveId
-            val retreatTax = if (targetIsActive && d(target.top).stage != Stage.BASIC) own.sumOf { pokemon ->
-                d(pokemon.top).abilities.sumOf { it.opponentActiveEvolutionRetreatCostBonus }
+            val retreatTax = if (targetIsActive) own.sumOf { pokemon ->
+                val abilities = d(pokemon.top).abilities
+                abilities.sumOf { it.opponentActiveRetreatCostBonus } +
+                    if (d(target.top).stage != Stage.BASIC) abilities.sumOf { it.opponentActiveEvolutionRetreatCostBonus } else 0
             } else 0
             val targetToolReduction = (target.tool?.let(::d)?.trainerEffect as? TrainerEffect.RetreatReduction)?.amount ?: 0
             val targetRetreatCost = (d(target.top).retreatCost + retreatTax - targetToolReduction).coerceAtLeast(0)

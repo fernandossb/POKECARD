@@ -231,6 +231,7 @@ import kotlinx.serialization.Serializable
     val onEvolveAttachMetalFromDiscardMax: Int = 0,
     val devolveOpponentPokemonMax: Int = 0,
     val opponentActiveEvolutionRetreatCostBonus: Int = 0,
+    val opponentActiveRetreatCostBonus: Int = 0,
     val searchBasicEnergyTypeToHand: EnergyType? = null, val searchBasicEnergyMaxToHand: Int = 0,
     val onEvolveRecoverNamedTrainerFromDiscard: String? = null, val onEvolveRecoverNamedTrainerMax: Int = 0,
     val tundraWallWaterDamageReduction: Int = 0,

@@ -98,6 +98,8 @@ internal object CatalogRuleCompiler {
             return AbilityDefinition("$id-ability$index", name, text, requiresActive = true, usageKey = name, devolveOpponentPokemonMax = 1)
         if (text == "Your opponent's Active Evolution Pokémon's Retreat Cost is {C} more.")
             return AbilityDefinition("$id-ability$index", name, text, opponentActiveEvolutionRetreatCostBonus = 1)
+        if (text == "Your opponent's Active Pokémon's Retreat Cost is {C} more.")
+            return AbilityDefinition("$id-ability$index", name, text, opponentActiveRetreatCostBonus = 1)
         if (text == "Once during your turn, you may move a Basic Energy from 1 of your Pokémon to another of your Pokémon.")
             return AbilityDefinition("$id-ability$index", name, text, usageKey = name, moveBasicEnergyBetweenOwnPokemon = true)
         if (text == "As often as you like during your turn, you may use this Ability. Move a Basic {G} Energy from 1 of your Pokémon to another of your Pokémon.")

@@ -188,9 +188,11 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             }
         } || (pokemon.energies.isEmpty() && definition(pokemon.top).abilities.any { it.freeRetreatWithNoEnergy })
         val base = if (free) 0 else definition(pokemon.top).retreatCost
-        val increase = if (definition(pokemon.top).stage != Stage.BASIC) opponentPokemon.sumOf { source ->
-            definition(source.top).abilities.sumOf { it.opponentActiveEvolutionRetreatCostBonus }
-        } else 0
+        val increase = opponentPokemon.sumOf { source ->
+            val abilities = definition(source.top).abilities
+            abilities.sumOf { it.opponentActiveRetreatCostBonus } +
+                if (definition(pokemon.top).stage != Stage.BASIC) abilities.sumOf { it.opponentActiveEvolutionRetreatCostBonus } else 0
+        }
         return (base + increase - ((pokemon.tool?.let(::definition)?.trainerEffect as? TrainerEffect.RetreatReduction)?.amount ?: 0)).coerceAtLeast(0)
     }
     fun attackCost(state: GameState, pokemon: PokemonInstance, attack: AttackDefinition): List<EnergyType> {
