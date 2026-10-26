@@ -1341,6 +1341,23 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     update(opponent) { it.copy(deck = it.deck.drop(discarded.size), discard = it.discard + discarded) }
                     emit("OpponentDeckDiscarded", "Descartou ${discarded.size} carta(s) do topo do deck adversário.", discarded.size)
                 }
+                if (Effect.DiscardOpponentDeckPerCoinHead in attack.effects) {
+                    val rng = SeededRng(next.rng)
+                    val flips = mutableListOf<Boolean>()
+                    while (flips.size < 1000) {
+                        val heads = rng.nextInt(2) == 0
+                        flips += heads
+                        if (!heads) break
+                    }
+                    next = next.copy(rng = rng.state)
+                    emit("CoinFlipped", flips.joinToString { if (it) "CARA" else "COROA" })
+                    val count = minOf(flips.count { it }, next.players[opponent].deck.size)
+                    if (count > 0) {
+                        val discarded = next.players[opponent].deck.take(count)
+                        update(opponent) { it.copy(deck = it.deck.drop(count), discard = it.discard + discarded) }
+                    }
+                    emit("OpponentDeckDiscarded", "Descartou $count carta(s) do topo do deck adversário, 1 por cara.", count)
+                }
                 attack.effects.filterIsInstance<Effect.Heal>().forEach { heal ->
                     val healed = minOf(heal.amount, next.players[actor].active!!.damage)
                     updatePokemon(p.active.id) { it.copy(damage = it.damage - healed) }

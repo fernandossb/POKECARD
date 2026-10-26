@@ -376,6 +376,11 @@ internal object CatalogRuleCompiler {
     fun compileAttack(id: String, index: Int, raw: JsonObject): AttackDefinition? {
         val cost = raw.a("cost").map { type(it.jsonPrimitive.content) ?: return null }
         val text = raw.s("effect").orEmpty().trim()
+        if (text == "Flip a coin until you get tails. For each heads, discard the top card of your opponent's deck.") {
+            val rewritten = JsonObject(raw.toMutableMap().apply { put("effect", JsonPrimitive("")) })
+            val compiled = compileAttack(id, index, rewritten) ?: return null
+            return compiled.copy(effects = compiled.effects + Effect.DiscardOpponentDeckPerCoinHead, text = text)
+        }
         val revealHandPokemonDamage = Regex("Reveal any number of (.+) from your hand, and this attack does (\\d+) damage for each card you revealed in this way\\.").matchEntire(text)
         if (revealHandPokemonDamage != null) {
             val perCard = revealHandPokemonDamage.groupValues[2].toInt()
