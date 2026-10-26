@@ -812,8 +812,18 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     }
                     ChoiceKind.ATTACH_DECK_ENERGY -> {
                         val cards = p.deck.filter { it.id in ids }
-                        update { it.copy(active = it.active!!.copy(energies = it.active.energies + cards), deck = it.deck - cards.toSet()) }
+                        if (cards.size != ids.size || cards.any { it.id !in choice.candidates || def(it).category != Category.ENERGY || !def(it).basicEnergy || choice.energyType != null && def(it).type != choice.energyType })
+                            return illegal("Escolha apenas Energias Básicas válidas do deck.")
+                        update { player -> player.copy(active = player.active!!.let { active ->
+                            val poisoned = choice.poisonSelfIfAttached && cards.isNotEmpty()
+                            val wasPoisoned = SpecialCondition.POISONED in active.conditions
+                            active.copy(energies = active.energies + cards,
+                                conditions = if (poisoned) active.conditions + SpecialCondition.POISONED else active.conditions,
+                                poisonDamageCounters = if (poisoned && !wasPoisoned) 1 else active.poisonDamageCounters)
+                        }, deck = player.deck - cards.toSet()) }
                         events += GameEvent("EffectEnergyAttached", "Buscou e ligou ${cards.size} Energia(s) ao atacante.")
+                        if (choice.poisonSelfIfAttached && cards.isNotEmpty())
+                            events += GameEvent("SpecialCondition", "${def(p.active!!.top).name} ficou Poisoned pelo próprio ataque.")
                     }
                     ChoiceKind.ATTACK_TOP_DECK_ENERGY -> {
                         if (ids.size != ids.distinct().size || ids.any { selectedId ->

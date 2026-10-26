@@ -157,6 +157,7 @@ class EffectEngine(private val catalog: CardCatalog) {
             effects.filterIsInstance<Effect.OpponentTypeDamage>().filter { targetIsOpponentActive && target.type == it.type }.sumOf { it.bonus } +
             effects.filterIsInstance<Effect.OpponentEvolutionActiveDamageBonus>().filter { targetIsOpponentActive && target.stage != Stage.BASIC }.sumOf { it.bonus } +
             effects.filterIsInstance<Effect.OwnEnergyCountDamage>().sumOf { it.perEnergy * attacker.energies.size } +
+            effects.filterIsInstance<Effect.AttackerConditionDamageBonus>().filter { it.condition in attacker.conditions }.sumOf { it.bonus } +
             effects.filterIsInstance<Effect.OpponentEnergyCountDamage>().filter { targetIsOpponentActive }.sumOf { it.perEnergy * opponentActiveEnergyCount } +
             effects.filterIsInstance<Effect.OpponentHandEnergyCountDamage>().sumOf { it.perEnergy * opponentHandEnergyCount } +
             effects.filterIsInstance<Effect.OpponentHandCountDamage>().sumOf { it.perCard * opponentHandCount } +
@@ -230,7 +231,7 @@ class EffectEngine(private val catalog: CardCatalog) {
         is Effect.OwnDamagedPokemonCountDamage,
         is Effect.StatusCondition, is Effect.OpponentActiveTypeCondition, is Effect.DiscardDefendingEnergy, Effect.DiscardAllOpponentSpecialEnergy, Effect.DiscardOpponentToolsAndSpecialEnergy, is Effect.BenchDamage, is Effect.OwnBenchDamage, is Effect.DiscardEnergyThenBenchDamage, is Effect.OptionalShuffleEnergyThenBenchDamage, is Effect.BenchDamageCounters, Effect.PlaceDamageCounter, is Effect.MultiTargetDamage, is Effect.OptionalDiscardLightningForParalysis, is Effect.CoinDamageEachOpponentPokemon, Effect.KnockOutBothActive, Effect.KnockOutOpponentActiveIfSpecialCondition, Effect.KnockOutOpponentActiveAtExactlySixDamageCounters, Effect.RecoverSelfFromSpecialConditions, Effect.NoWeaknessNextTurn, Effect.CoinMiss, is Effect.HealEachOwnPokemon, is Effect.HealEachPokemon,
         is Effect.ReduceDamageNextTurn, is Effect.SelfDamage, Effect.PreventDefendingAttackNextTurn, Effect.DefendingAttackFailsOnTailsNextTurn,
-        is Effect.OwnHandCounterDamage, is Effect.OpponentHandCountDamage, is Effect.OpponentHandAtMostDamageBonus, is Effect.OpponentExDamage, is Effect.OpponentTypeDamage, is Effect.OpponentEvolutionActiveDamageBonus, is Effect.OwnEnergyCountDamage,
+        is Effect.OwnHandCounterDamage, is Effect.OpponentHandCountDamage, is Effect.OpponentHandAtMostDamageBonus, is Effect.OpponentExDamage, is Effect.OpponentTypeDamage, is Effect.OpponentEvolutionActiveDamageBonus, is Effect.OwnEnergyCountDamage, is Effect.AttackerConditionDamageBonus,
         is Effect.OpponentEnergyCountDamage, is Effect.OpponentBasicDiscardEnergyDamage, is Effect.OpponentHandEnergyCountDamage, is Effect.OpponentActiveRetreatCostDamage, is Effect.ReduceDefendingAttackDamageNextTurn,
         is Effect.OpponentConditionDamage, is Effect.OpponentActiveDamagedDamage, is Effect.OpponentActiveDamageCounterDamage,
         is Effect.OwnDiscardEnergyDamage, is Effect.DiscardEnergyThresholdDamage, is Effect.OwnInPlayEnergyDamage, is Effect.OwnSpecialEnergyDamage,
