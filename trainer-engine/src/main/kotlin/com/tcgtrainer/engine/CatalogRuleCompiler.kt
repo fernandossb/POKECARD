@@ -614,6 +614,7 @@ internal object CatalogRuleCompiler {
         val benchDamageCounters = Regex("Place (\\d+) damage counters on 1 of your opponent's Benched Pokémon\\.").matchEntire(text)
         val placeDamageCounter = text == "Place 1 damage counter on 1 of your opponent's Pokémon."
         val spreadBenchDamageCounters = Regex("Put (\\d+) damage counters on your opponent's Benched Pokémon in any way you like\\.").matchEntire(text)
+        val grassDiscardEnergyTargetCounters = Regex("Put 2 damage counters on 1 of your opponent's Pokémon for each Basic \\{G\\} Energy card in your discard pile\\. Then, shuffle those Energy cards into your deck\\.").matches(text)
         val multiTargetDamage = Regex("Discard (\\d+) Energy from this Pokémon, and this attack does (\\d+) damage to each of (\\d+) of your opponent's Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
         val splitBombDamage = Regex("This attack does (\\d+) damage to each of (\\d+) of your opponent's Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
         val coinDamageEachPokemon = Regex("For each of your opponent's Pokémon, flip a coin\\. If heads, this attack does (\\d+) damage to that Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
@@ -1178,6 +1179,7 @@ internal object CatalogRuleCompiler {
                     (damagedBenchDamage ?: benchDamage!!).groupValues[1].toInt(), requiresDamageCounters = damagedBenchDamage != null)
                 benchDamageCounters != null || spreadBenchDamageCounters != null -> effects += Effect.BenchDamageCounters(
                     (benchDamageCounters ?: spreadBenchDamageCounters!!).groupValues[1].toInt(), distribute = spreadBenchDamageCounters != null)
+                grassDiscardEnergyTargetCounters -> effects += Effect.GrassDiscardEnergyTargetCounters
                 placeDamageCounter -> effects += Effect.PlaceDamageCounter
                 discardTeamRocketEnergyToDiscardOpponentActive -> effects += Effect.DiscardTeamRocketEnergyToDiscardOpponentActive
                 multiTargetDamage != null -> {

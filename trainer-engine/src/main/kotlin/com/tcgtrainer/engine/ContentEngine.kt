@@ -1290,6 +1290,14 @@ internal class ContentEngine(private val rules: RulesEngine) {
                             active = player.active?.let { pokemon -> if (pokemon.id == targetId) pokemon.copy(damage = pokemon.damage + choice.amount) else pokemon },
                             bench = player.bench.map { pokemon -> if (pokemon.id == targetId) pokemon.copy(damage = pokemon.damage + choice.amount) else pokemon }) }
                         events += GameEvent("BenchDamageCountersPlaced", "Colocou ${choice.amount / 10} contador(es) de dano no Pokémon do Banco adversário.", choice.amount)
+                        if (choice.pendingCards.isNotEmpty()) {
+                            val energies = choice.pendingCards.mapNotNull { id -> s.players[actor].discard.firstOrNull { it.id == id } }
+                            val rng = SeededRng(s.rng)
+                            val shuffled = rng.shuffle(s.players[actor].deck + energies)
+                            update(actor) { it.copy(discard = it.discard - energies.toSet(), deck = shuffled) }
+                            s = s.copy(rng = rng.state)
+                            events += GameEvent("DiscardEnergyShuffledIntoDeck", "Embaralhou ${energies.size} Energia(s) Planta no deck.", energies.size)
+                        }
                         if (choice.remaining > 1) remainingChoices = listOf(choice.copy(
                             title = "Escolha um Pokémon do Banco adversário para receber 1 dos ${choice.remaining-1} contadores restantes.",
                             remaining = choice.remaining - 1)) + remainingChoices

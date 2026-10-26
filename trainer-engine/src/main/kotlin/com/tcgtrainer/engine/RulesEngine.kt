@@ -1560,6 +1560,13 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         bench.map { it.id }, 1, 1, remaining = if (effect.distribute) effect.count else 0,
                         amount = if (effect.distribute) 10 else effect.count * 10)
                 }
+                if (Effect.GrassDiscardEnergyTargetCounters in attack.effects) {
+                    val grass = next.players[actor].discard.filter { card -> definition(card).energyType == EnergyType.GRASS && definition(card).basicEnergy }
+                    val targets = next.players[opponent].pokemon().filter { !attackTargetEffectsPrevented(next, opponent, it) }
+                    if (grass.isNotEmpty() && targets.isNotEmpty()) choices += ChoiceRequest(
+                        ChoiceKind.ATTACK_DAMAGE_COUNTER_TARGET, "Escolha um Pokémon adversário para receber 2 contadores por Energia Planta descartada.",
+                        targets.map { it.id }, 1, 1, amount = grass.size * 20, pendingCards = grass.map { it.id })
+                }
                 if (Effect.PlaceDamageCounter in attack.effects) {
                     val targets = next.players[opponent].pokemon().filter { !attackTargetEffectsPrevented(next, opponent, it) }
                     if (targets.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.ATTACK_DAMAGE_COUNTER_TARGET,
