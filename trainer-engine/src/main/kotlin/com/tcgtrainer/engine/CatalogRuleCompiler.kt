@@ -684,6 +684,7 @@ internal object CatalogRuleCompiler {
         val preventBasicDamage = text == "During your opponent's next turn, prevent all damage done to this Pokémon by attacks from Basic Pokémon."
         val discardOwn = Regex("Discard (an|a|1|2|3) (?:\\{([GRFLWPMD])\\} )?Energy from this Pokémon\\.").matchEntire(text)
         val discardAllOwn = Regex("Discard all (?:\\{([GRFLWPMD])\\} )?Energy from this Pokémon\\.").matchEntire(text)
+        val discardAllEnergyTakePrize = text == "Discard all Energy from this Pokémon, and take a Prize card."
         val condition = (status ?: coinStatus)?.groupValues?.get(1)?.uppercase()?.let { runCatching { SpecialCondition.valueOf(it) }.getOrNull() }
         val multiStatusParts = Regex("Your opponent's Active Pokémon is now (.+)\\.").matchEntire(text)?.groupValues?.get(1)
             ?.split(Regex(", and | and |, "))
@@ -1315,6 +1316,10 @@ internal object CatalogRuleCompiler {
                 Regex("Discard (an|a|1|2|3) Energy from your opponent's Active Pokémon\\.").matchEntire(text) != null -> {
                     val count = Regex("Discard (an|a|1|2|3) Energy from your opponent's Active Pokémon\\.").matchEntire(text)!!.groupValues[1]
                     effects += Effect.DiscardDefendingEnergy(if (count in listOf("an", "a")) 1 else count.toInt())
+                }
+                discardAllEnergyTakePrize -> {
+                    effects += Effect.DiscardAttackEnergy(0, all = true)
+                    effects += Effect.TakePrizeCard
                 }
                 discardAllOwn != null -> effects += Effect.DiscardAttackEnergy(0,
                     discardAllOwn.groupValues[1].takeIf(String::isNotEmpty)?.let(::symbolType), all = true)

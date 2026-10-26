@@ -844,6 +844,12 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     val settled = settle(next, ResolutionEnd.ATTACK); next = settled.state; events += settled.events
                 } else {
                 next = next.copy(pendingAttackDamageSourcePokemonId = p.active!!.id)
+                if (Effect.TakePrizeCard in attack.effects) {
+                    val owed = next.prizesOwed.toMutableList()
+                    owed[actor] += 1
+                    next = next.copy(prizesOwed = owed)
+                    emit("AttackPrize", "O ataque concedeu 1 Prêmio ao jogador ${actor+1}.", 1)
+                }
                 attack.effects.filterIsInstance<Effect.NextTurnAttackDamageBonus>().forEach { effect ->
                     updatePokemon(p.active!!.id) { it.copy(nextTurnAttackDamageBonusName = effect.attackName,
                         nextTurnAttackDamageBonus = effect.bonus, nextTurnAttackDamageBonusTurn = state.turn + 2) }
