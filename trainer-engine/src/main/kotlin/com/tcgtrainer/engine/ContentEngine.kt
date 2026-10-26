@@ -117,6 +117,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     is TrainerEffect.ShuffleHandDraw -> if (p.deck.isEmpty() && p.hand.size <= 1) illegal("Não há cartas para embaralhar ou comprar.") else Legality.Legal
                     is TrainerEffect.DrawCardsIfOpponentPrizesAtMost -> Legality.Legal
                     TrainerEffect.MegatonBlower -> Legality.Legal
+                    is TrainerEffect.RecoverSupporters -> Legality.Legal
                     is TrainerEffect.DrawCards, TrainerEffect.GreatBall, TrainerEffect.Sonia -> if (p.deck.isEmpty()) illegal("Seu deck está vazio.") else Legality.Legal
                     TrainerEffect.CoinSwitch -> if (s.players[1-s.currentPlayer].bench.isEmpty()) illegal("Não há Pokémon adversário no Banco.") else Legality.Legal
                     TrainerEffect.ForestOfVitality -> when {
@@ -350,6 +351,12 @@ internal class ContentEngine(private val rules: RulesEngine) {
                             s = s.copy(stadium = null, stadiumOwner = null)
                             events += GameEvent("StadiumDiscarded", "Descartou o Estádio em jogo.")
                         }
+                    }
+                    is TrainerEffect.RecoverSupporters -> {
+                        val candidates = p.discard.filter { def(it).trainerType == TrainerType.SUPPORTER }
+                        begin(Resolution(listOf(ChoiceRequest(ChoiceKind.RECOVER,
+                            "Escolha até ${effect.max} Apoiador(es) do seu descarte para recuperar.",
+                            candidates.map { it.id }, 0, minOf(effect.max, candidates.size)))))
                     }
                     TrainerEffect.GreatBall -> begin(Resolution(listOf(ChoiceRequest(ChoiceKind.SEARCH, "Olhe as 7 primeiras cartas: escolha até 1 Pokémon.",
                         p.deck.take(7).filter { def(it).category == Category.POKEMON }.map { it.id }, 0, 1, visibleCards = p.deck.take(7).map { it.id })), shuffleAfter = true))

@@ -466,6 +466,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                     100.0 + if (o.opponentPrizeCount <= effect.prizeThreshold) effect.bonus * 8.0 else 0.0
                 } else -5.0
                 TrainerEffect.MegatonBlower -> 20.0
+                is TrainerEffect.RecoverSupporters -> if (o.ownDiscard.any { d(it).trainerType == TrainerType.SUPPORTER }) 45.0 else -5.0
                 TrainerEffect.GreatBall, TrainerEffect.Sonia -> if (o.ownDeckCount > 0 && own.size < 5) 90.0 else -5.0
                 TrainerEffect.CoinSwitch -> if (o.opponentField.size > 1) 20.0 else -5.0
                 TrainerEffect.ForestOfVitality -> 30.0
