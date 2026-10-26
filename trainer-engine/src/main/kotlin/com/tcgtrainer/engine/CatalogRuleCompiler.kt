@@ -310,6 +310,9 @@ internal object CatalogRuleCompiler {
         val surviveAttackKnockoutOnHeads = Regex("If this Pokémon would be Knocked Out by damage from an attack, flip a coin. If heads, this Pokémon is not Knocked Out, and its remaining HP becomes (\\d+)\\.").matchEntire(text)
         if (surviveAttackKnockoutOnHeads != null) return AbilityDefinition("$id-ability$index", name, text,
             surviveAttackKnockoutOnHeadsAtHp = surviveAttackKnockoutOnHeads.groupValues[1].toInt())
+        val healActive = Regex("Once during your turn, you may heal (\\d+) damage from your Active Pokémon\\.").matchEntire(text)
+        if (healActive != null) return AbilityDefinition("$id-ability$index", name, text, usageKey = name,
+            healDamage = healActive.groupValues[1].toInt(), healActiveOnly = true)
         val heal = Regex("Once during your turn, you may (?:use this Ability\\. )?heal (\\d+) damage from 1 of your Pokémon\\.", RegexOption.IGNORE_CASE).matchEntire(text)
         if (heal != null) return AbilityDefinition("$id-ability$index", name, text, usageKey = name, healDamage = heal.groupValues[1].toInt())
         val recoverBasicToBench = Regex("Once during your turn, if this Pokémon is in the Active Spot, you may put a Basic Pokémon with (\\d+) HP or less from your discard pile onto your Bench\\.").matchEntire(text)

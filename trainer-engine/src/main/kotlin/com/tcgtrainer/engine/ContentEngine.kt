@@ -211,7 +211,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     } -> illegal("Não há Pokémon Darkness elegível no Banco para trocar.")
                     ability.attachHandEnergyToPokemonType != null && (if (ability.attachHandEnergyBenchOnly) p.bench else p.pokemon()).none { def(it.top).type == ability.attachHandEnergyToPokemonType } -> illegal("Não há Pokémon do tipo necessário na área permitida para receber a Energia.")
                     ability.attachHandEnergyBenchOnly && p.bench.none { def(it.top).name.startsWith(ability.attachHandEnergyToPokemonNamePrefix.orEmpty()) } -> illegal("Não há Pokémon elegível no Banco para receber a Energia.")
-                    ability.healDamage > 0 && p.pokemon().none { it.damage > 0 } -> illegal("Não há dano para curar.")
+                    ability.healDamage > 0 && (if (ability.healActiveOnly) listOfNotNull(p.active) else p.pokemon()).none { it.damage > 0 } -> illegal("Não há dano para curar no alvo permitido.")
                     ability.recoverBasicPokemonToBenchMaxHp > 0 && p.bench.size >= 5 -> illegal("O Banco já tem 5 Pokémon.")
                     ability.recoverBasicPokemonToBenchMaxHp > 0 && p.discard.none { def(it).category == Category.POKEMON && def(it).stage == Stage.BASIC && def(it).hp <= ability.recoverBasicPokemonToBenchMaxHp } -> illegal("Não há Pokémon Básico válido no descarte.")
                     ability.attachBasicEnergyFromDiscard && p.discard.none { def(it).category == Category.ENERGY && def(it).basicEnergy &&
@@ -479,8 +479,12 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         resumePlayer = actor, afterResolution = ResolutionEnd.MAIN)
                     events += GameEvent("PokemonShuffledIntoDeck", "${def(pokemon.top).name} e todas as cartas ligadas foram embaralhados no deck.", cards.size)
                 }
-                else if (ability.healDamage > 0) begin(Resolution(listOf(ChoiceRequest(ChoiceKind.HEAL_TARGET,
-                    "Curar até ${ability.healDamage} de dano de 1 dos seus Pokémon.", p.pokemon().filter { it.damage > 0 }.map { it.id }, 1, 1, amount = ability.healDamage))))
+                else if (ability.healDamage > 0) {
+                    val targets = (if (ability.healActiveOnly) listOfNotNull(p.active) else p.pokemon()).filter { it.damage > 0 }
+                    begin(Resolution(listOf(ChoiceRequest(ChoiceKind.HEAL_TARGET,
+                        if (ability.healActiveOnly) "Curar até ${ability.healDamage} de dano do seu Pokémon Ativo." else "Curar até ${ability.healDamage} de dano de 1 dos seus Pokémon.",
+                        targets.map { it.id }, 1, 1, amount = ability.healDamage))))
+                }
                 else if (ability.recoverBasicPokemonToBenchMaxHp > 0) begin(Resolution(listOf(ChoiceRequest(ChoiceKind.ABILITY_BASIC_POKEMON_TO_BENCH,
                     "Escolha um Pokémon Básico de até ${ability.recoverBasicPokemonToBenchMaxHp} HP do descarte para colocar no Banco.",
                     p.discard.filter { def(it).category == Category.POKEMON && def(it).stage == Stage.BASIC && def(it).hp <= ability.recoverBasicPokemonToBenchMaxHp }.map { it.id },

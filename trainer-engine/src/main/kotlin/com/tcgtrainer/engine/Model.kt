@@ -275,7 +275,7 @@ import kotlinx.serialization.Serializable
     val healIfAttached: Int = 0,
     val attachHandEnergyMax: Int = 1, val attachHandEnergyBenchOnly: Boolean = false,
     val usagePerPokemon: Boolean = false, val surviveAttackKnockoutAtHp: Int = 0,
-    val shuffleSelfIntoDeck: Boolean = false, val healDamage: Int = 0,
+    val shuffleSelfIntoDeck: Boolean = false, val healDamage: Int = 0, val healActiveOnly: Boolean = false,
     val recoverBasicPokemonToBenchMaxHp: Int = 0, val damageBonusIfHandsEqual: Int = 0,
     val surviveAttackKnockoutOnHeadsAtHp: Int = 0,
     val onEvolveShuffleRandomOpponentHandPerHeads: Int = 0,
