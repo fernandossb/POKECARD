@@ -933,9 +933,11 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     result
                 } else false
                 val immunityHeads = if (Effect.PreventAttackDamageNextTurnOnHeads in attack.effects) {
-                    val rng = SeededRng(next.rng); val result = rng.nextInt(2) == 0
-                    next = next.copy(rng = rng.state); emit("CoinFlipped", if (result) "CARA — proteção" else "COROA — proteção")
-                    result
+                    if (Effect.CoinMiss in attack.effects) !coinMiss else {
+                        val rng = SeededRng(next.rng); val result = rng.nextInt(2) == 0
+                        next = next.copy(rng = rng.state); emit("CoinFlipped", if (result) "CARA — proteção" else "COROA — proteção")
+                        result
+                    }
                 } else false
                 val defender = primaryTargetId?.let { id -> next.players[opponent].pokemon().first { it.id == id } } ?: next.players[opponent].active!!
                 val defenderAbilities = effectiveAbilities(next, opponent, defender)

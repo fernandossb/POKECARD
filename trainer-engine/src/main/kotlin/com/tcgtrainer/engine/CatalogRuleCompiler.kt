@@ -928,6 +928,10 @@ internal object CatalogRuleCompiler {
                 multiStatus != null -> multiStatus.forEach { effects += Effect.StatusCondition(it) }
                 selfOnly != null && damage == 0 -> effects += Effect.SelfDamage(selfOnly.groupValues[1].toInt())
                 text == "Flip a coin. If tails, this attack does nothing." -> effects += Effect.CoinMiss
+                text == "Flip a coin. If tails, this attack does nothing. If heads, during your opponent's next turn, prevent all damage from and effects of attacks done to this Pokémon." -> {
+                    effects += Effect.CoinMiss
+                    effects += Effect.PreventAttackDamageNextTurnOnHeads
+                }
                 text == "Flip a coin. If heads, during your opponent's next turn, prevent all damage from and effects of attacks done to this Pokémon." ||
                     text == "Flip a coin. If heads, during your opponent's next turn, prevent all damage done to this Pokémon by attacks." -> effects += Effect.PreventAttackDamageNextTurnOnHeads
                 moveEnergy != null -> effects += Effect.MoveEnergyToBench(moveEnergy.groupValues[1].toInt())
