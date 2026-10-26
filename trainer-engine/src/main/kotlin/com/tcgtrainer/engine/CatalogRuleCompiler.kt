@@ -61,6 +61,8 @@ internal object CatalogRuleCompiler {
                 requirePecharuntExForPrizeReduction = true)
         if (text == "If your opponent's Basic Pokémon is Knocked Out by damage from an attack used by this Pokémon, take 1 more Prize card.")
             return AbilityDefinition("$id-ability$index", name, text, extraPrizeForOpponentBasicKnockoutByAttack = 1)
+        if (text == "Once during your turn, if this Pokémon is in the Active Spot, you may make your opponent's Active Pokémon Burned.")
+            return AbilityDefinition("$id-ability$index", name, text, usageKey = name, requiresActive = true, burnOpponentActive = true)
         if (text == "When your opponent's Active Pokémon is Knocked Out, flip a coin. If heads, take 1 more Prize card. The effect of Wonder Kiss doesn't stack.")
             return AbilityDefinition("$id-ability$index", name, text, wonderKissPrizeOnActiveKnockout = true)
         if (text == "Once during your turn, you may switch 1 of your Benched {D} Pokémon, except any Pecharunt ex, with your Active Pokémon. If you do, the new Active Pokémon is now Poisoned. You can't use more than 1 Subjugating Chains Ability each turn.")

@@ -313,6 +313,7 @@ import kotlinx.serialization.Serializable
     val attackDiscountPerKofuDiscard: Boolean = false,
     val searchColorlessPokemonMaxHpToHand: Int = 0, val requiresFirstTurn: Boolean = false,
     val coinFlipPreventAttackDamage: Boolean = false, val coinFlipPreventAttackDamageEnergyType: EnergyType? = null,
+    val burnOpponentActive: Boolean = false,
     val checkupDamageCountersPerPokemonWithAbilityExceptFroslass: Int = 0,
     val preventDamageFromBasicPokemonEx: Boolean = false,
     val preventDamageAndEffectsFromTeraAttacks: Boolean = false,
