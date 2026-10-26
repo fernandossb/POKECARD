@@ -1326,7 +1326,10 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 val attackKo = end == ResolutionEnd.ATTACK && pokemon.id in state.pendingAttackDamageKnockoutIds
                 val attackerIsEx = state.players[1-owner].active?.let { definition(it.top).name.endsWith(" ex") } == true
                 val shadowyConcealment = attackKo && definition(pokemon.top).type == EnergyType.DARKNESS && attackerIsEx &&
-                    player.pokemon().any { field -> definition(field.top).abilities.any { it.reducePrizeForDarknessKnockoutByEx } }
+                    player.pokemon().any { field -> definition(field.top).abilities.any { ability ->
+                        ability.reducePrizeForDarknessKnockoutByEx && (!ability.requirePecharuntExForPrizeReduction ||
+                            player.pokemon().any { definition(it.top).name == "Pecharunt ex" })
+                    } }
                 val prizeCount = (definition(pokemon.top).prizes - if (shadowyConcealment) 1 else 0).coerceAtLeast(0)
                 owed[1-owner] += prizeCount
                 events += if (shadowyConcealment) GameEvent("PokemonKnockedOut",

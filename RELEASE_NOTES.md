@@ -1,3 +1,10 @@
+# POKECARD Brasil 5.99.34 — Habilidades de Pecharunt e Munkidori ex
+
+- Subjugating Chains troca com um Pokémon Darkness elegível do Banco, aplica Veneno ao novo Ativo e limita o uso a uma vez por turno para todas as cópias.
+- Oh No You Don't reduz um Prêmio ao nocautear Munkidori ex somente enquanto Pecharunt ex está em jogo.
+- A cobertura do Padrão subiu de 1.654 para 1.662 impressões; restam 1.399 das 3.061 elegíveis.
+- Suíte do motor: 391 testes aprovados.
+
 # POKECARD Brasil 5.99.33 — Correção do início da partida
 
 - Corrigidos padrões de texto de Energia que o runtime Android rejeitava ao compilar as regras.

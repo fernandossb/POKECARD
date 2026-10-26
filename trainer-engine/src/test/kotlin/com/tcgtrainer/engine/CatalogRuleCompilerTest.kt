@@ -16,6 +16,59 @@ class CatalogRuleCompilerTest {
             assertTrue(ability.requiresActive, id)
         }
     }
+    @Test fun `Subjugating Chains switches only eligible Darkness and poisons the selected Active once per turn`() {
+        val ids = listOf("sv06.5-039", "sv06.5-085", "sv06.5-093", "sv06.5-095", "sv08.5-163")
+        val compiled = ids.map { id -> CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())!! }
+        assertTrue(compiled.all { card -> card.abilities.any { it.switchOwnDarknessExceptPecharunt && it.poisonNewActiveOnSwitch } })
+        val source = compiled.first(); val otherPecharunt = compiled.last()
+        val darkId = CardLibrary.entries.first { it.category == Category.POKEMON && it.canonicalName != "Pecharunt ex" &&
+            CatalogRuleCompiler.rows[it.id]?.get("types")?.jsonArray?.any { type -> type.jsonPrimitive.content == "Darkness" } == true }.id
+        val engine = RulesEngine(object : CardCatalog { override fun get(id: String) = compiled.find { it.id == id } ?: TrainerCatalog.get(id) })
+        fun c(id: String, def: String = "sv01-258") = CardInstance(id, def)
+        val active = PokemonInstance(listOf(c("pecharunt", source.id)), enteredPlayTurn = 0)
+        val eligible = PokemonInstance(listOf(c("dark", darkId)), enteredPlayTurn = 0)
+        val excluded = PokemonInstance(listOf(c("pecharunt-ex", otherPecharunt.id)), enteredPlayTurn = 0)
+        val player = PlayerState(deck = List(20) { c("d-$it") }, prizes = List(6) { c("p-$it") }, active = active,
+            bench = listOf(eligible, excluded))
+        val opponent = PlayerState(deck = List(20) { c("od-$it") }, prizes = List(6) { c("op-$it") },
+            active = PokemonInstance(listOf(c("opp", "me01-073")), enteredPlayTurn = 0))
+        val state = GameState("subjugating-chains", 81, RngState(81), listOf(player, opponent), 0, 0, 3, Phase.MAIN)
+        val ability = source.abilities.first { it.switchOwnDarknessExceptPecharunt }
+        val started = engine.apply(state, GameAction.UseAbility(active.id, ability.id))
+        assertEquals(Legality.Legal, started.legality)
+        assertEquals(listOf(eligible.id), started.state.resolution!!.choices.single().candidates)
+        val switched = engine.apply(started.state, GameAction.ChooseCards(listOf(eligible.id)))
+        assertEquals(Legality.Legal, switched.legality)
+        assertEquals(eligible.id, switched.state.players[0].active!!.id)
+        assertTrue(SpecialCondition.POISONED in switched.state.players[0].active!!.conditions)
+        assertTrue(switched.state.players[0].bench.single { it.id == active.id }.conditions.isEmpty())
+        assertEquals(Legality.Illegal("Esta habilidade já foi usada neste turno."),
+            engine.validate(switched.state, GameAction.UseAbility(excluded.id, otherPecharunt.abilities.first { it.switchOwnDarknessExceptPecharunt }.id)))
+    }
+    @Test fun `Oh No You Don't reduces Munkidori ex prizes only while Pecharunt ex is in play`() {
+        val ids = listOf("sv06.5-037", "sv06.5-083", "sv06.5-091")
+        val cards = ids.map { CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(it), emptyMap())!! }
+        assertTrue(cards.all { card -> card.abilities.any { it.requirePecharuntExForPrizeReduction } })
+        val munkidori = cards.first()
+        val pecharunt = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv06.5-039"), emptyMap())!!
+        val opponentEx = CardDefinition("opponent-ex", "Opponent ex", "TEST", "1", category = Category.POKEMON,
+            hp = 200, prizes = 2)
+        val engine = RulesEngine(object : CardCatalog { override fun get(id: String) =
+            cards.find { it.id == id } ?: if (id == pecharunt.id) pecharunt else if (id == opponentEx.id) opponentEx else TrainerCatalog.get(id) })
+        fun card(id: String, definition: String = "sv01-258") = CardInstance(id, definition)
+        fun settle(withPecharunt: Boolean): GameState {
+            val knockedOut = PokemonInstance(listOf(card("munk", munkidori.id)), munkidori.hp,
+                enteredPlayTurn = 0)
+            val own = PlayerState(deck = List(10) { card("deck-a$it") }, prizes = List(6) { card("prize-a$it") },
+                active = knockedOut, bench = if (withPecharunt) listOf(PokemonInstance(listOf(card("pech", pecharunt.id)), enteredPlayTurn = 0)) else emptyList())
+            val rival = PlayerState(deck = List(10) { card("deck-b$it") }, prizes = List(6) { card("prize-b$it") },
+                active = PokemonInstance(listOf(card("rival", opponentEx.id)), enteredPlayTurn = 0))
+            return engine.settle(GameState("pecharunt-prize-$withPecharunt", 82, RngState(82), listOf(own, rival),
+                1, 1, 4, Phase.MAIN, pendingAttackDamageKnockoutIds = setOf("munk")), ResolutionEnd.ATTACK).state
+        }
+        assertEquals(2, settle(false).prizesOwed[1])
+        assertEquals(1, settle(true).prizesOwed[1])
+    }
     @Test fun `evolution accepts another print of the same species but preserves owner and stage`() {
         val evolution = TrainerCatalog.get("me01-077")
         val base = TrainerCatalog.get("me01-076").copy(id = "another-riolu-print")

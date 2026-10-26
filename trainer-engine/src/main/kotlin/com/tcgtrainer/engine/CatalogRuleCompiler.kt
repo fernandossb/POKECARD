@@ -33,6 +33,12 @@ internal object CatalogRuleCompiler {
             return AbilityDefinition("$id-ability$index", name, text, changeOpponentNsPokemonWeaknessToPsychic = true)
         if (text == "If 1 of your {D} Pokémon is Knocked Out by damage from an attack from your opponent's Pokémon ex, that player takes 1 fewer Prize card. The effect of Shadowy Concealment doesn't stack.")
             return AbilityDefinition("$id-ability$index", name, text, reducePrizeForDarknessKnockoutByEx = true)
+        if (text == "If this Pokémon is Knocked Out by damage from an attack from your opponent's Pokémon, and if you have any Pecharunt ex in play, your opponent takes 1 fewer Prize card.")
+            return AbilityDefinition("$id-ability$index", name, text, reducePrizeForDarknessKnockoutByEx = true,
+                requirePecharuntExForPrizeReduction = true)
+        if (text == "Once during your turn, you may switch 1 of your Benched {D} Pokémon, except any Pecharunt ex, with your Active Pokémon. If you do, the new Active Pokémon is now Poisoned. You can't use more than 1 Subjugating Chains Ability each turn.")
+            return AbilityDefinition("$id-ability$index", name, text, usageKey = "Subjugating Chains", switchOwnActive = true,
+                switchOwnDarknessExceptPecharunt = true, poisonNewActiveOnSwitch = true)
         if (text == "Once during your turn, if this Pokémon is in the Active Spot, you may discard a Basic {W} Energy card from your hand in order to use this Ability. Place 6 damage counters on 1 of your opponent's Pokémon.")
             return AbilityDefinition("$id-ability$index", name, text, requiresActive = true, usageKey = name,
                 discardEnergyType = EnergyType.WATER, damageCounters = 6, damageTargets = 1)
