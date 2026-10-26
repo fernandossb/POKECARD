@@ -776,6 +776,14 @@ class CatalogRuleCompilerTest {
             assertTrue(Effect.CopyBenchedNsAttack in compiled.attacks.single { it.name == "Night Joker" }.effects, id)
         }
     }
+    @Test fun `Shadowy Concealment compiles on every Standard Mega Gengar print`() {
+        val ids = listOf("me02-056", "me02.5-125", "me02.5-269", "me02.5-284", "mep-073")
+        ids.forEach { id ->
+            val compiled = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())
+            assertNotNull(compiled, id)
+            assertTrue(compiled.abilities.any { it.reducePrizeForDarknessKnockoutByEx }, id)
+        }
+    }
     @Test fun `Boltund Electrifying Dash selects only Lightning Energy for Benched targets`() {
         val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv05-059"), emptyMap())!!
         assertTrue(Effect.AttachBasicEnergyFromDeckAny(2, EnergyType.LIGHTNING, benchedOnly = true) in card.attacks.single { it.name == "Electrifying Dash" }.effects)

@@ -3054,4 +3054,31 @@ class RulesEngineTest {
         assertTrue(selected.events.any { it.type == "AttackDeclared" && it.message.startsWith("Night Joker") })
         assertNull(selected.state.pendingCopiedAttack)
     }
+
+    @Test fun `Shadowy Concealment reduces one Prize for an ex attack knockout and does not stack`() {
+        val gengarAbility = AbilityDefinition("shadowy-test", "Shadowy Concealment", "", reducePrizeForDarknessKnockoutByEx = true)
+        val gengar = CardDefinition("shadowy-gengar", "Mega Gengar ex", "Test", "1", category = Category.POKEMON,
+            hp = 350, type = EnergyType.DARKNESS, abilities = listOf(gengarAbility), prizes = 3)
+        val darkPokemon = CardDefinition("shadowy-victim", "Dark ex", "Test", "2", category = Category.POKEMON,
+            hp = 100, type = EnergyType.DARKNESS, prizes = 3)
+        val attack = AttackDefinition("shadowy-hit", "Ex Impact", emptyList(), listOf(Effect.Damage(100)))
+        val attacker = CardDefinition("shadowy-attacker", "Attacker ex", "Test", "3", category = Category.POKEMON,
+            hp = 300, attacks = listOf(attack))
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            gengar.id -> gengar; darkPokemon.id -> darkPokemon; attacker.id -> attacker
+            else -> TestCatalog.definitions[id] ?: TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        val original = main()
+        val state = original.copy(currentPlayer = 1, turn = 3, players = original.players.mapIndexed { index, player ->
+            if (index == 0) player.copy(active = field("dark-victim", darkPokemon.id),
+                bench = listOf(field("gengar-a", gengar.id), field("gengar-b", gengar.id)))
+            else player.copy(active = field("attacker-ex", attacker.id), bench = emptyList())
+        })
+        val result = rules.apply(state, GameAction.Attack(attack.id))
+        assertEquals(Legality.Legal, result.legality)
+        assertEquals(2, result.state.prizesOwed[1])
+        assertEquals(2, result.state.pendingPrizes)
+        assertTrue(result.events.any { it.message.contains("2 Prêmio(s) após Shadowy Concealment") })
+    }
 }

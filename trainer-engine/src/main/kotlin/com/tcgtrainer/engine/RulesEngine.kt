@@ -1323,8 +1323,15 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         val players = state.players.mapIndexed { owner, player ->
             val knockedOut = player.pokemon().filter { it.damage >= effects.effectiveHp(it, state) }
             knockedOut.forEach { pokemon ->
-                owed[1-owner] += definition(pokemon.top).prizes
-                events += GameEvent("PokemonKnockedOut", "${definition(pokemon.top).name} foi nocauteado; ${definition(pokemon.top).prizes} Prêmio(s).")
+                val attackKo = end == ResolutionEnd.ATTACK && pokemon.id in state.pendingAttackDamageKnockoutIds
+                val attackerIsEx = state.players[1-owner].active?.let { definition(it.top).name.endsWith(" ex") } == true
+                val shadowyConcealment = attackKo && definition(pokemon.top).type == EnergyType.DARKNESS && attackerIsEx &&
+                    player.pokemon().any { field -> definition(field.top).abilities.any { it.reducePrizeForDarknessKnockoutByEx } }
+                val prizeCount = (definition(pokemon.top).prizes - if (shadowyConcealment) 1 else 0).coerceAtLeast(0)
+                owed[1-owner] += prizeCount
+                events += if (shadowyConcealment) GameEvent("PokemonKnockedOut",
+                    "${definition(pokemon.top).name} foi nocauteado; $prizeCount Prêmio(s) após Shadowy Concealment.", prizeCount)
+                else GameEvent("PokemonKnockedOut", "${definition(pokemon.top).name} foi nocauteado; ${definition(pokemon.top).prizes} Prêmio(s).")
             }
             val ids = knockedOut.map { it.id }.toSet()
             player.copy(active = player.active?.takeUnless { it.id in ids }, bench = player.bench.filterNot { it.id in ids },

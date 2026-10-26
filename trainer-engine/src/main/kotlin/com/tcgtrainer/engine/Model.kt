@@ -236,6 +236,7 @@ import kotlinx.serialization.Serializable
     val onBenchDiscardOpponentDeckTop: Boolean = false,
     val onBenchSwitchAndMoveEnergy: Boolean = false,
     val changeOpponentNsPokemonWeaknessToPsychic: Boolean = false,
+    val reducePrizeForDarknessKnockoutByEx: Boolean = false,
     val teamDamageReduction: Int = 0,
     val onEvolveConfuseOpponentActive: Boolean = false,
     val hpBonusPerOpponentPrizeTaken: Int = 0,
