@@ -893,6 +893,10 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 if (attackDamageKnockout) next = next.copy(pendingAttackDamageKnockoutIds = next.pendingAttackDamageKnockoutIds + defender.id)
                 update(opponent) { it.copy(active = it.active?.let { pokemon -> if (pokemon.id == defender.id) pokemon.copy(damage = damageAfterAttack) else pokemon },
                     bench = it.bench.map { pokemon -> if (pokemon.id == defender.id) pokemon.copy(damage = damageAfterAttack) else pokemon }) }
+                if (attackDamageKnockout && Effect.ProtectAttackerNextTurnIfKnocksOutByDamage in attack.effects) {
+                    updatePokemon(p.active.id) { it.copy(attackImmunityTurn = state.turn + 1) }
+                    emit("AttackImmunityNextTurn", "${definition(p.active.top).name} impedirá dano e efeitos de ataques durante o próximo turno adversário.")
+                }
                 if (!defenderEffectsPrevented) attack.effects.filterIsInstance<Effect.DelayedDefendingDamageCounters>().forEach { effect ->
                     updatePokemon(defender.id) { it.copy(delayedDamageCounters = it.delayedDamageCounters + effect.counters,
                         delayedDamageTurn = state.turn + 1) }

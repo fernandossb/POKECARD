@@ -147,6 +147,7 @@ import kotlinx.serialization.Serializable
     @Serializable data object KnockOutBothActive : Effect
     @Serializable data object KnockOutOpponentActiveIfSpecialCondition : Effect
     @Serializable data object KnockOutOpponentActiveAtExactlySixDamageCounters : Effect
+    @Serializable data object ProtectAttackerNextTurnIfKnocksOutByDamage : Effect
     @Serializable data object RecoverSelfFromSpecialConditions : Effect
     @Serializable data object NoWeaknessNextTurn : Effect
     @Serializable data class OpponentActiveRetreatCostDamage(val perCost: Int) : Effect
