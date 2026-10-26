@@ -28,7 +28,8 @@ internal class ContentEngine(private val rules: RulesEngine) {
         }
     }
     fun validate(s: GameState, action: GameAction): Legality {
-        val p = s.players[rules.actingPlayer(s)]
+        val actor = rules.actingPlayer(s)
+        val p = s.players[actor]
         return when (action) {
             is GameAction.ChooseCards -> {
                 val choice = s.resolution?.choices?.firstOrNull() ?: return illegal("Nenhuma escolha pendente.")
@@ -52,6 +53,8 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     } -> illegal("Escolha apenas um Pokémon elegível, não protegido e diferente do atacante.")
                     choice.kind == ChoiceKind.TRAINER_MOVE_BENCH_ENERGY && (p.active == null || action.cardIds.any { id -> p.bench.none { pokemon -> pokemon.energies.any { it.id == id } } }) -> illegal("Escolha Energias ligadas aos seus Pokémon do Banco com um Pokémon Ativo em jogo.")
                     choice.kind == ChoiceKind.TRAINER_SEARCH_EVOLUTION_LINE && (action.cardIds.any { id -> p.deck.none { it.id == id && def(it).category == Category.POKEMON } } || action.cardIds.mapNotNull { id -> p.deck.find { it.id == id }?.let { def(it).stage } }.distinct().size != action.cardIds.size) -> illegal("Escolha no máximo um Pokémon de cada estágio que ainda esteja no deck.")
+                    choice.kind == ChoiceKind.TRAINER_BASIC_POKEMON_TO_BENCH && action.cardIds.size > (5-p.bench.size).coerceAtLeast(0) -> illegal("O Banco não tem espaço para tantos Pokémon Básicos.")
+                    choice.kind == ChoiceKind.TRAINER_BASIC_POKEMON_TO_BENCH && action.cardIds.any { id -> p.deck.none { it.id == id && def(it).category == Category.POKEMON && def(it).stage == Stage.BASIC && def(it).hp <= 70 } } -> illegal("Escolha apenas Pokémon Básicos de até 70 HP que ainda estejam no deck.")
                     choice.kind == ChoiceKind.PALAFIN_ZERO_TO_HERO && action.cardIds.isNotEmpty() && action.cardIds.any { id ->
                         p.deck.none { it.id == id && def(it).name == "Palafin ex" }
                     } -> illegal("Escolha um Palafin ex que ainda esteja no deck.")
@@ -107,6 +110,11 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     TrainerEffect.MysteryGarden -> when {
                         p.flags.stadium -> illegal("Você já jogou um Estádio neste turno.")
                         s.stadium?.let { def(it).name == d.name } == true -> illegal("Já existe um Estádio com esse nome em jogo.")
+                        else -> Legality.Legal
+                    }
+                    TrainerEffect.BuddyBuddyPoffin -> when {
+                        p.bench.size >= 5 -> illegal("O Banco já tem 5 Pokémon.")
+                        p.deck.none { def(it).category == Category.POKEMON && def(it).stage == Stage.BASIC && def(it).hp <= 70 } -> illegal("Não há Pokémon Básicos de até 70 HP no deck.")
                         else -> Legality.Legal
                     }
                     is TrainerEffect.DiscardOpponentItemsFromHand -> Legality.Legal
@@ -293,6 +301,13 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         if (old != null && owner != null) update(owner) { it.copy(discard = it.discard + old) }
                         s = s.copy(stadium = card, stadiumOwner = actor)
                         update { it.copy(flags = it.flags.copy(stadium = true)) }
+                    }
+                    TrainerEffect.BuddyBuddyPoffin -> {
+                        val eligible = p.deck.filter { def(it).category == Category.POKEMON && def(it).stage == Stage.BASIC && def(it).hp <= 70 }
+                        val max = minOf(2, (5-p.bench.size).coerceAtLeast(0), eligible.size)
+                        begin(Resolution(listOf(ChoiceRequest(ChoiceKind.TRAINER_BASIC_POKEMON_TO_BENCH,
+                            "Buddy-Buddy Poffin: escolha até $max Pokémon Básicos de até 70 HP para colocar no Banco.",
+                            eligible.map { it.id }, 0, max, visibleCards = eligible.map { it.id })), shuffleAfter = true))
                     }
                     is TrainerEffect.DiscardOpponentItemsFromHand -> {
                         val opponentHand = s.players[1-actor].hand
@@ -931,6 +946,13 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         val card = p.discard.first { it.id == ids.single() && def(it).category == Category.POKEMON && def(it).stage == Stage.BASIC }
                         update { it.copy(discard = it.discard - card, bench = it.bench + PokemonInstance(listOf(card), enteredPlayTurn = s.turn)) }
                         events += GameEvent("PokemonRecoveredToBench", "Colocou ${def(card).name} do descarte no Banco pela habilidade.")
+                    }
+                    ChoiceKind.TRAINER_BASIC_POKEMON_TO_BENCH -> {
+                        val cards = p.deck.filter { it.id in ids && it.id in choice.candidates &&
+                            def(it).category == Category.POKEMON && def(it).stage == Stage.BASIC && def(it).hp <= 70 }
+                        update { player -> player.copy(deck = player.deck - cards.toSet(),
+                            bench = player.bench + cards.map { PokemonInstance(listOf(it), enteredPlayTurn = s.turn) }) }
+                        events += GameEvent("PokemonSearchedToBench", "Buscou ${cards.size} Pokémon Básico(s) de até 70 HP e colocou no Banco.", cards.size)
                     }
                     ChoiceKind.ABILITY_MOVE_BASIC_ENERGY -> {
                         val energyId = ids.single()
