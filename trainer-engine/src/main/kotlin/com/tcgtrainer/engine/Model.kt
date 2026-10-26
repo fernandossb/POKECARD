@@ -307,6 +307,7 @@ import kotlinx.serialization.Serializable
     val searchPokemonNamePrefixToHand: String? = null, val searchPokemonEvolutionTypeToHand: EnergyType? = null,
     val searchPokemonMaxToHand: Int = 0, val festivalGroundsMayAttackAgain: Boolean = false,
     val preventOpponentItemSupporterEffects: Boolean = false,
+    val preventOpponentItemAndToolPlayFromHand: Boolean = false,
     val opponentShuffleHandAndDraw: Int = 0,
     val eachPlayerDraw: Int = 0,
     val onEvolveHealAllEvolutionAndDiscardEnergy: Boolean = false,

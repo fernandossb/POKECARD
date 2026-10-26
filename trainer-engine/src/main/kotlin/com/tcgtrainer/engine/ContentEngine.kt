@@ -59,6 +59,10 @@ internal class ContentEngine(private val rules: RulesEngine) {
                 val d = def(card)
                 val effect = d.trainerEffect ?: return illegal("Efeito de Treinador não suportado.")
                 if (d.trainerType == TrainerType.ITEM && s.turn <= p.itemPlayLockedUntilTurn) return illegal("Você não pode jogar cartas de Item neste turno.")
+                val opponentActive = s.players[1-actor].active
+                if (d.trainerType in setOf(TrainerType.ITEM, TrainerType.TOOL) && opponentActive != null &&
+                    rules.effectiveAbilities(s, 1-actor, opponentActive).any { it.preventOpponentItemAndToolPlayFromHand })
+                    return illegal("O Pokémon Ativo adversário impede jogar cartas de Item e Ferramenta da mão.")
                 if (d.trainerType == TrainerType.SUPPORTER) {
                     if (s.turn == 1) return illegal("Quem começa não pode usar Apoiador no primeiro turno.")
                     if (p.flags.supporter) return illegal("Você já usou um Apoiador neste turno.")
@@ -109,7 +113,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     ability.onEvolveRecoverNamedTrainerFromDiscard != null -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
                     ability.devolveOpponentPokemonMax > 0 && s.players[1-s.currentPlayer].pokemon().none { it.cards.size > 1 && rules.effectiveAbilities(s, 1-rules.actingPlayer(s), it).none { targetAbility -> targetAbility.preventOpponentEffects } } -> illegal("Não há Pokémon adversário evoluído e sem proteção para desvoluir.")
                     ability.attackDiscountPerOpponentPrize -> illegal("Esta habilidade é aplicada automaticamente ao custo do ataque.")
-                    ability.hpBonusPerOpponentPrizeTaken > 0 || ability.hpBonusPerAttachedEnergyType != null || ability.teamDamageReduction > 0 || ability.additionalPokemonTypes.isNotEmpty() || ability.attackDamageBonusAgainstEvolutionActive > 0 || ability.futurePokemonDamageBonus > 0 || ability.teamAttackDamageBonusType != null || ability.freeRetreatWithNoEnergy || ability.attackDiscountPerKofuDiscard || ability.coinFlipPreventAttackDamage || ability.preventOpponentItemSupporterEffects || ability.changeOpponentNsPokemonWeaknessToPsychic || ability.reducePrizeForDarknessKnockoutByEx || ability.mayAttackFirstTurnIfStarting || ability.suppressSelfKnockoutAbilities || ability.opponentActiveAbilityException != null -> illegal("Esta habilidade passiva se aplica automaticamente.")
+                    ability.hpBonusPerOpponentPrizeTaken > 0 || ability.hpBonusPerAttachedEnergyType != null || ability.teamDamageReduction > 0 || ability.additionalPokemonTypes.isNotEmpty() || ability.attackDamageBonusAgainstEvolutionActive > 0 || ability.futurePokemonDamageBonus > 0 || ability.teamAttackDamageBonusType != null || ability.freeRetreatWithNoEnergy || ability.attackDiscountPerKofuDiscard || ability.coinFlipPreventAttackDamage || ability.preventOpponentItemSupporterEffects || ability.preventOpponentItemAndToolPlayFromHand || ability.changeOpponentNsPokemonWeaknessToPsychic || ability.reducePrizeForDarknessKnockoutByEx || ability.mayAttackFirstTurnIfStarting || ability.suppressSelfKnockoutAbilities || ability.opponentActiveAbilityException != null -> illegal("Esta habilidade passiva se aplica automaticamente.")
                     ability.selfKnockout && s.players.any { player -> player.pokemon().any { source ->
                         def(source.top).abilities.any { it.suppressSelfKnockoutAbilities }
                     } } -> illegal("Habilidades que nocauteiam o próprio Pokémon estão desativadas enquanto Damp estiver em jogo.")

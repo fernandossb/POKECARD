@@ -296,7 +296,12 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             else expectedHeads*effect.perHeads
         } ?: 0) +
             if (state.players[state.currentPlayer].flags.supporter) attack.effects.filterIsInstance<Effect.SupporterBonus>().sumOf { it.damage } else 0
-        val resolvedEffects = attack.effects + (if (extra > 0) listOf(Effect.Damage(extra)) else emptyList()) +
+        val resolvedAttackEffects = attack.effects.map { effect ->
+            if (effect is Effect.ConditionalAttachedEnergyDamage) effect.copy(
+                minimum = attackCost(state, attacker, attack).size + (effect.minimum - attack.cost.size)
+            ) else effect
+        }
+        val resolvedEffects = resolvedAttackEffects + (if (extra > 0) listOf(Effect.Damage(extra)) else emptyList()) +
             (if (effectDamage > 0) listOf(Effect.Damage(effectDamage)) else emptyList())
         val teraAttackImmune = definition(attacker.top).isTera &&
             effectiveAbilities(state, 1-state.currentPlayer, defender).any { it.preventDamageAndEffectsFromTeraAttacks }
