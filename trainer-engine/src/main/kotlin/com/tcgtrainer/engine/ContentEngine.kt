@@ -128,7 +128,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     } } -> illegal("Habilidades que nocauteiam o próprio Pokémon estão desativadas enquanto Damp estiver em jogo.")
                     ability.alternativeAttackCost.isNotEmpty() -> illegal("Esta habilidade passiva altera o custo do ataque quando a condição é atendida.")
                     ability.opponentActiveEvolutionRetreatCostBonus > 0 || ability.opponentActiveRetreatCostBonus > 0 -> illegal("Esta habilidade passiva é aplicada automaticamente ao recuo.")
-                    ability.draw <= 0 && ability.drawTo <= 0 && ability.opponentShuffleHandAndDraw <= 0 && ability.eachPlayerDraw <= 0 && !ability.onBenchSwitchAndMoveEnergy && !ability.switchOwnActive && !ability.changeOpponentNsPokemonWeaknessToPsychic && !ability.reducePrizeForDarknessKnockoutByEx && ability.damageCounters <= 0 && ability.discardAttachedBasicEnergyType == null && ability.attachHandEnergyType == null && ability.attachHandEnergyTypes.isEmpty() && ability.searchBasicEnergyTypeToHand == null && ability.attachBasicEnergyFromDeckToBenchedType == null && ability.damageCountersToEnergyTarget <= 0 && ability.searchColorlessPokemonMaxHpToHand <= 0 && ability.searchPokemonMaxToHand <= 0 && ability.onEvolveSearchTrainerIfTeraMax <= 0 && ability.onEvolveDiscardOpponentDeckCount <= 0 && !ability.onEvolveOpponentHandBasicToBench && !ability.attachBasicEnergyFromDiscard && !ability.moveBasicEnergyBetweenOwnPokemon && ability.lookAtTopCardsChooseOne <= 0 && !ability.searchAnyCardToTop && ability.alternativeAttackCost.isEmpty() && !ability.shuffleSelfIntoDeck && !ability.moveEnergyFromOtherPokemonToSelf && ability.healDamage <= 0 && ability.recoverBasicPokemonToBenchMaxHp <= 0 && ability.devolveOpponentPokemonMax <= 0 && ability.onEvolveShuffleRandomOpponentHandPerHeads <= 0 && !ability.festivalGroundsMayAttackAgain && !ability.preventOpponentItemSupporterEffects && !ability.onlyPlayableWithPalafinZeroToHero && !ability.onEvolveHealAllEvolutionAndDiscardEnergy && !ability.mayAttackFirstTurnIfStarting -> illegal("Habilidade não suportada.")
+                    ability.draw <= 0 && ability.drawTo <= 0 && ability.opponentShuffleHandAndDraw <= 0 && ability.eachPlayerDraw <= 0 && !ability.onBenchSwitchAndMoveEnergy && !ability.switchOwnActive && !ability.changeOpponentNsPokemonWeaknessToPsychic && !ability.reducePrizeForDarknessKnockoutByEx && ability.damageCounters <= 0 && ability.discardAttachedBasicEnergyType == null && ability.attachHandEnergyType == null && ability.attachHandEnergyTypes.isEmpty() && ability.searchBasicEnergyTypeToHand == null && ability.attachBasicEnergyFromDeckToBenchedType == null && ability.damageCountersToEnergyTarget <= 0 && ability.moveDamageCountersMax <= 0 && ability.searchColorlessPokemonMaxHpToHand <= 0 && ability.searchPokemonMaxToHand <= 0 && ability.onEvolveSearchTrainerIfTeraMax <= 0 && ability.onEvolveDiscardOpponentDeckCount <= 0 && !ability.onEvolveOpponentHandBasicToBench && !ability.attachBasicEnergyFromDiscard && !ability.moveBasicEnergyBetweenOwnPokemon && ability.lookAtTopCardsChooseOne <= 0 && !ability.searchAnyCardToTop && ability.alternativeAttackCost.isEmpty() && !ability.shuffleSelfIntoDeck && !ability.moveEnergyFromOtherPokemonToSelf && ability.healDamage <= 0 && ability.recoverBasicPokemonToBenchMaxHp <= 0 && ability.devolveOpponentPokemonMax <= 0 && ability.onEvolveShuffleRandomOpponentHandPerHeads <= 0 && !ability.festivalGroundsMayAttackAgain && !ability.preventOpponentItemSupporterEffects && !ability.onlyPlayableWithPalafinZeroToHero && !ability.onEvolveHealAllEvolutionAndDiscardEnergy && !ability.mayAttackFirstTurnIfStarting -> illegal("Habilidade não suportada.")
                     ability.damageCounters > 0 && s.players[1-s.currentPlayer].pokemon().count { target -> rules.effectiveAbilities(s, 1-rules.actingPlayer(s), target).none { it.preventOpponentEffects } } < ability.damageTargets -> illegal("Não há Pokémon adversários suficientes para esta habilidade.")
                     !ability.unlimitedUse && abilityUsageKey(pokemon, ability) in p.flags.abilitiesUsed -> illegal("Esta habilidade já foi usada neste turno.")
                     ability.requiresActive && p.active?.id != pokemon.id -> illegal("Esta habilidade só pode ser usada com este Pokémon no Ativo.")
@@ -164,6 +164,8 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     ability.attachBasicEnergyFromDiscardBenchOnly && p.bench.isEmpty() -> illegal("Não há Pokémon no Banco para receber a Energia.")
                     ability.moveBasicEnergyBetweenOwnPokemon && p.pokemon().none { source -> source.energies.any { def(it).category == Category.ENERGY && def(it).basicEnergy } && p.pokemon().any { it.id != source.id } } -> illegal("Não há Energia Básica para mover entre Pokémon diferentes.")
                     ability.moveEnergyFromOtherPokemonToSelf && p.pokemon().filter { it.id != pokemon.id }.none { it.energies.isNotEmpty() } -> illegal("Não há Energia em outro Pokémon para mover.")
+                    ability.moveDamageCountersMax > 0 && pokemon.energies.none { def(it).category == Category.ENERGY && def(it).type == ability.moveDamageCountersEnergyType } -> illegal("É preciso ter uma Energia do tipo necessário ligada a este Pokémon.")
+                    ability.moveDamageCountersMax > 0 && (p.pokemon().none { it.damage >= 10 } || s.players[1-actor].pokemon().none { rules.effectiveAbilities(s, 1-actor, it).none { targetAbility -> targetAbility.preventOpponentEffects } }) -> illegal("Não há Pokémon válidos para mover contadores de dano.")
                     p.deck.isEmpty() && (ability.draw > 0 || ability.drawTo > p.hand.size || ability.lookAtTopCardsChooseOne > 0 || ability.searchAnyCardToTop || ability.searchColorlessPokemonMaxHpToHand > 0 || ability.searchPokemonMaxToHand > 0) -> illegal("Seu deck está vazio.")
                     else -> Legality.Legal
                 }
@@ -288,6 +290,12 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     val energies = p.pokemon().flatMap { it.energies }.filter { def(it).category == Category.ENERGY && def(it).basicEnergy && (ability.moveBasicEnergyType == null || def(it).type == ability.moveBasicEnergyType) }
                     begin(Resolution(listOf(ChoiceRequest(ChoiceKind.ABILITY_MOVE_BASIC_ENERGY,
                         "Escolha uma Energia Básica para mover.", energies.map { it.id }, 1, 1, sourcePokemonId = pokemon.id, energyType = ability.moveBasicEnergyType))))
+                }
+                else if (ability.moveDamageCountersMax > 0) {
+                    begin(Resolution(listOf(ChoiceRequest(ChoiceKind.ABILITY_MOVE_DAMAGE_SOURCE,
+                        "Escolha 1 dos seus Pokémon com dano para mover até ${ability.moveDamageCountersMax} contadores.",
+                        p.pokemon().filter { it.damage >= 10 }.map { it.id }, 1, 1,
+                        amount = ability.moveDamageCountersMax * 10, sourcePokemonId = pokemon.id))))
                 }
                 else if (ability.switchOwnActive) {
                     val candidates = if (ability.switchOwnDarknessExceptPecharunt) p.bench.filter {
@@ -797,6 +805,40 @@ internal class ContentEngine(private val rules: RulesEngine) {
                             active = player.active?.let { pokemon -> when (pokemon.id) { sourceId -> pokemon.copy(energies = pokemon.energies - energy); targetId -> pokemon.copy(energies = pokemon.energies + energy); else -> pokemon } },
                             bench = player.bench.map { pokemon -> when (pokemon.id) { sourceId -> pokemon.copy(energies = pokemon.energies - energy); targetId -> pokemon.copy(energies = pokemon.energies + energy); else -> pokemon } }) }
                         events += GameEvent("AbilityEnergyMoved", "Moveu ${def(energy).name} para ${def(p.pokemon().first { it.id == targetId }.top).name}.")
+                    }
+                    ChoiceKind.ABILITY_MOVE_DAMAGE_SOURCE -> {
+                        val source = p.pokemon().firstOrNull { it.id == ids.single() && it.damage >= 10 }
+                            ?: return illegal("Escolha um Pokémon seu com contadores de dano.")
+                        val targets = s.players[1-actor].pokemon().filter { rules.effectiveAbilities(s, 1-actor, it).none { a -> a.preventOpponentEffects } }
+                        remainingChoices = listOf(ChoiceRequest(ChoiceKind.ABILITY_MOVE_DAMAGE_TARGET,
+                            "Escolha um Pokémon adversário para receber os contadores.", targets.map { it.id }, 1, 1,
+                            sourcePokemonId = source.id, amount = minOf(choice.amount, source.damage))) + remainingChoices
+                    }
+                    ChoiceKind.ABILITY_MOVE_DAMAGE_TARGET -> {
+                        val targetId = ids.single()
+                        if (s.players[1-actor].pokemon().none { it.id == targetId && rules.effectiveAbilities(s, 1-actor, it).none { a -> a.preventOpponentEffects } }) return illegal("Escolha um Pokémon adversário válido.")
+                        val source = p.pokemon().firstOrNull { it.id == choice.sourcePokemonId }
+                            ?: return illegal("O Pokémon que fornece os contadores não está mais em jogo.")
+                        val maxCounters = minOf(choice.amount / 10, source.damage / 10)
+                        val amountOptions = (1..maxCounters).associate { it.toString() to "$it contador(es)" }
+                        remainingChoices = listOf(ChoiceRequest(ChoiceKind.ABILITY_MOVE_DAMAGE_AMOUNT,
+                            "Quantos contadores de dano deseja mover?", amountOptions.keys.toList(), 1, 1,
+                            sourcePokemonId = source.id, pendingCards = listOf(targetId), optionLabels = amountOptions)) + remainingChoices
+                    }
+                    ChoiceKind.ABILITY_MOVE_DAMAGE_AMOUNT -> {
+                        val counters = ids.single().toIntOrNull()?.takeIf { it > 0 }
+                            ?: return illegal("Escolha a quantidade de contadores para mover.")
+                        val sourceId = checkNotNull(choice.sourcePokemonId)
+                        val targetId = choice.pendingCards.single()
+                        val source = p.pokemon().firstOrNull { it.id == sourceId && it.damage >= counters * 10 }
+                            ?: return illegal("O Pokémon não tem contadores suficientes.")
+                        update { player -> player.copy(
+                            active = player.active?.let { pokemon -> when (pokemon.id) { sourceId -> pokemon.copy(damage = pokemon.damage-counters*10); else -> pokemon } },
+                            bench = player.bench.map { pokemon -> if (pokemon.id == sourceId) pokemon.copy(damage = pokemon.damage-counters*10) else pokemon }) }
+                        update(1-actor) { player -> player.copy(
+                            active = player.active?.let { pokemon -> if (pokemon.id == targetId) pokemon.copy(damage = pokemon.damage+counters*10) else pokemon },
+                            bench = player.bench.map { pokemon -> if (pokemon.id == targetId) pokemon.copy(damage = pokemon.damage+counters*10) else pokemon }) }
+                        events += GameEvent("AbilityDamageCountersMoved", "Moveu $counters contador(es) de dano para um Pokémon adversário.", counters)
                     }
                     ChoiceKind.ABILITY_MOVE_ENERGY_TO_SELF -> {
                         val targetId = checkNotNull(choice.sourcePokemonId)

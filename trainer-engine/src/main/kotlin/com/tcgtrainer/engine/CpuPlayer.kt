@@ -249,6 +249,9 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 ChoiceKind.ABILITY_MOVE_ENERGY_TO_SELF -> -keepValue(checkNotNull(card(id)))
                 ChoiceKind.ABILITY_MOVE_BASIC_ENERGY -> 1.0
                 ChoiceKind.ABILITY_MOVE_BASIC_ENERGY_TARGET -> { val target = pokemon(id); val energy = checkNotNull(own.flatMap { it.energies }.find { it.id == choice.selectedEnergy }); potential(target.copy(energies = target.energies + energy)) - potential(target) }
+                ChoiceKind.ABILITY_MOVE_DAMAGE_SOURCE -> pokemon(id).damage.toDouble()
+                ChoiceKind.ABILITY_MOVE_DAMAGE_TARGET -> pokemon(id).damage.toDouble()
+                ChoiceKind.ABILITY_MOVE_DAMAGE_AMOUNT -> id.toIntOrNull()?.toDouble() ?: 0.0
                 ChoiceKind.OPPONENT_SHUFFLES_OWN_HAND -> -keepValue(checkNotNull(card(id)))
                 ChoiceKind.OPPONENT_DISCARDS_OWN_HAND -> 10.0 - keepValue(checkNotNull(card(id)))
                 ChoiceKind.ATTACK_CHOOSE_OPPONENT_HAND_DISCARD -> keepValue(checkNotNull(card(id)))

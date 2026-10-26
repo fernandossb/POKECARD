@@ -253,6 +253,9 @@ internal object CatalogRuleCompiler {
         val passiveReduction = Regex("This Pokémon takes (\\d+) less damage from attacks \\(after applying Weakness and Resistance\\)\\.").matchEntire(text)
         if (passiveReduction != null)
             return AbilityDefinition("$id-ability$index", name, text, damageReduction = passiveReduction.groupValues[1].toInt(), usageKey = name)
+        if (text == "Once during your turn, if this Pokémon has any {D} Energy attached, you may move up to 3 damage counters from 1 of your Pokémon to 1 of your opponent's Pokémon.")
+            return AbilityDefinition("$id-ability$index", name, text, usageKey = name,
+                moveDamageCountersMax = 3, moveDamageCountersEnergyType = EnergyType.DARKNESS)
         val equalHandBonus = Regex("If you have the same number of cards in your hand as your opponent, attacks used by this Pokémon do (\\d+) more damage to your opponent's Active Pokémon \\(before applying Weakness and Resistance\\)\\.").matchEntire(text)
         if (equalHandBonus != null) return AbilityDefinition("$id-ability$index", name, text,
             damageBonusIfHandsEqual = equalHandBonus.groupValues[1].toInt())
