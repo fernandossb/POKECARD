@@ -29,6 +29,8 @@ internal object CatalogRuleCompiler {
     internal fun compileAbility(id: String, index: Int, raw: JsonObject): AbilityDefinition? {
         val name = raw.s("name") ?: return null
         val text = raw.s("effect")?.trim().orEmpty()
+        if (text == "Once during your turn, if this Pokémon is in the Active Spot, you may use this Ability. Draw 2 cards. You can't use more than 1 Run Errand Ability each turn.")
+            return AbilityDefinition("$id-ability$index", name, text, draw = 2, usageKey = "Run Errand", requiresActive = true)
         if (text.contains("you play this Pokémon from your hand onto your Bench") &&
             text.contains("Search your deck for a Supporter card, reveal it, and put it into your hand") &&
             text.contains("more than 1 Ability that has \"Last-Ditch\" in its name each turn"))
