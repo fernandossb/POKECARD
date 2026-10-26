@@ -16,8 +16,12 @@ fun RulesEngine.cpuInput(state: GameState): CpuInput {
     val revealedOpponentHand = if (choice?.kind in listOf(ChoiceKind.ATTACK_CHOOSE_OPPONENT_HAND_DISCARD, ChoiceKind.EVOLUTION_OPPONENT_HAND_BASIC_TO_BENCH)) state.players[1-actor].hand else emptyList()
     val revealedOpponentDeckTop = if (choice?.kind == ChoiceKind.ATTACK_REORDER_OPPONENT_TOP)
         state.players[1-actor].deck.take(choice.candidates.size) else emptyList()
+    val revealedOpponentEnergy = if (choice?.kind == ChoiceKind.TRAINER_DISCARD_OPPONENT_ENERGY)
+        state.players[1-actor].pokemon().flatMap { it.energies } else emptyList()
+    val revealedOwnEnergy = if (choice?.kind == ChoiceKind.TRAINER_ENERGY_SWITCH_SOURCE)
+        own.pokemon().flatMap { it.energies } else emptyList()
     val selectable = if (state.phase == Phase.RESOLVE_CHOICE && choice != null)
-        (own.hand + own.deck + own.discard + revealedOpponentHand + revealedOpponentDeckTop).filter { it.id in choice.candidates || it.id in choice.visibleCards }.sortedBy { it.id }
+        (own.hand + own.deck + own.discard + revealedOpponentHand + revealedOpponentDeckTop + revealedOpponentEnergy + revealedOwnEnergy).filter { it.id in choice.candidates || it.id in choice.visibleCards }.sortedBy { it.id }
     else emptyList()
     // Sorting prevents eligible deck search results from disclosing their order.
     val preserveOrder = choice?.kind == ChoiceKind.ATTACK_REORDER_OPPONENT_TOP
@@ -54,7 +58,8 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
         fun missing(p: PokemonInstance, a: AttackDefinition): Int {
             val energy = p.energies.map { d(it).type }.toMutableList()
             val teraAlternative = abilities(p).firstOrNull { ability ->
-                ability.alternativeAttackName == a.name && ability.requiresTeraInPlay && own.any { d(it.top).isTera }
+                ability.alternativeAttackName == a.name && ((ability.requiresTeraInPlay && own.any { d(it.top).isTera }) ||
+                    (ability.alternativeAttackRequiresOpponentDiscardName != null && o.opponentDiscard.any { d(it).canonicalName.contains(ability.alternativeAttackRequiresOpponentDiscardName, ignoreCase = true) }))
             }
             var discount = if (abilities(p).any { it.attackDiscountPerOpponentPrize }) 6-o.opponentPrizeCount else 0
             val printedCost = teraAlternative?.alternativeAttackCost ?: a.cost
@@ -65,6 +70,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
         }
         fun damage(p: PokemonInstance, a: AttackDefinition, target: PokemonInstance): Int {
             if (a.effects.filterIsInstance<Effect.RequiresBenched>().any { req -> own.none { it.id != p.id && it.top.definitionId == req.definitionId } }) return 0
+            if (a.effects.filterIsInstance<Effect.RequiresNamedBenchedPokemon>().any { req -> req.names.any { name -> own.none { it.id != p.id && d(it.top).canonicalName == name } } }) return 0
             val extra = a.effects.filterIsInstance<Effect.CoinDamage>().sumOf { coin ->
                 if (coin.minimumHeads > 0) coin.perHeads / (1 shl coin.minimumHeads) else coin.coins*coin.perHeads/2
             } +
@@ -154,6 +160,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 }
                 Category.TRAINER -> when (val effect = def.trainerEffect) {
                     is TrainerEffect.ShuffleHandDraw -> if (o.ownHand.size < 5) 75.0 else 20.0
+                is TrainerEffect.ShuffleBothHandsDraw -> if (o.ownHand.size < effect.count && (!effect.requiresPreviousKnockout || o.ownLastKnockedOutTurn == input.turn-1)) 80.0 else 15.0
                     is TrainerEffect.DrawTo -> if (o.ownHand.size - 1 < (effect.teamRocketSize ?: effect.size)) 75.0 else 20.0
                     is TrainerEffect.DrawPerOpponentBenchedPokemon -> if (o.ownHand.size > effect.discardCost && o.opponentField.size > 1) 75.0 else 20.0
                     is TrainerEffect.DamageBoost -> 25.0
@@ -338,9 +345,32 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                     if (target == null || energy == null) 0.0
                     else potential(target.copy(energies = target.energies + energy)) - potential(target)
                 }
-                ChoiceKind.ATTACK_OPPONENT_ENERGY -> o.opponentField.firstOrNull { source -> source.energies.any { it.id == id } }?.let { source ->
+                ChoiceKind.ATTACK_OPPONENT_ENERGY, ChoiceKind.TRAINER_DISCARD_OPPONENT_ENERGY -> o.opponentField.firstOrNull { source -> source.energies.any { it.id == id } }?.let { source ->
                     (if (source.id == o.opponentActiveId) 120.0 else 20.0) + source.energies.size
                 } ?: 0.0
+                ChoiceKind.TRAINER_CRISPIN_SEARCH, ChoiceKind.TRAINER_CRISPIN_SELECT_ATTACH -> keepValue(checkNotNull(card(id)))
+                ChoiceKind.TRAINER_CRISPIN_TARGET -> {
+                    val target = pokemon(id)
+                    val energy = checkNotNull(card(choice.selectedEnergy!!))
+                    potential(target.copy(energies = target.energies + energy)) - potential(target)
+                }
+                ChoiceKind.TRAINER_ENERGY_SWITCH_SOURCE -> {
+                    val source = own.firstOrNull { pokemon -> pokemon.energies.any { it.id == id } }
+                    val energy = checkNotNull(card(id))
+                    if (source == null) 0.0 else -(potential(source.copy(energies = source.energies - energy)) - potential(source))
+                }
+                ChoiceKind.TRAINER_ENERGY_SWITCH_TARGET -> {
+                    val target = pokemon(id)
+                    val energy = checkNotNull(card(choice.selectedEnergy!!))
+                    potential(target.copy(energies = target.energies + energy)) - potential(target)
+                }
+                ChoiceKind.TRAINER_ROSA_TARGET -> own.firstOrNull { it.id == id }?.let { target -> target.damage.toDouble() + target.energies.size * 5.0 + 40.0 } ?: 0.0
+                ChoiceKind.TRAINER_JANINE_TARGETS -> own.firstOrNull { it.id == id }?.let { target -> 35.0 - target.energies.size * 5.0 + if (target.id == active?.id) 3.0 else 0.0 } ?: 0.0
+                ChoiceKind.TRAINER_ROSA_ENERGIES -> {
+                    val target = own.firstOrNull { it.id == choice.sourcePokemonId }
+                    val energy = o.ownDiscard.firstOrNull { it.id == id }
+                    if (target == null || energy == null) 0.0 else potential(target.copy(energies = target.energies + energy)) - potential(target)
+                }
                 ChoiceKind.ATTACK_OPPONENT_ENERGY_TARGET -> o.opponentField.find { it.id == id }?.let { target ->
                     val source = o.opponentField.firstOrNull { it.id == choice.sourcePokemonId }
                     val energy = source?.energies?.firstOrNull { it.id == choice.selectedEnergy }
@@ -473,6 +503,20 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
             is GameAction.PlayTrainer -> when (val effect = d(checkNotNull(card(a.cardId))).trainerEffect) {
                 is TrainerEffect.Search -> if (o.ownDeckCount == 0 || o.ownHand.size > 11) -5.0 else 110.0-effect.discardCost*12
                 is TrainerEffect.ShuffleHandDraw -> if (o.ownDeckCount <= 3 || o.ownHand.size > (if (o.ownPrizeCount == 6) effect.sixPrizeCount else effect.count)) -5.0 else 65.0-o.ownHand.size
+                is TrainerEffect.ShuffleBothHandsDraw -> if (o.ownDeckCount > 0 && o.ownHand.size < effect.count && (!effect.requiresPreviousKnockout || o.ownLastKnockedOutTurn == input.turn-1)) 55.0 else -5.0
+                TrainerEffect.CoinDiscardOpponentEnergy -> if (o.opponentField.sumOf { it.energies.size } > 0) 65.0 else 15.0
+                TrainerEffect.Crispin -> if (o.ownDeckCount > 0 && own.isNotEmpty()) 72.0 else -5.0
+                TrainerEffect.MoveBasicEnergyBetweenOwnPokemon -> if (own.size > 1 && own.sumOf { it.energies.size } > 0) 55.0 else -5.0
+                TrainerEffect.RosaEncouragement -> if (o.ownPrizeCount > o.opponentPrizeCount && own.any { d(it.top).stage == Stage.STAGE_TWO } && o.ownDiscard.any { d(it).category == Category.ENERGY && d(it).basicEnergy }) 70.0 else -5.0
+                is TrainerEffect.BindingMochi -> if (own.any { SpecialCondition.POISONED in it.conditions }) 62.0 else 20.0
+                is TrainerEffect.ToolHpModifier -> if (own.any { it.tools.size < 1 && d(it.top).prizes > 1 }) 58.0 else 25.0
+                TrainerEffect.LuckyHelmet -> if (active != null && active.tools.isEmpty()) 52.0 else 20.0
+                TrainerEffect.NsCastle -> if (own.any { d(it.top).name.startsWith("N's ") && d(it.top).retreatCost > 0 }) 58.0 else 16.0
+                TrainerEffect.ColorlessAbilityLock -> if (o.opponentField.any { d(it.top).type == EnergyType.COLORLESS && d(it.top).abilities.isNotEmpty() }) 68.0 else 18.0
+                TrainerEffect.JanineSecretArt -> if (own.any { d(it.top).type == EnergyType.DARKNESS } && o.ownDeckCount > 0) 72.0 else 20.0
+                TrainerEffect.RiskyRuins -> if (o.opponentField.any { d(it.top).stage == Stage.BASIC && d(it.top).type != EnergyType.DARKNESS }) 58.0 else 20.0
+                is TrainerEffect.LookTopKeepDiscard -> if (o.ownDeckCount > 0) 68.0 else -5.0
+                is TrainerEffect.OpponentBottomHandDraw -> if (o.opponentPrizeCount <= 3 && o.opponentHandCount > 0 && o.opponentDeckCount > 2) 75.0 else -5.0
                 is TrainerEffect.DrawTo -> {
                     val allTeamRocket = own.all { d(it.top).name.startsWith("Team Rocket's ") }
                     val targetSize = if (effect.teamRocketSize != null && allTeamRocket) effect.teamRocketSize else effect.size

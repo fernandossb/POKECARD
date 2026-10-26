@@ -1,3 +1,8 @@
+# POKECARD Brasil 5.99.37 — Dragapult completo e regras de Treinadores
+
+- Risky Ruins agora aplica 2 contadores ao Pokémon Básico não {D} que entrar no Banco durante o turno, inclusive quando colocado por efeitos de cartas.
+- Regras executáveis também cobrem Lucky Helmet, Janine's Secret Art, N's Castle, Team Rocket's Watchtower, Explorer's Guidance, Pokégear 3.0 e Jumbo Ice Cream.
+- A versão local do aplicativo passa para `versionCode` 239 e `versionName` 5.99.37.
 # POKECARD Brasil 5.99.36 — Treino com decks salvos e tela de decks mais responsiva
 
 - Decks salvos podem ser treinados sem possuir as cartas e mesmo fora da legalidade do formato selecionado, desde que tenham 14–60 cartas, um Pokémon Básico e efeitos implementados.

@@ -9,6 +9,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
     fun definition(card: CardInstance) = catalog.get(card.definitionId)
     fun effectiveAbilities(state: GameState, owner: Int, pokemon: PokemonInstance): List<AbilityDefinition> {
         val card = definition(pokemon.top)
+        if (state.stadium?.let { definition(it).trainerEffect == TrainerEffect.ColorlessAbilityLock } == true && card.type == EnergyType.COLORLESS) return emptyList()
         val lockActive = state.players.indices.any { sourceOwner ->
             val active = state.players[sourceOwner].active ?: return@any false
             val source = definition(active.top)
@@ -296,7 +297,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     active.retreatBlockedTurn == state.turn -> reason("Este Pokémon não pode recuar durante este turno.")
                     SpecialCondition.PARALYZED in active.conditions || SpecialCondition.ASLEEP in active.conditions -> reason("Este Pokémon não pode recuar enquanto está Paralisado ou Adormecido.")
                     p.bench.none { it.id == action.pokemonId } -> reason("Escolha um Pokémon do Banco.")
-                    action.energyIds.size != retreatCost(active, p.pokemon(), state.players[1-state.currentPlayer].pokemon()) -> reason("Selecione exatamente o custo de recuo em Energias.")
+                    action.energyIds.size != retreatCost(active, p.pokemon(), state.players[1-state.currentPlayer].pokemon(), state) -> reason("Selecione exatamente o custo de recuo em Energias.")
                     action.energyIds.distinct().size != action.energyIds.size || !active.energies.map { it.id }.containsAll(action.energyIds) -> reason("Energias de recuo inválidas.")
                     else -> Legality.Legal
                 }
@@ -316,7 +317,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         return if (missing > 0) reason("Falta $missing Energia para o custo incolor.") else Legality.Legal
     }
 
-    fun retreatCost(pokemon: PokemonInstance, friendlyPokemon: List<PokemonInstance> = listOf(pokemon), opponentPokemon: List<PokemonInstance> = emptyList()): Int {
+    fun retreatCost(pokemon: PokemonInstance, friendlyPokemon: List<PokemonInstance> = listOf(pokemon), opponentPokemon: List<PokemonInstance> = emptyList(), state: GameState? = null): Int {
         val friendlyActive = friendlyPokemon.firstOrNull()
         val opponentActive = opponentPokemon.firstOrNull()
         val ruleBoxLock = listOfNotNull(friendlyActive, opponentActive).any { source ->
@@ -354,7 +355,9 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 type != null && pokemon.energies.any { definition(it).type == type }
             } || (definition(pokemon.top).stage == Stage.BASIC && abilities(source, true).any { it.basicPokemonHaveFreeRetreat })
         } || (pokemon.energies.isEmpty() && abilities(pokemon, true).any { it.freeRetreatWithNoEnergy })
-        val base = if (free) 0 else definition(pokemon.top).retreatCost
+        val stadiumFreeRetreat = state?.stadium?.let { definition(it).trainerEffect == TrainerEffect.NsCastle } == true &&
+            definition(pokemon.top).name.startsWith("N's ")
+        val base = if (free || stadiumFreeRetreat) 0 else definition(pokemon.top).retreatCost
         val increase = opponentPokemon.sumOf { source ->
             val sourceAbilities = abilities(source, false)
             sourceAbilities.sumOf { it.opponentActiveRetreatCostBonus } +
@@ -364,12 +367,15 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         return (base + increase - toolReduction).coerceAtLeast(0)
     }
     fun attackCost(state: GameState, pokemon: PokemonInstance, attack: AttackDefinition): List<EnergyType> {
-        val activeAbilities = effectiveAbilities(state, state.players.indexOfFirst { it.active?.id == pokemon.id }.let { if (it < 0) state.currentPlayer else it }, pokemon)
+        val owner = state.players.indexOfFirst { it.active?.id == pokemon.id || it.bench.any { bench -> bench.id == pokemon.id } }.let { if (it < 0) state.currentPlayer else it }
+        val activeAbilities = effectiveAbilities(state, owner, pokemon)
         val teraAlternative = activeAbilities.firstOrNull {
-            it.alternativeAttackName == attack.name && it.requiresTeraInPlay &&
-                state.players[state.currentPlayer].pokemon().any { inPlay -> definition(inPlay.top).isTera }
+            it.alternativeAttackName == attack.name && ((it.requiresTeraInPlay &&
+                state.players[state.currentPlayer].pokemon().any { inPlay -> definition(inPlay.top).isTera }) ||
+                (it.alternativeAttackRequiresOpponentDiscardName != null && state.players[1-owner].discard.any { card ->
+                    definition(card).canonicalName.contains(it.alternativeAttackRequiresOpponentDiscardName, ignoreCase = true)
+                }))
         }
-        val owner = state.players.indexOfFirst { it.active?.id == pokemon.id }.let { if (it < 0) state.currentPlayer else it }
         val ignoreColorless = activeAbilities.any { ability ->
             ability.ignoreColorlessAttackCostWhenOpponentHandCountIs > 0 &&
                 state.players[1-owner].hand.size == ability.ignoreColorlessAttackCostWhenOpponentHandCountIs
@@ -405,11 +411,13 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         }
         if (!effects.supported(attack)) return null
         val requirement = attack.effects.filterIsInstance<Effect.RequiresBenched>().firstOrNull()
+        val namedRequirement = attack.effects.filterIsInstance<Effect.RequiresNamedBenchedPokemon>().firstOrNull()
         val exactHandSize = attack.effects.filterIsInstance<Effect.RequiresExactHandSize>().firstOrNull()
         val requiredOwnBenchCount = attack.effects.filterIsInstance<Effect.RequiresOwnBenchCountAtLeast>().firstOrNull()?.count ?: 0
         val damageOnlyBenchCount = attack.effects.filterIsInstance<Effect.DamageOnlyWithOwnBenchCountAtLeast>().firstOrNull()?.count ?: 0
         val undamagedActiveRequirement = Effect.RequiresUndamagedOpponentActive in attack.effects
         val hasRequirement = (requirement == null || state.players[state.currentPlayer].bench.any { it.top.definitionId == requirement.definitionId }) &&
+            (namedRequirement == null || namedRequirement.names.all { name -> state.players[state.currentPlayer].bench.any { definition(it.top).canonicalName == name } }) &&
             (exactHandSize == null || state.players[state.currentPlayer].hand.size == exactHandSize.size) &&
             state.players[state.currentPlayer].bench.size >= requiredOwnBenchCount &&
             state.players[state.currentPlayer].bench.size >= damageOnlyBenchCount &&
@@ -480,7 +488,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             attackerPokemon = state.players[state.currentPlayer].pokemon(),
             opponentDamageCounterCount = state.players[1-state.currentPlayer].pokemon().sumOf { it.damage / 10 },
             opponentActiveRetreatCost = if (defender.id == opponent.active?.id)
-                retreatCost(defender, opponent.pokemon(), state.players[state.currentPlayer].pokemon()) else 0,
+                retreatCost(defender, opponent.pokemon(), state.players[state.currentPlayer].pokemon(), state) else 0,
             ownDiscardEnergyCount = state.players[state.currentPlayer].discard.count { definition(it).category == Category.ENERGY },
             ownBasicDiscardEnergyCounts = state.players[state.currentPlayer].discard.filter { definition(it).category == Category.ENERGY && definition(it).basicEnergy }
                 .groupBy({ definition(it).type }, { it }).mapValues { it.value.size },
@@ -530,8 +538,35 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
     }
 
     fun apply(state: GameState, action: GameAction): Transition {
-        val transition = applyInternal(state, action)
+        var transition = applyInternal(state, action)
         if (transition.legality is Legality.Illegal) return transition
+        if (transition.state.stadium?.let { definition(it).trainerEffect == TrainerEffect.RiskyRuins } == true) {
+            val addedBasics = transition.state.players.flatMapIndexed { owner, player ->
+                val existingIds = state.players[owner].bench.map { it.id }.toSet()
+                player.bench.filter { pokemon -> pokemon.id !in existingIds &&
+                    definition(pokemon.cards.first()).stage == Stage.BASIC && definition(pokemon.cards.first()).type != EnergyType.DARKNESS
+                }.map { owner to it }
+            }
+            if (addedBasics.isNotEmpty()) {
+                val damaged = transition.state.players.mapIndexed { owner, player -> player.copy(
+                    bench = player.bench.map { pokemon ->
+                        if (addedBasics.any { it.first == owner && it.second.id == pokemon.id }) pokemon.copy(damage = pokemon.damage + 20) else pokemon
+                    })
+                }
+                val damageState = transition.state.copy(players = damaged)
+                val events = transition.events + addedBasics.map { (_, pokemon) ->
+                    GameEvent("RiskyRuinsDamage", "Risky Ruins colocou 2 contadores de dano em ${definition(pokemon.cards.first()).name}.", 20)
+                }
+                val knockedOut = addedBasics.any { (owner, pokemon) ->
+                    val after = damaged[owner].bench.firstOrNull { it.id == pokemon.id }
+                    after != null && after.damage >= effectiveHp(damageState, after)
+                }
+                transition = if (knockedOut) {
+                    val settled = settle(damageState, ResolutionEnd.MAIN)
+                    Transition(settled.state, transition.legality, events + settled.events)
+                } else transition.copy(state = damageState, events = events)
+            }
+        }
         val normalized = normalizeRotomTools(transition.state)
         return if (normalized == transition.state) transition else transition.copy(state = normalized,
             events = transition.events + GameEvent("RotomExtraToolsDiscarded", "A habilidade Rotom deixou de valer; descartou Ferramentas excedentes."))
@@ -926,7 +961,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 val defenderEffectsPrevented = attackTargetEffectsPrevented(next, opponent, defender)
                 val teraAttackImmune = definition(next.players[actor].active!!.top).isTera &&
                     defenderAbilities.any { it.preventDamageAndEffectsFromTeraAttacks }
-                if (attack.effects.any { it is Effect.OpponentHandEnergyCountDamage || it is Effect.OpponentHandTrainerCountDamage } || Effect.RevealOpponentHand in attack.effects || Effect.RevealAndChooseOpponentHandDiscard in attack.effects) {
+                if (attack.effects.any { it is Effect.OpponentHandEnergyCountDamage || it is Effect.OpponentHandTrainerCountDamage } || Effect.RevealOpponentHand in attack.effects || (Effect.RevealAndChooseOpponentHandDiscard in attack.effects || Effect.RevealAndChooseOpponentHandBottomDeck in attack.effects)) {
                     val revealed = next.players[opponent].hand.joinToString(", ") { definition(it).name }
                     emit("OpponentHandRevealed", "Mão adversária revelada: ${revealed.ifEmpty { "vazia" }}.")
                 }
@@ -1061,6 +1096,25 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     emit("AttackEffectKnockout", "O Pokémon Básico Ativo adversário foi Nocauteado pelo efeito do ataque.")
                 }
                 fun applyPostDamageEffects() {
+                if (appliedDamage > 0 && defender.id == state.players[opponent].active?.id &&
+                    defender.tools.any { definition(it).trainerEffect == TrainerEffect.LuckyHelmet }) {
+                    val player = next.players[opponent]
+                    val count = minOf(2, player.deck.size)
+                    update(opponent) { it.copy(hand = it.hand + it.deck.take(count), deck = it.deck.drop(count)) }
+                    emit("LuckyHelmetDraw", "Lucky Helmet: comprou $count carta(s), mesmo que o Pokémon Ativo seja Nocauteado.", count)
+                }
+                if (!defenderEffectsPrevented) attack.effects.filterIsInstance<Effect.DamageCountersOnDamagedOpponentPokemon>().forEach { effect ->
+                    val affected = next.players[opponent].pokemon().filter { it.damage > 0 && !attackTargetEffectsPrevented(next, opponent, it) }
+                    affected.forEach { target ->
+                        val added = effect.count * 10
+                        if (target.damage < effectiveHp(next, target) && target.damage + added >= effectiveHp(next, target))
+                            next = next.copy(pendingAttackDamageKnockoutIds = next.pendingAttackDamageKnockoutIds + target.id)
+                        update(opponent) { player -> player.copy(
+                            active = player.active?.let { if (it.id == target.id) it.copy(damage = it.damage + added) else it },
+                            bench = player.bench.map { if (it.id == target.id) it.copy(damage = it.damage + added) else it }) }
+                    }
+                    if (affected.isNotEmpty()) emit("DamageCountersPlaced", "Colocou ${effect.count} contador(es) em cada Pokémon adversário já danificado.", affected.size * effect.count)
+                }
                 val retaliation = if (appliedDamage > 0 && defender.id == state.players[opponent].active?.id)
                     defenderAbilities.sumOf { it.retaliateDamageCounters * 10 } +
                         if (defender.retaliateDamageCountersTurn == state.turn) defender.retaliateDamageCounters * 10 else 0
@@ -1573,12 +1627,13 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         eligible.map { it.id }, 0, effect.count, amount = effect.amount)
                 }
                 attack.effects.filterIsInstance<Effect.BenchDamageCounters>().forEach { effect ->
-                    val bench = next.players[opponent].bench.filter { !attackTargetEffectsPrevented(next, opponent, it) }
-                    if (bench.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.ATTACK_DAMAGE_COUNTER_TARGET,
-                        if (effect.distribute) "Escolha um Pokémon do Banco adversário para receber 1 dos ${effect.count} contadores de dano."
-                        else "Escolha um Pokémon do Banco adversário para receber ${effect.count} contadores de dano.",
-                        bench.map { it.id }, 1, 1, remaining = if (effect.distribute) effect.count else 0,
-                        amount = if (effect.distribute) 10 else effect.count * 10)
+                    val targets = (if (effect.benchedOnly) next.players[opponent].bench else next.players[opponent].pokemon())
+                        .filter { !attackTargetEffectsPrevented(next, opponent, it) }
+                    if (targets.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.ATTACK_DAMAGE_COUNTER_TARGET,
+                        if (effect.distribute) "Escolha um Pokémon ${if (effect.benchedOnly) "do Banco " else ""}adversário para receber 1 dos ${effect.count} contadores de dano."
+                        else "Escolha um Pokémon ${if (effect.benchedOnly) "do Banco " else ""}adversário para receber ${effect.count} contadores de dano.",
+                        targets.map { it.id }, 1, 1, remaining = if (effect.distribute) effect.count else 0,
+                        amount = if (effect.distribute) 10 else effect.count * 10, benchedOnly = effect.benchedOnly)
                 }
                 if (Effect.GrassDiscardEnergyTargetCounters in attack.effects) {
                     val grass = next.players[actor].discard.filter { card -> definition(card).type == EnergyType.GRASS && definition(card).basicEnergy }
@@ -1661,6 +1716,15 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     val candidates = if (targetAvailable) eligible else emptyList()
                     choices += ChoiceRequest(ChoiceKind.ATTACK_DECK_BASIC_ENERGY_ANY,
                         "Você pode buscar até ${effect.max} Energia(s) Básica(s) e ligar aos seus Pokémon.", candidates.map { it.id }, 0, minOf(1, effect.max, candidates.size), remaining = effect.max, energyType = effect.type, benchedOnly = effect.benchedOnly)
+                }
+                attack.effects.filterIsInstance<Effect.AttachEnergyFromDeckToPokemonType>().forEach { effect ->
+                    val eligible = next.players[actor].deck.filter { definition(it).category == Category.ENERGY }
+                    val targets = if (effect.benchedOnly) next.players[actor].bench else next.players[actor].pokemon()
+                    val candidates = if (targets.any { definition(it.top).type == effect.type }) eligible else emptyList()
+                    choices += ChoiceRequest(ChoiceKind.ATTACK_DECK_BASIC_ENERGY_ANY,
+                        "Busque uma Energia e ligue-a a um Pokémon de " + effect.type + " no Banco.",
+                        candidates.map { it.id }, 0, minOf(1, candidates.size), remaining = 1,
+                        benchedOnly = effect.benchedOnly, targetPokemonType = effect.type, basicEnergyOnly = false)
                 }
                 attack.effects.filterIsInstance<Effect.AttachEnergyFromTopDeck>().forEach { effect ->
                     val revealed = next.players[actor].deck.take(effect.count)
@@ -1791,11 +1855,12 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         "Escolha $count carta(s) da sua mão para descartar.", hand.map { it.id }, count, count,
                         visibleCards = hand.map { it.id })
                 }
-                if (Effect.RevealAndChooseOpponentHandDiscard in attack.effects) {
+                if ((Effect.RevealAndChooseOpponentHandDiscard in attack.effects || Effect.RevealAndChooseOpponentHandBottomDeck in attack.effects)) {
                     val hand = next.players[opponent].hand
                     if (hand.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.ATTACK_CHOOSE_OPPONENT_HAND_DISCARD,
-                        "Escolha uma carta revelada da mão adversária para descartar.", hand.map { it.id }, 1, 1,
-                        visibleCards = hand.map { it.id })
+                        if (Effect.RevealAndChooseOpponentHandBottomDeck in attack.effects) "Escolha uma carta revelada para colocar no fundo do deck adversário."
+                        else "Escolha uma carta revelada da mão adversária para descartar.", hand.map { it.id }, 1, 1,
+                        visibleCards = hand.map { it.id }, putOnBottomOfDeck = Effect.RevealAndChooseOpponentHandBottomDeck in attack.effects)
                 }
                 if (Effect.KnockOutPokemonWithLeastHpRemainingExceptAttacker in attack.effects) {
                     val attackerId = next.players[actor].active?.id
@@ -2390,7 +2455,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 else if (attack.effects.any { it is Effect.TargetedDamage }) state.players[1-state.currentPlayer].pokemon().filter { !attackTargetEffectsPrevented(state, 1-state.currentPlayer, it) }.forEach { candidates += GameAction.Attack(attack.id, it.id) }
                 else candidates += GameAction.Attack(attack.id)
             }
-            val cost = retreatCost(active, p.pokemon(), state.players[1-state.currentPlayer].pokemon())
+            val cost = retreatCost(active, p.pokemon(), state.players[1-state.currentPlayer].pokemon(), state)
             fun combinations(ids: List<String>, n: Int): List<List<String>> = when {
                 n == 0 -> listOf(emptyList())
                 ids.size < n -> emptyList()

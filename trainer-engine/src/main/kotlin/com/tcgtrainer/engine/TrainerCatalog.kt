@@ -11,16 +11,43 @@ object TrainerCatalog : CardCatalog {
         "sv06.5-061" to 2, "sv06-163" to 1, "me01-130" to 1, "sv10.5b-079" to 2, "sv01-258" to 12)
     private val academyIds by lazy { Academy2022.decks.flatMap { it.cards }.distinct() }
     private val academyNames by lazy { academyIds.associateBy { json(it).string("name")!! } }
+    private data class BasicEnergySpec(val id: String, val number: String, val english: String, val portuguese: String, val type: EnergyType)
+    private val basicEnergies = listOf(
+        BasicEnergySpec("sve-001", "001", "Basic Grass Energy", "Energia Básica de Planta", EnergyType.GRASS),
+        BasicEnergySpec("sve-002", "002", "Basic Fire Energy", "Energia Básica de Fogo", EnergyType.FIRE),
+        BasicEnergySpec("sve-003", "003", "Basic Water Energy", "Energia Básica de Água", EnergyType.WATER),
+        BasicEnergySpec("sve-004", "004", "Basic Lightning Energy", "Energia Básica de Raio", EnergyType.LIGHTNING),
+        BasicEnergySpec("sve-005", "005", "Basic Psychic Energy", "Energia Básica Psíquica", EnergyType.PSYCHIC),
+        BasicEnergySpec("sve-006", "006", "Basic Fighting Energy", "Energia Básica de Luta", EnergyType.FIGHTING),
+        BasicEnergySpec("sve-007", "007", "Basic Darkness Energy", "Energia Básica de Escuridão", EnergyType.DARKNESS),
+        BasicEnergySpec("sve-008", "008", "Basic Metal Energy", "Energia Básica Metálica", EnergyType.METAL)
+    )
+    private val basicEnergyById by lazy { basicEnergies.associateBy { it.id } }
     val definitions: Map<String, CardDefinition> by lazy {
         val reviewed = (counts.keys + academyIds).associateWith(::read)
-        CatalogRuleCompiler.rows.mapNotNull { (id, raw) ->
+        val compiled = CatalogRuleCompiler.rows.mapNotNull { (id, raw) ->
             if (id in reviewed) null else CatalogRuleCompiler.compile(raw, reviewed)?.let { id to it }
-        }.toMap() + reviewed
+        }.toMap()
+        val importedEnergies = basicEnergies.associate { energy ->
+            energy.id to CardDefinition(energy.id, energy.portuguese, "SVE", energy.number,
+                category = Category.ENERGY, type = energy.type, verified = true,
+                source = "TCGdex • https://api.tcgdex.net/v2/en/cards/${energy.id}",
+                artAsset = "remote:https://assets.tcgdex.net/en/sv/sve/${energy.number}/high.webp",
+                basicEnergy = true, canonicalName = energy.english)
+        }
+        compiled + reviewed + importedEnergies
     }
     override fun get(id: String): CardDefinition = definitions[id] ?: TestCatalog.get(id)
     fun deck() = counts.flatMap { (id, count) -> List(count) { id } }
     val deckName = "Mega Lucario ex • treino"
-    internal fun sourceData(id: String) = json(id)
+    internal fun sourceData(id: String): JsonObject = basicEnergyById[id]?.let { energy ->
+        buildJsonObject {
+            put("id", energy.id); put("localId", energy.number); put("name", energy.english)
+            put("category", "Energy"); put("setCode", "SVE")
+            put("image", "https://assets.tcgdex.net/en/sv/sve/${energy.number}")
+            put("set", buildJsonObject { put("id", "sve"); put("name", "Scarlet & Violet Energy") })
+        }
+    } ?: json(id)
     private fun json(id: String, language: String = ""): JsonObject {
         val path = "/cards/$id${if (language.isEmpty()) "" else "-$language"}.json"
         val stream = checkNotNull(javaClass.getResourceAsStream(path)) { "Dados ausentes: $path" }

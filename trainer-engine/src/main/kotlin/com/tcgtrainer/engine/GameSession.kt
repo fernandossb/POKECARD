@@ -48,14 +48,14 @@ data class PlayerObservation(
     val ownField: List<PokemonInstance>, val opponentField: List<PokemonInstance>,
     val ownDiscard: List<CardInstance>, val opponentDiscard: List<CardInstance>,
     val ownActiveId: String? = null, val opponentActiveId: String? = null,
-    val ownLastKnockedOutByAttackDamageTurn: Int = -1
+    val ownLastKnockedOutByAttackDamageTurn: Int = -1, val ownLastKnockedOutTurn: Int = -1
 ) {
     companion object {
         fun from(state: GameState, viewer: Int): PlayerObservation {
             val own = state.players[viewer]; val other = state.players[1-viewer]
             return PlayerObservation(viewer, own.hand, own.deck.size, own.prizes.size, other.hand.size, other.deck.size,
                 other.prizes.size, own.pokemon(), if (state.turn == 0) emptyList() else other.pokemon(), own.discard, other.discard,
-                own.active?.id, if (state.turn == 0) null else other.active?.id, own.lastKnockedOutByAttackDamageTurn)
+                own.active?.id, if (state.turn == 0) null else other.active?.id, own.lastKnockedOutByAttackDamageTurn, own.lastKnockedOutTurn)
         }
     }
 }

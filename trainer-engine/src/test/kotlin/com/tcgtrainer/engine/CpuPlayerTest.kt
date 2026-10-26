@@ -13,9 +13,9 @@ class CpuPlayerTest {
             prizes = List(6) { c("$id-p$it") }, active = p(id), bench = listOf(p("$id-b", "me01-074")))
         return GameState("cpu", 42, RngState(42), listOf(player("human"), player("cpu")), 0, 1, 4, Phase.MAIN, catalogVersion = "lucario-v1")
     }
-    @Test fun `all seven decks contain 60 verified cards and respect copy limits`() {
-        assertEquals(7, TrainingDecks.all.size)
-        assertEquals(7, TrainingDecks.all.map { it.cards }.distinct().size)
+    @Test fun `all seventeen decks contain 60 verified cards and respect copy limits`() {
+        assertEquals(17, TrainingDecks.all.size)
+        assertEquals(17, TrainingDecks.all.map { it.cards }.distinct().size)
         TrainingDecks.all.forEach { deck ->
             assertEquals(60, deck.cards.size)
             deck.cards.groupingBy { it }.eachCount().forEach { (id, n) ->
