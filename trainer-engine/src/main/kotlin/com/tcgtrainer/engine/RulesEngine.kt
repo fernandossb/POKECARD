@@ -168,7 +168,11 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         forceIgnoreWeaknessResistance: Boolean = false): AttackPreview? {
         val attacker = state.players[state.currentPlayer].active ?: return null
         val opponent = state.players[1-state.currentPlayer]
-        val defender = if (targetId != null) opponent.pokemon().find { it.id == targetId } ?: return null else opponent.active ?: return null
+        val rawDefender = if (targetId != null) opponent.pokemon().find { it.id == targetId } ?: return null else opponent.active ?: return null
+        val opponentNWeaknessChanged = state.players[state.currentPlayer].pokemon().any { pokemon ->
+            definition(pokemon.top).abilities.any { it.changeOpponentNsPokemonWeaknessToPsychic }
+        } && definition(rawDefender.top).name.startsWith("N's ")
+        val defender = if (opponentNWeaknessChanged) rawDefender.copy(weaknessOverride = EnergyType.PSYCHIC) else rawDefender
         val attack = definition(attacker.top).attacks.find { it.id == attackId } ?: return null
         if (Effect.PullSelectedBenchBeforeDamage in attack.effects && targetId != null) {
             val pulled = opponent.bench.find { it.id == targetId } ?: return null
@@ -258,13 +262,14 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         val uncertain = coin != null && rolledHeads == null || benchEnergyBonus > 0 || topDeckEnergy != null
         val minimum = if (coin != null && rolledHeads == null) preview(state, attackId, targetId, 0)!!.damage else damage
         val coinMaximum = if (coin != null && rolledHeads == null) preview(state, attackId, targetId, coinFlipCount)!!.damage else damage
+        val defenderWeakness = defender.weaknessOverride ?: definition(defender.top).weakness
         val bonusAfterWeakness = if (attack.effects.contains(Effect.IgnoreWeaknessResistance) || defender.id != opponent.active?.id) benchEnergyBonus
-            else if (!(defender.weaknessSuppressedTurn >= 0 && defender.weaknessSuppressedTurn == state.turn) && definition(defender.top).weakness == definition(attacker.top).type) benchEnergyBonus * 2 else benchEnergyBonus
+            else if (!(defender.weaknessSuppressedTurn >= 0 && defender.weaknessSuppressedTurn == state.turn) && defenderWeakness == definition(attacker.top).type) benchEnergyBonus * 2 else benchEnergyBonus
         val topDeckMaxBonus = topDeckEnergy?.let { effect ->
             val raw = minOf(effect.count, state.players[state.currentPlayer].deck.size) * effect.damagePerEnergy
             val weakness = !forceIgnoreWeaknessResistance && !attack.effects.contains(Effect.IgnoreWeaknessResistance) && !attack.effects.contains(Effect.IgnoreWeakness) &&
                 defender.id == opponent.active?.id && defender.weaknessSuppressedTurn != state.turn &&
-                definition(defender.top).weakness == definition(attacker.top).type
+                (defender.weaknessOverride ?: definition(defender.top).weakness) == definition(attacker.top).type
             raw * if (weakness) 2 else 1
         } ?: 0
         val maximum = coinMaximum + bonusAfterWeakness + topDeckMaxBonus

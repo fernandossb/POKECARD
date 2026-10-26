@@ -29,6 +29,8 @@ internal object CatalogRuleCompiler {
     internal fun compileAbility(id: String, index: Int, raw: JsonObject): AbilityDefinition? {
         val name = raw.s("name") ?: return null
         val text = raw.s("effect")?.trim().orEmpty()
+        if (text == "The Weakness of each of your opponent's {N} Pokémon in play is now {P}. (Apply Weakness as ×2.)")
+            return AbilityDefinition("$id-ability$index", name, text, changeOpponentNsPokemonWeaknessToPsychic = true)
         if (text == "During Pokémon Checkup, put 1 damage counter on each Pokémon that has an Ability (both yours and your opponent's), except any Froslass.")
             return AbilityDefinition("$id-ability$index", name, text, checkupDamageCountersPerPokemonWithAbilityExceptFroslass = 1)
         if (text == "If this Pokémon has no Energy attached, it has no Retreat Cost.")

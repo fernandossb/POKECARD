@@ -234,6 +234,7 @@ import kotlinx.serialization.Serializable
     val onBenchDiscardStadium: Boolean = false,
     val onBenchDiscardOpponentDeckTop: Boolean = false,
     val onBenchSwitchAndMoveEnergy: Boolean = false,
+    val changeOpponentNsPokemonWeaknessToPsychic: Boolean = false,
     val teamDamageReduction: Int = 0,
     val onEvolveConfuseOpponentActive: Boolean = false,
     val hpBonusPerOpponentPrizeTaken: Int = 0,
@@ -286,7 +287,8 @@ fun CardDefinition.canEvolveFrom(base: CardDefinition): Boolean = category == Ca
     val retaliateDamageCounters: Int = 0, val retaliateDamageCountersTurn: Int = -1,
     val incomingDamageReductionEvolutionOnly: Boolean = false,
     val attackIdsUsedWhileActive: List<String> = emptyList(),
-    val delayedDamageCounters: Int = 0, val delayedDamageTurn: Int = -1
+    val delayedDamageCounters: Int = 0, val delayedDamageTurn: Int = -1,
+    val weaknessOverride: EnergyType? = null
 ) { val id: String get() = cards.first().id; val top: CardInstance get() = cards.last() }
 @Serializable data class AttackRestriction(val attackId: String?, val blockedTurn: Int)
 @Serializable data class TurnFlags(val manualEnergy: Boolean = false, val supporter: Boolean = false, val retreat: Boolean = false,

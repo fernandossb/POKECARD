@@ -760,6 +760,14 @@ class CatalogRuleCompilerTest {
             assertTrue(compiled.attacks.flatMap { it.effects }.contains(Effect.AttachBasicEnergyFromDiscardAny(3, EnergyType.FIGHTING, benchedOnly = true)), id)
         }
     }
+    @Test fun `Lillie Clefairy changes weakness for all Standard prints`() {
+        val ids = listOf("me02.5-076", "me02.5-280", "sv09-056", "sv09-173", "sv09-184", "svp-195")
+        ids.forEach { id ->
+            val compiled = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue(id), emptyMap())
+            assertNotNull(compiled, id)
+            assertTrue(compiled.abilities.any { it.changeOpponentNsPokemonWeaknessToPsychic }, id)
+        }
+    }
     @Test fun `Boltund Electrifying Dash selects only Lightning Energy for Benched targets`() {
         val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv05-059"), emptyMap())!!
         assertTrue(Effect.AttachBasicEnergyFromDeckAny(2, EnergyType.LIGHTNING, benchedOnly = true) in card.attacks.single { it.name == "Electrifying Dash" }.effects)

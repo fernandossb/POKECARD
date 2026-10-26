@@ -2547,8 +2547,8 @@ class RulesEngineTest {
         // v0.5 adds deck identity/list metadata; v0.6 adds retreat-block state; v0.7 adds status and damage-reduction state.
         // v0.8 adds protection from all Basic Pokémon attacks; v0.9 adds timed weakness suppression.
         // v1.1 enables additional card rules that can change deterministic attack outcomes.
-        // v1.2 serializes Festival Lead bonus attack availability.
-        assertEquals("3ca4b0182c5b9c378c2f87801edaa6e9898902feb64411dc53435e6ce0f3c341", digest)
+        // v1.2 serializes Festival Lead bonus attack availability; v1.3 serializes Pokémon weakness overrides.
+        assertEquals("fbefe1a1c8051fe9adcd9238c4a2315b9be2670ae6ab59282f0fe14c78294844", digest)
     }
 
     @Test fun `Gothitelle Distorted Future shuffles opponent hand then draws three once per turn`() {
@@ -2981,5 +2981,36 @@ class RulesEngineTest {
         val stopped = rules.apply(attached.state, GameAction.ChooseCards(emptyList()))
         assertEquals(Legality.Legal, stopped.legality)
         assertEquals(Phase.MAIN, stopped.state.phase)
+    }
+
+    @Test fun `Lillie Clefairy weakness change affects every N Pokemon and later Psychic damage`() {
+        val psychicHit = AttackDefinition("psychic-hit", "Mind Ray", emptyList(), listOf(Effect.Damage(30)))
+        val attacker = CardDefinition("lillie-attack-user", "Psychic Attacker", "Test", "1", category = Category.POKEMON,
+            hp = 190, type = EnergyType.PSYCHIC, attacks = listOf(psychicHit))
+        val lillie = CardDefinition("lillie-ability-owner", "Lillie's Clefairy ex", "Test", "4", category = Category.POKEMON,
+            hp = 190, abilities = listOf(AbilityDefinition("fairy-zone", "Fairy Zone", "", changeOpponentNsPokemonWeaknessToPsychic = true)))
+        val nPokemon = CardDefinition("lillie-n-pokemon", "N's Zoroark ex", "Test", "2", category = Category.POKEMON,
+            hp = 280, type = EnergyType.DARKNESS, weakness = EnergyType.FIRE)
+        val regular = CardDefinition("lillie-regular-pokemon", "Zoroark ex", "Test", "3", category = Category.POKEMON,
+            hp = 280, type = EnergyType.DARKNESS, weakness = EnergyType.FIRE)
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            attacker.id -> attacker; lillie.id -> lillie; nPokemon.id -> nPokemon; regular.id -> regular
+            else -> TestCatalog.definitions[id] ?: TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        val original = main()
+        val start = original.copy(players = original.players.mapIndexed { index, player -> when (index) {
+            0 -> player.copy(active = field("psychic-attacker", attacker.id), bench = listOf(field("lillie", lillie.id)))
+            else -> player.copy(active = field("n-active", nPokemon.id), bench = listOf(field("n-bench", nPokemon.id), field("regular-bench", regular.id)))
+        } })
+        assertEquals(60, rules.preview(start, psychicHit.id)!!.damage)
+        val nBenchActive = start.copy(players = start.players.mapIndexed { index, player ->
+            if (index == 1) player.copy(active = player.bench.first { it.id == "n-bench" }, bench = player.bench.filterNot { it.id == "n-bench" }) else player
+        })
+        assertEquals(60, rules.preview(nBenchActive, psychicHit.id)!!.damage)
+        val regularBenchActive = start.copy(players = start.players.mapIndexed { index, player ->
+            if (index == 1) player.copy(active = player.bench.first { it.id == "regular-bench" }, bench = player.bench.filterNot { it.id == "regular-bench" }) else player
+        })
+        assertEquals(30, rules.preview(regularBenchActive, psychicHit.id)!!.damage)
     }
 }

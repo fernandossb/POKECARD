@@ -64,7 +64,9 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
             } else 0
             val targetToolReduction = (target.tool?.let(::d)?.trainerEffect as? TrainerEffect.RetreatReduction)?.amount ?: 0
             val targetRetreatCost = (d(target.top).retreatCost + retreatTax - targetToolReduction).coerceAtLeast(0)
-            val base = effects.damage(p, target, a.effects + Effect.Damage(extra), input.flags.damageBoosts[d(p.top).type] ?: 0,
+            val nWeaknessChanged = own.any { pokemon -> d(pokemon.top).abilities.any { it.changeOpponentNsPokemonWeaknessToPsychic } } && d(target.top).name.startsWith("N's ")
+            val effectiveTarget = if (nWeaknessChanged) target.copy(weaknessOverride = EnergyType.PSYCHIC) else target
+            val base = effects.damage(p, effectiveTarget, a.effects + Effect.Damage(extra), input.flags.damageBoosts[d(p.top).type] ?: 0,
                 Effect.IgnoreWeaknessResistance in a.effects || (a.effects.any { it is Effect.TargetedDamage } && target.id != enemy?.id),
                 ownBenchCount = own.count { it.id != o.ownActiveId },
                 opponentBenchCount = o.opponentField.count { it.id != o.opponentActiveId },
@@ -91,7 +93,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 })
             val discardEffect = a.effects.filterIsInstance<Effect.DiscardBenchEnergyDamage>().firstOrNull()
             val discarded = minOf(discardEffect?.max ?: 0, own.filter { it.id != o.ownActiveId }.sumOf { it.energies.size })
-            val multiplier = if (target.id == enemy?.id && !(target.weaknessSuppressedTurn >= 0 && target.weaknessSuppressedTurn == input.turn) && Effect.IgnoreWeaknessResistance !in a.effects && d(target.top).weakness == d(p.top).type) 2 else 1
+            val multiplier = if (target.id == enemy?.id && !(target.weaknessSuppressedTurn >= 0 && target.weaknessSuppressedTurn == input.turn) && Effect.IgnoreWeaknessResistance !in a.effects && (effectiveTarget.weaknessOverride ?: d(target.top).weakness) == d(p.top).type) 2 else 1
             return base + discarded * (discardEffect?.perEnergyDamage ?: 0) * multiplier
         }
         fun attackValue(p: PokemonInstance, target: PokemonInstance? = enemy): Double {

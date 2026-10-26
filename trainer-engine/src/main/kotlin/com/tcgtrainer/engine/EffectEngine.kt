@@ -154,7 +154,8 @@ class EffectEngine(private val catalog: CardCatalog) {
         if (attackBase == 0) return counterDamage
         var value = (attackBase + attacker.damageModifier + boost).coerceAtLeast(0)
         val sourceTypes = setOf(source.type) + source.abilities.flatMap { it.additionalPokemonTypes }
-        if (!ignoreWeaknessResistance && !ignoreWeakness && !(defender.weaknessSuppressedTurn >= 0 && defender.weaknessSuppressedTurn == turn) && target.weakness in sourceTypes) value *= 2
+        val weakness = defender.weaknessOverride ?: target.weakness
+        if (!ignoreWeaknessResistance && !ignoreWeakness && !(defender.weaknessSuppressedTurn >= 0 && defender.weaknessSuppressedTurn == turn) && weakness in sourceTypes) value *= 2
         if (!ignoreWeaknessResistance && !ignoreResistance && target.resistance in sourceTypes) value -= target.resistanceAmount
         val ignoresOpponentActiveEffects = ignoreOpponentActiveEffects || source.abilities.any { it.ignoreOpponentActiveEffects }
         if (!ignoresOpponentActiveEffects) {
