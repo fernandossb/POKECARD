@@ -27,7 +27,7 @@ class EffectEngine(private val catalog: CardCatalog) {
         ownInPlayCount: Int = ownBenchCount + 1, ignoreOpponentActiveEffects: Boolean = false,
         ignoreResistance: Boolean = false, ignoreWeakness: Boolean = false, turn: Int = -1, ownHandCount: Int = 0,
         opponentActiveIsEx: Boolean = false, targetIsOpponentActive: Boolean = true, opponentActiveEnergyCount: Int = 0, opponentHandTrainerCount: Int = 0,
-        opponentHasSpecialCondition: Boolean = false, opponentActiveDamage: Int = 0, opponentHandCount: Int = 0, ownToolCount: Int = 0, ownDamagedPokemonCount: Int = 0,
+        opponentHasSpecialCondition: Boolean = false, opponentSpecialConditionCount: Int = 0, opponentActiveDamage: Int = 0, opponentHandCount: Int = 0, ownToolCount: Int = 0, ownDamagedPokemonCount: Int = 0,
         ownDamagedBenchedPokemonCount: Int = 0,
         ownEnergyCounts: Map<EnergyType, Int> = emptyMap(), ownKnockedOutByAttackLastTurn: Boolean = false,
         ownPokemonNames: List<String> = emptyList(),
@@ -183,6 +183,7 @@ class EffectEngine(private val catalog: CardCatalog) {
             effects.filterIsInstance<Effect.OwnHandEmptyDamageBonus>().filter { ownHandCount == 0 }.sumOf { it.bonus } +
             effects.filterIsInstance<Effect.OpponentActiveRetreatCostDamage>().filter { targetIsOpponentActive }.sumOf { it.perCost * opponentActiveRetreatCost } +
             effects.filterIsInstance<Effect.OpponentConditionDamage>().filter { targetIsOpponentActive && opponentHasSpecialCondition }.sumOf { it.bonus } +
+            effects.filterIsInstance<Effect.OpponentSpecialConditionCountDamage>().filter { targetIsOpponentActive }.sumOf { it.perCondition * opponentSpecialConditionCount } +
             effects.filterIsInstance<Effect.OpponentActiveDamagedDamage>().filter { targetIsOpponentActive && opponentActiveDamage > 0 }.sumOf { it.bonus } +
             effects.filterIsInstance<Effect.OpponentActiveDamageCounterDamage>().filter { targetIsOpponentActive }.sumOf { it.perCounter * (opponentActiveDamage / 10) } +
             effects.filterIsInstance<Effect.OwnDiscardEnergyDamage>().sumOf { it.perEnergy * ownDiscardEnergyCount } +
@@ -252,7 +253,7 @@ class EffectEngine(private val catalog: CardCatalog) {
         is Effect.ReduceDamageNextTurn, is Effect.SelfDamage, Effect.PreventDefendingAttackNextTurn, Effect.DefendingAttackFailsOnTailsNextTurn,
         is Effect.OwnHandCounterDamage, is Effect.OpponentHandCountDamage, is Effect.OpponentHandAtMostDamageBonus, is Effect.OwnHandEmptyDamageBonus, is Effect.OpponentExDamage, is Effect.OpponentTypeDamage, is Effect.OpponentEvolutionActiveDamageBonus, is Effect.OpponentStageTwoActiveDamageBonus, is Effect.OwnEnergyCountDamage, is Effect.AttackerConditionDamageBonus,
         is Effect.OpponentEnergyCountDamage, is Effect.OpponentActiveEnergyCountDamage, is Effect.OpponentBasicDiscardEnergyDamage, is Effect.OpponentHandEnergyCountDamage, is Effect.OpponentActiveRetreatCostDamage, is Effect.ReduceDefendingAttackDamageNextTurn,
-        is Effect.OpponentConditionDamage, is Effect.OpponentActiveDamagedDamage, is Effect.OpponentActiveDamageCounterDamage,
+        is Effect.OpponentConditionDamage, is Effect.OpponentSpecialConditionCountDamage, is Effect.OpponentActiveDamagedDamage, is Effect.OpponentActiveDamageCounterDamage,
         is Effect.OwnDiscardEnergyDamage, is Effect.DiscardEnergyThresholdDamage, is Effect.OwnInPlayEnergyDamage, is Effect.OwnSpecialEnergyDamage,
         is Effect.OwnDiscardAbilityCountBonus,
         is Effect.OpponentPrizeTakenDamage, is Effect.OpponentPrizeTakenBenchDamage, is Effect.OpponentPrizeCountDamage, is Effect.OwnPrizeLeadDamageBonus, is Effect.OpponentNoRetreatDamage,

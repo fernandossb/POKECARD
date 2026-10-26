@@ -455,6 +455,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             targetIsOpponentActive = defender.id == state.players[1-state.currentPlayer].active?.id,
             opponentActiveEnergyCount = state.players[1-state.currentPlayer].active?.energies?.size ?: 0,
             opponentHasSpecialCondition = state.players[1-state.currentPlayer].active?.conditions?.isNotEmpty() == true,
+            opponentSpecialConditionCount = state.players[1-state.currentPlayer].active?.conditions?.size ?: 0,
             opponentActiveDamage = state.players[1-state.currentPlayer].active?.damage ?: 0,
             opponentHandCount = state.players[1-state.currentPlayer].hand.size,
             stadiumInPlay = state.stadium != null,
