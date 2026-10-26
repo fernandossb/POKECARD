@@ -6,6 +6,11 @@ internal class ContentEngine(private val rules: RulesEngine) {
     private fun illegal(reason: String) = Legality.Illegal(reason)
     private fun abilityUsageKey(pokemon: PokemonInstance, ability: AbilityDefinition) =
         if (ability.usagePerPokemon) "${pokemon.id}:${ability.usageKey}" else ability.usageKey
+    private fun hasMegaFireEx(player: PlayerState) = player.pokemon().any { pokemon ->
+        val card = def(pokemon.top)
+        card.category == Category.POKEMON && card.type == EnergyType.FIRE && card.name.startsWith("Mega ") &&
+            card.name.endsWith(" ex") && card.prizes == 3
+    }
     fun matches(card: CardInstance, filter: CardFilter): Boolean {
         val d = def(card)
         return when (filter) {
@@ -38,6 +43,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     choice.kind == ChoiceKind.EVOLUTION_OPPONENT_HAND_BASIC_TO_BENCH && action.cardIds.any { id ->
                         s.players[1-rules.actingPlayer(s)].hand.none { it.id == id && def(it).category == Category.POKEMON && def(it).stage == Stage.BASIC }
                     } -> illegal("Escolha apenas Pokémon Básicos ainda na mão revelada do adversário.")
+                    choice.kind == ChoiceKind.ABILITY_ATTACH_ENERGY_TARGET && choice.benchedOnly && action.cardIds.any { id -> p.bench.none { it.id == id } } -> illegal("O alvo precisa estar no Banco.")
                     choice.kind == ChoiceKind.SONIA && p.deck.filter { it.id in action.cardIds }.map { def(it).category }.distinct().size > 1 -> illegal("Sonia busca Pokémon Básicos OU Energias Básicas; não misture as categorias.")
                     else -> Legality.Legal
                 }
@@ -90,6 +96,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     ability.onEvolveHealAllEvolutionAndDiscardEnergy -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
                     ability.onEvolveShuffleRandomOpponentHandPerHeads > 0 -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
                     ability.onEvolveConfuseOpponentActive -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
+                    ability.requiresMegaEvolutionFireExInPlay && !hasMegaFireEx(p) -> illegal("É preciso ter uma Mega Evolution Pokémon ex de Fogo em jogo.")
                     ability.onEvolveDiscardOpponentDeckCount > 0 -> illegal("Esta habilidade só pode ser usada ao evoluir da mão ou quando este Pokémon Ativo é nocauteado por dano de ataque.")
                     ability.onBenchSwitchAndMoveEnergy -> illegal("Esta habilidade só pode ser usada quando o Pokémon entra no Banco pela mão.")
                     ability.onEvolveAttachMetalFromDiscardMax > 0 -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
@@ -126,7 +133,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     ability.switchOwnDarknessExceptPecharunt && p.bench.none {
                         def(it.top).type == EnergyType.DARKNESS && def(it.top).name != "Pecharunt ex"
                     } -> illegal("Não há Pokémon Darkness elegível no Banco para trocar.")
-                    ability.attachHandEnergyToPokemonType != null && p.pokemon().none { def(it.top).type == ability.attachHandEnergyToPokemonType } -> illegal("Não há Pokémon do tipo necessário em jogo para receber a Energia.")
+                    ability.attachHandEnergyToPokemonType != null && (if (ability.attachHandEnergyBenchOnly) p.bench else p.pokemon()).none { def(it.top).type == ability.attachHandEnergyToPokemonType } -> illegal("Não há Pokémon do tipo necessário na área permitida para receber a Energia.")
                     ability.attachHandEnergyBenchOnly && p.bench.none { def(it.top).name.startsWith(ability.attachHandEnergyToPokemonNamePrefix.orEmpty()) } -> illegal("Não há Pokémon elegível no Banco para receber a Energia.")
                     ability.healDamage > 0 && p.pokemon().none { it.damage > 0 } -> illegal("Não há dano para curar.")
                     ability.recoverBasicPokemonToBenchMaxHp > 0 && p.bench.size >= 5 -> illegal("O Banco já tem 5 Pokémon.")
@@ -369,7 +376,8 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         else "Escolha uma Energia Básica de ${ability.attachHandEnergyType} da mão para ligar a um Pokémon de ${ability.attachHandEnergyToPokemonType}.",
                         candidates, if (ability.attachHandEnergyToPokemonType == null && ability.attachHandEnergyToPokemonNamePrefix == null) 0 else 1, minOf(1, candidates.size),
                         amount = ability.drawIfAttached, sourcePokemonId = pokemon.id, energyType = ability.attachHandEnergyToPokemonType,
-                        targetNamePrefix = ability.attachHandEnergyToPokemonNamePrefix, healAmount = ability.healIfAttached))))
+                        targetNamePrefix = ability.attachHandEnergyToPokemonNamePrefix, healAmount = ability.healIfAttached,
+                        benchedOnly = ability.attachHandEnergyBenchOnly))))
                 }
                 else if (ability.discardAttachedBasicEnergyType != null) {
                     val attachedEnergy = pokemon.energies.filter { def(it).category == Category.ENERGY &&
@@ -601,13 +609,13 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     ChoiceKind.ABILITY_ATTACH_ENERGY -> if (ids.isNotEmpty()) {
                         val energy = p.hand.first { it.id == ids.single() && def(it).category == Category.ENERGY && def(it).basicEnergy }
                         if (choice.energyType != null || choice.targetNamePrefix != null || choice.healAmount > 0) {
-                            val targets = p.pokemon().filter { pokemon ->
+                            val targets = (if (choice.benchedOnly) p.bench else p.pokemon()).filter { pokemon ->
                                 (choice.healAmount > 0 || choice.energyType == null || def(pokemon.top).type == choice.energyType) &&
                                     (choice.targetNamePrefix == null || def(pokemon.top).name.startsWith(choice.targetNamePrefix))
                             }.map { it.id }
                             remainingChoices = listOf(ChoiceRequest(ChoiceKind.ABILITY_ATTACH_ENERGY_TARGET,
                                 "Escolha um Pokémon elegível para receber a Energia.", targets, 1, 1,
-                                selectedEnergy = energy.id, healAmount = choice.healAmount)) + remainingChoices
+                                selectedEnergy = energy.id, healAmount = choice.healAmount, benchedOnly = choice.benchedOnly)) + remainingChoices
                         } else {
                             val target = choice.sourcePokemonId ?: error("Pokémon da habilidade ausente")
                             update { player -> player.copy(hand = player.hand - energy,

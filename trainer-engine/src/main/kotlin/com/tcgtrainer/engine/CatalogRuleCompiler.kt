@@ -29,6 +29,10 @@ internal object CatalogRuleCompiler {
     internal fun compileAbility(id: String, index: Int, raw: JsonObject): AbilityDefinition? {
         val name = raw.s("name") ?: return null
         val text = raw.s("effect")?.trim().orEmpty()
+        if (text == "As often as you like during your turn, if you have any {R} Mega Evolution Pokémon ex in play, you may use this Ability. Attach a Basic {R} Energy card from your hand to 1 of your Benched {R} Pokémon.")
+            return AbilityDefinition("$id-ability$index", name, text, attachHandEnergyType = EnergyType.FIRE,
+                unlimitedUse = true, attachHandEnergyToPokemonType = EnergyType.FIRE,
+                attachHandEnergyBenchOnly = true, requiresMegaEvolutionFireExInPlay = true)
         if (text == "When you play this Pokémon from your hand to evolve 1 of your Pokémon during your turn, you may switch in 1 of your opponent's Benched Pokémon that has 90 HP or less remaining to the Active Spot.")
             return AbilityDefinition("$id-ability$index", name, text, onEvolveSwitch = true,
                 onEvolveSwitchOpponentBenchMaxRemainingHp = 90)
