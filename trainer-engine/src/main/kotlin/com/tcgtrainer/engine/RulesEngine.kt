@@ -539,7 +539,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 val active = p.active!!
                 val target = p.bench.first { it.id == action.pokemonId }
                 val paid = active.energies.filter { it.id in action.energyIds }
-                update(actor) { it.copy(active = target.copy(conditions = emptySet(), attackImmunityTurn = -1, incomingDamageReduction = 0, damageReductionTurn = -1, incomingDamageReductionEvolutionOnly = false, outgoingDamageReduction = 0, outgoingDamageReductionTurn = -1, preventBasicNonColorlessDamageTurn = -1, preventBasicPokemonDamageTurn = -1), bench = it.bench - target + active.copy(energies = active.energies - paid.toSet(), restrictions = emptyList(), attackIdsUsedWhileActive = emptyList(), conditions = emptySet(), attackImmunityTurn = -1, incomingDamageReduction = 0, damageReductionTurn = -1, incomingDamageReductionEvolutionOnly = false, outgoingDamageReduction = 0, outgoingDamageReductionTurn = -1, preventBasicNonColorlessDamageTurn = -1, preventBasicPokemonDamageTurn = -1), discard = it.discard + paid, flags = it.flags.copy(retreat = true)) }
+                update(actor) { it.copy(active = target.copy(enteredActiveTurn = state.turn, conditions = emptySet(), attackImmunityTurn = -1, incomingDamageReduction = 0, damageReductionTurn = -1, incomingDamageReductionEvolutionOnly = false, outgoingDamageReduction = 0, outgoingDamageReductionTurn = -1, preventBasicNonColorlessDamageTurn = -1, preventBasicPokemonDamageTurn = -1), bench = it.bench - target + active.copy(energies = active.energies - paid.toSet(), restrictions = emptyList(), attackIdsUsedWhileActive = emptyList(), conditions = emptySet(), attackImmunityTurn = -1, incomingDamageReduction = 0, damageReductionTurn = -1, incomingDamageReductionEvolutionOnly = false, outgoingDamageReduction = 0, outgoingDamageReductionTurn = -1, preventBasicNonColorlessDamageTurn = -1, preventBasicPokemonDamageTurn = -1), discard = it.discard + paid, flags = it.flags.copy(retreat = true)) }
                 emit("Retreated", "Recuou descartando ${paid.size} Energia(s).")
             }
             is GameAction.Attack -> {
@@ -1331,7 +1331,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             }
             is GameAction.Promote -> {
                 val target = p.bench.first { it.id == action.pokemonId }
-                update(actor) { it.copy(active = target, bench = it.bench - target) }
+                update(actor) { it.copy(active = target.copy(enteredActiveTurn = state.turn), bench = it.bench - target) }
                 emit("PokemonPromoted", "${definition(target.top).name} foi promovido ao Ativo.")
                 val remaining = state.promotionQueue.filter { it != actor }
                 if (remaining.isNotEmpty()) next = next.copy(promotionQueue = remaining, currentPlayer = remaining.first())

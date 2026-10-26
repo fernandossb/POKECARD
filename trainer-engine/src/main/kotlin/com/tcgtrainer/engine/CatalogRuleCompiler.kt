@@ -367,6 +367,7 @@ internal object CatalogRuleCompiler {
         val conditionalEnergy = Regex("If this Pokémon has (?:at least )?(\\d+) or more \\{([GRFLWPMD])\\} Energy attached, this attack does (\\d+) more damage\\.").matchEntire(text)
         val conditionalInPlayEnergy = Regex("If you have (?:at least )?(\\d+)(?: or more)? \\{([GRFLWPMD])\\} Energy in play, this attack does (\\d+) more damage\\.").matchEntire(text)
         val ownKnockoutBonus = Regex("If any of your Pokémon were Knocked Out by damage from an attack during your opponent's last turn, this attack does (\\d+) more damage\\.").matchEntire(text)
+        val movedFromBenchBonus = Regex("If this Pokémon moved from your Bench to the Active Spot this turn, this attack does (\\d+) more damage\\.").matchEntire(text)
         val ownBenchNameBonus = Regex("If (.+) is on your Bench, this attack does (\\d+) more damage\\.").matchEntire(text)
         val ownBenchTypeBonus = Regex("If you have any \\{([GRFLWPMD])\\} Pokémon on your Bench, this attack does (\\d+) more damage\\.").matchEntire(text)
         val sameTypePokemonBonus = text == "If any of your Pokémon in play are the same type as any of your opponent's Pokémon in play, this attack does 120 more damage."
@@ -670,7 +671,7 @@ internal object CatalogRuleCompiler {
         } else {
             val discardOwnEnergyDamage = discardTypedAttackerEnergy != null || discardAnyBasicEnergyFromTeam != null || discardTypedEnergyFromTeam != null
             val damage = if (damageText.isEmpty() || opponentHandEnergyDamage != null || discardOwnEnergyDamage || opponentActiveDamageCountersTimes != null || opponentHandCountDamage != null) 0 else
-                (if (coinBonus != null || coinBonusMultiple != null || coinBonusAllHeads != null || coinBonusUntilTails != null || optionalWaterEnergyDamageBonus != null || conditionalEnergy != null || conditionalInPlayEnergy != null || ownKnockoutBonus != null || ownBenchNameBonus != null || ownBenchTypeBonus != null || sameTypePokemonBonus || sameHandSizeDamageBonus || allOwnBenchedDamagedBonus != null || ownDamagedBenchedPokemonBonus != null || ownUndamagedBonus != null || opponentExBonus != null || opponentTypeBonus != null || opponentEvolutionBonus != null || ownEnergyBonus != null || opponentEnergyBonus != null || opponentRetreatCostBonus != null || ownBenchEnergyBonus != null || opponentConditionBonus != null || opponentActiveDamagedBonus != null || opponentActiveDamageCounters != null || ownDiscardEnergyDamage != null || discardEnergyThresholdDamage != null || ownDiscardAbilityBonus != null || opponentPrizeTakenDamage != null || opponentPrizeCountDamage != null || opponentNoRetreatDamage != null || opponentResistanceDamage != null || ownToolAttachedDamage != null || bothActiveEnergyDamage != null || benchedDamage != null || benchEnergyBonus != null || handEnergyBonus != null || ownTeamEnergyTypeBonus != null) damageText.removeSuffix("+") else damageText).toIntOrNull() ?: return null
+                (if (coinBonus != null || coinBonusMultiple != null || coinBonusAllHeads != null || coinBonusUntilTails != null || optionalWaterEnergyDamageBonus != null || conditionalEnergy != null || conditionalInPlayEnergy != null || ownKnockoutBonus != null || movedFromBenchBonus != null || ownBenchNameBonus != null || ownBenchTypeBonus != null || sameTypePokemonBonus || sameHandSizeDamageBonus || allOwnBenchedDamagedBonus != null || ownDamagedBenchedPokemonBonus != null || ownUndamagedBonus != null || opponentExBonus != null || opponentTypeBonus != null || opponentEvolutionBonus != null || ownEnergyBonus != null || opponentEnergyBonus != null || opponentRetreatCostBonus != null || ownBenchEnergyBonus != null || opponentConditionBonus != null || opponentActiveDamagedBonus != null || opponentActiveDamageCounters != null || ownDiscardEnergyDamage != null || discardEnergyThresholdDamage != null || ownDiscardAbilityBonus != null || opponentPrizeTakenDamage != null || opponentPrizeCountDamage != null || opponentNoRetreatDamage != null || opponentResistanceDamage != null || ownToolAttachedDamage != null || bothActiveEnergyDamage != null || benchedDamage != null || benchEnergyBonus != null || handEnergyBonus != null || ownTeamEnergyTypeBonus != null) damageText.removeSuffix("+") else damageText).toIntOrNull() ?: return null
             if (damage < 0) return null
             if (damage > 0) effects += Effect.Damage(damage)
             val draw = Regex("(?:You may )?[Dd]raw (a|1|2|3|4|5) cards?\\.").matchEntire(text)
@@ -879,6 +880,10 @@ internal object CatalogRuleCompiler {
                 ownKnockoutBonus != null -> {
                     if (damage <= 0 || !damageText.endsWith("+")) return null
                     effects += Effect.OwnKnockoutLastTurnDamage(ownKnockoutBonus.groupValues[1].toInt())
+                }
+                movedFromBenchBonus != null -> {
+                    if (damage <= 0 || !damageText.endsWith("+")) return null
+                    effects += Effect.MovedFromBenchDamageBonus(movedFromBenchBonus.groupValues[1].toInt())
                 }
                 ownBenchNameBonus != null -> {
                     if (damage <= 0 || !damageText.endsWith("+")) return null

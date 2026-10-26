@@ -582,7 +582,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         val owner = if (choice.kind == ChoiceKind.SWITCH_OWN) actor else 1-actor
                         val player = s.players[owner]; val target = player.bench.first { it.id == ids.single() }
                         val targetConditions = if (choice.poisonSwitchedPokemon) (target.conditions - setOf(SpecialCondition.ASLEEP, SpecialCondition.PARALYZED, SpecialCondition.CONFUSED)) + SpecialCondition.POISONED else emptySet()
-                        update(owner) { it.copy(active = target.copy(conditions = targetConditions, attackImmunityTurn = -1, incomingDamageReduction = 0, damageReductionTurn = -1, outgoingDamageReduction = 0, outgoingDamageReductionTurn = -1, preventBasicNonColorlessDamageTurn = -1, preventBasicPokemonDamageTurn = -1), bench = it.bench - target + listOfNotNull(it.active?.copy(restrictions = emptyList(), attackIdsUsedWhileActive = emptyList(), conditions = emptySet(), attackImmunityTurn = -1, incomingDamageReduction = 0, damageReductionTurn = -1, outgoingDamageReduction = 0, outgoingDamageReductionTurn = -1, preventBasicNonColorlessDamageTurn = -1, preventBasicPokemonDamageTurn = -1))) }
+                        update(owner) { it.copy(active = target.copy(enteredActiveTurn = if (owner == actor) s.turn else target.enteredActiveTurn, conditions = targetConditions, attackImmunityTurn = -1, incomingDamageReduction = 0, damageReductionTurn = -1, outgoingDamageReduction = 0, outgoingDamageReductionTurn = -1, preventBasicNonColorlessDamageTurn = -1, preventBasicPokemonDamageTurn = -1), bench = it.bench - target + listOfNotNull(it.active?.copy(restrictions = emptyList(), attackIdsUsedWhileActive = emptyList(), conditions = emptySet(), attackImmunityTurn = -1, incomingDamageReduction = 0, damageReductionTurn = -1, outgoingDamageReduction = 0, outgoingDamageReductionTurn = -1, preventBasicNonColorlessDamageTurn = -1, preventBasicPokemonDamageTurn = -1))) }
                         events += GameEvent("ActiveSwitched", "${def(target.top).name} entrou no Ativo do jogador ${owner+1}.")
                     }
                     ChoiceKind.TOOL_TARGET -> {
@@ -686,7 +686,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         val newActive = p.bench.first { it.id == targetId }
                         val oldActive = p.active
                         if (oldActive != null) {
-                            update { it.copy(active = newActive, bench = it.bench.filterNot { pokemon -> pokemon.id == targetId } + oldActive) }
+                            update { it.copy(active = newActive.copy(enteredActiveTurn = s.turn), bench = it.bench.filterNot { pokemon -> pokemon.id == targetId } + oldActive) }
                             events += GameEvent("OnBenchAbilitySwitched", "${def(newActive.top).name} entrou no Ativo pela habilidade.")
                             val energies = p.pokemon().filter { it.id != targetId }.flatMap { it.energies }
                             if (energies.isNotEmpty()) remainingChoices = listOf(ChoiceRequest(ChoiceKind.ON_BENCH_MOVE_ENERGY,

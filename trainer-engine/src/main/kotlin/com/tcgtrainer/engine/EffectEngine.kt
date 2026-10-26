@@ -149,7 +149,8 @@ class EffectEngine(private val catalog: CardCatalog) {
             effects.filterIsInstance<Effect.ConditionalInPlayEnergyDamage>().filter { conditional ->
                 (ownEnergyCounts[conditional.type] ?: 0) >= conditional.minimum
             }.sumOf { it.bonus } +
-            effects.filterIsInstance<Effect.OwnKnockoutLastTurnDamage>().filter { ownKnockedOutByAttackLastTurn }.sumOf { it.bonus }
+            effects.filterIsInstance<Effect.OwnKnockoutLastTurnDamage>().filter { ownKnockedOutByAttackLastTurn }.sumOf { it.bonus } +
+            effects.filterIsInstance<Effect.MovedFromBenchDamageBonus>().filter { attacker.enteredActiveTurn == turn }.sumOf { it.bonus }
         val attackBase = (base - if (turn == attacker.outgoingDamageReductionTurn) attacker.outgoingDamageReduction else 0).coerceAtLeast(0)
         if (attackBase == 0) return counterDamage
         var value = (attackBase + attacker.damageModifier + boost).coerceAtLeast(0)
@@ -197,7 +198,7 @@ class EffectEngine(private val catalog: CardCatalog) {
         is Effect.OwnDiscardAbilityCountBonus,
         is Effect.OpponentPrizeTakenDamage, is Effect.OpponentPrizeCountDamage, is Effect.OpponentNoRetreatDamage,
         is Effect.OpponentResistanceDamage, is Effect.OwnToolAttachedDamage,
-        is Effect.OwnKnockoutLastTurnDamage,
+        is Effect.OwnKnockoutLastTurnDamage, is Effect.MovedFromBenchDamageBonus,
         is Effect.RequiresExactHandSize,
         is Effect.OwnToolCountDamage, is Effect.OwnDamageCounterPenalty,
         is Effect.AllPokemonToolCountDamage,

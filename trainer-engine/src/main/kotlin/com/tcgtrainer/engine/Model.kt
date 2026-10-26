@@ -163,6 +163,7 @@ import kotlinx.serialization.Serializable
     @Serializable data class OpponentResistanceDamage(val type: EnergyType, val bonus: Int) : Effect
     @Serializable data class OwnToolAttachedDamage(val bonus: Int) : Effect
     @Serializable data class OwnKnockoutLastTurnDamage(val bonus: Int) : Effect
+    @Serializable data class MovedFromBenchDamageBonus(val bonus: Int) : Effect
     @Serializable data class RequiresExactHandSize(val size: Int) : Effect
     @Serializable data class OwnToolCountDamage(val perTool: Int) : Effect
     @Serializable data class AllPokemonToolCountDamage(val perTool: Int) : Effect
@@ -298,7 +299,7 @@ fun CardDefinition.canEvolveFrom(base: CardDefinition): Boolean = category == Ca
     val incomingDamageReductionEvolutionOnly: Boolean = false,
     val attackIdsUsedWhileActive: List<String> = emptyList(),
     val delayedDamageCounters: Int = 0, val delayedDamageTurn: Int = -1,
-    val weaknessOverride: EnergyType? = null
+    val weaknessOverride: EnergyType? = null, val enteredActiveTurn: Int = -1
 ) { val id: String get() = cards.first().id; val top: CardInstance get() = cards.last() }
 @Serializable data class AttackRestriction(val attackId: String?, val blockedTurn: Int)
 @Serializable data class TurnFlags(val manualEnergy: Boolean = false, val supporter: Boolean = false, val retreat: Boolean = false,
