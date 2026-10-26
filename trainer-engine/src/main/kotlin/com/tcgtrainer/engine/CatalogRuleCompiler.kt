@@ -624,6 +624,7 @@ internal object CatalogRuleCompiler {
         val opponentChoosesHandShuffle = Regex("Your opponent chooses (\\d+) cards from their hand and shuffles those cards into their deck\\.").matchEntire(text)
         val opponentShuffleRandom = Regex("Choose a random card from your opponent's hand(?:, and your opponent reveals that card and shuffles it into their deck|\\. Your opponent reveals that card and shuffles it into their deck)\\.").matchEntire(text)
         val moveEnergy = Regex("Move an Energy from this Pokémon to (\\d+) of your Benched Pokémon\\.").matchEntire(text)
+        val moveEnergyToOneBench = Regex("Move (\\d+) Energy from this Pokémon to 1 of your Benched Pokémon\\.").matchEntire(text)
         val moveAllEnergyToBench = text == "Move all Energy from this Pokémon to 1 of your Benched Pokémon."
         val returnEnergyToHand = text == "Put an Energy attached to this Pokémon into your hand."
         val optionalWaterEnergyDamageBonus = Regex("You may put a \\{W\\} Energy attached to this Pokémon into your hand and have this attack do (\\d+) more damage\\.").matchEntire(text)
@@ -922,6 +923,7 @@ internal object CatalogRuleCompiler {
                 text == "Flip a coin. If heads, during your opponent's next turn, prevent all damage from and effects of attacks done to this Pokémon." ||
                     text == "Flip a coin. If heads, during your opponent's next turn, prevent all damage done to this Pokémon by attacks." -> effects += Effect.PreventAttackDamageNextTurnOnHeads
                 moveEnergy != null -> effects += Effect.MoveEnergyToBench(moveEnergy.groupValues[1].toInt())
+                moveEnergyToOneBench != null -> effects += Effect.MoveEnergyToOneBench(moveEnergyToOneBench.groupValues[1].toInt())
                 moveAllEnergyToBench -> effects += Effect.MoveAllEnergyToBench
                 benchEnergyBonus != null -> {
                     if (damage <= 0 || !damageText.endsWith("+")) return null

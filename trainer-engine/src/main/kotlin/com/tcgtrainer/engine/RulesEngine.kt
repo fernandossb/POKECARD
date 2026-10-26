@@ -1571,6 +1571,14 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     if (count > 0) choices += ChoiceRequest(ChoiceKind.ATTACK_ENERGY,
                         "Escolha uma Energia do atacante para mover para ${count} Pokémon do Banco.", energies.map { it.id }, 1, 1, remaining = count)
                 }
+                attack.effects.filterIsInstance<Effect.MoveEnergyToOneBench>().forEach { effect ->
+                    val energies = next.players[actor].active!!.energies
+                    val count = minOf(effect.count, energies.size)
+                    if (count > 0 && next.players[actor].bench.isNotEmpty()) choices += ChoiceRequest(
+                        ChoiceKind.ATTACK_MOVE_ENERGY_TO_ONE_BENCH,
+                        "Escolha até $count Energia(s) do Ativo para mover ao mesmo Pokémon do Banco.",
+                        energies.map { it.id }, count, count)
+                }
                 if (Effect.MoveAllEnergyToBench in attack.effects && next.players[actor].active!!.energies.isNotEmpty() && next.players[actor].bench.isNotEmpty())
                     choices += ChoiceRequest(ChoiceKind.ATTACK_MOVE_ALL_ENERGY_TARGET,
                         "Escolha um Pokémon do seu Banco para receber todas as Energias do Ativo.", next.players[actor].bench.map { it.id }, 1, 1)

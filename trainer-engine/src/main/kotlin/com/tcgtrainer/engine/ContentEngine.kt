@@ -1399,6 +1399,27 @@ internal class ContentEngine(private val rules: RulesEngine) {
                             "Escolha um Pokémon do seu Banco para receber a Energia movida.", p.bench.map { it.id }.filter { it !in choice.selectedTargets }, 1, 1,
                             remaining = choice.remaining, selectedEnergy = ids.single(), selectedTargets = choice.selectedTargets)) + remainingChoices
                     }
+                    ChoiceKind.ATTACK_MOVE_ENERGY_TO_ONE_BENCH -> {
+                        val activeEnergies = p.active?.energies.orEmpty()
+                        val selected = ids.map { id -> activeEnergies.firstOrNull { it.id == id }
+                            ?: return illegal("Escolha Energias ligadas ao Pokémon Ativo.") }
+                        if (selected.isEmpty()) return illegal("Escolha pelo menos uma Energia para mover.")
+                        remainingChoices = listOf(ChoiceRequest(ChoiceKind.ATTACK_MOVE_ENERGY_TO_ONE_BENCH_TARGET,
+                            "Escolha um Pokémon do seu Banco para receber todas as Energias selecionadas.",
+                            p.bench.map { it.id }, 1, 1, pendingCards = selected.map { it.id })) + remainingChoices
+                    }
+                    ChoiceKind.ATTACK_MOVE_ENERGY_TO_ONE_BENCH_TARGET -> {
+                        val targetId = ids.single()
+                        val target = p.bench.firstOrNull { it.id == targetId }
+                            ?: return illegal("Escolha um Pokémon do seu Banco.")
+                        val activeEnergies = p.active?.energies.orEmpty()
+                        val moving = choice.pendingCards.map { id -> activeEnergies.firstOrNull { it.id == id }
+                            ?: return illegal("Uma Energia selecionada não está mais ligada ao Ativo.") }
+                        update(actor) { player -> player.copy(
+                            active = player.active?.let { it.copy(energies = it.energies - moving.toSet()) },
+                            bench = player.bench.map { pokemon -> if (pokemon.id == targetId) pokemon.copy(energies = pokemon.energies + moving) else pokemon }) }
+                        events += GameEvent("AttackEnergyMoved", "Moveu ${moving.size} Energia(s) do Ativo para ${def(target.top).name}.", moving.size)
+                    }
                     ChoiceKind.ATTACK_ENERGY_TARGET -> {
                         val energy = p.active!!.energies.first { it.id == choice.selectedEnergy }
                         val target = ids.single()
