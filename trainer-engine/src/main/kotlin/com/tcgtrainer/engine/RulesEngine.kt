@@ -1110,6 +1110,17 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                             candidates.map { it.id }, count, count, amount = effect.amount)
                     }
                 }
+                attack.effects.filterIsInstance<Effect.OptionalDiscardLightningForParalysis>().forEach { effect ->
+                    val attacker = next.players[actor].active
+                    val target = next.players[opponent].active
+                    val lightning = attacker?.energies?.filter { definition(it).category == Category.ENERGY && definition(it).type == EnergyType.LIGHTNING }.orEmpty()
+                    if (lightning.size >= effect.count && target != null && target.attackImmunityTurn != state.turn &&
+                        definition(target.top).abilities.none { it.preventOpponentEffects }) {
+                        choices += ChoiceRequest(ChoiceKind.ATTACK_OPTIONAL_PARALYSIS_DISCARD,
+                            "Opcional: descarte ${effect.count} Energias {L} deste Pokémon para Paralisar o Ativo adversário.",
+                            lightning.map { it.id }, 0, effect.count, sourcePokemonId = attacker.id)
+                    }
+                }
                 if (coinDamageEachPokemon != null && coinDamageTargets.isNotEmpty()) {
                     choices += ChoiceRequest(ChoiceKind.ATTACK_MULTI_DAMAGE_TARGETS,
                         "Causará ${coinDamageEachPokemon.amount} de dano a cada Pokémon adversário que saiu cara.",

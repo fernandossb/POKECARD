@@ -31,6 +31,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     action.cardIds.distinct().size != action.cardIds.size -> illegal("Não repita cartas.")
                     action.cardIds.size !in choice.min..choice.max -> illegal("Escolha de ${choice.min} a ${choice.max} carta(s).")
                     choice.kind == ChoiceKind.ATTACK_OPTIONAL_SHUFFLE_ENERGY && action.cardIds.isNotEmpty() && action.cardIds.size != 3 -> illegal("Escolha zero ou exatamente 3 Energias para pagar o efeito opcional.")
+                    choice.kind == ChoiceKind.ATTACK_OPTIONAL_PARALYSIS_DISCARD && action.cardIds.isNotEmpty() && action.cardIds.size != choice.max -> illegal("Escolha zero ou exatamente ${choice.max} Energias {L} para pagar o efeito opcional.")
                     choice.kind == ChoiceKind.EVOLUTION_DAMAGE_TARGETS && action.cardIds.isNotEmpty() && action.cardIds.size != 2 -> illegal("Biting Spree exige escolher exatamente 2 Pokémon, ou nenhum para pular.")
                     !choice.candidates.containsAll(action.cardIds) -> illegal("Alvo inválido para este efeito.")
                     choice.kind == ChoiceKind.SONIA && p.deck.filter { it.id in action.cardIds }.map { def(it).category }.distinct().size > 1 -> illegal("Sonia busca Pokémon Básicos OU Energias Básicas; não misture as categorias.")
@@ -681,6 +682,37 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         val targets = s.players[1-actor].bench.filter { it.attackImmunityTurn != s.turn && def(it.top).abilities.none { ability -> ability.preventOpponentEffects } }
                         if (targets.isNotEmpty()) remainingChoices = listOf(ChoiceRequest(ChoiceKind.ATTACK_DISCARD_THEN_BENCH_TARGET,
                             "Escolha um Pokémon do Banco adversário para receber ${effect.amount} de dano.", targets.map { it.id }, 1, 1, amount = effect.amount)) + remainingChoices
+                    }
+                    ChoiceKind.ATTACK_OPTIONAL_PARALYSIS_DISCARD -> {
+                        if (ids.isEmpty()) {
+                            events += GameEvent("OptionalParalysisDeclined", "Não descartou Energias; o Ativo adversário não foi Paralisado.")
+                        } else {
+                            val attacker = p.active ?: return illegal("O atacante não está mais no Campo.")
+                            if (choice.sourcePokemonId != null && choice.sourcePokemonId != attacker.id)
+                                return illegal("O Pokémon atacante mudou antes da resolução da Paralisia.")
+                            val attack = rules.definition(attacker.top).attacks.firstOrNull { candidate ->
+                                candidate.effects.any { it is Effect.OptionalDiscardLightningForParalysis }
+                            } ?: return illegal("O efeito de Paralisia opcional não está mais disponível.")
+                            val effect = attack.effects.filterIsInstance<Effect.OptionalDiscardLightningForParalysis>().single()
+                            val energies = attacker.energies.filter { energy ->
+                                energy.id in ids && def(energy).category == Category.ENERGY && def(energy).type == EnergyType.LIGHTNING
+                            }
+                            if (ids.size != effect.count || energies.size != effect.count)
+                                return illegal("Descarte exatamente ${effect.count} Energias {L} do atacante.")
+                            update(actor) { player -> player.copy(
+                                active = player.active!!.copy(energies = player.active.energies - energies.toSet()),
+                                discard = player.discard + energies
+                            ) }
+                            val target = s.players[1-actor].active
+                            if (target != null && target.damage < rules.effects.effectiveHp(target, s) && target.attackImmunityTurn != s.turn &&
+                                def(target.top).abilities.none { it.preventOpponentEffects }) {
+                                update(1-actor) { player -> player.copy(active = player.active?.let { active ->
+                                    if (active.id == target.id) active.copy(conditions = (active.conditions - setOf(SpecialCondition.ASLEEP, SpecialCondition.CONFUSED, SpecialCondition.PARALYZED)) + SpecialCondition.PARALYZED)
+                                    else active
+                                }) }
+                                events += GameEvent("SpecialCondition", "Descartou ${energies.size} Energias {L}; o Ativo adversário ficou Paralisado.")
+                            } else events += GameEvent("AttackEffectPrevented", "Descartou ${energies.size} Energias {L}, mas o Ativo adversário não recebeu Paralisia.")
+                        }
                     }
                     ChoiceKind.ATTACH_DECK_ENERGY -> {
                         val cards = p.deck.filter { it.id in ids }

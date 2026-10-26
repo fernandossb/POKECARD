@@ -264,6 +264,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                     if (energy == null) 0.0 else potential(target.copy(energies = target.energies + energy)) - potential(target)
                 }
                 ChoiceKind.ATTACK_ENERGY_TO_HAND -> 60.0
+                ChoiceKind.ATTACK_OPTIONAL_PARALYSIS_DISCARD -> 10.0 - keepValue(checkNotNull(card(id)))
                 ChoiceKind.ATTACK_MOVE_ALL_ENERGY_TARGET -> active?.energies?.let { energies ->
                     val target = pokemon(id)
                     potential(target.copy(energies = target.energies + energies)) - potential(target)

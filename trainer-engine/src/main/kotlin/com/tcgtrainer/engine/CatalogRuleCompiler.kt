@@ -513,6 +513,7 @@ internal object CatalogRuleCompiler {
         val placeDamageCounter = text == "Place 1 damage counter on 1 of your opponent's Pokémon."
         val spreadBenchDamageCounters = Regex("Put (\\d+) damage counters on your opponent's Benched Pokémon in any way you like\\.").matchEntire(text)
         val multiTargetDamage = Regex("Discard (\\d+) Energy from this Pokémon, and this attack does (\\d+) damage to each of (\\d+) of your opponent's Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
+        val splitBombDamage = Regex("This attack does (\\d+) damage to each of (\\d+) of your opponent's Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
         val coinDamageEachPokemon = Regex("For each of your opponent's Pokémon, flip a coin\\. If heads, this attack does (\\d+) damage to that Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
         val multiTargetDamageIgnoringEffects = Regex("This attack does (\\d+) damage to (\\d+) of your opponent's Pokémon\\. This attack's damage isn't affected by Weakness or Resistance, or by any effects on those Pokémon\\.").matchEntire(text)
         val knockOutBothActive = text == "Both Active Pokémon are Knocked Out."
@@ -525,6 +526,7 @@ internal object CatalogRuleCompiler {
         val moveAllEnergyToBench = text == "Move all Energy from this Pokémon to 1 of your Benched Pokémon."
         val returnEnergyToHand = text == "Put an Energy attached to this Pokémon into your hand."
         val optionalWaterEnergyDamageBonus = Regex("You may put a \\{W\\} Energy attached to this Pokémon into your hand and have this attack do (\\d+) more damage\\.").matchEntire(text)
+        val optionalLightningParalysis = Regex("You may discard (\\d+) \\{L\\} Energy from this Pokémon and make your opponent's Active Pokémon Paralyzed\\.").matchEntire(text)
         val confusePoisonThenSwitch = text == "Your opponent's Active Pokémon is now Confused and Poisoned. Switch this Pokémon with 1 of your Benched Pokémon."
         val statusThenRetreat = Regex("Your opponent's Active Pokémon is now (Poisoned|Burned|Asleep|Paralyzed|Confused)\\. During your opponent's next turn, (?:that Pokémon|the Defending Pokémon) can't retreat\\.").matchEntire(text)
         val exactHandSize = Regex("If you don't have exactly (\\d+) cards? in your hand, this attack does nothing\\.").matchEntire(text)
@@ -1014,6 +1016,8 @@ internal object CatalogRuleCompiler {
                     effects += Effect.DiscardAttackEnergy(multiTargetDamage.groupValues[1].toInt())
                     effects += Effect.MultiTargetDamage(multiTargetDamage.groupValues[2].toInt(), multiTargetDamage.groupValues[3].toInt())
                 }
+                splitBombDamage != null -> effects += Effect.MultiTargetDamage(
+                    splitBombDamage.groupValues[1].toInt(), splitBombDamage.groupValues[2].toInt())
                 knockOutBothActive -> effects += Effect.KnockOutBothActive
                 opponentActiveSpecialConditionKnockout -> effects += Effect.KnockOutOpponentActiveIfSpecialCondition
                 opponentActiveExactlySixCountersKnockout -> effects += Effect.KnockOutOpponentActiveAtExactlySixDamageCounters
@@ -1075,6 +1079,7 @@ internal object CatalogRuleCompiler {
                     if (damage <= 0 || !damageText.endsWith("+")) return null
                     effects += Effect.OptionalReturnWaterEnergyDamageBonus(optionalWaterEnergyDamageBonus.groupValues[1].toInt())
                 }
+                optionalLightningParalysis != null -> effects += Effect.OptionalDiscardLightningForParalysis(optionalLightningParalysis.groupValues[1].toInt())
                 text == "Switch out your opponent's Active Pokémon to the Bench. (Your opponent chooses the new Active Pokémon.)" -> effects += Effect.SwitchOpponent
                 text == "This attack's damage isn't affected by Weakness or Resistance." -> effects += Effect.IgnoreWeaknessResistance
                 text == "This attack's damage isn't affected by Resistance." -> effects += Effect.IgnoreResistance
