@@ -1829,8 +1829,10 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     val eligible = next.players[actor].discard.filter { definition(it).category == Category.ENERGY && definition(it).basicEnergy && (effect.type == null || definition(it).type == effect.type) }
                     if (next.players[actor].bench.isNotEmpty() && eligible.isNotEmpty()) choices += ChoiceRequest(
                         ChoiceKind.ABILITY_DISCARD_ENERGY_FROM_DISCARD,
-                        "Você pode ligar até ${minOf(effect.max, eligible.size)} Energia(s) Básica(s) do descarte aos Pokémon do Banco.",
-                        eligible.map { it.id }, 0, 1, remaining = minOf(effect.max, eligible.size), energyType = effect.type, benchedOnly = true)
+                        if (effect.required) "Escolha 1 Energia Básica do descarte para ligar a um Pokémon do Banco."
+                        else "Você pode ligar até ${minOf(effect.max, eligible.size)} Energia(s) Básica(s) do descarte aos Pokémon do Banco.",
+                        eligible.map { it.id }, if (effect.required) 1 else 0, 1,
+                        remaining = minOf(effect.max, eligible.size), energyType = effect.type, benchedOnly = true)
                 }
                 attack.effects.filterIsInstance<Effect.AttachBasicFightingEnergyFromDiscardToSelf>().forEach { effect ->
                     val eligible = next.players[actor].discard.filter { definition(it).category == Category.ENERGY && definition(it).basicEnergy && definition(it).type == EnergyType.FIGHTING }

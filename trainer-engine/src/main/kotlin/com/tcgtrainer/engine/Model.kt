@@ -124,7 +124,7 @@ import kotlinx.serialization.Serializable
     @Serializable data object OptionalReturnSelfAndAttachmentsToHand : Effect
     @Serializable data class AttachBasicEnergyFromDeckAny(val max: Int, val type: EnergyType? = null, val benchedOnly: Boolean = false) : Effect
     @Serializable data class AttachEnergyFromTopDeck(val count: Int) : Effect
-    @Serializable data class AttachBasicEnergyFromDiscardAny(val max: Int, val type: EnergyType? = null, val benchedOnly: Boolean = false) : Effect
+    @Serializable data class AttachBasicEnergyFromDiscardAny(val max: Int, val type: EnergyType? = null, val benchedOnly: Boolean = false, val required: Boolean = false) : Effect
     @Serializable data class AttachBasicFightingEnergyFromDiscardToSelf(val max: Int) : Effect
     @Serializable data class AttachBasicEnergyToEachBenchedPokemon(val type: EnergyType) : Effect
     @Serializable data class SearchPokemonToHand(val max: Int = 1) : Effect
