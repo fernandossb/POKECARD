@@ -315,6 +315,7 @@ import kotlinx.serialization.Serializable
     val switchOwnDarknessExceptPecharunt: Boolean = false, val poisonNewActiveOnSwitch: Boolean = false,
     val requirePecharuntExForPrizeReduction: Boolean = false,
     val teamAttackDamageBonusType: EnergyType? = null, val teamAttackDamageBonus: Int = 0,
+    val teamAttackDamageBonusAnyType: Int = 0,
     val hpBonusPerAttachedEnergyType: EnergyType? = null, val hpBonusPerAttachedEnergy: Int = 0,
     val hpAndAttackBonusWithAttachedEnergyType: EnergyType? = null,
     val hpAndAttackBonusWithAttachedEnergy: Int = 0,

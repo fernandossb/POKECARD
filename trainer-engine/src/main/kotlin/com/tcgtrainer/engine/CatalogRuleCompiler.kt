@@ -204,6 +204,8 @@ internal object CatalogRuleCompiler {
             return AbilityDefinition("$id-ability$index", name, text, preventDamageFromBasicPokemonEx = true)
         if (text == "Attacks used by your {F} Pokémon do 30 more damage to your opponent's Active Pokémon (before applying Weakness and Resistance).")
             return AbilityDefinition("$id-ability$index", name, text, teamAttackDamageBonusType = EnergyType.FIGHTING, teamAttackDamageBonus = 30)
+        if (text == "Attacks used by your Pokémon do 20 more damage to your opponent's Active Pokémon (before applying Weakness and Resistance).")
+            return AbilityDefinition("$id-ability$index", name, text, teamAttackDamageBonusAnyType = 20)
         if (text == "Once during your turn, you may search your deck for a Cynthia's Pokémon, reveal it, and put it into your hand. Then, shuffle your deck.")
             return AbilityDefinition("$id-ability$index", name, text, usageKey = name, searchPokemonNamePrefixToHand = "Cynthia's", searchPokemonMaxToHand = 1)
         if (text == "Once during your turn, you may search your deck for up to 2 Evolution {M} Pokémon, reveal them, and put them into your hand. Then, shuffle your deck.")
