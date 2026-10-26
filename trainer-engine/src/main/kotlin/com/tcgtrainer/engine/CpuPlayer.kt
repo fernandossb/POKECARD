@@ -90,6 +90,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 allPokemonToolCount = o.ownField.count { it.tool != null } + o.opponentField.count { it.tool != null },
                 friendlyBenchPokemon = o.opponentField.filter { it.id != o.opponentActiveId },
                 opponentDamageCounterCount = o.opponentField.sumOf { it.damage / 10 },
+                opponentBasicDiscardEnergyCount = o.opponentDiscard.count { d(it).category == Category.ENERGY && d(it).basicEnergy },
                 opponentActiveRetreatCost = if (targetIsActive) targetRetreatCost else 0,
                 ownBenchWithEnergyCounts = EnergyType.entries.associateWith { type ->
                     own.filter { it.id != p.id }.count { pokemon -> pokemon.energies.any { d(it).type == type } }

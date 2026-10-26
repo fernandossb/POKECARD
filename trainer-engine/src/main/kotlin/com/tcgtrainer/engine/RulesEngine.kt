@@ -291,6 +291,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             ownDiscardEnergyCount = state.players[state.currentPlayer].discard.count { definition(it).category == Category.ENERGY },
             ownBasicDiscardEnergyCounts = state.players[state.currentPlayer].discard.filter { definition(it).category == Category.ENERGY && definition(it).basicEnergy }
                 .groupBy({ definition(it).type }, { it }).mapValues { it.value.size },
+            opponentBasicDiscardEnergyCount = state.players[1-state.currentPlayer].discard.count { definition(it).category == Category.ENERGY && definition(it).basicEnergy },
             ownDiscardPokemonAbilityNames = state.players[state.currentPlayer].discard.flatMap(::abilityNames),
             ownSpecialEnergyCount = state.players[state.currentPlayer].pokemon().flatMap { it.energies }
                 .count { definition(it).category == Category.ENERGY && !definition(it).basicEnergy },
