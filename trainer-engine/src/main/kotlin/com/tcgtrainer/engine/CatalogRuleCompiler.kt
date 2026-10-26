@@ -330,6 +330,15 @@ internal object CatalogRuleCompiler {
         val source = "TCGdex • https://api.tcgdex.net/v2/en/cards/$id • gramática executável v1"
         // Reuse only identical trainer/energy print semantics, including ACE SPEC rarity.
         if (raw.s("category") in listOf("Trainer", "Energy")) {
+            val trainerText = raw.s("effect").orEmpty()
+            if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Supporter" &&
+                trainerText.startsWith("You can use this card only if your opponent has exactly 2 Prize cards remaining.") &&
+                trainerText.endsWith("During this turn, if your opponent's Active Pokémon is Knocked Out by damage from an attack used by your Tera Pokémon, take 1 more Prize card.")) {
+                return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
+                    category = Category.TRAINER, verified = true, source = source,
+                    artAsset = "remote:$image/high.webp", text = trainerText,
+                    trainerType = TrainerType.SUPPORTER, trainerEffect = TrainerEffect.Briar)
+            }
             if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Supporter" &&
                 raw.s("effect") == "Your opponent reveals their hand, and you discard up to 2 Item cards you find there.") {
                 return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,

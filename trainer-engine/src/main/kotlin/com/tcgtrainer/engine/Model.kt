@@ -238,6 +238,7 @@ import kotlinx.serialization.Serializable
     @Serializable data object CoinSwitch : TrainerEffect
     @Serializable data object ForestOfVitality : TrainerEffect
     @Serializable data class DiscardOpponentItemsFromHand(val max: Int) : TrainerEffect
+    @Serializable data object Briar : TrainerEffect
     @Serializable data class RecoverEnergy(val max: Int, val toDeck: Boolean = false) : TrainerEffect
 }
 @Serializable data class AbilityDefinition(
@@ -390,7 +391,8 @@ fun CardDefinition.canEvolveFrom(base: CardDefinition): Boolean = category == Ca
 ) { val id: String get() = cards.first().id; val top: CardInstance get() = cards.last() }
 @Serializable data class AttackRestriction(val attackId: String?, val blockedTurn: Int)
 @Serializable data class TurnFlags(val manualEnergy: Boolean = false, val supporter: Boolean = false, val retreat: Boolean = false,
-    val stadium: Boolean = false, val abilitiesUsed: List<String> = emptyList(), val damageBoosts: Map<EnergyType, Int> = emptyMap())
+    val stadium: Boolean = false, val abilitiesUsed: List<String> = emptyList(), val damageBoosts: Map<EnergyType, Int> = emptyMap(),
+    val teraActiveKnockoutExtraPrize: Boolean = false)
 @Serializable data class PlayerState(
     val deck: List<CardInstance>, val hand: List<CardInstance> = emptyList(),
     val discard: List<CardInstance> = emptyList(), val prizes: List<CardInstance> = emptyList(),

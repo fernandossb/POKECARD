@@ -103,6 +103,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         else -> Legality.Legal
                     }
                     is TrainerEffect.DiscardOpponentItemsFromHand -> Legality.Legal
+                    TrainerEffect.Briar -> if (s.players[1-actor].prizes.size == 2) Legality.Legal else illegal("Briar só pode ser jogada quando o oponente tem exatamente 2 Prêmios restantes.")
                     is TrainerEffect.HealPokemon -> if ((if (effect.activeOnly) listOfNotNull(p.active) else p.pokemon()).none { it.damage > 0 }) illegal("Não há dano para curar no alvo permitido.") else Legality.Legal
                     is TrainerEffect.RecoverEnergy -> if (p.discard.none { def(it).category == Category.ENERGY }) illegal("Não há Energia Básica no descarte.") else Legality.Legal
                 }
@@ -275,6 +276,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                             items.map { it.id }, 0, minOf(effect.max, items.size), visibleCards = opponentHand.map { it.id }
                         ))))
                     }
+                    TrainerEffect.Briar -> update { it.copy(flags = it.flags.copy(teraActiveKnockoutExtraPrize = true)) }
                     is TrainerEffect.HealPokemon -> begin(Resolution(listOf(ChoiceRequest(ChoiceKind.HEAL_TARGET, "Curar até ${effect.amount} de dano.",
                         (if (effect.activeOnly) listOfNotNull(p.active) else p.pokemon()).filter { it.damage > 0 }.map { it.id }, 1, 1, amount = effect.amount))))
                     is TrainerEffect.RecoverEnergy -> begin(Resolution(listOf(ChoiceRequest(if (effect.toDeck) ChoiceKind.RECYCLE_ENERGY else ChoiceKind.RECOVER,

@@ -2093,13 +2093,15 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 val extraPrize = if (attackKo && definition(pokemon.top).stage == Stage.BASIC && attackSource != null)
                     effectiveAbilities(state, 1-owner, attackSource).sumOf { it.extraPrizeForOpponentBasicKnockoutByAttack }
                 else 0
+                val briarBonus = if (attackKo && player.active?.id == pokemon.id && attackSource != null &&
+                    state.players[1-owner].flags.teraActiveKnockoutExtraPrize && definition(attackSource.top).isTera) 1 else 0
                 val wonderKiss = player.active?.id == pokemon.id && state.players[1-owner].pokemon().any { field ->
                     effectiveAbilities(state, 1-owner, field).any { it.wonderKissPrizeOnActiveKnockout }
                 }
                 val wonderKissBonus = if (wonderKiss && prizeRng.nextInt(2) == 0) 1 else 0
                 if (wonderKiss) events += GameEvent("WonderKissFlip", if (wonderKissBonus > 0) "Wonder Kiss: cara; recebe 1 Prêmio adicional." else "Wonder Kiss: coroa; sem Prêmio adicional.", wonderKissBonus)
-                owed[1-owner] += prizeCount + extraPrize + wonderKissBonus
-                val totalPrizeCount = prizeCount + extraPrize + wonderKissBonus
+                owed[1-owner] += prizeCount + extraPrize + wonderKissBonus + briarBonus
+                val totalPrizeCount = prizeCount + extraPrize + wonderKissBonus + briarBonus
                 events += if (shadowyConcealment) GameEvent("PokemonKnockedOut",
                     "${definition(pokemon.top).name} foi nocauteado; $totalPrizeCount Prêmio(s) após modificadores.", totalPrizeCount)
                 else GameEvent("PokemonKnockedOut", "${definition(pokemon.top).name} foi nocauteado; $totalPrizeCount Prêmio(s).", totalPrizeCount)
