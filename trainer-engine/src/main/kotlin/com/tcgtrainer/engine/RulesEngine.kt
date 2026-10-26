@@ -268,6 +268,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             opponentHasSpecialCondition = state.players[1-state.currentPlayer].active?.conditions?.isNotEmpty() == true,
             opponentActiveDamage = state.players[1-state.currentPlayer].active?.damage ?: 0,
             opponentHandCount = state.players[1-state.currentPlayer].hand.size,
+            stadiumInPlay = state.stadium != null,
             opponentHandEnergyCount = state.players[1-state.currentPlayer].hand.count { definition(it).category == Category.ENERGY },
             ownToolCount = state.players[state.currentPlayer].pokemon().count { it.tool != null },
             ownDamagedPokemonCount = state.players[state.currentPlayer].pokemon().count { it.damage > 0 },
