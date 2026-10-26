@@ -754,6 +754,7 @@ internal object CatalogRuleCompiler {
         val namedPokemonBenchSearch = Regex("Search your deck for up to (\\d+) (.+?) and put them onto your Bench\\. Then, shuffle your deck\\.").matchEntire(text)
         val recoverNamedPokemon = Regex("Put up to (\\d+) (.+?) from your discard pile onto your Bench\\.").matchEntire(text)
         val recoverPokemonType = Regex("Put up to (\\d+) \\{([GRFLWPMD])\\} Pokémon from your discard pile onto your Bench\\.").matchEntire(text)
+        val recoverPokemonToHand = Regex("Put up to (\\d+) Pokémon from your discard pile into your hand\\.").matchEntire(text)
         val rotomSearch = Regex("""You may search your deck for any number of Pokémon that have "Rotom" in their name and put them onto your Bench\. Then, shuffle your deck\.""").matchEntire(text)
         val matchingEnergySearch = Regex("Search your deck for up to (\\d+) Pokémon that are the same type as any Basic Energy attached to this Pokémon, reveal them, and put them into your hand\\. Then, shuffle your deck\\.").matchEntire(text)
         val basicEnergyToHandSearch = Regex("Search your deck for up to (\\d+) Basic Energy cards, reveal them, and put them into your hand\\. Then, shuffle your deck\\.").matchEntire(text)
@@ -1464,6 +1465,7 @@ internal object CatalogRuleCompiler {
                 benchSearch != null -> effects += Effect.BasicPokemonToBench(benchSearch.groupValues[1].toIntOrNull() ?: 1)
                 recoverPokemonType != null -> effects += Effect.RecoverPokemonTypeToBench(
                     symbolType(recoverPokemonType.groupValues[2]) ?: return null, recoverPokemonType.groupValues[1].toInt())
+                recoverPokemonToHand != null -> effects += Effect.RecoverPokemonToHand(recoverPokemonToHand.groupValues[1].toInt())
                 recoverNamedPokemon != null -> effects += Effect.RecoverNamedPokemonToBench(recoverNamedPokemon.groupValues[2], recoverNamedPokemon.groupValues[1].toInt())
                 rotomSearch != null -> effects += Effect.SearchRotomToBench
                 recoil != null -> effects += Effect.Recoil(recoil.groupValues[1].toInt())

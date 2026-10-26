@@ -2077,6 +2077,12 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         "Escolha até $maxCards Pokémon do tipo ${effect.type} do descarte para colocar no Banco.",
                         candidates.map { it.id }, 0, maxCards, energyType = effect.type)
                 }
+                attack.effects.filterIsInstance<Effect.RecoverPokemonToHand>().forEach { effect ->
+                    val candidates = next.players[actor].discard.filter { definition(it).category == Category.POKEMON }
+                    val maxCards = minOf(effect.count, candidates.size)
+                    if (maxCards > 0) choices += ChoiceRequest(ChoiceKind.ATTACK_RECOVER_POKEMON_TO_HAND,
+                        "Escolha até $maxCards Pokémon do descarte para colocar na mão.", candidates.map { it.id }, 0, maxCards)
+                }
                 if (Effect.SearchRotomToBench in attack.effects) {
                     val freeSlots = (5-next.players[actor].bench.size).coerceAtLeast(0)
                     val candidates = next.players[actor].deck.filter {

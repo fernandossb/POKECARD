@@ -1456,6 +1456,13 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         update { it.copy(discard = it.discard - cards.toSet(), bench = it.bench + cards.map { card -> PokemonInstance(listOf(card), enteredPlayTurn = s.turn) }) }
                         events += GameEvent("PokemonRecoveredToBench", "Colocou ${cards.size} Pokémon do descarte no Banco.", cards.size)
                     }
+                    ChoiceKind.ATTACK_RECOVER_POKEMON_TO_HAND -> {
+                        val cards = p.discard.filter { it.id in ids && def(it).category == Category.POKEMON }
+                        if (ids.size != ids.distinct().size || cards.size != ids.size || cards.size > choice.max)
+                            return illegal("Escolha apenas Pokémon do descarte dentro do limite deste ataque.")
+                        update { it.copy(discard = it.discard - cards.toSet(), hand = it.hand + cards) }
+                        events += GameEvent("PokemonRecoveredToHand", "Colocou ${cards.size} Pokémon do descarte na mão.", cards.size)
+                    }
                     ChoiceKind.ATTACK_ROTOM_SEARCH -> {
                         val cards = p.deck.filter { it.id in ids && def(it).category == Category.POKEMON && def(it).name.contains("Rotom", ignoreCase = true) }
                         update { it.copy(deck = it.deck - cards.toSet(), bench = it.bench + cards.map { card -> PokemonInstance(listOf(card), enteredPlayTurn = s.turn) }) }

@@ -225,6 +225,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 ChoiceKind.ABILITY_TOP_DECK_KEEP_ONE -> keepValue(checkNotNull(card(id)))
                 ChoiceKind.ABILITY_SEARCH_TOP_CARD -> keepValue(checkNotNull(card(id)))
                 ChoiceKind.ATTACK_RECOVER_POKEMON -> 100.0 - keepValue(checkNotNull(card(id)))
+                ChoiceKind.ATTACK_RECOVER_POKEMON_TO_HAND -> keepValue(checkNotNull(card(id)))
                 ChoiceKind.ON_BENCH_DISCARD_OPPONENT_DECK_TOP -> 15.0
                 ChoiceKind.ON_BENCH_LAST_DITCH, ChoiceKind.ATTACK_COPY_OPPONENT_DECK_TOP -> 100.0
                 ChoiceKind.ATTACK_COPY_BENCHED_N -> {
