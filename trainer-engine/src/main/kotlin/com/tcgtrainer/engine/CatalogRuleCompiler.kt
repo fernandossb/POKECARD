@@ -404,6 +404,14 @@ internal object CatalogRuleCompiler {
             return compiled.copy(effects = compiled.effects + Effect.MultiTargetDamage(
                 discardThenMultiTarget.groupValues[2].toInt(), discardThenMultiTarget.groupValues[3].toInt(), discardBeforeDamage = true), text = text)
         }
+        val multiBenchDamageNoWeakness = Regex("This attack also does (\\d+) damage to (\\d+) of your opponent's Benched Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
+        if (multiBenchDamageNoWeakness != null) {
+            val rewritten = JsonObject(raw.toMutableMap().apply { put("effect", JsonPrimitive("")) })
+            val compiled = compileAttack(id, index, rewritten) ?: return null
+            return compiled.copy(effects = compiled.effects + Effect.MultiTargetDamage(
+                multiBenchDamageNoWeakness.groupValues[1].toInt(), multiBenchDamageNoWeakness.groupValues[2].toInt(),
+                ignoreWeaknessResistance = true, benchedOnly = true), text = text)
+        }
         val discardThenSingleTarget = Regex("Discard (\\d+) Energy from this Pokémon, and this attack does (\\d+) damage to 1 of your opponent's Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
         if (discardThenSingleTarget != null) {
             val discardText = "Discard ${discardThenSingleTarget.groupValues[1]} Energy from this Pokémon."

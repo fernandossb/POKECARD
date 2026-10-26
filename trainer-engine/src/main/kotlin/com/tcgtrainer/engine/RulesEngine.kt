@@ -1298,7 +1298,8 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         eligible.map { it.id }, 0, minOf(effect.max, eligible.size), amount = effect.perEnergy)
                 }
                 attack.effects.filterIsInstance<Effect.MultiTargetDamage>().forEach { effect ->
-                    val candidates = next.players[opponent].pokemon().filter { !attackTargetEffectsPrevented(next, opponent, it) }
+                    val candidates = (if (effect.benchedOnly) next.players[opponent].bench else next.players[opponent].pokemon())
+                        .filter { !attackTargetEffectsPrevented(next, opponent, it) }
                     if (effect.allowRepeat) {
                         if (candidates.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.ATTACK_MULTI_DAMAGE_SINGLE_TARGET,
                             "Escolha 1 Pokémon adversário para receber ${effect.amount} de dano (${effect.targets} escolhas no total).",
