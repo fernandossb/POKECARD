@@ -49,7 +49,7 @@ import com.tcgtrainer.engine.*
                 val hp = engine.effectiveHp(state, pokemon)
                 Text("${(hp-pokemon.damage).coerceAtLeast(0)} / $hp HP  ·  Dano: ${pokemon.damage}", fontWeight = FontWeight.Bold)
                 Text("Energias: ${pokemon.energies.groupingBy { engine.definition(it).type }.eachCount().entries.joinToString { "${energyLabel(it.key)} ×${it.value}" }.ifEmpty { "nenhuma" }}", fontSize = 12.sp)
-                Text("Ferramenta: ${pokemon.tool?.let { engine.definition(it).name } ?: "nenhuma"} · Condição: nenhuma", fontSize = 12.sp)
+                Text("Ferramentas: ${pokemon.tools.joinToString { engine.definition(it).name }.ifEmpty { "nenhuma" }} · Condição: nenhuma", fontSize = 12.sp)
             }
             if (d.text.isNotEmpty()) Text(d.text, fontSize = 13.sp)
             if (inHand && humanTurn) {

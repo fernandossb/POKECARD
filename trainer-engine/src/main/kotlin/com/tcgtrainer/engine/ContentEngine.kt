@@ -89,7 +89,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     }
                     is TrainerEffect.Switch -> if ((if (effect.opponent) s.players[1-s.currentPlayer] else p).bench.isEmpty()) illegal("Não há Pokémon no Banco para trocar.") else Legality.Legal
                     TrainerEffect.Recover -> if (p.discard.none { matches(it, CardFilter.POKEMON_OR_ENERGY) }) illegal("Não há Pokémon ou Energia Básica no descarte.") else Legality.Legal
-                    is TrainerEffect.RetreatReduction -> if (p.pokemon().none { it.tool == null }) illegal("Seus Pokémon já têm uma Ferramenta.") else Legality.Legal
+                    is TrainerEffect.RetreatReduction -> if (p.pokemon().none { rules.canAttachTool(s, actor, it) }) illegal("Seus Pokémon já atingiram o limite de Ferramentas.") else Legality.Legal
                     is TrainerEffect.HpModifier -> when {
                         p.flags.stadium -> illegal("Você já jogou um Estádio neste turno.")
                         s.stadium?.let { def(it).name == d.name } == true -> illegal("Já existe um Estádio com esse nome em jogo.")
@@ -133,14 +133,14 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     ability.onEvolveRecoverNamedTrainerFromDiscard != null -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
                     ability.devolveOpponentPokemonMax > 0 && s.players[1-s.currentPlayer].pokemon().none { it.cards.size > 1 && rules.effectiveAbilities(s, 1-rules.actingPlayer(s), it).none { targetAbility -> targetAbility.preventOpponentEffects } } -> illegal("Não há Pokémon adversário evoluído e sem proteção para desvoluir.")
                     ability.attackDiscountPerOpponentPrize -> illegal("Esta habilidade é aplicada automaticamente ao custo do ataque.")
-                    ability.hpBonusPerOpponentPrizeTaken > 0 || ability.hpBonusPerAttachedEnergyType != null || ability.teamDamageReduction > 0 || ability.additionalPokemonTypes.isNotEmpty() || ability.attackDamageBonusAgainstEvolutionActive > 0 || ability.futurePokemonDamageBonus > 0 || ability.teamAttackDamageBonusType != null || ability.teamAttackDamageBonusAnyType > 0 || ability.freeRetreatWithNoEnergy || ability.attackDiscountPerKofuDiscard || ability.coinFlipPreventAttackDamage || ability.preventOpponentItemSupporterEffects || ability.preventOpponentItemAndToolPlayFromHand || ability.triggersWhenMovedFromActiveToBench || ability.changeOpponentNsPokemonWeaknessToPsychic || ability.reducePrizeForDarknessKnockoutByEx || ability.mayAttackFirstTurnIfStarting || ability.suppressSelfKnockoutAbilities || ability.opponentActiveAbilityException != null -> illegal("Esta habilidade passiva se aplica automaticamente.")
-                    ability.hpBonusPerOpponentPrizeTaken > 0 || ability.hpBonusPerAttachedEnergyType != null || ability.teamDamageReduction > 0 || ability.additionalPokemonTypes.isNotEmpty() || ability.attackDamageBonusAgainstEvolutionActive > 0 || ability.futurePokemonDamageBonus > 0 || ability.teamAttackDamageBonusType != null || ability.teamAttackDamageBonusAnyType > 0 || ability.freeRetreatWithNoEnergy || ability.attackDiscountPerKofuDiscard || ability.coinFlipPreventAttackDamage || ability.preventOpponentItemSupporterEffects || ability.preventOpponentItemAndToolPlayFromHand || ability.onlyPlayableWithPalafinZeroToHero || ability.changeOpponentNsPokemonWeaknessToPsychic || ability.reducePrizeForDarknessKnockoutByEx || ability.mayAttackFirstTurnIfStarting || ability.suppressSelfKnockoutAbilities || ability.suppressRuleBoxAbilitiesExceptFuture || ability.opponentActiveAbilityException != null -> illegal("Esta habilidade passiva se aplica automaticamente.")
+                    ability.hpBonusPerOpponentPrizeTaken > 0 || ability.hpBonusPerAttachedEnergyType != null || ability.teamDamageReduction > 0 || ability.additionalPokemonTypes.isNotEmpty() || ability.attackDamageBonusAgainstEvolutionActive > 0 || ability.futurePokemonDamageBonus > 0 || ability.teamAttackDamageBonusType != null || ability.teamAttackDamageBonusAnyType > 0 || ability.freeRetreatWithNoEnergy || ability.attackDiscountPerKofuDiscard || ability.coinFlipPreventAttackDamage || ability.preventOpponentItemSupporterEffects || ability.preventOpponentItemAndToolPlayFromHand || ability.triggersWhenMovedFromActiveToBench || ability.changeOpponentNsPokemonWeaknessToPsychic || ability.reducePrizeForDarknessKnockoutByEx || ability.mayAttackFirstTurnIfStarting || ability.suppressSelfKnockoutAbilities || ability.opponentActiveAbilityException != null || ability.rotomToolCapacityBonus -> illegal("Esta habilidade passiva se aplica automaticamente.")
+                    ability.hpBonusPerOpponentPrizeTaken > 0 || ability.hpBonusPerAttachedEnergyType != null || ability.teamDamageReduction > 0 || ability.additionalPokemonTypes.isNotEmpty() || ability.attackDamageBonusAgainstEvolutionActive > 0 || ability.futurePokemonDamageBonus > 0 || ability.teamAttackDamageBonusType != null || ability.teamAttackDamageBonusAnyType > 0 || ability.freeRetreatWithNoEnergy || ability.attackDiscountPerKofuDiscard || ability.coinFlipPreventAttackDamage || ability.preventOpponentItemSupporterEffects || ability.preventOpponentItemAndToolPlayFromHand || ability.onlyPlayableWithPalafinZeroToHero || ability.changeOpponentNsPokemonWeaknessToPsychic || ability.reducePrizeForDarknessKnockoutByEx || ability.mayAttackFirstTurnIfStarting || ability.suppressSelfKnockoutAbilities || ability.suppressRuleBoxAbilitiesExceptFuture || ability.opponentActiveAbilityException != null || ability.rotomToolCapacityBonus -> illegal("Esta habilidade passiva se aplica automaticamente.")
                     ability.selfKnockout && s.players.any { player -> player.pokemon().any { source ->
                         rules.effectiveAbilities(s, s.players.indexOf(player), source).any { it.suppressSelfKnockoutAbilities }
                     } } -> illegal("Habilidades que nocauteiam o próprio Pokémon estão desativadas enquanto Damp estiver em jogo.")
                     ability.alternativeAttackCost.isNotEmpty() -> illegal("Esta habilidade passiva altera o custo do ataque quando a condição é atendida.")
                     ability.opponentActiveEvolutionRetreatCostBonus > 0 || ability.opponentActiveRetreatCostBonus > 0 -> illegal("Esta habilidade passiva é aplicada automaticamente ao recuo.")
-                    ability.draw <= 0 && ability.drawTo <= 0 && ability.opponentShuffleHandAndDraw <= 0 && ability.eachPlayerDraw <= 0 && !ability.onBenchSwitchAndMoveEnergy && !ability.switchOwnActive && !ability.burnOpponentActive && !ability.changeOpponentNsPokemonWeaknessToPsychic && !ability.reducePrizeForDarknessKnockoutByEx && ability.damageCounters <= 0 && ability.discardAttachedBasicEnergyType == null && ability.attachHandEnergyType == null && ability.attachHandEnergyTypes.isEmpty() && ability.searchBasicEnergyTypeToHand == null && ability.attachBasicEnergyFromDeckToBenchedType == null && ability.damageCountersToEnergyTarget <= 0 && ability.moveDamageCountersMax <= 0 && ability.searchColorlessPokemonMaxHpToHand <= 0 && ability.searchPokemonMaxToHand <= 0 && ability.onEvolveSearchTrainerIfTeraMax <= 0 && ability.onEvolveDiscardOpponentDeckCount <= 0 && !ability.onEvolveOpponentHandBasicToBench && !ability.attachBasicEnergyFromDiscard && !ability.moveBasicEnergyBetweenOwnPokemon && ability.lookAtTopCardsChooseOne <= 0 && ability.lookAtTopCardsSupporterToHand <= 0 && !ability.searchAnyCardToTop && ability.alternativeAttackCost.isEmpty() && !ability.shuffleSelfIntoDeck && !ability.moveEnergyFromOtherPokemonToSelf && ability.healDamage <= 0 && ability.recoverBasicPokemonToBenchMaxHp <= 0 && ability.devolveOpponentPokemonMax <= 0 && ability.onEvolveShuffleRandomOpponentHandPerHeads <= 0 && !ability.festivalGroundsMayAttackAgain && !ability.preventOpponentItemSupporterEffects && !ability.onlyPlayableWithPalafinZeroToHero && !ability.onEvolveHealAllEvolutionAndDiscardEnergy && !ability.mayAttackFirstTurnIfStarting -> illegal("Habilidade não suportada.")
+                    ability.draw <= 0 && ability.drawTo <= 0 && ability.opponentShuffleHandAndDraw <= 0 && ability.eachPlayerDraw <= 0 && !ability.onBenchSwitchAndMoveEnergy && !ability.switchOwnActive && !ability.burnOpponentActive && !ability.changeOpponentNsPokemonWeaknessToPsychic && !ability.reducePrizeForDarknessKnockoutByEx && ability.damageCounters <= 0 && ability.discardAttachedBasicEnergyType == null && ability.attachHandEnergyType == null && ability.attachHandEnergyTypes.isEmpty() && ability.searchBasicEnergyTypeToHand == null && ability.attachBasicEnergyFromDeckToBenchedType == null && ability.damageCountersToEnergyTarget <= 0 && ability.moveDamageCountersMax <= 0 && ability.searchColorlessPokemonMaxHpToHand <= 0 && ability.searchPokemonMaxToHand <= 0 && ability.onEvolveSearchTrainerIfTeraMax <= 0 && ability.onEvolveDiscardOpponentDeckCount <= 0 && !ability.onEvolveOpponentHandBasicToBench && !ability.attachBasicEnergyFromDiscard && !ability.moveBasicEnergyBetweenOwnPokemon && ability.lookAtTopCardsChooseOne <= 0 && ability.lookAtTopCardsSupporterToHand <= 0 && !ability.searchAnyCardToTop && ability.alternativeAttackCost.isEmpty() && !ability.shuffleSelfIntoDeck && !ability.moveEnergyFromOtherPokemonToSelf && ability.healDamage <= 0 && ability.recoverBasicPokemonToBenchMaxHp <= 0 && ability.devolveOpponentPokemonMax <= 0 && ability.onEvolveShuffleRandomOpponentHandPerHeads <= 0 && !ability.festivalGroundsMayAttackAgain && !ability.preventOpponentItemSupporterEffects && !ability.onlyPlayableWithPalafinZeroToHero && !ability.onEvolveHealAllEvolutionAndDiscardEnergy && !ability.mayAttackFirstTurnIfStarting && !ability.rotomToolCapacityBonus -> illegal("Habilidade não suportada.")
                     ability.damageCounters > 0 && s.players[1-s.currentPlayer].pokemon().count { target -> rules.effectiveAbilities(s, 1-rules.actingPlayer(s), target).none { it.preventOpponentEffects } } < ability.damageTargets -> illegal("Não há Pokémon adversários suficientes para esta habilidade.")
                     !ability.unlimitedUse && abilityUsageKey(pokemon, ability) in p.flags.abilitiesUsed -> illegal("Esta habilidade já foi usada neste turno.")
                     ability.requiresActive && p.active?.id != pokemon.id -> illegal("Esta habilidade só pode ser usada com este Pokémon no Ativo.")
@@ -246,7 +246,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     }
                     TrainerEffect.Recover -> begin(Resolution(listOf(ChoiceRequest(ChoiceKind.RECOVER, "Recuperar Pokémon ou Energia Básica.", p.discard.filter { matches(it, CardFilter.POKEMON_OR_ENERGY) }.map { it.id }, 1, 1))))
                     is TrainerEffect.DamageBoost -> update { it.copy(flags = it.flags.copy(damageBoosts = it.flags.damageBoosts + (effect.type to ((it.flags.damageBoosts[effect.type] ?: 0) + effect.amount)))) }
-                    is TrainerEffect.RetreatReduction -> begin(Resolution(listOf(ChoiceRequest(ChoiceKind.TOOL_TARGET, "Ligar Ferramenta a qual Pokémon?", p.pokemon().filter { it.tool == null }.map { it.id }, 1, 1)), toolCard = card))
+                    is TrainerEffect.RetreatReduction -> begin(Resolution(listOf(ChoiceRequest(ChoiceKind.TOOL_TARGET, "Ligar Ferramenta a qual Pokémon?", p.pokemon().filter { rules.canAttachTool(s, actor, it) }.map { it.id }, 1, 1)), toolCard = card))
                     is TrainerEffect.HpModifier -> {
                         val old = s.stadium; val owner = s.stadiumOwner
                         if (old != null && owner != null) update(owner) { it.copy(discard = it.discard + old) }
@@ -377,7 +377,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         energies.map { it.id }, 1, 1, sourcePokemonId = pokemon.id))))
                 }
                 else if (ability.shuffleSelfIntoDeck) {
-                    val cards = pokemon.cards + pokemon.energies + listOfNotNull(pokemon.tool)
+                    val cards = pokemon.cards + pokemon.energies + pokemon.tools
                     update { it.copy(active = null, deck = it.deck + cards) }
                     val rng = SeededRng(s.rng)
                     update { it.copy(deck = rng.shuffle(it.deck)) }
@@ -1056,8 +1056,11 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     }
                     ChoiceKind.TOOL_TARGET -> {
                         val id = ids.single(); val tool = resolution.toolCard!!
-                        update { it.copy(active = it.active?.let { pokemon -> if (pokemon.id == id) pokemon.copy(tool = tool) else pokemon },
-                            bench = it.bench.map { pokemon -> if (pokemon.id == id) pokemon.copy(tool = tool) else pokemon }) }
+                        val target = p.pokemon().firstOrNull { it.id == id }
+                            ?: return illegal("Pokémon escolhido não está mais em jogo.")
+                        if (!rules.canAttachTool(s, actor, target)) return illegal("Este Pokémon já atingiu o limite de Ferramentas permitidas.")
+                        update { it.copy(active = it.active?.let { pokemon -> if (pokemon.id == id) pokemon.withAddedTool(tool) else pokemon },
+                            bench = it.bench.map { pokemon -> if (pokemon.id == id) pokemon.withAddedTool(tool) else pokemon }) }
                         events += GameEvent("ToolAttached", "${def(tool).name} ligada a $id.")
                     }
                     ChoiceKind.ENERGY_FROM_DISCARD -> if (ids.isNotEmpty()) {
@@ -1414,7 +1417,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     ChoiceKind.ATTACK_SHUFFLE_OWN_BENCH -> {
                         val targetId = ids.single()
                         val target = p.bench.first { it.id == targetId }
-                        val cards = target.cards + target.energies + listOfNotNull(target.tool)
+                        val cards = target.cards + target.energies + target.tools
                         val rng = SeededRng(s.rng)
                         update { player -> player.copy(bench = player.bench.filterNot { it.id == targetId }, deck = rng.shuffle(player.deck + cards)) }
                         s = s.copy(rng = rng.state)
@@ -1476,7 +1479,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     ChoiceKind.ATTACK_OPTIONAL_RETURN_SELF -> if (ids.isNotEmpty()) {
                         val returning = s.players[actor].active?.takeIf { it.id == ids.single() }
                             ?: return Transition(state, Legality.Illegal("O Pokémon que retornaria à mão não está mais no Ativo."))
-                        val attached = returning.energies + listOfNotNull(returning.tool)
+                        val attached = returning.energies + returning.tools
                         update(actor) { player -> player.copy(active = null, hand = player.hand + returning.cards, discard = player.discard + attached) }
                         events += GameEvent("PokemonReturnedToHand", "Devolveu ${def(returning.top).name} à mão e descartou ${attached.size} carta(s) ligada(s).", returning.cards.size)
                     }
@@ -1736,7 +1739,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         val target = s.players[opponent].active ?: return illegal("Não há Pokémon Ativo adversário para descartar.")
                         if (rules.attackTargetEffectsPrevented(s, opponent, target))
                             return illegal("O Pokémon Ativo adversário está protegido contra efeitos de ataques.")
-                        val attached = target.cards + target.energies + listOfNotNull(target.tool)
+                        val attached = target.cards + target.energies + target.tools
                         update(actor) { player -> player.copy(
                             active = player.active?.let { attacker -> attacker.copy(energies = attacker.energies - energy) },
                             discard = player.discard + energy)

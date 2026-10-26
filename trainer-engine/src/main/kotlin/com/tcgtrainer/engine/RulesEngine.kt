@@ -32,6 +32,30 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         } ?: return card.abilities
         return card.abilities.filter { it.name == suppressor.opponentActiveAbilityException }
     }
+    fun toolCapacity(state: GameState, owner: Int, pokemon: PokemonInstance): Int {
+        val hasRotomCapacity = definition(pokemon.top).name.contains("Rotom") &&
+            state.players[owner].pokemon().any { source ->
+                effectiveAbilities(state, owner, source).any { it.rotomToolCapacityBonus }
+            }
+        return if (hasRotomCapacity) 2 else 1
+    }
+    fun canAttachTool(state: GameState, owner: Int, pokemon: PokemonInstance) = pokemon.tools.size < toolCapacity(state, owner, pokemon)
+    private fun normalizeRotomTools(state: GameState): GameState {
+        val players = state.players.mapIndexed { owner, player ->
+            val hasRotomCapacity = player.pokemon().any { source -> effectiveAbilities(state, owner, source).any { it.rotomToolCapacityBonus } }
+            var discard = player.discard
+            fun normalize(pokemon: PokemonInstance): PokemonInstance {
+                val capacity = if (hasRotomCapacity && definition(pokemon.top).name.contains("Rotom")) 2 else 1
+                if (pokemon.tools.size <= capacity) return pokemon
+                val kept = pokemon.tools.take(capacity)
+                discard = discard + pokemon.tools.drop(capacity)
+                return pokemon.copy(tool = kept.firstOrNull(), extraTools = kept.drop(1))
+            }
+            player.copy(active = player.active?.let(::normalize), bench = player.bench.map(::normalize), discard = discard)
+        }
+        if (players == state.players) return state
+        return state.copy(players = players)
+    }
     internal fun enqueuePalafinZeroToHero(before: GameState, after: GameState, owner: Int): GameState {
         if (before.currentPlayer != owner) return after
         val previousActive = before.players[owner].active ?: return after
@@ -299,7 +323,8 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             sourceAbilities.sumOf { it.opponentActiveRetreatCostBonus } +
                 if (definition(pokemon.top).stage != Stage.BASIC) sourceAbilities.sumOf { it.opponentActiveEvolutionRetreatCostBonus } else 0
         }
-        return (base + increase - ((pokemon.tool?.let(::definition)?.trainerEffect as? TrainerEffect.RetreatReduction)?.amount ?: 0)).coerceAtLeast(0)
+        val toolReduction = pokemon.tools.sumOf { (definition(it).trainerEffect as? TrainerEffect.RetreatReduction)?.amount ?: 0 }
+        return (base + increase - toolReduction).coerceAtLeast(0)
     }
     fun attackCost(state: GameState, pokemon: PokemonInstance, attack: AttackDefinition): List<EnergyType> {
         val activeAbilities = effectiveAbilities(state, state.players.indexOfFirst { it.active?.id == pokemon.id }.let { if (it < 0) state.currentPlayer else it }, pokemon)
@@ -393,7 +418,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             opponentHandTrainerCount = state.players[1-state.currentPlayer].hand.count { definition(it).category == Category.TRAINER },
             sourceAbilityOverride = effectiveAbilities(state, state.currentPlayer, attacker),
             targetAbilityOverride = effectiveAbilities(state, 1-state.currentPlayer, defender),
-            ownToolCount = state.players[state.currentPlayer].pokemon().count { it.tool != null },
+            ownToolCount = state.players[state.currentPlayer].pokemon().sumOf { it.tools.size },
             ownDamagedPokemonCount = state.players[state.currentPlayer].pokemon().count { it.damage > 0 },
             ownDamagedBenchedPokemonCount = state.players[state.currentPlayer].bench.count { it.damage > 0 },
             ownEnergyCounts = state.players[state.currentPlayer].pokemon().flatMap { it.energies }
@@ -418,7 +443,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             ownSpecialEnergyCount = state.players[state.currentPlayer].pokemon().flatMap { it.energies }
                 .count { definition(it).category == Category.ENERGY && !definition(it).basicEnergy },
             opponentPrizeCardsRemaining = opponent.prizes.size,
-            allPokemonToolCount = state.players.flatMap { it.pokemon() }.count { it.tool != null },
+            allPokemonToolCount = state.players.flatMap { it.pokemon() }.sumOf { it.tools.size },
             attackerPokemon = state.players[state.currentPlayer].pokemon(),
             targetIsOpponentBench = state.players[1-state.currentPlayer].bench.any { it.id == defender.id },
             ownBenchWithEnergyCounts = EnergyType.entries.associateWith { type ->
@@ -456,6 +481,13 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
     }
 
     fun apply(state: GameState, action: GameAction): Transition {
+        val transition = applyInternal(state, action)
+        if (transition.legality is Legality.Illegal) return transition
+        val normalized = normalizeRotomTools(transition.state)
+        return if (normalized == transition.state) transition else transition.copy(state = normalized,
+            events = transition.events + GameEvent("RotomExtraToolsDiscarded", "A habilidade Rotom deixou de valer; descartou Ferramentas excedentes."))
+    }
+    private fun applyInternal(state: GameState, action: GameAction): Transition {
         val legality = validate(state, action)
         if (legality is Legality.Illegal) return Transition(state, legality)
         val actor = actingPlayer(state)
@@ -947,9 +979,10 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         .map { it.first.id }
                 } else emptyList()
                 val toolTarget = next.players[opponent].active
-                if (Effect.DiscardDefendingTools in attack.effects && toolTarget?.tool != null && toolTarget.attackImmunityTurn != state.turn) {
-                    val tool = toolTarget.tool
-                    update(opponent) { it.copy(active = it.active?.let { active -> if (active.id == toolTarget.id) active.copy(tool = null) else active }, discard = it.discard + tool) }
+                if (Effect.DiscardDefendingTools in attack.effects && toolTarget?.tools?.isNotEmpty() == true && toolTarget.attackImmunityTurn != state.turn) {
+                    val tool = toolTarget.tools.first()
+                    val remainingTools = toolTarget.tools.drop(1)
+                    update(opponent) { it.copy(active = it.active?.let { active -> if (active.id == toolTarget.id) active.copy(tool = remainingTools.firstOrNull(), extraTools = remainingTools.drop(1)) else active }, discard = it.discard + tool) }
                     emit("DefendingToolsDiscarded", "Descartou ${definition(tool).name} do Pokémon Ativo adversário.")
                 }
                 val topDeckEffect = attack.effects.filterIsInstance<Effect.DiscardTopDeckEnergyDamage>().firstOrNull()
@@ -1329,15 +1362,15 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     val discardedEnergies = affected.flatMap { pokemon -> pokemon.energies.filter { energy ->
                         definition(energy).category == Category.ENERGY && !definition(energy).basicEnergy
                     } }
-                    val discardedTools = affected.mapNotNull { it.tool }
+                    val discardedTools = affected.flatMap { it.tools }
                     if (discardedEnergies.isNotEmpty() || discardedTools.isNotEmpty()) {
                         update(opponent) { player ->
                             player.copy(
                                 active = player.active?.let { active ->
-                                    if (active.id in affectedIds) active.copy(energies = active.energies - discardedEnergies.toSet(), tool = null) else active
+                                    if (active.id in affectedIds) active.copy(energies = active.energies - discardedEnergies.toSet(), tool = null, extraTools = emptyList()) else active
                                 },
                                 bench = player.bench.map { pokemon ->
-                                    if (pokemon.id in affectedIds) pokemon.copy(energies = pokemon.energies - discardedEnergies.toSet(), tool = null) else pokemon
+                                    if (pokemon.id in affectedIds) pokemon.copy(energies = pokemon.energies - discardedEnergies.toSet(), tool = null, extraTools = emptyList()) else pokemon
                                 },
                                 discard = player.discard + discardedEnergies + discardedTools
                             )
@@ -1496,7 +1529,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 if (Effect.ReturnSelfAndAttachmentsToHand in attack.effects) {
                     val returning = next.players[actor].active
                     if (returning != null && returning.damage < effectiveHp(next, returning)) {
-                        val cards = returning.cards + returning.energies + listOfNotNull(returning.tool)
+                        val cards = returning.cards + returning.energies + returning.tools
                         update(actor) { it.copy(active = null, hand = it.hand + cards) }
                         emit("PokemonReturnedToHand", "Devolveu ${definition(returning.top).name} e todas as cartas ligadas à mão.", cards.size)
                     }
@@ -2108,7 +2141,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             }
             val ids = knockedOut.map { it.id }.toSet()
             player.copy(active = player.active?.takeUnless { it.id in ids }, bench = player.bench.filterNot { it.id in ids },
-                discard = player.discard + knockedOut.flatMap { it.cards + it.energies + listOfNotNull(it.tool) },
+                discard = player.discard + knockedOut.flatMap { it.cards + it.energies + it.tools },
                 lastKnockedOutTurn = if (knockedOut.isNotEmpty()) state.turn else player.lastKnockedOutTurn,
                 lastKnockedOutByAttackDamageTurn = if (end == ResolutionEnd.ATTACK && knockedOut.any { it.id in state.pendingAttackDamageKnockoutIds })
                     state.turn else player.lastKnockedOutByAttackDamageTurn)

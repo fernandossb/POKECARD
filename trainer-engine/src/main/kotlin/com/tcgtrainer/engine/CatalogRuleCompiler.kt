@@ -29,6 +29,8 @@ internal object CatalogRuleCompiler {
     internal fun compileAbility(id: String, index: Int, raw: JsonObject): AbilityDefinition? {
         val name = raw.s("name") ?: return null
         val text = raw.s("effect")?.trim().orEmpty()
+        if (text == "Each of your Pokémon that has \"Rotom\" in its name may have up to 2 Pokémon Tool cards attached. If this Ability goes away, discard Pokémon Tools from those Pokémon until only 1 remains on each.")
+            return AbilityDefinition("$id-ability$index", name, text, rotomToolCapacityBonus = true)
         if (text == "Once during your turn, if this Pokémon is in the Active Spot, you may use this Ability. Draw 2 cards. You can't use more than 1 Run Errand Ability each turn.")
             return AbilityDefinition("$id-ability$index", name, text, draw = 2, usageKey = "Run Errand", requiresActive = true)
         if (text.contains("you play this Pokémon from your hand onto your Bench") &&

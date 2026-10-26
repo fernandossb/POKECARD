@@ -75,7 +75,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 sourceAbilities.sumOf { it.opponentActiveRetreatCostBonus } +
                     if (d(target.top).stage != Stage.BASIC) sourceAbilities.sumOf { it.opponentActiveEvolutionRetreatCostBonus } else 0
             } else 0
-            val targetToolReduction = (target.tool?.let(::d)?.trainerEffect as? TrainerEffect.RetreatReduction)?.amount ?: 0
+            val targetToolReduction = target.tools.sumOf { (d(it).trainerEffect as? TrainerEffect.RetreatReduction)?.amount ?: 0 }
             val latiasFreeRetreat = d(target.top).stage == Stage.BASIC && own.any { pokemon ->
                 abilities(pokemon).any { it.basicPokemonHaveFreeRetreat }
             }
@@ -104,7 +104,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 ownKnockedOutByAttackLastTurn = o.ownLastKnockedOutByAttackDamageTurn == input.turn-1,
                 friendlyPokemon = o.opponentField,
                 attackerPokemon = o.ownField,
-                allPokemonToolCount = o.ownField.count { it.tool != null } + o.opponentField.count { it.tool != null },
+                allPokemonToolCount = o.ownField.sumOf { it.tools.size } + o.opponentField.sumOf { it.tools.size },
                 friendlyBenchPokemon = o.opponentField.filter { it.id != o.opponentActiveId },
                 opponentDamageCounterCount = o.opponentField.sumOf { it.damage / 10 },
                 opponentBasicDiscardEnergyCount = o.opponentDiscard.count { d(it).category == Category.ENERGY && d(it).basicEnergy },

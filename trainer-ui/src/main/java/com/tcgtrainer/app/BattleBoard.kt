@@ -140,7 +140,7 @@ internal val BoardBlue = Color(0xFF599BC6)
             val label = p.energies.groupingBy { engine.definition(it).type }.eachCount().entries.joinToString(" ") { "${energyLabel(it.key).take(1)} ${it.value}" }
             Text(label, Modifier.padding(horizontal = 4.dp), color = Color(0xFFFFD894), fontSize = 9.sp, fontWeight = FontWeight.Bold)
         }
-        if (p.tool != null) Text("F", Modifier.align(Alignment.CenterEnd).offset(x = 7.dp).background(Color(0xFF714A9A), RoundedCornerShape(3.dp)).padding(3.dp), fontSize = 8.sp, fontWeight = FontWeight.Bold)
+        if (p.tools.isNotEmpty()) Text(if (p.tools.size > 1) "F${p.tools.size}" else "F", Modifier.align(Alignment.CenterEnd).offset(x = 7.dp).background(Color(0xFF714A9A), RoundedCornerShape(3.dp)).padding(3.dp), fontSize = 8.sp, fontWeight = FontWeight.Bold)
     }
 }
 @Composable private fun Counter(text: String, modifier: Modifier, accent: Color) {

@@ -281,6 +281,7 @@ import kotlinx.serialization.Serializable
     val tundraWallWaterDamageReduction: Int = 0,
     val moveEnergyFromOtherPokemonToSelf: Boolean = false,
     val unlimitedUse: Boolean = false,
+    val rotomToolCapacityBonus: Boolean = false,
     val alternativeAttackName: String? = null,
     val alternativeAttackCost: List<EnergyType> = emptyList(),
     val requiresTeraInPlay: Boolean = false,
@@ -378,7 +379,7 @@ fun CardDefinition.canEvolveFrom(base: CardDefinition): Boolean = category == Ca
     val cards: List<CardInstance>, val damage: Int = 0, val energies: List<CardInstance> = emptyList(),
     val enteredPlayTurn: Int, val lastEvolutionTurn: Int = -1,
     val hpModifier: Int = 0, val damageModifier: Int = 0,
-    val tool: CardInstance? = null, val restrictions: List<AttackRestriction> = emptyList(), val retreatBlockedTurn: Int = -1,
+    val tool: CardInstance? = null, val extraTools: List<CardInstance> = emptyList(), val restrictions: List<AttackRestriction> = emptyList(), val retreatBlockedTurn: Int = -1,
     val defendingAttackFailsOnTailsTurn: Int = -1,
     val conditions: Set<SpecialCondition> = emptySet(), val poisonDamageCounters: Int = 1, val incomingDamageReduction: Int = 0, val damageReductionTurn: Int = -1,
     val attackImmunityTurn: Int = -1, val outgoingDamageReduction: Int = 0, val outgoingDamageReductionTurn: Int = -1,
@@ -391,7 +392,9 @@ fun CardDefinition.canEvolveFrom(base: CardDefinition): Boolean = category == Ca
     val weaknessOverride: EnergyType? = null, val enteredActiveTurn: Int = -1,
     val nextTurnAttackDamageBonusName: String? = null, val nextTurnAttackDamageBonus: Int = 0,
     val nextTurnAttackDamageBonusTurn: Int = -1
-) { val id: String get() = cards.first().id; val top: CardInstance get() = cards.last() }
+) { val id: String get() = cards.first().id; val top: CardInstance get() = cards.last(); val tools: List<CardInstance> get() = listOfNotNull(tool) + extraTools }
+fun PokemonInstance.withAddedTool(card: CardInstance): PokemonInstance =
+    if (tool == null) copy(tool = card) else copy(extraTools = extraTools + card)
 @Serializable data class AttackRestriction(val attackId: String?, val blockedTurn: Int)
 @Serializable data class TurnFlags(val manualEnergy: Boolean = false, val supporter: Boolean = false, val retreat: Boolean = false,
     val stadium: Boolean = false, val abilitiesUsed: List<String> = emptyList(), val damageBoosts: Map<EnergyType, Int> = emptyMap(),

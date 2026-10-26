@@ -189,7 +189,7 @@ class EffectEngine(private val catalog: CardCatalog) {
             effects.filterIsInstance<Effect.OpponentPrizeCountDamage>().filter { targetIsOpponentActive && opponentPrizeCardsRemaining <= it.maxRemaining }.sumOf { it.bonus } +
             effects.filterIsInstance<Effect.OpponentNoRetreatDamage>().filter { targetIsOpponentActive && opponentActiveRetreatCost == 0 }.sumOf { it.bonus } +
             effects.filterIsInstance<Effect.OpponentResistanceDamage>().filter { targetIsOpponentActive && target.resistance == it.type }.sumOf { it.bonus } +
-            effects.filterIsInstance<Effect.OwnToolAttachedDamage>().filter { attacker.tool != null }.sumOf { it.bonus } +
+            effects.filterIsInstance<Effect.OwnToolAttachedDamage>().filter { attacker.tools.isNotEmpty() }.sumOf { it.bonus } +
             effects.filterIsInstance<Effect.OwnToolCountDamage>().sumOf { it.perTool * ownToolCount } +
             effects.filterIsInstance<Effect.AllPokemonToolCountDamage>().sumOf { it.perTool * allPokemonToolCount } +
             effects.filterIsInstance<Effect.BothActiveEnergyCountDamage>().sumOf { it.perEnergy * (attacker.energies.size + opponentActiveEnergyCount) } +
