@@ -610,6 +610,7 @@ internal object CatalogRuleCompiler {
         val splitBombDamage = Regex("This attack does (\\d+) damage to each of (\\d+) of your opponent's Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
         val coinDamageEachPokemon = Regex("For each of your opponent's Pokémon, flip a coin\\. If heads, this attack does (\\d+) damage to that Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
         val multiTargetDamageIgnoringEffects = Regex("This attack does (\\d+) damage to (\\d+) of your opponent's Pokémon\\. This attack's damage isn't affected by Weakness or Resistance, or by any effects on those Pokémon\\.").matchEntire(text)
+        val selectedMultiTargetDamage = Regex("This attack does (\\d+) damage to (\\d+) of your opponent's Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
         val knockOutBothActive = text == "Both Active Pokémon are Knocked Out."
         val repeatedMultiTargetDamage = Regex("Choose 1 of your opponent's Pokémon (\\d+) times\\. \\(You can choose the same Pokémon more than once\\.\\) For each time you chose a Pokémon, do (\\d+) damage to it\\. This damage isn't affected by Weakness or Resistance\\.").matchEntire(text)
         val opponentDiscard = Regex("Discard a random card from your opponent's hand\\.").matchEntire(text)
@@ -1183,6 +1184,9 @@ internal object CatalogRuleCompiler {
                         multiTargetDamageIgnoringEffects.groupValues[2].toInt(), ignoreWeaknessResistance = true)
                     effects += Effect.IgnoreOpponentActiveEffects
                 }
+                selectedMultiTargetDamage != null -> effects += Effect.MultiTargetDamage(
+                    selectedMultiTargetDamage.groupValues[1].toInt(), selectedMultiTargetDamage.groupValues[2].toInt(),
+                    ignoreWeaknessResistanceForBench = true)
                 text == "This Pokémon recovers from all Special Conditions." -> effects += Effect.RecoverSelfFromSpecialConditions
                 text == "Move an Energy from 1 of your opponent's Pokémon to another of their Pokémon." -> effects += Effect.MoveEnergyBetweenOpponentPokemon
                 text == "You may move an Energy from your opponent's Active Pokémon to 1 of their Benched Pokémon." -> effects += Effect.MoveEnergyFromOpponentActiveToBench

@@ -1267,8 +1267,11 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         ids.forEach { targetId ->
                             val target = s.players[opponent].pokemon().first { it.id == targetId }
                             if (rules.attackTargetEffectsPrevented(s, opponent, target)) return illegal("Este Pokémon está protegido contra ataques.")
+                            val ignoreWeaknessResistance = multiEffect?.let { effect ->
+                                effect.ignoreWeaknessResistance || (effect.ignoreWeaknessResistanceForBench && target.id != s.players[opponent].active?.id)
+                            } ?: false
                             val preview = rules.preview(s, attack.id, targetId, effectDamage = choice.amount,
-                                forceIgnoreWeaknessResistance = multiEffect?.ignoreWeaknessResistance ?: false)
+                                forceIgnoreWeaknessResistance = ignoreWeaknessResistance)
                                 ?: error("Não foi possível calcular o dano ao alvo selecionado.")
                             val damage = preview.damage
                             val hp = preview.effectiveHp

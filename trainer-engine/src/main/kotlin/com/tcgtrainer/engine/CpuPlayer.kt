@@ -365,7 +365,12 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                         minOf(effect.amount, (hp(target)-target.damage).coerceAtLeast(0))
                     }
                 }
-                if (p.damage == 0) chargeValue+drawValue+benchSpreadValue*.35-1 else 10.0+p.damage.coerceAtMost(p.effectiveHp-p.currentDamage)*.35 + benchSpreadValue*.35 + chargeValue +
+                val multiTargetDamageValue = attack.effects.filterIsInstance<Effect.MultiTargetDamage>().sumOf { effect ->
+                    o.opponentField.filter { !effect.benchedOnly || it.id != o.opponentActiveId }
+                        .map { minOf(effect.amount, (hp(it)-it.damage).coerceAtLeast(0)) }
+                        .sortedDescending().take(effect.targets).sum()
+                }
+                if (p.damage == 0) chargeValue+drawValue+(benchSpreadValue+multiTargetDamageValue)*.35-1 else 10.0+p.damage.coerceAtMost(p.effectiveHp-p.currentDamage)*.35 + (benchSpreadValue+multiTargetDamageValue)*.35 + chargeValue +
                     (if (p.knockout) (if (p.uncertain) .5 else 1.0)*(200.0*p.prizes + if (p.prizes >= o.ownPrizeCount) 10000.0 else 0.0) else 0.0)
             }
             is GameAction.UseAbility -> {
