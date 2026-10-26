@@ -37,6 +37,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
             CardFilter.BASIC_POKEMON -> d.category == Category.POKEMON && d.stage == Stage.BASIC
             CardFilter.BASIC_ENERGY -> d.category == Category.ENERGY && d.basicEnergy
             CardFilter.ENERGY -> d.category == Category.ENERGY
+            CardFilter.EVOLUTION_POKEMON -> d.category == Category.POKEMON && d.stage != Stage.BASIC
             CardFilter.DARKNESS_POKEMON -> d.category == Category.POKEMON && d.type == EnergyType.DARKNESS
             CardFilter.METAL_POKEMON -> d.category == Category.POKEMON && d.type == EnergyType.METAL
             CardFilter.LIGHTNING_POKEMON -> d.category == Category.POKEMON && d.type == EnergyType.LIGHTNING
@@ -2094,6 +2095,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
         CardFilter.TOOL -> "Ferramenta"; CardFilter.SUPPORTER -> "Apoiador"; CardFilter.STADIUM -> "Estádio"
         CardFilter.BASIC_POKEMON -> "Pokémon Básico"; CardFilter.BASIC_ENERGY -> "Energia Básica"
         CardFilter.ENERGY -> "Energia"; CardFilter.DARKNESS_POKEMON -> "Pokémon de Escuridão"; CardFilter.METAL_POKEMON -> "Pokémon Metal"
+        CardFilter.EVOLUTION_POKEMON -> "Pokémon de Evolução"
         CardFilter.LIGHTNING_POKEMON -> "Pokémon de Raio"
         CardFilter.POKEMON_WITHOUT_RULE_BOX -> "Pokémon sem Rule Box"
         CardFilter.MEGA_EVOLUTION_EX -> "Mega Evolution Pokémon ex"
