@@ -116,6 +116,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     is TrainerEffect.DamageBoost -> Legality.Legal
                     is TrainerEffect.ShuffleHandDraw -> if (p.deck.isEmpty() && p.hand.size <= 1) illegal("Não há cartas para embaralhar ou comprar.") else Legality.Legal
                     is TrainerEffect.DrawCardsIfOpponentPrizesAtMost -> Legality.Legal
+                    TrainerEffect.MegatonBlower -> Legality.Legal
                     is TrainerEffect.DrawCards, TrainerEffect.GreatBall, TrainerEffect.Sonia -> if (p.deck.isEmpty()) illegal("Seu deck está vazio.") else Legality.Legal
                     TrainerEffect.CoinSwitch -> if (s.players[1-s.currentPlayer].bench.isEmpty()) illegal("Não há Pokémon adversário no Banco.") else Legality.Legal
                     TrainerEffect.ForestOfVitality -> when {
@@ -317,6 +318,38 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     is TrainerEffect.DrawCardsIfOpponentPrizesAtMost -> {
                         val bonus = if (s.players[1-actor].prizes.size <= effect.prizeThreshold) effect.bonus else 0
                         draw(effect.count + bonus)
+                    }
+                    TrainerEffect.MegatonBlower -> {
+                        val targetPlayer = 1-actor
+                        val target = s.players[targetPlayer]
+                        val field = target.pokemon()
+                        val attached = field.flatMap { pokemon ->
+                            pokemon.energies.filter { energy -> def(energy).category == Category.ENERGY && !def(energy).basicEnergy } + pokemon.tools
+                        }
+                        if (attached.isNotEmpty()) {
+                            val attachedSet = attached.toSet()
+                            update(targetPlayer) { player -> player.copy(
+                                active = player.active?.let { pokemon -> pokemon.copy(
+                                    energies = pokemon.energies - attachedSet,
+                                    tool = pokemon.tool?.takeUnless { it in attachedSet },
+                                    extraTools = pokemon.extraTools.filterNot { it in attachedSet }
+                                ) },
+                                bench = player.bench.map { pokemon -> pokemon.copy(
+                                    energies = pokemon.energies - attachedSet,
+                                    tool = pokemon.tool?.takeUnless { it in attachedSet },
+                                    extraTools = pokemon.extraTools.filterNot { it in attachedSet }
+                                ) },
+                                discard = player.discard + attached
+                            ) }
+                            events += GameEvent("MegatonBlowerAttachmentsDiscarded", "Descartou ${attached.size} Ferramenta(s) e Energia(s) Especial(is) dos Pokémon adversários.", attached.size)
+                        }
+                        val stadium = s.stadium
+                        val stadiumOwner = s.stadiumOwner
+                        if (stadium != null && stadiumOwner != null) {
+                            update(stadiumOwner) { player -> player.copy(discard = player.discard + stadium) }
+                            s = s.copy(stadium = null, stadiumOwner = null)
+                            events += GameEvent("StadiumDiscarded", "Descartou o Estádio em jogo.")
+                        }
                     }
                     TrainerEffect.GreatBall -> begin(Resolution(listOf(ChoiceRequest(ChoiceKind.SEARCH, "Olhe as 7 primeiras cartas: escolha até 1 Pokémon.",
                         p.deck.take(7).filter { def(it).category == Category.POKEMON }.map { it.id }, 0, 1, visibleCards = p.deck.take(7).map { it.id })), shuffleAfter = true))
