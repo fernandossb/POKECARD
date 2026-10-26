@@ -49,6 +49,12 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         target == null || target.second.id == choice.sourcePokemonId ||
                             target.first != rules.actingPlayer(s) && rules.attackTargetEffectsPrevented(s, target.first, target.second)
                     } -> illegal("Escolha apenas um Pokémon elegível, não protegido e diferente do atacante.")
+                    choice.kind == ChoiceKind.PALAFIN_ZERO_TO_HERO && action.cardIds.isNotEmpty() && action.cardIds.any { id ->
+                        p.deck.none { it.id == id && def(it).name == "Palafin ex" }
+                    } -> illegal("Escolha um Palafin ex que ainda esteja no deck.")
+                    choice.kind == ChoiceKind.PALAFIN_ZERO_TO_HERO && p.bench.none { it.id == choice.sourcePokemonId &&
+                        def(it.top).name == "Palafin" && def(it.top).abilities.any { ability -> ability.triggersWhenMovedFromActiveToBench }
+                    } -> illegal("Palafin não está mais no Banco para resolver Zero to Hero.")
                     choice.kind == ChoiceKind.ATTACK_REORDER_OPPONENT_TOP && s.players[1-rules.actingPlayer(s)].deck.take(choice.candidates.size).map { it.id }.toSet() != choice.candidates.toSet() -> illegal("As cartas do topo do deck adversário mudaram durante a escolha.")
                     choice.kind == ChoiceKind.SONIA && p.deck.filter { it.id in action.cardIds }.map { def(it).category }.distinct().size > 1 -> illegal("Sonia busca Pokémon Básicos OU Energias Básicas; não misture as categorias.")
                     else -> Legality.Legal
@@ -109,18 +115,19 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     ability.requiresMegaEvolutionFireExInPlay && !hasMegaFireEx(p) -> illegal("É preciso ter uma Mega Evolution Pokémon ex de Fogo em jogo.")
                     ability.onEvolveDiscardOpponentDeckCount > 0 -> illegal("Esta habilidade só pode ser usada ao evoluir da mão ou quando este Pokémon Ativo é nocauteado por dano de ataque.")
                     ability.onBenchSwitchAndMoveEnergy -> illegal("Esta habilidade só pode ser usada quando o Pokémon entra no Banco pela mão.")
+                    ability.triggersWhenMovedFromActiveToBench -> illegal("Zero to Hero dispara quando Palafin é movido do Ativo para o Banco.")
                     ability.onEvolveAttachMetalFromDiscardMax > 0 -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
                     ability.onEvolveRecoverNamedTrainerFromDiscard != null -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
                     ability.devolveOpponentPokemonMax > 0 && s.players[1-s.currentPlayer].pokemon().none { it.cards.size > 1 && rules.effectiveAbilities(s, 1-rules.actingPlayer(s), it).none { targetAbility -> targetAbility.preventOpponentEffects } } -> illegal("Não há Pokémon adversário evoluído e sem proteção para desvoluir.")
                     ability.attackDiscountPerOpponentPrize -> illegal("Esta habilidade é aplicada automaticamente ao custo do ataque.")
-                    ability.hpBonusPerOpponentPrizeTaken > 0 || ability.hpBonusPerAttachedEnergyType != null || ability.teamDamageReduction > 0 || ability.additionalPokemonTypes.isNotEmpty() || ability.attackDamageBonusAgainstEvolutionActive > 0 || ability.futurePokemonDamageBonus > 0 || ability.teamAttackDamageBonusType != null || ability.freeRetreatWithNoEnergy || ability.attackDiscountPerKofuDiscard || ability.coinFlipPreventAttackDamage || ability.preventOpponentItemSupporterEffects || ability.preventOpponentItemAndToolPlayFromHand || ability.changeOpponentNsPokemonWeaknessToPsychic || ability.reducePrizeForDarknessKnockoutByEx || ability.mayAttackFirstTurnIfStarting || ability.suppressSelfKnockoutAbilities || ability.opponentActiveAbilityException != null -> illegal("Esta habilidade passiva se aplica automaticamente.")
-                    ability.hpBonusPerOpponentPrizeTaken > 0 || ability.hpBonusPerAttachedEnergyType != null || ability.teamDamageReduction > 0 || ability.additionalPokemonTypes.isNotEmpty() || ability.attackDamageBonusAgainstEvolutionActive > 0 || ability.futurePokemonDamageBonus > 0 || ability.teamAttackDamageBonusType != null || ability.freeRetreatWithNoEnergy || ability.attackDiscountPerKofuDiscard || ability.coinFlipPreventAttackDamage || ability.preventOpponentItemSupporterEffects || ability.preventOpponentItemAndToolPlayFromHand || ability.changeOpponentNsPokemonWeaknessToPsychic || ability.reducePrizeForDarknessKnockoutByEx || ability.mayAttackFirstTurnIfStarting || ability.suppressSelfKnockoutAbilities || ability.suppressRuleBoxAbilitiesExceptFuture || ability.opponentActiveAbilityException != null -> illegal("Esta habilidade passiva se aplica automaticamente.")
+                    ability.hpBonusPerOpponentPrizeTaken > 0 || ability.hpBonusPerAttachedEnergyType != null || ability.teamDamageReduction > 0 || ability.additionalPokemonTypes.isNotEmpty() || ability.attackDamageBonusAgainstEvolutionActive > 0 || ability.futurePokemonDamageBonus > 0 || ability.teamAttackDamageBonusType != null || ability.freeRetreatWithNoEnergy || ability.attackDiscountPerKofuDiscard || ability.coinFlipPreventAttackDamage || ability.preventOpponentItemSupporterEffects || ability.preventOpponentItemAndToolPlayFromHand || ability.triggersWhenMovedFromActiveToBench || ability.changeOpponentNsPokemonWeaknessToPsychic || ability.reducePrizeForDarknessKnockoutByEx || ability.mayAttackFirstTurnIfStarting || ability.suppressSelfKnockoutAbilities || ability.opponentActiveAbilityException != null -> illegal("Esta habilidade passiva se aplica automaticamente.")
+                    ability.hpBonusPerOpponentPrizeTaken > 0 || ability.hpBonusPerAttachedEnergyType != null || ability.teamDamageReduction > 0 || ability.additionalPokemonTypes.isNotEmpty() || ability.attackDamageBonusAgainstEvolutionActive > 0 || ability.futurePokemonDamageBonus > 0 || ability.teamAttackDamageBonusType != null || ability.freeRetreatWithNoEnergy || ability.attackDiscountPerKofuDiscard || ability.coinFlipPreventAttackDamage || ability.preventOpponentItemSupporterEffects || ability.preventOpponentItemAndToolPlayFromHand || ability.onlyPlayableWithPalafinZeroToHero || ability.changeOpponentNsPokemonWeaknessToPsychic || ability.reducePrizeForDarknessKnockoutByEx || ability.mayAttackFirstTurnIfStarting || ability.suppressSelfKnockoutAbilities || ability.suppressRuleBoxAbilitiesExceptFuture || ability.opponentActiveAbilityException != null -> illegal("Esta habilidade passiva se aplica automaticamente.")
                     ability.selfKnockout && s.players.any { player -> player.pokemon().any { source ->
                         rules.effectiveAbilities(s, s.players.indexOf(player), source).any { it.suppressSelfKnockoutAbilities }
                     } } -> illegal("Habilidades que nocauteiam o próprio Pokémon estão desativadas enquanto Damp estiver em jogo.")
                     ability.alternativeAttackCost.isNotEmpty() -> illegal("Esta habilidade passiva altera o custo do ataque quando a condição é atendida.")
                     ability.opponentActiveEvolutionRetreatCostBonus > 0 || ability.opponentActiveRetreatCostBonus > 0 -> illegal("Esta habilidade passiva é aplicada automaticamente ao recuo.")
-                    ability.draw <= 0 && ability.drawTo <= 0 && ability.opponentShuffleHandAndDraw <= 0 && ability.eachPlayerDraw <= 0 && !ability.onBenchSwitchAndMoveEnergy && !ability.switchOwnActive && !ability.changeOpponentNsPokemonWeaknessToPsychic && !ability.reducePrizeForDarknessKnockoutByEx && ability.damageCounters <= 0 && ability.discardAttachedBasicEnergyType == null && ability.attachHandEnergyType == null && ability.attachHandEnergyTypes.isEmpty() && ability.searchBasicEnergyTypeToHand == null && ability.searchColorlessPokemonMaxHpToHand <= 0 && ability.searchPokemonMaxToHand <= 0 && ability.onEvolveSearchTrainerIfTeraMax <= 0 && ability.onEvolveDiscardOpponentDeckCount <= 0 && !ability.onEvolveOpponentHandBasicToBench && !ability.attachBasicEnergyFromDiscard && !ability.moveBasicEnergyBetweenOwnPokemon && ability.lookAtTopCardsChooseOne <= 0 && !ability.searchAnyCardToTop && ability.alternativeAttackCost.isEmpty() && !ability.shuffleSelfIntoDeck && !ability.moveEnergyFromOtherPokemonToSelf && ability.healDamage <= 0 && ability.recoverBasicPokemonToBenchMaxHp <= 0 && ability.devolveOpponentPokemonMax <= 0 && ability.onEvolveShuffleRandomOpponentHandPerHeads <= 0 && !ability.festivalGroundsMayAttackAgain && !ability.preventOpponentItemSupporterEffects && !ability.onEvolveHealAllEvolutionAndDiscardEnergy && !ability.mayAttackFirstTurnIfStarting -> illegal("Habilidade não suportada.")
+                    ability.draw <= 0 && ability.drawTo <= 0 && ability.opponentShuffleHandAndDraw <= 0 && ability.eachPlayerDraw <= 0 && !ability.onBenchSwitchAndMoveEnergy && !ability.switchOwnActive && !ability.changeOpponentNsPokemonWeaknessToPsychic && !ability.reducePrizeForDarknessKnockoutByEx && ability.damageCounters <= 0 && ability.discardAttachedBasicEnergyType == null && ability.attachHandEnergyType == null && ability.attachHandEnergyTypes.isEmpty() && ability.searchBasicEnergyTypeToHand == null && ability.searchColorlessPokemonMaxHpToHand <= 0 && ability.searchPokemonMaxToHand <= 0 && ability.onEvolveSearchTrainerIfTeraMax <= 0 && ability.onEvolveDiscardOpponentDeckCount <= 0 && !ability.onEvolveOpponentHandBasicToBench && !ability.attachBasicEnergyFromDiscard && !ability.moveBasicEnergyBetweenOwnPokemon && ability.lookAtTopCardsChooseOne <= 0 && !ability.searchAnyCardToTop && ability.alternativeAttackCost.isEmpty() && !ability.shuffleSelfIntoDeck && !ability.moveEnergyFromOtherPokemonToSelf && ability.healDamage <= 0 && ability.recoverBasicPokemonToBenchMaxHp <= 0 && ability.devolveOpponentPokemonMax <= 0 && ability.onEvolveShuffleRandomOpponentHandPerHeads <= 0 && !ability.festivalGroundsMayAttackAgain && !ability.preventOpponentItemSupporterEffects && !ability.onlyPlayableWithPalafinZeroToHero && !ability.onEvolveHealAllEvolutionAndDiscardEnergy && !ability.mayAttackFirstTurnIfStarting -> illegal("Habilidade não suportada.")
                     ability.damageCounters > 0 && s.players[1-s.currentPlayer].pokemon().count { target -> rules.effectiveAbilities(s, 1-rules.actingPlayer(s), target).none { it.preventOpponentEffects } } < ability.damageTargets -> illegal("Não há Pokémon adversários suficientes para esta habilidade.")
                     !ability.unlimitedUse && abilityUsageKey(pokemon, ability) in p.flags.abilitiesUsed -> illegal("Esta habilidade já foi usada neste turno.")
                     ability.requiresActive && p.active?.id != pokemon.id -> illegal("Esta habilidade só pode ser usada com este Pokémon no Ativo.")
@@ -804,6 +811,23 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         }) }
                         events += GameEvent("SpecialCondition", "Pokémon Ativo adversário ficou Confuso.")
                     }
+                    ChoiceKind.PALAFIN_ZERO_TO_HERO -> if (ids.isNotEmpty()) {
+                        val sourceId = checkNotNull(choice.sourcePokemonId)
+                        val source = p.bench.firstOrNull { it.id == sourceId && def(it.top).name == "Palafin" }
+                            ?: return illegal("Palafin não está mais no Banco para resolver Zero to Hero.")
+                        val ability = def(source.top).abilities.firstOrNull { it.triggersWhenMovedFromActiveToBench }
+                            ?: return illegal("A habilidade Zero to Hero não está mais disponível.")
+                        val palafinEx = p.deck.firstOrNull { it.id == ids.single() && it.id in choice.candidates && def(it).name == "Palafin ex" }
+                            ?: return illegal("O Palafin ex escolhido não está mais no deck.")
+                        val returningPalafin = source.top
+                        val replacement = source.copy(cards = source.cards.dropLast(1) + palafinEx)
+                        update { player -> player.copy(
+                            deck = player.deck.filterNot { it.id == palafinEx.id } + returningPalafin,
+                            bench = player.bench.map { if (it.id == sourceId) replacement else it },
+                            flags = player.flags.copy(abilitiesUsed = player.flags.abilitiesUsed + abilityUsageKey(source, ability))) }
+                        events += GameEvent("PalafinZeroToHero", "Palafin foi substituído por ${def(palafinEx).name}; dano, Energias e efeitos foram mantidos.")
+                        shuffle()
+                    }
                     ChoiceKind.SWITCH_OWN, ChoiceKind.SWITCH_OPPONENT, ChoiceKind.EVOLUTION_SWITCH -> if (ids.isNotEmpty()) {
                         val owner = if (choice.kind == ChoiceKind.SWITCH_OWN) actor else 1-actor
                         val player = s.players[owner]; val target = player.bench.first { it.id == ids.single() }
@@ -1035,7 +1059,8 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         events += GameEvent("CardSearched", "Buscou ${cards.size} carta(s) do deck.", cards.size)
                     }
                     ChoiceKind.ATTACK_EVOLVE_SELF -> {
-                        val evolution = p.deck.first { it.id == ids.single() && def(it).canEvolveFrom(def(p.active!!.top)) }
+                        val evolution = p.deck.first { it.id == ids.single() && def(it).canEvolveFrom(def(p.active!!.top)) &&
+                            def(it).abilities.none { ability -> ability.onlyPlayableWithPalafinZeroToHero } }
                         update { it.copy(deck = it.deck - evolution, active = it.active!!.copy(cards = it.active.cards + evolution, lastEvolutionTurn = s.turn)) }
                         events += GameEvent("PokemonEvolvedByAttack", "${def(evolution).name} evoluiu do seu Pokémon Ativo pelo efeito do ataque.")
                     }
@@ -1044,7 +1069,8 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         if (ids.isNotEmpty()) {
                             val target = s.players[actor].bench.firstOrNull { it.id == targetId }
                                 ?: return illegal("O Pokémon do Banco escolhido não está mais em jogo.")
-                            val evolution = s.players[actor].deck.firstOrNull { it.id == ids.single() && it.id in choice.candidates && def(it).canEvolveFrom(def(target.top)) }
+                            val evolution = s.players[actor].deck.firstOrNull { it.id == ids.single() && it.id in choice.candidates &&
+                                def(it).canEvolveFrom(def(target.top)) && def(it).abilities.none { ability -> ability.onlyPlayableWithPalafinZeroToHero } }
                                 ?: return illegal("A carta escolhida não evolui do Pokémon selecionado ou já saiu do deck.")
                             update { player -> player.copy(deck = player.deck - evolution, bench = player.bench.map { pokemon ->
                                 if (pokemon.id != targetId) pokemon else pokemon.copy(cards = pokemon.cards + evolution,
@@ -1125,7 +1151,8 @@ internal class ContentEngine(private val rules: RulesEngine) {
                             if (pending.kind != ChoiceKind.ATTACK_EVOLVE_BENCHED) pending else {
                                 val pendingTarget = s.players[actor].bench.firstOrNull { it.id == pending.sourcePokemonId }
                                 val eligible = pendingTarget?.let { target ->
-                                    s.players[actor].deck.filter { def(it).canEvolveFrom(def(target.top)) }
+                                    s.players[actor].deck.filter { def(it).canEvolveFrom(def(target.top)) &&
+                                        def(it).abilities.none { ability -> ability.onlyPlayableWithPalafinZeroToHero } }
                                 }.orEmpty()
                                 if (eligible.isEmpty()) null else pending.copy(
                                     candidates = eligible.map { it.id }, visibleCards = eligible.map { it.id })
@@ -1478,6 +1505,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
             }
             else -> error("Ação incorreta para ContentEngine")
         }
+        s = rules.enqueuePalafinZeroToHero(state, s, actor)
         val resolution = s.resolution
         if (resolution != null && resolution.choices.isNotEmpty()) return Transition(s, Legality.Legal, events)
         if (resolution != null) {

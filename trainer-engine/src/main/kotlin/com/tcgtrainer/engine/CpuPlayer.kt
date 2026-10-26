@@ -223,6 +223,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                     if (active == null || enemy == null || copied == null) 0.0 else damage(active, copied, enemy).toDouble()
                 }
                 ChoiceKind.ON_BENCH_SWITCH_AND_MOVE_ENERGY -> attackValue(pokemon(id)) - (active?.let(::attackValue) ?: 0.0) + potential(pokemon(id))*.05
+                ChoiceKind.PALAFIN_ZERO_TO_HERO -> 100.0 + setupValue(checkNotNull(card(id)))
                 ChoiceKind.ON_BENCH_MOVE_ENERGY -> {
                     val target = own.find { it.id == choice.sourcePokemonId }
                     val source = own.firstOrNull { field -> field.energies.any { it.id == id } }
@@ -334,7 +335,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
             if (choice.kind == ChoiceKind.ATTACK_REORDER_OPPONENT_TOP)
                 return GameAction.ChooseCards(choice.candidates.sortedBy { opponentDrawValue(checkNotNull(card(it))) })
             val ranked = choice.candidates.sortedByDescending(::value)
-            val desired = if (choice.kind == ChoiceKind.SWITCH_OWN || choice.kind == ChoiceKind.EVOLUTION_SWITCH || choice.kind == ChoiceKind.ATTACK_OPTIONAL_RETURN_SELF || choice.kind == ChoiceKind.ATTACK_OPTIONAL_DISCARD_TOP_CARD)
+            val desired = if (choice.kind == ChoiceKind.SWITCH_OWN || choice.kind == ChoiceKind.EVOLUTION_SWITCH || choice.kind == ChoiceKind.ATTACK_OPTIONAL_RETURN_SELF || choice.kind == ChoiceKind.ATTACK_OPTIONAL_DISCARD_TOP_CARD || choice.kind == ChoiceKind.PALAFIN_ZERO_TO_HERO)
                 ranked.filter { value(it) > 0 }.size else ranked.size
             return GameAction.ChooseCards(ranked.take(desired.coerceIn(choice.min, choice.max.coerceAtMost(ranked.size))))
         }

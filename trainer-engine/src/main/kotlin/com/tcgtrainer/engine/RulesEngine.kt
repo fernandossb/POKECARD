@@ -32,6 +32,25 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         } ?: return card.abilities
         return card.abilities.filter { it.name == suppressor.opponentActiveAbilityException }
     }
+    internal fun enqueuePalafinZeroToHero(before: GameState, after: GameState, owner: Int): GameState {
+        if (before.currentPlayer != owner) return after
+        val previousActive = before.players[owner].active ?: return after
+        val movedPalafin = after.players[owner].bench.firstOrNull { it.id == previousActive.id } ?: return after
+        val ability = effectiveAbilities(after, owner, movedPalafin).firstOrNull { it.triggersWhenMovedFromActiveToBench } ?: return after
+        val usageKey = if (ability.usagePerPokemon) "${movedPalafin.id}:${ability.usageKey}" else ability.usageKey
+        if (usageKey in after.players[owner].flags.abilitiesUsed) return after
+        if (after.resolution?.choices?.any { it.kind == ChoiceKind.PALAFIN_ZERO_TO_HERO && it.sourcePokemonId == movedPalafin.id } == true) return after
+        val candidates = after.players[owner].deck.filter { definition(it).name == "Palafin ex" }.map { it.id }
+        if (candidates.isEmpty()) return after
+        val choice = ChoiceRequest(ChoiceKind.PALAFIN_ZERO_TO_HERO,
+            "Zero to Hero: você pode trocar este Palafin por um Palafin ex do deck, mantendo seus marcadores e cartas ligadas.",
+            candidates, 0, 1, sourcePokemonId = movedPalafin.id)
+        val currentResolution = after.resolution
+        return after.copy(phase = Phase.RESOLVE_CHOICE, currentPlayer = owner,
+            resolution = if (currentResolution == null) Resolution(listOf(choice))
+                else currentResolution.copy(choices = listOf(choice) + currentResolution.choices),
+            afterResolution = if (currentResolution == null) ResolutionEnd.MAIN else after.afterResolution)
+    }
     fun effectiveHp(state: GameState, pokemon: PokemonInstance): Int {
         val owner = state.players.indexOfFirst { player -> player.pokemon().any { it.id == pokemon.id } }
         return effects.effectiveHp(pokemon, state, abilityOverride = if (owner >= 0) effectiveAbilities(state, owner, pokemon) else null)
@@ -167,6 +186,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 val canEvolveImmediately = target.id == state.players[state.currentPlayer].active?.id && effectiveAbilities(state, state.currentPlayer, target).any { it.mayEvolveFirstTurnIfActive }
                 when {
                     state.turn <= p.evolutionLockedUntilTurn -> reason("O adversário impediu evoluções neste turno.")
+                    evolution.abilities.any { it.onlyPlayableWithPalafinZeroToHero } -> reason("Palafin ex só pode entrar em jogo pelo efeito de Zero to Hero de Palafin.")
                     state.turn <= 2 && !canEvolveImmediately -> reason("Não é permitido evoluir no primeiro turno de cada jogador.")
                     target.enteredPlayTurn == state.turn && !canEvolveImmediately -> reason("Este Pokémon entrou em jogo neste turno.")
                     target.lastEvolutionTurn == state.turn -> reason("Este Pokémon já evoluiu neste turno.")
@@ -1662,14 +1682,16 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 }
                 if (Effect.SearchEvolutionForSelfToEvolve in attack.effects) {
                     val currentActive = next.players[actor].active!!
-                    val evolutions = next.players[actor].deck.filter { definition(it).canEvolveFrom(definition(currentActive.top)) }
+                    val evolutions = next.players[actor].deck.filter { definition(it).canEvolveFrom(definition(currentActive.top)) &&
+                        definition(it).abilities.none { ability -> ability.onlyPlayableWithPalafinZeroToHero } }
                     if (evolutions.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.ATTACK_EVOLVE_SELF,
                         "Escolha uma evolução do seu deck para evoluir este Pokémon Ativo.", evolutions.map { it.id }, 1, 1,
                         visibleCards = evolutions.map { it.id })
                 }
                 if (Effect.SearchEvolutionForEachBenchedPokemon in attack.effects) {
                     next.players[actor].bench.forEach { target ->
-                        val evolutions = next.players[actor].deck.filter { definition(it).canEvolveFrom(definition(target.top)) }
+                        val evolutions = next.players[actor].deck.filter { definition(it).canEvolveFrom(definition(target.top)) &&
+                            definition(it).abilities.none { ability -> ability.onlyPlayableWithPalafinZeroToHero } }
                         if (evolutions.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.ATTACK_EVOLVE_BENCHED,
                             "Você pode evoluir ${definition(target.top).name} com uma carta do seu deck.",
                             evolutions.map { it.id }, 0, 1, visibleCards = evolutions.map { it.id }, sourcePokemonId = target.id)
@@ -1858,6 +1880,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             }
             GameAction.EndTurn -> { val ended = nextTurn(next, 1-actor); next = ended.state; events += ended.events }
         }
+        next = enqueuePalafinZeroToHero(state, next, actor)
         next = next.copy(history = state.history + ActionRecord(actor, state.turn, action, events.toList()))
         return Transition(next, Legality.Legal, events)
     }
