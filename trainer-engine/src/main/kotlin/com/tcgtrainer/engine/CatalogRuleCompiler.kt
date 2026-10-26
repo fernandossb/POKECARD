@@ -435,6 +435,14 @@ internal object CatalogRuleCompiler {
     fun compileAttack(id: String, index: Int, raw: JsonObject): AttackDefinition? {
         val cost = raw.a("cost").map { type(it.jsonPrimitive.content) ?: return null }
         val text = raw.s("effect").orEmpty().trim()
+        val infernalSlash = Regex("Discard (\\d+) Basic \\{R\\} Energy cards from your hand\\. If you can't discard \\1 cards in this way, this attack does nothing\\.").matchEntire(text)
+        if (raw.s("name") == "Infernal Slash" && infernalSlash != null) {
+            val count = infernalSlash.groupValues[1].toInt()
+            val damage = raw.s("damage")?.toIntOrNull() ?: return null
+            val rewritten = JsonObject(raw.toMutableMap().apply { put("effect", JsonPrimitive("")); put("damage", JsonPrimitive(0)) })
+            val compiled = compileAttack(id, index, rewritten) ?: return null
+            return compiled.copy(effects = compiled.effects + Effect.RequiredHandBasicEnergyDiscard(EnergyType.FIRE, count, damage), text = text)
+        }
         val restrictNamedAttack = Regex("During your next turn, this Pokémon can't use (.+)\\.").matchEntire(text)
         if (restrictNamedAttack != null) {
             if (restrictNamedAttack.groupValues[1] != raw.s("name")) return null

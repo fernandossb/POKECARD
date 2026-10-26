@@ -1800,6 +1800,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     ChoiceKind.ATTACK_COPY_BENCHED_N -> error("A escolha do ataque copiado deve ser consumida pelo RulesEngine antes do ContentEngine.")
                     ChoiceKind.ATTACK_COPY_OPPONENT_ACTIVE -> error("A escolha do ataque adversário copiado deve ser consumida pelo RulesEngine antes do ContentEngine.")
                     ChoiceKind.ATTACK_REVEAL_HAND_POKEMON -> error("A escolha de revelar Pokémon da mão é consumida pelo RulesEngine antes do ContentEngine.")
+                    ChoiceKind.ATTACK_REQUIRED_HAND_ENERGY_DISCARD -> error("A escolha de descarte obrigatório de Energia da mão é consumida pelo RulesEngine antes do ContentEngine.")
                 }
                 s = s.copy(resolution = resolution.copy(choices = remainingChoices, shuffleAfter = shuffleAfterResolution))
             }

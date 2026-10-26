@@ -230,7 +230,7 @@ class EffectEngine(private val catalog: CardCatalog) {
         return value.coerceAtLeast(0) + counterDamage
     }
     fun supported(attack: AttackDefinition): Boolean = attack.effects.all { effect -> when (effect) {
-        is Effect.Damage, is Effect.DrawToHand, is Effect.DiscardHandDraw, is Effect.DiscardHandEnergyDamageBonus, is Effect.DiscardOwnEnergyDamageBonus, is Effect.ShuffleHandDraw, is Effect.AccelerateEnergy, is Effect.RestrictNextTurn, is Effect.Recoil, is Effect.RetaliateDamageCountersNextTurn,
+        is Effect.Damage, is Effect.DrawToHand, is Effect.DiscardHandDraw, is Effect.DiscardHandEnergyDamageBonus, is Effect.RequiredHandBasicEnergyDiscard, is Effect.DiscardOwnEnergyDamageBonus, is Effect.ShuffleHandDraw, is Effect.AccelerateEnergy, is Effect.RestrictNextTurn, is Effect.Recoil, is Effect.RetaliateDamageCountersNextTurn,
         is Effect.AttachBasicEnergyToEachBenchedPokemon,
         is Effect.RequiresBenched, is Effect.TargetedDamage, is Effect.SearchPokemonToHand, Effect.SearchAnyCardToHand, is Effect.SearchUpToAnyCardsToHand, Effect.SearchSupporterToHand, Effect.SearchItemToHand, Effect.ChooseOpponentAttackToRestrict, Effect.HealSelfByDamageDealt, is Effect.HealOwnPokemon, Effect.IgnoreWeaknessResistance, Effect.IgnoreResistance, Effect.IgnoreOpponentActiveEffects,
         is Effect.RestrictNamedAttackNextTurn, Effect.CannotRepeatAttackUntilLeavingActive, Effect.LockOpponentItemsNextTurn, Effect.LockOpponentEvolutionNextTurn,

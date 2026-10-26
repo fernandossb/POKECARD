@@ -110,6 +110,12 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
     }
     private fun attackFor(state: GameState, active: PokemonInstance, attackId: String): AttackDefinition? {
         val printed = definition(active.top).attacks.find { it.id == attackId } ?: return null
+        val requiredHandDiscard = printed.effects.filterIsInstance<Effect.RequiredHandBasicEnergyDiscard>().firstOrNull()
+        if (requiredHandDiscard != null) {
+            val damage = if (state.pendingRequiredHandEnergyAttackId == attackId && state.pendingRequiredHandEnergyPaid)
+                listOf(Effect.Damage(requiredHandDiscard.damage)) else emptyList()
+            return printed.copy(effects = printed.effects.filterNot { it is Effect.RequiredHandBasicEnergyDiscard || it is Effect.Damage } + damage)
+        }
         if (active.nextTurnAttackDamageBonusTurn == state.turn && active.nextTurnAttackDamageBonus > 0 &&
             active.nextTurnAttackDamageBonusName == printed.name) {
             return printed.copy(effects = printed.effects + Effect.Damage(active.nextTurnAttackDamageBonus))
@@ -494,6 +500,22 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         if (action is GameAction.Attack) {
             val active = state.players[actor].active!!
             val printed = definition(active.top).attacks.first { it.id == action.attackId }
+            val requiredHandDiscard = printed.effects.filterIsInstance<Effect.RequiredHandBasicEnergyDiscard>().firstOrNull()
+            if (requiredHandDiscard != null && state.pendingRequiredHandEnergyAttackId != action.attackId) {
+                val eligible = state.players[actor].hand.filter { card ->
+                    val cardDefinition = definition(card)
+                    cardDefinition.category == Category.ENERGY && cardDefinition.basicEnergy && cardDefinition.type == requiredHandDiscard.type
+                }
+                if (eligible.size >= requiredHandDiscard.count) {
+                    val request = ChoiceRequest(ChoiceKind.ATTACK_REQUIRED_HAND_ENERGY_DISCARD,
+                        "Descarte exatamente ${requiredHandDiscard.count} Energias Básicas {R} da mão para este ataque causar dano.",
+                        eligible.map { it.id }, requiredHandDiscard.count, requiredHandDiscard.count)
+                    return Transition(state.copy(phase = Phase.RESOLVE_CHOICE, resolution = Resolution(listOf(request)),
+                        afterResolution = ResolutionEnd.MAIN), Legality.Legal,
+                        listOf(GameEvent("RequiredEnergyDiscardChoiceOpened", "Escolha Energias Básicas {R} para descartar antes de resolver o ataque.")))
+                }
+                return apply(state.copy(pendingRequiredHandEnergyAttackId = action.attackId, pendingRequiredHandEnergyPaid = false), action)
+            }
             val optionalWaterEnergy = printed.effects.filterIsInstance<Effect.OptionalReturnWaterEnergyDamageBonus>().firstOrNull()
             if (optionalWaterEnergy != null && state.pendingOptionalEnergyAttackId != action.attackId) {
                 val energies = active.energies.filter { definition(it).category == Category.ENERGY && definition(it).type == EnergyType.WATER }
@@ -567,6 +589,27 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     afterResolution = ResolutionEnd.MAIN,
                     history = state.history + ActionRecord(actor, state.turn, action, listOf(event))), Legality.Legal, listOf(event))
             }
+        }
+        if (action is GameAction.ChooseCards && state.resolution?.choices?.firstOrNull()?.kind == ChoiceKind.ATTACK_REQUIRED_HAND_ENERGY_DISCARD) {
+            val choice = state.resolution.choices.first()
+            if (action.cardIds.distinct().size != choice.min || action.cardIds.any { it !in choice.candidates })
+                return Transition(state, Legality.Illegal("Escolha exatamente ${choice.min} Energias Básicas {R} da mão."))
+            val active = state.players[actor].active ?: return Transition(state, Legality.Illegal("O atacante não está mais no Campo."))
+            val attack = definition(active.top).attacks.firstOrNull { candidate ->
+                candidate.effects.any { it is Effect.RequiredHandBasicEnergyDiscard }
+            } ?: return Transition(state, Legality.Illegal("Infernal Slash não está mais disponível."))
+            val required = attack.effects.filterIsInstance<Effect.RequiredHandBasicEnergyDiscard>().single()
+            val selected = state.players[actor].hand.filter { it.id in action.cardIds }
+            if (selected.size != required.count || selected.any { definition(it).category != Category.ENERGY || !definition(it).basicEnergy || definition(it).type != required.type })
+                return Transition(state, Legality.Illegal("As cartas selecionadas não atendem ao custo de descarte."))
+            val event = GameEvent("BasicEnergyDiscardedForAttack", "Descartou ${selected.size} Energia(s) Básica(s) {R}; Infernal Slash causará dano.", selected.size)
+            val prepared = state.copy(phase = Phase.MAIN, resolution = null,
+                pendingRequiredHandEnergyAttackId = attack.id, pendingRequiredHandEnergyPaid = true,
+                players = state.players.mapIndexed { index, player ->
+                    if (index != actor) player else player.copy(hand = player.hand - selected.toSet(), discard = player.discard + selected)
+                }, history = state.history + ActionRecord(actor, state.turn, action, listOf(event)))
+            val resolved = apply(prepared, GameAction.Attack(attack.id))
+            return Transition(resolved.state, resolved.legality, listOf(event) + resolved.events)
         }
         if (action is GameAction.ChooseCards && state.resolution?.choices?.firstOrNull()?.kind == ChoiceKind.OPTIONAL_ATTACK_ENERGY_BONUS) {
             val active = state.players[actor].active
@@ -892,6 +935,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 val attack = attackFor(state, p.active!!, action.attackId)!!
                 if (state.pendingCopiedAttackId == action.attackId) next = next.copy(pendingCopiedAttackId = null, pendingCopiedAttack = null)
                 if (state.pendingHandRevealAttackId == action.attackId) next = next.copy(pendingHandRevealAttackId = null, pendingHandRevealCount = 0)
+                if (state.pendingRequiredHandEnergyAttackId == action.attackId) next = next.copy(pendingRequiredHandEnergyAttackId = null, pendingRequiredHandEnergyPaid = false)
                 if (Effect.CannotRepeatAttackUntilLeavingActive in attack.effects) {
                     updatePokemon(p.active.id) { it.copy(attackIdsUsedWhileActive = it.attackIdsUsedWhileActive + action.attackId) }
                 }
