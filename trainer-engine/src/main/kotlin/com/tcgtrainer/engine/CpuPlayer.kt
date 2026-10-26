@@ -13,7 +13,7 @@ fun RulesEngine.cpuInput(state: GameState): CpuInput {
     val actor = actingPlayer(state)
     val own = state.players[actor]
     val choice = state.resolution?.choices?.firstOrNull()
-    val revealedOpponentHand = if (choice?.kind == ChoiceKind.ATTACK_CHOOSE_OPPONENT_HAND_DISCARD) state.players[1-actor].hand else emptyList()
+    val revealedOpponentHand = if (choice?.kind in listOf(ChoiceKind.ATTACK_CHOOSE_OPPONENT_HAND_DISCARD, ChoiceKind.EVOLUTION_OPPONENT_HAND_BASIC_TO_BENCH)) state.players[1-actor].hand else emptyList()
     val selectable = if (state.phase == Phase.RESOLVE_CHOICE && choice != null)
         (own.hand + own.deck + own.discard + revealedOpponentHand).filter { it.id in choice.candidates || it.id in choice.visibleCards }.sortedBy { it.id }
     else emptyList()
@@ -153,6 +153,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
             val choice = checkNotNull(input.choice)
             fun value(id: String): Double = when (choice.kind) {
                 ChoiceKind.EVOLUTION_DISCARD_OPPONENT_DECK, ChoiceKind.KNOCKOUT_DISCARD_OPPONENT_DECK -> 100.0
+                ChoiceKind.EVOLUTION_OPPONENT_HAND_BASIC_TO_BENCH -> 100.0 - setupValue(checkNotNull(card(id)))
                 ChoiceKind.DISCARD, ChoiceKind.ABILITY_ENERGY, ChoiceKind.ABILITY_DISCARD_ENERGY_FROM_DISCARD, ChoiceKind.DISCARD_ATTACK_ENERGY, ChoiceKind.ATTACK_HAND_ENERGY_DISCARD, ChoiceKind.ATTACK_OWN_ENERGY_DISCARD, ChoiceKind.EVOLUTION_METAL_ENERGY -> 10.0 - keepValue(checkNotNull(card(id)))
                 ChoiceKind.ABILITY_ATTACH_ENERGY, ChoiceKind.ABILITY_ATTACH_MULTIPLE_BASIC_ENERGY -> keepValue(checkNotNull(card(id))) + 10.0
                 ChoiceKind.ABILITY_ATTACH_ENERGY_TARGET, ChoiceKind.ABILITY_DISCARD_ENERGY_TARGET -> {

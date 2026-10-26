@@ -691,6 +691,18 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                             listOf("use"), 0, 1, amount = ability.onEvolveDiscardOpponentDeckCount,
                             optionLabels = mapOf("use" to "Usar habilidade")))))
                 }
+                if (next.phase != Phase.RESOLVE_CHOICE && evolvedAbilities.any { it.onEvolveOpponentHandBasicToBench }) {
+                    val opponent = next.players[1-actor]
+                    val basicPokemon = opponent.hand.filter { definition(it).category == Category.POKEMON && definition(it).stage == Stage.BASIC }
+                    if (basicPokemon.isNotEmpty()) {
+                        next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN,
+                            resolution = Resolution(listOf(ChoiceRequest(
+                                ChoiceKind.EVOLUTION_OPPONENT_HAND_BASIC_TO_BENCH,
+                                "${evolvedAbilities.first { it.onEvolveOpponentHandBasicToBench }.name}: revele a mão adversária e escolha até ${minOf(basicPokemon.size, (5-opponent.bench.size).coerceAtLeast(0))} Pokémon Básico(s) para colocar no Banco dela.",
+                                basicPokemon.map { it.id }, 0, minOf(basicPokemon.size, (5-opponent.bench.size).coerceAtLeast(0)),
+                                visibleCards = opponent.hand.map { it.id }))))
+                    }
+                }
             }
             is GameAction.Retreat -> {
                 val active = p.active!!
