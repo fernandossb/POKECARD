@@ -224,7 +224,7 @@ import kotlinx.serialization.Serializable
 @Serializable enum class SpecialCondition { POISONED, BURNED, ASLEEP, PARALYZED, CONFUSED }
 @Serializable data class AttackDefinition(val id: String, val name: String, val cost: List<EnergyType>, val effects: List<Effect>, val text: String = "")
 @Serializable enum class TrainerType { ITEM, SUPPORTER, STADIUM, TOOL }
-@Serializable enum class CardFilter { POKEMON, BASIC_FIGHTING_OR_ENERGY, POKEMON_OR_ENERGY, ITEM, TOOL, SUPPORTER, STADIUM, BASIC_POKEMON, BASIC_ENERGY, ENERGY, DARKNESS_POKEMON, METAL_POKEMON }
+@Serializable enum class CardFilter { POKEMON, BASIC_FIGHTING_OR_ENERGY, POKEMON_OR_ENERGY, ITEM, TOOL, SUPPORTER, STADIUM, BASIC_POKEMON, BASIC_ENERGY, ENERGY, DARKNESS_POKEMON, METAL_POKEMON, MEGA_EVOLUTION_EX }
 @Serializable sealed interface TrainerEffect {
     @Serializable data class Search(val filters: List<CardFilter>, val discardCost: Int = 0) : TrainerEffect
     @Serializable data class DrawTo(val size: Int, val discardCost: Int = 0) : TrainerEffect

@@ -27,6 +27,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
             CardFilter.BASIC_ENERGY, CardFilter.ENERGY -> d.category == Category.ENERGY
             CardFilter.DARKNESS_POKEMON -> d.category == Category.POKEMON && d.type == EnergyType.DARKNESS
             CardFilter.METAL_POKEMON -> d.category == Category.POKEMON && d.type == EnergyType.METAL
+            CardFilter.MEGA_EVOLUTION_EX -> isMegaEvolutionEx(d)
         }
     }
     fun validate(s: GameState, action: GameAction): Legality {
@@ -1872,5 +1873,6 @@ internal class ContentEngine(private val rules: RulesEngine) {
         CardFilter.TOOL -> "Ferramenta"; CardFilter.SUPPORTER -> "Apoiador"; CardFilter.STADIUM -> "Estádio"
         CardFilter.BASIC_POKEMON -> "Pokémon Básico"; CardFilter.BASIC_ENERGY -> "Energia Básica"
         CardFilter.ENERGY -> "Energia"; CardFilter.DARKNESS_POKEMON -> "Pokémon de Escuridão"; CardFilter.METAL_POKEMON -> "Pokémon Metal"
+        CardFilter.MEGA_EVOLUTION_EX -> "Mega Evolution Pokémon ex"
     }
 }
