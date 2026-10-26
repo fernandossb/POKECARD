@@ -440,6 +440,8 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 TrainerEffect.ForestOfVitality -> 30.0
                 is TrainerEffect.DiscardOpponentItemsFromHand -> if (o.opponentHandCount > 0) 45.0 else 15.0
                 TrainerEffect.Briar -> if (o.opponentPrizeCount == 2) 115.0 else -5.0
+                is TrainerEffect.HealEachOwnPokemonOfType -> own.filter { d(it.top).type == effect.type }
+                    .sumOf { minOf(effect.amount, it.damage).toDouble() }.let { if (it > 0) 65.0 + it else -5.0 }
                 is TrainerEffect.HealPokemon -> own.filter { !effect.activeOnly || it.id == active?.id }.maxOfOrNull { minOf(it.damage, effect.amount).toDouble() } ?: -5.0
                 is TrainerEffect.RecoverEnergy -> if (o.ownDiscard.any { d(it).category == Category.ENERGY }) 45.0 else -5.0
             }

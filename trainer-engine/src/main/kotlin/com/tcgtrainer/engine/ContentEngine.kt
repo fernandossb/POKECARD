@@ -104,6 +104,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     }
                     is TrainerEffect.DiscardOpponentItemsFromHand -> Legality.Legal
                     TrainerEffect.Briar -> if (s.players[1-actor].prizes.size == 2) Legality.Legal else illegal("Briar só pode ser jogada quando o oponente tem exatamente 2 Prêmios restantes.")
+                    is TrainerEffect.HealEachOwnPokemonOfType -> Legality.Legal
                     is TrainerEffect.HealPokemon -> if ((if (effect.activeOnly) listOfNotNull(p.active) else p.pokemon()).none { it.damage > 0 }) illegal("Não há dano para curar no alvo permitido.") else Legality.Legal
                     is TrainerEffect.RecoverEnergy -> if (p.discard.none { def(it).category == Category.ENERGY }) illegal("Não há Energia Básica no descarte.") else Legality.Legal
                 }
@@ -277,6 +278,17 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         ))))
                     }
                     TrainerEffect.Briar -> update { it.copy(flags = it.flags.copy(teraActiveKnockoutExtraPrize = true)) }
+                    is TrainerEffect.HealEachOwnPokemonOfType -> {
+                        val targets = s.players[actor].pokemon().filter { def(it.top).type == effect.type && it.damage > 0 }
+                        targets.forEach { target ->
+                            val healed = minOf(effect.amount, target.damage)
+                            update { player -> player.copy(
+                                active = player.active?.let { if (it.id == target.id) it.copy(damage = it.damage - healed) else it },
+                                bench = player.bench.map { if (it.id == target.id) it.copy(damage = it.damage - healed) else it }
+                            ) }
+                            events += GameEvent("PokemonHealed", "Curou $healed de dano de ${def(target.top).name}.", healed)
+                        }
+                    }
                     is TrainerEffect.HealPokemon -> begin(Resolution(listOf(ChoiceRequest(ChoiceKind.HEAL_TARGET, "Curar até ${effect.amount} de dano.",
                         (if (effect.activeOnly) listOfNotNull(p.active) else p.pokemon()).filter { it.damage > 0 }.map { it.id }, 1, 1, amount = effect.amount))))
                     is TrainerEffect.RecoverEnergy -> begin(Resolution(listOf(ChoiceRequest(if (effect.toDeck) ChoiceKind.RECYCLE_ENERGY else ChoiceKind.RECOVER,

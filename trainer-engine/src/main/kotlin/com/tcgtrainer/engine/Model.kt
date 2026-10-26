@@ -239,6 +239,7 @@ import kotlinx.serialization.Serializable
     @Serializable data object ForestOfVitality : TrainerEffect
     @Serializable data class DiscardOpponentItemsFromHand(val max: Int) : TrainerEffect
     @Serializable data object Briar : TrainerEffect
+    @Serializable data class HealEachOwnPokemonOfType(val amount: Int, val type: EnergyType) : TrainerEffect
     @Serializable data class RecoverEnergy(val max: Int, val toDeck: Boolean = false) : TrainerEffect
 }
 @Serializable data class AbilityDefinition(

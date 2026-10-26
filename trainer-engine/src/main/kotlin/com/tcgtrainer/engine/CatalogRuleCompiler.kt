@@ -330,6 +330,14 @@ internal object CatalogRuleCompiler {
         val source = "TCGdex • https://api.tcgdex.net/v2/en/cards/$id • gramática executável v1"
         // Reuse only identical trainer/energy print semantics, including ACE SPEC rarity.
         if (raw.s("category") in listOf("Trainer", "Energy")) {
+            if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Supporter" &&
+                raw.s("effect") == "Heal 60 damage from each of your {L} Pokémon.") {
+                return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
+                    category = Category.TRAINER, verified = true, source = source,
+                    artAsset = "remote:$image/high.webp", text = raw.s("effect").orEmpty(),
+                    trainerType = TrainerType.SUPPORTER,
+                    trainerEffect = TrainerEffect.HealEachOwnPokemonOfType(60, EnergyType.LIGHTNING))
+            }
             val trainerText = raw.s("effect").orEmpty()
             if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Supporter" &&
                 trainerText.startsWith("You can use this card only if your opponent has exactly 2 Prize cards remaining.") &&
