@@ -336,6 +336,7 @@ import kotlinx.serialization.Serializable
     val requirePecharuntExForPrizeReduction: Boolean = false,
     val teamAttackDamageBonusType: EnergyType? = null, val teamAttackDamageBonus: Int = 0,
     val teamAttackDamageBonusAnyType: Int = 0,
+    val teamAttackDamageBonusPokemonNamePrefix: String? = null,
     val hpBonusPerAttachedEnergyType: EnergyType? = null, val hpBonusPerAttachedEnergy: Int = 0,
     val hpAndAttackBonusWithAttachedEnergyType: EnergyType? = null,
     val hpAndAttackBonusWithAttachedEnergy: Int = 0,

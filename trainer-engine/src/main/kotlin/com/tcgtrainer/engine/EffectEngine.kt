@@ -91,9 +91,13 @@ class EffectEngine(private val catalog: CardCatalog) {
             attackerPokemon.flatMap(::abilitiesOf).sumOf { it.futurePokemonDamageBonus } else 0
         val attackerTypes = setOf(source.type) + sourceAbilities.flatMap { it.additionalPokemonTypes }
         val teamAttackDamageBonus = if (targetIsOpponentActive)
-            attackerPokemon.sumOf { pokemon -> abilitiesOf(pokemon).sumOf { ability ->
-                (if (ability.teamAttackDamageBonusType in attackerTypes) ability.teamAttackDamageBonus else 0) + ability.teamAttackDamageBonusAnyType
-            } }
+            attackerPokemon.sumOf { pokemon ->
+                abilitiesOf(pokemon).sumOf { ability ->
+                    val nameMatches = ability.teamAttackDamageBonusPokemonNamePrefix?.let { prefix -> source.canonicalName.startsWith(prefix) } ?: true
+                    if (!nameMatches) 0 else
+                        (if (ability.teamAttackDamageBonusType in attackerTypes) ability.teamAttackDamageBonus else 0) + ability.teamAttackDamageBonusAnyType
+                }
+            }
         else 0
         val ownInPlayTypes = attackerPokemon.flatMap { pokemon ->
             val def = catalog.get(pokemon.top.definitionId)
