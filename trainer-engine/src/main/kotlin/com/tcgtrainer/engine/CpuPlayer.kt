@@ -309,6 +309,12 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                             .maxOfOrNull(::setupValue) ?: -5.0
                         if (best > 0) 125.0+best*.1 else -5.0
                     }
+                } else if (ability?.discardAttachedBasicEnergyType != null) {
+                    val cardsToDraw = minOf(
+                        (ability.drawTo-o.ownHand.size).coerceAtLeast(0),
+                        o.ownDeckCount
+                    )
+                    if (cardsToDraw > 0) 20.0+cardsToDraw*15.0 else -5.0
                 } else if ((ability?.healDamage ?: 0) > 0) {
                     val heal = own.maxOfOrNull { minOf(it.damage, checkNotNull(ability).healDamage) } ?: 0
                     if (heal > 0) 135.0+heal else -5.0

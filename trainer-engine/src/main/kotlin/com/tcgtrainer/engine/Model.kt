@@ -200,7 +200,7 @@ import kotlinx.serialization.Serializable
 }
 @Serializable data class AbilityDefinition(
     val id: String, val name: String, val text: String, val draw: Int = 0,
-    val discardEnergyType: EnergyType? = null, val requiresInPlay: String? = null,
+    val discardEnergyType: EnergyType? = null, val discardAttachedBasicEnergyType: EnergyType? = null, val requiresInPlay: String? = null,
     val requiresPreviousKnockout: Boolean = false, val onEvolveSwitch: Boolean = false,
     val attackDiscountPerOpponentPrize: Boolean = false, val usageKey: String = id,
     val requiresActive: Boolean = false, val onEvolveDraw: Int = 0,

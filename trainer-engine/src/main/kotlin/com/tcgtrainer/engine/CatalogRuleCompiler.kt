@@ -58,6 +58,9 @@ internal object CatalogRuleCompiler {
             return AbilityDefinition("$id-ability$index", name, text, onEvolveHealAllEvolutionAndDiscardEnergy = true)
         if (text == "Once during your turn, if this Pokémon is in the Active Spot, you may have your opponent shuffle their hand into their deck and draw 3 cards.")
             return AbilityDefinition("$id-ability$index", name, text, requiresActive = true, usageKey = name, opponentShuffleHandAndDraw = 3)
+        if (text == "You must discard a Basic {L} Energy from this Pokémon in order to use this Ability. Once during your turn, you may draw cards until you have 6 cards in your hand.")
+            return AbilityDefinition("$id-ability$index", name, text, usageKey = name,
+                discardAttachedBasicEnergyType = EnergyType.LIGHTNING, drawTo = 6)
         val flipTheScript = Regex("Once during your turn, if any of your Pokémon were Knocked Out during your opponent's last turn, you may draw (\\d+) cards?\\. You can't use more than 1 Flip the Script Ability each turn\\.").matchEntire(text)
         if (flipTheScript != null) return AbilityDefinition("$id-ability$index", name, text, draw = flipTheScript.groupValues[1].toInt(),
             requiresPreviousKnockout = true, usageKey = "Flip the Script")
