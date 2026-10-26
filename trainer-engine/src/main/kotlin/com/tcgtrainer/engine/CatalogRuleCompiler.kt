@@ -630,6 +630,7 @@ internal object CatalogRuleCompiler {
         val opponentDiscard = Regex("Discard a random card from your opponent's hand\\.").matchEntire(text)
         val opponentHandAndDeckDiscard = text == "Discard a random card from your opponent's hand. Discard the top card of your opponent's deck."
         val opponentChoosesHandDiscard = Regex("Your opponent discards (\\d+) cards from their hand\\.").matchEntire(text)
+        val salazzleHandDiscard = text == "Your opponent discards a card from their hand. If this Pokémon evolved from Salandit during this turn, your opponent discards 2 more cards."
         val opponentChoosesHandShuffle = Regex("Your opponent chooses (\\d+) cards from their hand and shuffles those cards into their deck\\.").matchEntire(text)
         val opponentShuffleRandom = Regex("Choose a random card from your opponent's hand(?:, and your opponent reveals that card and shuffles it into their deck|\\. Your opponent reveals that card and shuffles it into their deck)\\.").matchEntire(text)
         val moveEnergy = Regex("Move an Energy from this Pokémon to (\\d+) of your Benched Pokémon\\.").matchEntire(text)
@@ -1060,6 +1061,7 @@ internal object CatalogRuleCompiler {
                 }
                 opponentChoosesHandShuffle != null -> effects += Effect.OpponentChoosesHandShuffle(opponentChoosesHandShuffle.groupValues[1].toInt())
                 opponentChoosesHandDiscard != null -> effects += Effect.OpponentChoosesHandDiscard(opponentChoosesHandDiscard.groupValues[1].toInt())
+                salazzleHandDiscard -> effects += Effect.SalazzleHandDiscard(1, 2)
                 revealAndChooseOpponentHandDiscard -> effects += Effect.RevealAndChooseOpponentHandDiscard
                 opponentHandAndDeckDiscard -> {
                     effects += Effect.DiscardRandomOpponentHand(1)

@@ -1745,6 +1745,16 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         "Escolha $count carta(s) da sua mão para descartar.", hand.map { it.id }, count, count,
                         visibleCards = hand.map { it.id })
                 }
+                attack.effects.filterIsInstance<Effect.SalazzleHandDiscard>().forEach { effect ->
+                    val attacker = next.players[actor].active
+                    val evolvedFromSalanditThisTurn = attacker != null && attacker.lastEvolutionTurn == next.turn &&
+                        attacker.cards.size >= 2 && definition(attacker.cards[attacker.cards.lastIndex - 1]).canonicalName == "Salandit"
+                    val hand = next.players[opponent].hand
+                    val count = minOf(effect.baseCount + if (evolvedFromSalanditThisTurn) effect.evolvedBonus else 0, hand.size)
+                    if (count > 0) choices += ChoiceRequest(ChoiceKind.OPPONENT_DISCARDS_OWN_HAND,
+                        "Escolha $count carta(s) da sua mão para descartar.", hand.map { it.id }, count, count,
+                        visibleCards = hand.map { it.id })
+                }
                 if (Effect.RevealAndChooseOpponentHandDiscard in attack.effects) {
                     val hand = next.players[opponent].hand
                     if (hand.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.ATTACK_CHOOSE_OPPONENT_HAND_DISCARD,

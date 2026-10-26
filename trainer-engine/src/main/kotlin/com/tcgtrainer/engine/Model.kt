@@ -83,6 +83,7 @@ import kotlinx.serialization.Serializable
     @Serializable data class OwnEnergyTypeCountDamage(val type: EnergyType, val damagePerEnergy: Int, val allPokemon: Boolean = false) : Effect
     @Serializable data class OpponentChoosesHandShuffle(val count: Int) : Effect
     @Serializable data class OpponentChoosesHandDiscard(val count: Int) : Effect
+    @Serializable data class SalazzleHandDiscard(val baseCount: Int, val evolvedBonus: Int) : Effect
     @Serializable data object RequiresUndamagedOpponentActive : Effect
     @Serializable data object RequiresOpponentBurned : Effect
     @Serializable data object RequiresStadium : Effect
