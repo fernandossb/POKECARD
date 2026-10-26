@@ -1032,6 +1032,23 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         emit("PokemonHealed", "Curou $healed de dano de ${definition(pokemon.top).name}.", healed)
                     }
                 }
+                attack.effects.filterIsInstance<Effect.HealEachPokemon>().forEach { heal ->
+                    next.players.indices.forEach { owner ->
+                        next.players[owner].pokemon().filter { pokemon ->
+                            pokemon.damage > 0 && (owner == actor ||
+                                (pokemon.attackImmunityTurn != state.turn && definition(pokemon.top).abilities.none { it.preventOpponentEffects }))
+                        }.forEach { pokemon ->
+                            val healed = minOf(heal.amount, pokemon.damage)
+                            update(owner) { player ->
+                                player.copy(
+                                    active = player.active?.let { if (it.id == pokemon.id) it.copy(damage = it.damage - healed) else it },
+                                    bench = player.bench.map { if (it.id == pokemon.id) it.copy(damage = it.damage - healed) else it }
+                                )
+                            }
+                            emit("PokemonHealed", "Curou $healed de dano de ${definition(pokemon.top).name} do jogador ${owner + 1}.", healed)
+                        }
+                    }
+                }
                 attack.effects.filterIsInstance<Effect.Recoil>().forEach { recoil ->
                     val ownActive = next.players[actor].active!!
                     val hp = effects.effectiveHp(ownActive, next)
