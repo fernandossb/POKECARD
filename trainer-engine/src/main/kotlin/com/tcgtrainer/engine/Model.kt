@@ -391,7 +391,8 @@ import kotlinx.serialization.Serializable
     val trainerEffect: TrainerEffect? = null, val abilities: List<AbilityDefinition> = emptyList(),
     val aceSpec: Boolean = false, val ruleBox: String = "", val implemented: Boolean = true,
     val canonicalName: String = name, val evolvesFromName: String? = null,
-    val basicEnergy: Boolean = false, val isTera: Boolean = false
+    val basicEnergy: Boolean = false, val isTera: Boolean = false,
+    val cannotBeRecoveredFromDiscard: Boolean = false
 ){
     val hasRuleBox: Boolean get() = ruleBox.isNotBlank() || prizes > 1 || canonicalName.startsWith("Radiant ")
     val isFuturePokemon: Boolean get() = canonicalName.startsWith("Iron ") || canonicalName.startsWith("Miraidon")

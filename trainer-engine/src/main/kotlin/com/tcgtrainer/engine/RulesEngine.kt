@@ -897,7 +897,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 } else {
                     val namedRecovery = evolvedAbilities.firstOrNull { it.onEvolveRecoverNamedTrainerFromDiscard != null }
                     val eligible = namedRecovery?.let { ability -> next.players[actor].discard.filter {
-                        definition(it).category == Category.TRAINER && definition(it).name == ability.onEvolveRecoverNamedTrainerFromDiscard
+                                definition(it).category == Category.TRAINER && !definition(it).cannotBeRecoveredFromDiscard && definition(it).name == ability.onEvolveRecoverNamedTrainerFromDiscard
                     } }.orEmpty()
                     if (namedRecovery != null && eligible.isNotEmpty()) {
                         next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN, resolution = Resolution(listOf(ChoiceRequest(

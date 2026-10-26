@@ -359,7 +359,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         }
                     }
                     is TrainerEffect.RecoverSupporters -> {
-                        val candidates = p.discard.filter { def(it).trainerType == TrainerType.SUPPORTER }
+                        val candidates = p.discard.filter { def(it).trainerType == TrainerType.SUPPORTER && !def(it).cannotBeRecoveredFromDiscard }
                         begin(Resolution(listOf(ChoiceRequest(ChoiceKind.RECOVER,
                             "Escolha até ${effect.max} Apoiador(es) do seu descarte para recuperar.",
                             candidates.map { it.id }, 0, minOf(effect.max, candidates.size)))))
@@ -765,7 +765,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         }
                     }
                     ChoiceKind.EVOLUTION_RECOVER_NAMED_TRAINER -> {
-                        val cards = p.discard.filter { it.id in ids && def(it).category == Category.TRAINER }
+                        val cards = p.discard.filter { it.id in ids && def(it).category == Category.TRAINER && !def(it).cannotBeRecoveredFromDiscard }
                         update { it.copy(discard = it.discard - cards.toSet(), hand = it.hand + cards) }
                         events += GameEvent("EvolutionCardsRecovered", "Recuperou ${cards.size} carta(s) de Treinador da evolução.", cards.size)
                     }
@@ -1611,7 +1611,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                 metalEnergies.map { it.id }, 0, minOf(metalAbility.onEvolveAttachMetalFromDiscardMax, metalEnergies.size))) + remainingChoices
                             val namedRecovery = evolvedAbilities.firstOrNull { it.onEvolveRecoverNamedTrainerFromDiscard != null }
                             val namedCards = namedRecovery?.let { ability -> s.players[actor].discard.filter {
-                                def(it).category == Category.TRAINER && def(it).name == ability.onEvolveRecoverNamedTrainerFromDiscard
+                                def(it).category == Category.TRAINER && !def(it).cannotBeRecoveredFromDiscard && def(it).name == ability.onEvolveRecoverNamedTrainerFromDiscard
                             } }.orEmpty()
                             if (namedRecovery != null && namedCards.isNotEmpty()) remainingChoices = listOf(ChoiceRequest(
                                 ChoiceKind.EVOLUTION_RECOVER_NAMED_TRAINER,
