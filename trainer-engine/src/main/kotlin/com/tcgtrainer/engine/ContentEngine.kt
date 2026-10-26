@@ -566,6 +566,11 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         events += GameEvent("OpponentHandShuffled", "Embaralhou ${cards.size} carta(s) da própria mão no deck.", cards.size)
                         events += GameEvent("DeckShuffled", "Deck embaralhado após Cursed Words.")
                     }
+                    ChoiceKind.OPPONENT_DISCARDS_OWN_HAND -> {
+                        val cards = p.hand.filter { it.id in ids }
+                        update { it.copy(hand = it.hand - cards.toSet(), discard = it.discard + cards) }
+                        events += GameEvent("OpponentCardsDiscarded", "O adversário descartou ${cards.size} carta(s) da própria mão.", cards.size)
+                    }
                     ChoiceKind.RECOVER -> {
                         val cards = p.discard.filter { it.id in ids }
                         update { it.copy(discard = it.discard - cards.toSet(), hand = it.hand + cards) }
