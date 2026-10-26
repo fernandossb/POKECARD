@@ -110,7 +110,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     } } -> illegal("Habilidades que nocauteiam o próprio Pokémon estão desativadas enquanto Damp estiver em jogo.")
                     ability.alternativeAttackCost.isNotEmpty() -> illegal("Esta habilidade passiva altera o custo do ataque quando a condição é atendida.")
                     ability.opponentActiveEvolutionRetreatCostBonus > 0 || ability.opponentActiveRetreatCostBonus > 0 -> illegal("Esta habilidade passiva é aplicada automaticamente ao recuo.")
-                    ability.draw <= 0 && ability.drawTo <= 0 && ability.opponentShuffleHandAndDraw <= 0 && ability.eachPlayerDraw <= 0 && !ability.onBenchSwitchAndMoveEnergy && !ability.switchOwnActive && !ability.changeOpponentNsPokemonWeaknessToPsychic && !ability.reducePrizeForDarknessKnockoutByEx && ability.damageCounters <= 0 && ability.discardAttachedBasicEnergyType == null && ability.attachHandEnergyType == null && ability.searchBasicEnergyTypeToHand == null && ability.searchColorlessPokemonMaxHpToHand <= 0 && ability.searchPokemonMaxToHand <= 0 && ability.onEvolveSearchTrainerIfTeraMax <= 0 && ability.onEvolveDiscardOpponentDeckCount <= 0 && !ability.onEvolveOpponentHandBasicToBench && !ability.attachBasicEnergyFromDiscard && !ability.moveBasicEnergyBetweenOwnPokemon && ability.lookAtTopCardsChooseOne <= 0 && !ability.searchAnyCardToTop && ability.alternativeAttackCost.isEmpty() && !ability.shuffleSelfIntoDeck && !ability.moveEnergyFromOtherPokemonToSelf && ability.healDamage <= 0 && ability.recoverBasicPokemonToBenchMaxHp <= 0 && ability.devolveOpponentPokemonMax <= 0 && ability.onEvolveShuffleRandomOpponentHandPerHeads <= 0 && !ability.festivalGroundsMayAttackAgain && !ability.preventOpponentItemSupporterEffects && !ability.onEvolveHealAllEvolutionAndDiscardEnergy && !ability.mayAttackFirstTurnIfStarting -> illegal("Habilidade não suportada.")
+                    ability.draw <= 0 && ability.drawTo <= 0 && ability.opponentShuffleHandAndDraw <= 0 && ability.eachPlayerDraw <= 0 && !ability.onBenchSwitchAndMoveEnergy && !ability.switchOwnActive && !ability.changeOpponentNsPokemonWeaknessToPsychic && !ability.reducePrizeForDarknessKnockoutByEx && ability.damageCounters <= 0 && ability.discardAttachedBasicEnergyType == null && ability.attachHandEnergyType == null && ability.attachHandEnergyTypes.isEmpty() && ability.searchBasicEnergyTypeToHand == null && ability.searchColorlessPokemonMaxHpToHand <= 0 && ability.searchPokemonMaxToHand <= 0 && ability.onEvolveSearchTrainerIfTeraMax <= 0 && ability.onEvolveDiscardOpponentDeckCount <= 0 && !ability.onEvolveOpponentHandBasicToBench && !ability.attachBasicEnergyFromDiscard && !ability.moveBasicEnergyBetweenOwnPokemon && ability.lookAtTopCardsChooseOne <= 0 && !ability.searchAnyCardToTop && ability.alternativeAttackCost.isEmpty() && !ability.shuffleSelfIntoDeck && !ability.moveEnergyFromOtherPokemonToSelf && ability.healDamage <= 0 && ability.recoverBasicPokemonToBenchMaxHp <= 0 && ability.devolveOpponentPokemonMax <= 0 && ability.onEvolveShuffleRandomOpponentHandPerHeads <= 0 && !ability.festivalGroundsMayAttackAgain && !ability.preventOpponentItemSupporterEffects && !ability.onEvolveHealAllEvolutionAndDiscardEnergy && !ability.mayAttackFirstTurnIfStarting -> illegal("Habilidade não suportada.")
                     ability.damageCounters > 0 && s.players[1-s.currentPlayer].pokemon().count { target -> rules.effectiveAbilities(s, 1-rules.actingPlayer(s), target).none { it.preventOpponentEffects } } < ability.damageTargets -> illegal("Não há Pokémon adversários suficientes para esta habilidade.")
                     !ability.unlimitedUse && abilityUsageKey(pokemon, ability) in p.flags.abilitiesUsed -> illegal("Esta habilidade já foi usada neste turno.")
                     ability.requiresActive && p.active?.id != pokemon.id -> illegal("Esta habilidade só pode ser usada com este Pokémon no Ativo.")
@@ -129,6 +129,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     ability.discardEnergyType != null && p.hand.none { def(it).category == Category.ENERGY && def(it).type == ability.discardEnergyType } -> illegal("É preciso descartar uma Energia de Luta Básica da mão.")
                     ability.discardAttachedBasicEnergyType != null && pokemon.energies.none { def(it).category == Category.ENERGY && def(it).basicEnergy && def(it).type == ability.discardAttachedBasicEnergyType } -> illegal("É preciso descartar uma Energia Básica de Raio ligada a este Pokémon.")
                     ability.attachHandEnergyType != null && p.hand.none { def(it).category == Category.ENERGY && def(it).basicEnergy && def(it).type == ability.attachHandEnergyType } -> illegal("Não há Energia Básica do tipo necessário na mão.")
+                    ability.attachHandEnergyTypesMax > 0 && p.hand.none { def(it).category == Category.ENERGY && def(it).basicEnergy && def(it).type in ability.attachHandEnergyTypes } -> illegal("Não há Energia Básica de Fogo ou Luta na mão.")
                     ability.attachHandEnergyToPokemonNamePrefix != null && (if (ability.attachHandEnergyBenchOnly) p.bench else p.pokemon()).none { def(it.top).name.startsWith(ability.attachHandEnergyToPokemonNamePrefix) } -> illegal("Não há Pokémon elegível em jogo para receber a Energia.")
                     ability.switchOwnActive && p.bench.isEmpty() -> illegal("Não há Pokémon no Banco para trocar com o Ativo.")
                     ability.switchOwnDarknessExceptPecharunt && p.bench.none {
@@ -364,6 +365,13 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     begin(Resolution(listOf(ChoiceRequest(ChoiceKind.ABILITY_SEARCH_TOP_CARD,
                         "${ability.name}: escolha uma carta do deck para colocar no topo.", p.deck.map { it.id }, 1, 1, visibleCards = p.deck.map { it.id }))))
                 }
+                else if (ability.attachHandEnergyTypesMax > 0) {
+                    val eligible = p.hand.filter { def(it).category == Category.ENERGY && def(it).basicEnergy && def(it).type in ability.attachHandEnergyTypes }
+                    begin(Resolution(listOf(ChoiceRequest(ChoiceKind.ABILITY_ATTACH_ANY_BASIC_ENERGY_FROM_HAND,
+                        "${ability.name}: escolha uma Energia Básica de Fogo ou Luta para ligar a um dos seus Pokémon, ou conclua.",
+                        eligible.map { it.id }, 0, minOf(1, eligible.size), remaining = ability.attachHandEnergyTypesMax - 1,
+                        sourcePokemonId = pokemon.id))))
+                }
                 else if (ability.attachHandEnergyType != null && ability.attachHandEnergyMax > 1 && ability.attachHandEnergyBenchOnly) {
                     val targets = p.bench.filter { def(it.top).name.startsWith(ability.attachHandEnergyToPokemonNamePrefix.orEmpty()) }
                     begin(Resolution(listOf(ChoiceRequest(ChoiceKind.ABILITY_SELECT_ENERGY_TARGET,
@@ -563,6 +571,50 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         remainingChoices = listOf(ChoiceRequest(ChoiceKind.ABILITY_ATTACH_MULTIPLE_BASIC_ENERGY,
                             "Escolha até ${minOf(choice.amount, energies.size)} Energia(s) Básica(s) para ligar.",
                             energies.map { it.id }, 0, minOf(choice.amount, energies.size), sourcePokemonId = targetId)) + remainingChoices
+                    }
+                    ChoiceKind.ABILITY_ATTACH_ANY_BASIC_ENERGY_FROM_HAND -> if (ids.isNotEmpty()) {
+                        if (ids.size != 1) return illegal("Escolha uma Energia Básica por vez.")
+                        val source = p.pokemon().firstOrNull { it.id == choice.sourcePokemonId }
+                            ?: return illegal("Infernape não está mais em jogo.")
+                        val ability = def(source.top).abilities.firstOrNull { it.attachHandEnergyTypesMax > 0 }
+                            ?: return illegal("A habilidade Pyro Dance não está mais disponível.")
+                        val energy = p.hand.firstOrNull { it.id == ids.single() && def(it).category == Category.ENERGY && def(it).basicEnergy }
+                            ?: return illegal("Escolha uma Energia Básica ainda na mão.")
+                        val typeName = def(energy).type?.name ?: return illegal("O tipo desta Energia não é válido para Pyro Dance.")
+                        if (def(energy).type !in ability.attachHandEnergyTypes || typeName in choice.pendingCards)
+                            return illegal("Pyro Dance pode usar uma Energia de Fogo e uma de Luta, no máximo uma de cada.")
+                        val targets = p.pokemon()
+                        if (targets.isEmpty()) return illegal("Não há Pokémon seu em jogo para receber a Energia.")
+                        remainingChoices = listOf(ChoiceRequest(ChoiceKind.ABILITY_ATTACH_ANY_BASIC_ENERGY_TARGET,
+                            "Escolha qual Pokémon seu receberá ${def(energy).name}.", targets.map { it.id }, 1, 1,
+                            selectedEnergy = energy.id, sourcePokemonId = source.id, remaining = choice.remaining,
+                            pendingCards = choice.pendingCards + typeName)) + remainingChoices
+                    }
+                    ChoiceKind.ABILITY_ATTACH_ANY_BASIC_ENERGY_TARGET -> {
+                        val source = p.pokemon().firstOrNull { it.id == choice.sourcePokemonId }
+                            ?: return illegal("Infernape não está mais em jogo.")
+                        val ability = def(source.top).abilities.firstOrNull { it.attachHandEnergyTypesMax > 0 }
+                            ?: return illegal("A habilidade Pyro Dance não está mais disponível.")
+                        val energy = p.hand.firstOrNull { it.id == choice.selectedEnergy && def(it).category == Category.ENERGY && def(it).basicEnergy }
+                            ?: return illegal("A Energia escolhida não está mais na mão.")
+                        val typeName = def(energy).type?.name ?: return illegal("O tipo desta Energia não é válido para Pyro Dance.")
+                        if (def(energy).type !in ability.attachHandEnergyTypes || choice.pendingCards.lastOrNull() != typeName || choice.pendingCards.count { it == typeName } != 1)
+                            return illegal("A Energia escolhida não corresponde a uma Energia Básica permitida pelo Pyro Dance.")
+                        val targetId = ids.single()
+                        if (p.pokemon().none { it.id == targetId }) return illegal("Escolha um Pokémon seu que ainda esteja em jogo.")
+                        update { player -> player.copy(hand = player.hand - energy,
+                            active = player.active?.let { if (it.id == targetId) it.copy(energies = it.energies + energy) else it },
+                            bench = player.bench.map { if (it.id == targetId) it.copy(energies = it.energies + energy) else it }) }
+                        events += GameEvent("AbilityEnergyAttached", "Ligou ${def(energy).name} a ${def(p.pokemon().first { it.id == targetId }.top).name} por Pyro Dance.")
+                        if (choice.remaining > 0) {
+                            val eligible = s.players[actor].hand.filter { def(it).category == Category.ENERGY && def(it).basicEnergy &&
+                                def(it).type in ability.attachHandEnergyTypes && def(it).type?.name !in choice.pendingCards }
+                            if (eligible.isNotEmpty()) remainingChoices = listOf(ChoiceRequest(
+                                ChoiceKind.ABILITY_ATTACH_ANY_BASIC_ENERGY_FROM_HAND,
+                                "Pyro Dance: escolha uma Energia Básica do outro tipo para ligar, ou conclua.",
+                                eligible.map { it.id }, 0, 1, sourcePokemonId = source.id,
+                                pendingCards = choice.pendingCards, remaining = choice.remaining - 1)) + remainingChoices
+                        }
                     }
                     ChoiceKind.ABILITY_DISCARD_ENERGY_FROM_DISCARD -> {
                         val sourceAbility = p.pokemon().find { it.id == choice.sourcePokemonId }?.let { def(it.top).abilities.firstOrNull { a -> a.attachBasicEnergyFromDiscard } }
