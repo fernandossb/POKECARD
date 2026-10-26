@@ -29,6 +29,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
             CardFilter.METAL_POKEMON -> d.category == Category.POKEMON && d.type == EnergyType.METAL
             CardFilter.MEGA_EVOLUTION_EX -> isMegaEvolutionEx(d)
             CardFilter.TRAINER -> d.category == Category.TRAINER
+            CardFilter.TEAM_ROCKET_BASIC_POKEMON -> d.category == Category.POKEMON && d.stage == Stage.BASIC && d.name.startsWith("Team Rocket's ")
         }
     }
     fun validate(s: GameState, action: GameAction): Legality {
@@ -84,7 +85,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     rules.effectiveAbilities(s, 1-actor, opponentActive).any { it.preventOpponentItemAndToolPlayFromHand })
                     return illegal("O Pokémon Ativo adversário impede jogar cartas de Item e Ferramenta da mão.")
                 if (d.trainerType == TrainerType.SUPPORTER) {
-                    if (s.turn == 1) return illegal("Quem começa não pode usar Apoiador no primeiro turno.")
+                    if (s.turn == 1 && !(effect is TrainerEffect.Search && effect.allowFirstTurnIfStarting && actor == s.startingPlayer)) return illegal("Quem começa não pode usar Apoiador no primeiro turno.")
                     if (p.flags.supporter) return illegal("Você já usou um Apoiador neste turno.")
                 }
                 when (effect) {
@@ -264,7 +265,8 @@ internal class ContentEngine(private val rules: RulesEngine) {
                 fun cost(n: Int) = if (n == 0) emptyList() else listOf(ChoiceRequest(ChoiceKind.DISCARD, "Escolha $n carta(s) para pagar o custo.", hand.map { it.id }, n, n))
                 when (effect) {
                     is TrainerEffect.Search -> begin(Resolution(cost(effect.discardCost) + effect.filters.map { filter ->
-                        ChoiceRequest(ChoiceKind.SEARCH, "Buscar ${filterLabel(filter)} no deck (pode falhar a busca).", p.deck.filter { matches(it, filter) }.map { it.id }, 0, 1)
+                        val candidates = p.deck.filter { matches(it, filter) }
+                        ChoiceRequest(ChoiceKind.SEARCH, "Buscar ${filterLabel(filter)} no deck (pode falhar a busca).", candidates.map { it.id }, 0, minOf(effect.maxPerFilter, candidates.size), visibleCards = candidates.map { it.id })
                     }, shuffleAfter = true))
                     is TrainerEffect.DrawTo -> begin(Resolution(cost(effect.discardCost), drawTo = effect.size))
                     is TrainerEffect.ShuffleHandDraw -> {
@@ -1933,5 +1935,6 @@ internal class ContentEngine(private val rules: RulesEngine) {
         CardFilter.ENERGY -> "Energia"; CardFilter.DARKNESS_POKEMON -> "Pokémon de Escuridão"; CardFilter.METAL_POKEMON -> "Pokémon Metal"
         CardFilter.MEGA_EVOLUTION_EX -> "Mega Evolution Pokémon ex"
         CardFilter.TRAINER -> "Treinador"
+        CardFilter.TEAM_ROCKET_BASIC_POKEMON -> "Pokémon Básico da Equipe Rocket"
     }
 }
