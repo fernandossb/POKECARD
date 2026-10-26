@@ -500,6 +500,7 @@ internal object CatalogRuleCompiler {
         val requiresUndamagedOpponentActive = text == "If your opponent's Active Pokémon has no damage counters on it before this attack does damage, this attack does nothing."
         val requiresOpponentBurned = text == "If your opponent's Active Pokémon isn't Burned, this attack does nothing."
         val requiresStadium = text == "If there is no Stadium in play, this attack does nothing."
+        val requiresOwnBenchCountAtLeast = Regex("If you have (\\d+) or fewer Benched Pokémon, this attack does nothing\\.").matchEntire(text)
         val opponentDeckDiscard = Regex("Discard the top (?:card|([2-5]) cards) of your opponent's deck\\.").matchEntire(text)
         val discardOwnDeckTop = text == "Discard the top card of your deck."
         val searchEvolutionSelf = text == "Search your deck for a card that evolves from this Pokémon and put it onto this Pokémon to evolve it. Then, shuffle your deck."
@@ -757,6 +758,7 @@ internal object CatalogRuleCompiler {
                     effects += Effect.PreventRetreatNextTurn
                 }
                 exactHandSize != null -> effects += Effect.RequiresExactHandSize(exactHandSize.groupValues[1].toInt())
+                requiresOwnBenchCountAtLeast != null -> effects += Effect.RequiresOwnBenchCountAtLeast(requiresOwnBenchCountAtLeast.groupValues[1].toInt() + 1)
                 requiresUndamagedOpponentActive -> effects += Effect.RequiresUndamagedOpponentActive
                 multiStatus != null -> multiStatus.forEach { effects += Effect.StatusCondition(it) }
                 selfOnly != null && damage == 0 -> effects += Effect.SelfDamage(selfOnly.groupValues[1].toInt())

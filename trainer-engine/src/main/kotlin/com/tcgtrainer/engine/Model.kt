@@ -79,6 +79,7 @@ import kotlinx.serialization.Serializable
     @Serializable data object RequiresUndamagedOpponentActive : Effect
     @Serializable data object RequiresOpponentBurned : Effect
     @Serializable data object RequiresStadium : Effect
+    @Serializable data class RequiresOwnBenchCountAtLeast(val count: Int) : Effect
     @Serializable data object MayAttackFirstTurnIfStarting : Effect
     @Serializable data object SearchEvolutionForSelfToEvolve : Effect
     @Serializable data class BasicPokemonToBench(val count: Int) : Effect

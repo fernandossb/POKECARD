@@ -220,9 +220,11 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         if (!effects.supported(attack)) return null
         val requirement = attack.effects.filterIsInstance<Effect.RequiresBenched>().firstOrNull()
         val exactHandSize = attack.effects.filterIsInstance<Effect.RequiresExactHandSize>().firstOrNull()
+        val requiredOwnBenchCount = attack.effects.filterIsInstance<Effect.RequiresOwnBenchCountAtLeast>().firstOrNull()?.count ?: 0
         val undamagedActiveRequirement = Effect.RequiresUndamagedOpponentActive in attack.effects
         val hasRequirement = (requirement == null || state.players[state.currentPlayer].bench.any { it.top.definitionId == requirement.definitionId }) &&
             (exactHandSize == null || state.players[state.currentPlayer].hand.size == exactHandSize.size) &&
+            state.players[state.currentPlayer].bench.size >= requiredOwnBenchCount &&
             (!undamagedActiveRequirement || defender.id == opponent.active?.id && defender.damage == 0)
         val boost = if (defender.id == opponent.active?.id) state.players[state.currentPlayer].flags.damageBoosts[definition(attacker.top).type] ?: 0 else 0
         val coin = attack.effects.filterIsInstance<Effect.CoinDamage>().firstOrNull()
@@ -594,8 +596,10 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     failed
                 } else false
                 val requiredHandSize = attack.effects.filterIsInstance<Effect.RequiresExactHandSize>().firstOrNull()?.size
+                val requiredOwnBenchCount = attack.effects.filterIsInstance<Effect.RequiresOwnBenchCountAtLeast>().firstOrNull()?.count ?: 0
                 val requiresUndamagedOpponent = Effect.RequiresUndamagedOpponentActive in attack.effects
                 val attackConditionFails = requiredHandSize != null && p.hand.size != requiredHandSize ||
+                    next.players[actor].bench.size < requiredOwnBenchCount ||
                     requiresUndamagedOpponent && (next.players[1-actor].active?.damage != 0)
                 val coinMiss = if (!confusionFailed && !attackConditionFails && Effect.CoinMiss in attack.effects) {
                     val rng = SeededRng(next.rng); val missed = rng.nextInt(2) != 0
@@ -608,7 +612,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         update(actor) { player -> player.copy(active = player.active?.copy(damage = player.active!!.damage + 30)) }
                         emit("ConfusionDamage", "O ataque falhou por confusão; o atacante recebeu 30 de dano.", 30)
                     } else if (coinMiss) emit("AttackMissed", "A moeda caiu em coroa; o ataque não causou dano nem aplicou efeitos.")
-                    else emit("AttackEffectFailed", "Condição da mão não atendida; o ataque não causou dano nem aplicou efeitos.")
+                    else emit("AttackEffectFailed", "Condição do ataque não atendida; o ataque não causou dano nem aplicou efeitos.")
                     val settled = settle(next, ResolutionEnd.ATTACK); next = settled.state; events += settled.events
                 } else {
                 val coin = attack.effects.filterIsInstance<Effect.CoinDamage>().firstOrNull()
