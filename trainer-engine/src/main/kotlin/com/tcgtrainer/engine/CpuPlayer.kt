@@ -193,7 +193,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
             fun value(id: String): Double = when (choice.kind) {
                 ChoiceKind.EVOLUTION_DISCARD_OPPONENT_DECK, ChoiceKind.KNOCKOUT_DISCARD_OPPONENT_DECK -> 100.0
                 ChoiceKind.EVOLUTION_OPPONENT_HAND_BASIC_TO_BENCH -> 100.0 - setupValue(checkNotNull(card(id)))
-                ChoiceKind.DISCARD, ChoiceKind.ABILITY_ENERGY, ChoiceKind.DISCARD_ATTACK_ENERGY, ChoiceKind.ATTACK_HAND_ENERGY_DISCARD, ChoiceKind.ATTACK_REQUIRED_HAND_ENERGY_DISCARD, ChoiceKind.ATTACK_OWN_ENERGY_DISCARD, ChoiceKind.EVOLUTION_METAL_ENERGY, ChoiceKind.TRAINER_GWYNN_DISCARD -> 10.0 - keepValue(checkNotNull(card(id)))
+                ChoiceKind.DISCARD, ChoiceKind.ABILITY_ENERGY, ChoiceKind.DISCARD_ATTACK_ENERGY, ChoiceKind.ATTACK_OPTIONAL_SHUFFLE_ENERGY, ChoiceKind.ATTACK_HAND_ENERGY_DISCARD, ChoiceKind.ATTACK_REQUIRED_HAND_ENERGY_DISCARD, ChoiceKind.ATTACK_OWN_ENERGY_DISCARD, ChoiceKind.EVOLUTION_METAL_ENERGY, ChoiceKind.TRAINER_GWYNN_DISCARD -> 10.0 - keepValue(checkNotNull(card(id)))
                 ChoiceKind.ABILITY_DISCARD_ENERGY_FROM_DISCARD -> if (choice.targetPokemonType != null) 55.0 else 10.0 - keepValue(checkNotNull(card(id)))
                 ChoiceKind.ATTACK_DISCARD_BASIC_ENERGY_TO_SELF -> 30.0 - keepValue(checkNotNull(card(id)))
                 ChoiceKind.ATTACK_TEAM_ROCKET_ENERGY_DISCARD -> 150.0
