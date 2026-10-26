@@ -44,6 +44,11 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         s.players[1-rules.actingPlayer(s)].hand.none { it.id == id && def(it).category == Category.POKEMON && def(it).stage == Stage.BASIC }
                     } -> illegal("Escolha apenas Pokémon Básicos ainda na mão revelada do adversário.")
                     choice.kind == ChoiceKind.ABILITY_ATTACH_ENERGY_TARGET && choice.benchedOnly && action.cardIds.any { id -> p.bench.none { it.id == id } } -> illegal("O alvo precisa estar no Banco.")
+                    choice.kind == ChoiceKind.ATTACK_KNOCKOUT_LOWEST_HP_TARGET && action.cardIds.any { id ->
+                        val target = s.players.mapIndexedNotNull { owner, player -> player.pokemon().firstOrNull { it.id == id }?.let { owner to it } }.firstOrNull()
+                        target == null || target.second.id == choice.sourcePokemonId ||
+                            target.first != rules.actingPlayer(s) && rules.attackTargetEffectsPrevented(s, target.first, target.second)
+                    } -> illegal("Escolha apenas um Pokémon elegível, não protegido e diferente do atacante.")
                     choice.kind == ChoiceKind.ATTACK_REORDER_OPPONENT_TOP && s.players[1-rules.actingPlayer(s)].deck.take(choice.candidates.size).map { it.id }.toSet() != choice.candidates.toSet() -> illegal("As cartas do topo do deck adversário mudaram durante a escolha.")
                     choice.kind == ChoiceKind.SONIA && p.deck.filter { it.id in action.cardIds }.map { def(it).category }.distinct().size > 1 -> illegal("Sonia busca Pokémon Básicos OU Energias Básicas; não misture as categorias.")
                     else -> Legality.Legal
@@ -409,6 +414,15 @@ internal class ContentEngine(private val rules: RulesEngine) {
                 var remainingChoices = resolution.choices.drop(1)
                 val p = s.players[actor]
                 when (choice.kind) {
+                    ChoiceKind.ATTACK_KNOCKOUT_LOWEST_HP_TARGET -> {
+                        val targetId = ids.single()
+                        val targetOwner = s.players.indexOfFirst { player -> player.pokemon().any { it.id == targetId } }
+                        if (targetOwner < 0 || targetId == choice.sourcePokemonId) return illegal("O Pokémon escolhido não está mais em jogo ou é o atacante.")
+                        val target = s.players[targetOwner].pokemon().first { it.id == targetId }
+                        if (targetOwner != actor && rules.attackTargetEffectsPrevented(s, targetOwner, target))
+                            return illegal("O Pokémon escolhido está protegido contra efeitos de ataques.")
+                        s = s.copy(pendingAttackEffectKnockoutIds = s.pendingAttackEffectKnockoutIds + targetId)
+                    }
                     ChoiceKind.ATTACK_REORDER_OPPONENT_TOP -> {
                         val opponent = s.players[1-actor]
                         val count = choice.candidates.size

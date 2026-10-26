@@ -317,6 +317,11 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 ChoiceKind.ATTACK_KNOCKOUT_BASIC_BENCH -> o.opponentField.find { it.id == id }?.let { 1000.0+d(it.top).prizes*100.0 } ?: 0.0
                 ChoiceKind.ATTACK_BENCH_ENERGY_DISCARD -> -keepValue(checkNotNull(card(id)))
                 ChoiceKind.ATTACK_REVEAL_HAND_POKEMON -> 100.0 - keepValue(checkNotNull(card(id)))
+                ChoiceKind.ATTACK_KNOCKOUT_LOWEST_HP_TARGET -> {
+                    val target = pokemon(id)
+                    if (own.any { it.id == id }) -600.0 - d(target.top).prizes * 100.0 - potential(target)
+                    else 600.0 + d(target.top).prizes * 100.0 + if (id == o.opponentActiveId) 25.0 else 0.0
+                }
             }
             if (choice.kind == ChoiceKind.SONIA) {
                 val groups = choice.candidates.groupBy { d(checkNotNull(card(it))).category }.values

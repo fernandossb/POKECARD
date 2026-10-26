@@ -469,6 +469,7 @@ internal object CatalogRuleCompiler {
         val anyOwnBenchedDamagedBonus = Regex("If your Benched Pokémon have any damage counters on them, this attack does (\\d+) more damage\\.").matchEntire(text)
         val opponentActiveSpecialConditionKnockout = text == "If your opponent's Active Pokémon is affected by a Special Condition, it is Knocked Out."
         val opponentActiveExactlySixCountersKnockout = text == "If your opponent's Active Pokémon has exactly 6 damage counters on it, that Pokémon is Knocked Out."
+        val knockOutLeastHpPokemon = text == "Choose a Pokémon in play (yours or your opponent's) that has the least HP remaining, except for this Pokémon, and it is Knocked Out."
         val protectAttackerOnDamageKnockout = text == "If your opponent's Pokémon is Knocked Out by damage from this attack, during your opponent's next turn, prevent all damage from and effects of attacks done to this Pokémon."
         val revealAndChooseOpponentHandDiscard = text == "Your opponent reveals their hand, and you discard a card you find there."
         val attachBasicGrassAndHealBenched = text == "Attach a Basic {G} Energy card from your hand to 1 of your Benched Pokémon. If you do, heal all damage from that Pokémon."
@@ -1142,6 +1143,7 @@ internal object CatalogRuleCompiler {
                 knockOutBothActive -> effects += Effect.KnockOutBothActive
                 opponentActiveSpecialConditionKnockout -> effects += Effect.KnockOutOpponentActiveIfSpecialCondition
                 opponentActiveExactlySixCountersKnockout -> effects += Effect.KnockOutOpponentActiveAtExactlySixDamageCounters
+                knockOutLeastHpPokemon -> effects += Effect.KnockOutPokemonWithLeastHpRemainingExceptAttacker
                 protectAttackerOnDamageKnockout -> effects += Effect.ProtectAttackerNextTurnIfKnocksOutByDamage
                 repeatedMultiTargetDamage != null -> effects += Effect.MultiTargetDamage(
                     repeatedMultiTargetDamage.groupValues[2].toInt(), repeatedMultiTargetDamage.groupValues[1].toInt(),

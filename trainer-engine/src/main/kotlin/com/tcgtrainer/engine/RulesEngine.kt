@@ -868,7 +868,9 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     val revealed = next.players[opponent].hand.joinToString(", ") { definition(it).name }
                     emit("OpponentHandRevealed", "Mão adversária revelada: ${revealed.ifEmpty { "vazia" }}.")
                 }
-                emit("AttackDeclared", "${attack.name}: ${preview.damage} de dano em ${definition(defender.top).name}.", preview.damage)
+                if (Effect.KnockOutPokemonWithLeastHpRemainingExceptAttacker in attack.effects)
+                    emit("AttackDeclared", "${attack.name}: escolha um Pokémon para nocautear pelo efeito do ataque.")
+                else emit("AttackDeclared", "${attack.name}: ${preview.damage} de dano em ${definition(defender.top).name}.", preview.damage)
                 val survivalHp = if (defender.damage == 0) defenderAbilities.maxOfOrNull { it.surviveAttackKnockoutAtHp } ?: 0 else 0
                 val headsSurvivalHp = defenderAbilities.maxOfOrNull { it.surviveAttackKnockoutOnHeadsAtHp } ?: 0
                 val damageShield = defenderAbilities.firstOrNull { ability ->
@@ -916,7 +918,8 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     emit("DamageHealed", "Curou o atacante em até ${preview.damage} de dano pelo ataque.", preview.damage)
                 }
                 val remainingHpAfterDamage = (preview.effectiveHp - damageAfterAttack).coerceAtLeast(0)
-                emit("DamageDealt", "HP restante: $remainingHpAfterDamage.")
+                if (preview.damage > 0 || Effect.KnockOutPokemonWithLeastHpRemainingExceptAttacker !in attack.effects)
+                    emit("DamageDealt", "HP restante: $remainingHpAfterDamage.")
                 if (Effect.DevolveOpponentPokemonIntoDeck in attack.effects) {
                     val evolvedTargets = next.players[opponent].pokemon().filter { pokemon ->
                         pokemon.cards.size > 1 && !attackTargetEffectsPrevented(next, opponent, pokemon)
@@ -1575,6 +1578,23 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         "Escolha uma carta revelada da mão adversária para descartar.", hand.map { it.id }, 1, 1,
                         visibleCards = hand.map { it.id })
                 }
+                if (Effect.KnockOutPokemonWithLeastHpRemainingExceptAttacker in attack.effects) {
+                    val attackerId = next.players[actor].active?.id
+                    val eligible = next.players.flatMapIndexed { owner, player ->
+                        player.pokemon().filter { pokemon -> pokemon.id != attackerId &&
+                            (owner == actor || !attackTargetEffectsPrevented(next, owner, pokemon))
+                        }.map { pokemon -> pokemon to owner }
+                    }
+                    val leastHp = eligible.minOfOrNull { (pokemon, _) -> effects.effectiveHp(pokemon, next) - pokemon.damage }
+                    if (leastHp != null) {
+                        val targets = eligible.filter { (pokemon, _) ->
+                            effects.effectiveHp(pokemon, next) - pokemon.damage == leastHp
+                        }.map { (pokemon, _) -> pokemon.id }
+                        choices += ChoiceRequest(ChoiceKind.ATTACK_KNOCKOUT_LOWEST_HP_TARGET,
+                            "Escolha um dos Pokémon com menos HP restante para nocautear (empatados: ${targets.size}).",
+                            targets, 1, 1, sourcePokemonId = attackerId, amount = leastHp)
+                    }
+                }
                 attack.effects.filterIsInstance<Effect.ReorderOpponentDeckTop>().forEach { effect ->
                     val top = next.players[opponent].deck.take(effect.count)
                     if (top.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.ATTACK_REORDER_OPPONENT_TOP,
@@ -1787,7 +1807,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         val events = mutableListOf<GameEvent>()
         val flygonKnockoutTriggers = mutableListOf<Pair<Int, Int>>()
         val players = state.players.mapIndexed { owner, player ->
-            val knockedOut = player.pokemon().filter { it.damage >= effects.effectiveHp(it, state) }
+            val knockedOut = player.pokemon().filter { it.id in state.pendingAttackEffectKnockoutIds || it.damage >= effects.effectiveHp(it, state) }
             knockedOut.forEach { pokemon ->
                 val attackKo = end == ResolutionEnd.ATTACK && pokemon.id in state.pendingAttackDamageKnockoutIds
                 if (attackKo && player.active?.id == pokemon.id) {
@@ -1821,7 +1841,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         var next = state.copy(players = players, prizesOwed = owed.mapIndexed { i, n -> minOf(n, players[i].prizes.size) },
             afterResolution = end, resolution = null, resumePlayer = state.resumePlayer ?: if (end == ResolutionEnd.ATTACK) 1-actor else actor,
             pendingAttackDamageKnockoutIds = emptySet(),
-            pendingAttackDamageSourcePokemonId = null,
+            pendingAttackDamageSourcePokemonId = null,pendingAttackEffectKnockoutIds = emptySet(),
             extraAttackAvailableFor = if (festivalBonusAttack) actor else state.extraAttackAvailableFor,
             extraAttackUsedThisTurn = state.extraAttackUsedThisTurn || festivalBonusAttack)
         flygonKnockoutTriggers.firstOrNull()?.let { (owner, count) ->

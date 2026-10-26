@@ -122,6 +122,13 @@ import com.tcgtrainer.engine.*
                         }.padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                             CardArt(engine.definition(card), Modifier.fillMaxWidth().height(130.dp))
                             Text(engine.definition(card).name, fontSize = 10.sp, maxLines = 2)
+                            if (choice.kind == ChoiceKind.ATTACK_KNOCKOUT_LOWEST_HP_TARGET) {
+                                val owner = state.players.indexOfFirst { it.pokemon().any { pokemon -> pokemon.id == id } }
+                                val target = state.players.getOrNull(owner)?.pokemon()?.firstOrNull { it.id == id }
+                                val side = if (owner == state.currentPlayer) "Seu" else "Adversário"
+                                val position = if (target?.id == state.players[owner].active?.id) "Ativo" else "Banco"
+                                Text("$side · $position · ${engine.effects.effectiveHp(target!!, state) - target.damage} HP restantes", color = Aqua, fontSize = 9.sp)
+                            }
                             if (choice.kind == ChoiceKind.ATTACK_REORDER_OPPONENT_TOP && id in selected)
                                 Text("Posição ${selected.indexOf(id) + 1}", color = Aqua, fontSize = 9.sp)
                             Text("${engine.definition(card).set} ${engine.definition(card).number}", color = Muted, fontSize = 8.sp)
