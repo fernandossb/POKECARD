@@ -766,215 +766,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             }
         }
         val p = state.players[actor]
-        when (action) {
-            is GameAction.PlayTrainer, is GameAction.UseAbility, is GameAction.UseStadiumAbility, is GameAction.ChooseCards -> {
-                val resolved = content.apply(next, action)
-                next = resolved.state; events += resolved.events
-            }
-            is GameAction.ChooseStartingPlayer -> {
-                next = next.copy(startingPlayer = action.player, currentPlayer = action.player, setupPlayer = 0, phase = Phase.SELECT_ACTIVE)
-                emit("StartingPlayerChosen", "Vencedor da moeda: jogador ${actor+1}; começa: jogador ${action.player+1}.")
-            }
-            is GameAction.ChooseActive -> {
-                val card = p.hand.first { it.id == action.cardId }
-                update(actor) { it.copy(hand = it.hand - card, active = PokemonInstance(listOf(card), enteredPlayTurn = 0)) }
-                next = next.copy(phase = Phase.SELECT_BENCH)
-                emit("ActiveSelected", "Jogador ${actor+1}: ${definition(card).name} no Ativo.")
-            }
-            is GameAction.PlayBasic -> {
-                val card = p.hand.first { it.id == action.cardId }
-                update(actor) { it.copy(hand = it.hand - card, bench = it.bench + PokemonInstance(listOf(card), enteredPlayTurn = state.turn)) }
-                emit("BasicPlayed", "${definition(card).name} entrou no Banco.")
-                val playedPokemon = next.players[actor].bench.first { it.cards.last().id == card.id }
-                val onBenchAbilities = effectiveAbilities(next, actor, playedPokemon)
-                val lastDitchAbility = onBenchAbilities.firstOrNull { it.onBenchSearchSupporterFromDeck }
-                val onBenchSwitch = onBenchAbilities.any { it.onBenchSwitchAndMoveEnergy }
-                val onBenchAbility = onBenchAbilities.firstOrNull { it.onBenchAttachBasicEnergyMax > 0 }
-                val eligibleEnergy = onBenchAbility?.let { ability -> next.players[actor].hand.filter {
-                    definition(it).category == Category.ENERGY && definition(it).basicEnergy && definition(it).type == ability.onBenchAttachBasicEnergyType
-                } }.orEmpty()
-                if (state.phase == Phase.MAIN && lastDitchAbility != null && lastDitchAbility.usageKey !in next.players[actor].flags.abilitiesUsed) {
-                    next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN,
-                        resolution = Resolution(listOf(ChoiceRequest(ChoiceKind.ON_BENCH_LAST_DITCH,
-                            "${lastDitchAbility.name}: você pode buscar um Apoiador no deck.", listOf("use"), 0, 1,
-                            sourcePokemonId = playedPokemon.id, optionLabels = mapOf("use" to "Usar Last-Ditch")))))
-                } else if (state.phase == Phase.MAIN && onBenchSwitch) {
-                    next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN,
-                        resolution = Resolution(listOf(ChoiceRequest(ChoiceKind.ON_BENCH_SWITCH_AND_MOVE_ENERGY,
-                            "Você pode trocar o Pokémon que acabou de entrar no Banco com seu Ativo.", listOf(card.id), 0, 1))))
-                } else if (state.phase == Phase.MAIN && onBenchAbility != null && eligibleEnergy.isNotEmpty()) {
-                    next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN, resolution = Resolution(listOf(ChoiceRequest(
-                        ChoiceKind.ABILITY_ATTACH_MULTIPLE_BASIC_ENERGY,
-                        "${onBenchAbility.name}: você pode ligar até ${onBenchAbility.onBenchAttachBasicEnergyMax} Energia(s) Básica(s) da mão a este Pokémon.",
-                        eligibleEnergy.map { it.id }, 0, minOf(onBenchAbility.onBenchAttachBasicEnergyMax, eligibleEnergy.size), sourcePokemonId = card.id))))
-                } else if (state.phase == Phase.MAIN && onBenchAbilities.any { it.onBenchDiscardStadium } && next.stadium != null) {
-                    val stadium = next.stadium!!
-                    val owner = next.stadiumOwner ?: actor
-                    update(owner) { it.copy(discard = it.discard + stadium) }
-                    next = next.copy(stadium = null, stadiumOwner = null)
-                    emit("OnBenchStadiumDiscarded", "${definition(card).name} descartou o Estádio em jogo.")
-                } else if (state.phase == Phase.MAIN && onBenchAbilities.any { it.onBenchDiscardOpponentDeckTop } && next.players[1-actor].deck.isNotEmpty()) {
-                    val top = next.players[1-actor].deck.first()
-                    next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN,
-                        resolution = Resolution(listOf(ChoiceRequest(ChoiceKind.ON_BENCH_DISCARD_OPPONENT_DECK_TOP,
-                            "Você pode descartar a carta do topo do deck do adversário.", listOf(top.id), 0, 1, sourcePokemonId = card.id))))
-                }
-            }
-            GameAction.FinishSetup -> {
-                // Prizes are placed only after the player has selected the initial field.
-                update(actor) { it.copy(prizes = it.deck.take(6), prizePositions = it.deck.take(6).map { card -> card.id }, deck = it.deck.drop(6)) }
-                val finished = next.setupFinished + actor
-                next = next.copy(setupFinished = finished)
-                if (finished.size == 1) next = next.copy(setupPlayer = 1, phase = Phase.SELECT_ACTIVE)
-                else next = next.copy(setupPlayer = 0, phase = Phase.MULLIGAN_BONUS)
-                emit("SetupCompleted", "Jogador ${actor+1}: 6 Prêmios separados.")
-            }
-            is GameAction.MulliganDraw -> {
-                update(actor) { it.copy(hand = it.hand + it.deck.take(action.count), deck = it.deck.drop(action.count), bonusDraws = 0) }
-                emit("MulliganBonus", "Jogador ${actor+1} comprou ${action.count} carta(s) por mulligan.")
-                next = next.copy(phase = Phase.BONUS_BENCH, bonusCardIds = p.deck.take(action.count).map { it.id })
-            }
-            GameAction.FinishBonusSetup -> {
-                next = next.copy(bonusCardIds = emptyList())
-                if (actor == 0) next = next.copy(setupPlayer = 1, phase = Phase.MULLIGAN_BONUS) else startTurn(state.startingPlayer)
-            }
-            is GameAction.AttachEnergy -> {
-                val card = p.hand.first { it.id == action.cardId }
-                updatePokemon(action.pokemonId) { it.copy(energies = it.energies + card) }
-                update(actor) { it.copy(hand = it.hand - card, flags = it.flags.copy(manualEnergy = true)) }
-                emit("ManualEnergyAttached", "${definition(card).name} ligada a ${action.pokemonId}.")
-            }
-            is GameAction.Evolve -> {
-                val card = p.hand.first { it.id == action.cardId }
-                updatePokemon(action.pokemonId) { it.copy(cards = it.cards + card, lastEvolutionTurn = state.turn, restrictions = emptyList(), conditions = emptySet(), poisonDamageCounters = 1, defendingAttackFailsOnTailsTurn = -1, attackImmunityTurn = -1, incomingDamageReduction = 0, damageReductionTurn = -1, incomingDamageReductionEvolutionOnly = false, outgoingDamageReduction = 0, outgoingDamageReductionTurn = -1, preventBasicNonColorlessDamageTurn = -1, preventBasicPokemonDamageTurn = -1) }
-                update(actor) { it.copy(hand = it.hand - card) }
-                emit("PokemonEvolved", "Evoluiu para ${definition(card).name}; dano e Energias preservados.")
-                val evolvedInstance = next.players[actor].pokemon().first { it.id == action.pokemonId }
-                val evolvedAbilities = effectiveAbilities(next, actor, evolvedInstance)
-                evolvedAbilities.filter { it.onEvolveDraw > 0 }.forEach { ability ->
-                    val count = minOf(ability.onEvolveDraw, next.players[actor].deck.size)
-                    update(actor) { it.copy(hand = it.hand + it.deck.take(count), deck = it.deck.drop(count)) }
-                    emit("CardsDrawn", "Comprou $count carta(s) ao evoluir com ${ability.name}.")
-                }
-                if (evolvedAbilities.any { it.onEvolveHealAllEvolutionAndDiscardEnergy }) {
-                    val healedPokemon = next.players[actor].pokemon().filter {
-                        definition(it.top).stage != Stage.BASIC && it.damage > 0
-                    }
-                    if (healedPokemon.isNotEmpty()) {
-                        val discardedEnergy = healedPokemon.flatMap { it.energies }
-                        healedPokemon.forEach { pokemon -> updatePokemon(pokemon.id) { it.copy(damage = 0, energies = emptyList()) } }
-                        update(actor) { it.copy(discard = it.discard + discardedEnergy) }
-                        emit("EvolutionTeamHealed", "Curou ${healedPokemon.size} Pokémon Evoluído(s) e descartou ${discardedEnergy.size} Energia(s) com ${evolvedAbilities.first { it.onEvolveHealAllEvolutionAndDiscardEnergy }.name}.", healedPokemon.size)
-                    }
-                }
-                evolvedAbilities.filter { it.onEvolveShuffleRandomOpponentHandPerHeads > 0 }.forEach { ability ->
-                    val rng = SeededRng(next.rng)
-                    val flips = List(ability.onEvolveShuffleRandomOpponentHandPerHeads) { rng.nextInt(2) == 0 }
-                    emit("CoinFlipped", flips.joinToString { if (it) "CARA — ${ability.name}" else "COROA — ${ability.name}" })
-                    val opponent = 1-actor
-                    val hand = next.players[opponent].hand.toMutableList()
-                    val revealed = mutableListOf<CardInstance>()
-                    repeat(minOf(flips.count { it }, hand.size)) {
-                        revealed += hand.removeAt(rng.nextInt(hand.size))
-                    }
-                    if (revealed.isNotEmpty()) {
-                        val deck = rng.shuffle(next.players[opponent].deck + revealed)
-                        next = next.copy(players = next.players.mapIndexed { owner, player ->
-                            if (owner == opponent) player.copy(hand = hand, deck = deck) else player
-                        })
-                        emit("OpponentHandCardsShuffled", "O adversário revelou ${revealed.joinToString { definition(it).name }} e embaralhou ${revealed.size} carta(s) da mão no deck.", revealed.size)
-                        emit("DeckShuffled", "Deck adversário embaralhado após ${ability.name}.")
-                    }
-                    next = next.copy(rng = rng.state)
-                }
-                val metalAttach = evolvedAbilities.firstOrNull { it.onEvolveAttachMetalFromDiscardMax > 0 }
-                val metalEnergy = next.players[actor].discard.filter { definition(it).category == Category.ENERGY && definition(it).basicEnergy && definition(it).type == EnergyType.METAL }
-                val metalPokemon = next.players[actor].pokemon().filter { definition(it.top).type == EnergyType.METAL }
-                if (metalAttach != null && metalEnergy.isNotEmpty() && metalPokemon.isNotEmpty()) {
-                    next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN, resolution = Resolution(listOf(ChoiceRequest(
-                        ChoiceKind.EVOLUTION_METAL_ENERGY, "${metalAttach.name}: você pode escolher até ${metalAttach.onEvolveAttachMetalFromDiscardMax} Energias Metal Básicas do descarte.",
-                        metalEnergy.map { it.id }, 0, minOf(metalAttach.onEvolveAttachMetalFromDiscardMax, metalEnergy.size)))))
-                } else {
-                    val namedRecovery = evolvedAbilities.firstOrNull { it.onEvolveRecoverNamedTrainerFromDiscard != null }
-                    val eligible = namedRecovery?.let { ability -> next.players[actor].discard.filter {
-                                definition(it).category == Category.TRAINER && !definition(it).cannotBeRecoveredFromDiscard && definition(it).name == ability.onEvolveRecoverNamedTrainerFromDiscard
-                    } }.orEmpty()
-                    if (namedRecovery != null && eligible.isNotEmpty()) {
-                        next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN, resolution = Resolution(listOf(ChoiceRequest(
-                            ChoiceKind.EVOLUTION_RECOVER_NAMED_TRAINER,
-                            "${namedRecovery.name}: você pode recuperar até ${namedRecovery.onEvolveRecoverNamedTrainerMax} ${namedRecovery.onEvolveRecoverNamedTrainerFromDiscard}(s) do descarte.",
-                            eligible.map { it.id }, 0, minOf(namedRecovery.onEvolveRecoverNamedTrainerMax, eligible.size), visibleCards = eligible.map { it.id }))))
-                    }
-                }
-                val teraTrainerSearch = evolvedAbilities.firstOrNull { it.onEvolveSearchTrainerIfTeraMax > 0 }
-                val teraPresent = next.players[actor].pokemon().any { definition(it.top).isTera }
-                if (next.phase != Phase.RESOLVE_CHOICE && teraTrainerSearch != null && teraPresent) {
-                    val eligible = next.players[actor].deck.filter { definition(it).category == Category.TRAINER }
-                    next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN,
-                        resolution = Resolution(listOf(ChoiceRequest(ChoiceKind.EVOLUTION_SEARCH_TRAINER,
-                            "${teraTrainerSearch.name}: revele e escolha até ${minOf(teraTrainerSearch.onEvolveSearchTrainerIfTeraMax, eligible.size)} Treinador(es) do deck.",
-                            eligible.map { it.id }, 0, minOf(teraTrainerSearch.onEvolveSearchTrainerIfTeraMax, eligible.size), visibleCards = eligible.map { it.id })), shuffleAfter = true))
-                }
-                if (next.phase != Phase.RESOLVE_CHOICE && evolvedAbilities.any { it.onEvolveConfuseOpponentActive }) {
-                    val enemyActive = next.players[1-actor].active
-                    if (enemyActive != null && effectiveAbilities(next, 1-actor, enemyActive).none { it.preventOpponentEffects }) {
-                        next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN,
-                            resolution = Resolution(listOf(ChoiceRequest(ChoiceKind.EVOLUTION_CONFUSE_ACTIVE,
-                                "Usar ${evolvedAbilities.first { it.onEvolveConfuseOpponentActive }.name} e Confundir o Pokémon Ativo adversário?",
-                                listOf(enemyActive.id), 0, 1))))
-                    }
-                }
-                val onEvolveSwitch = evolvedAbilities.firstOrNull { it.onEvolveSwitch }
-                val switchCandidates = onEvolveSwitch?.let { ability -> next.players[1-actor].bench.filter { pokemon ->
-                    ability.onEvolveSwitchOpponentBenchMaxRemainingHp <= 0 ||
-                        effectiveHp(next, pokemon) - pokemon.damage <= ability.onEvolveSwitchOpponentBenchMaxRemainingHp
-                } }.orEmpty()
-                if (next.phase != Phase.RESOLVE_CHOICE && onEvolveSwitch != null && switchCandidates.isNotEmpty()) {
-                    next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN, resolution = Resolution(listOf(ChoiceRequest(
-                        ChoiceKind.EVOLUTION_SWITCH, "Usar ${onEvolveSwitch.name}? Escolha um Pokémon do Banco adversário ou pule.", switchCandidates.map { it.id }, 0, 1))))
-                }
-                if (next.phase != Phase.RESOLVE_CHOICE) {
-                    val spreadAbility = evolvedAbilities.firstOrNull { it.onEvolveDamageCounters }
-                    val targets = next.players[1-actor].pokemon().filter { target ->
-                        effectiveAbilities(next, 1-actor, target).none { it.preventOpponentEffects }
-                    }
-                    if (spreadAbility != null && targets.size >= spreadAbility.damageTargets) {
-                        next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN,
-                            resolution = Resolution(listOf(ChoiceRequest(ChoiceKind.EVOLUTION_DAMAGE_TARGETS,
-                                "${spreadAbility.name}: você pode escolher ${spreadAbility.damageTargets} Pokémon adversários para receber ${spreadAbility.damageCounters} contadores de dano cada.",
-                                targets.map { it.id }, 0, spreadAbility.damageTargets, amount = spreadAbility.damageCounters * 10))))
-                    }
-                }
-                if (next.phase != Phase.RESOLVE_CHOICE) {
-                    val ability = evolvedAbilities.firstOrNull { it.onEvolveDiscardOpponentDeckCount > 0 }
-                    if (ability != null && next.players[1-actor].deck.isNotEmpty()) next = next.copy(phase = Phase.RESOLVE_CHOICE,
-                        afterResolution = ResolutionEnd.MAIN, resolution = Resolution(listOf(ChoiceRequest(
-                            ChoiceKind.EVOLUTION_DISCARD_OPPONENT_DECK,
-                            "Usar ${ability.name} e descartar até ${ability.onEvolveDiscardOpponentDeckCount} cartas do topo do deck adversário?",
-                            listOf("use"), 0, 1, amount = ability.onEvolveDiscardOpponentDeckCount,
-                            optionLabels = mapOf("use" to "Usar habilidade")))))
-                }
-                if (next.phase != Phase.RESOLVE_CHOICE && evolvedAbilities.any { it.onEvolveOpponentHandBasicToBench }) {
-                    val opponent = next.players[1-actor]
-                    val basicPokemon = opponent.hand.filter { definition(it).category == Category.POKEMON && definition(it).stage == Stage.BASIC }
-                    if (basicPokemon.isNotEmpty()) {
-                        next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN,
-                            resolution = Resolution(listOf(ChoiceRequest(
-                                ChoiceKind.EVOLUTION_OPPONENT_HAND_BASIC_TO_BENCH,
-                                "${evolvedAbilities.first { it.onEvolveOpponentHandBasicToBench }.name}: revele a mão adversária e escolha até ${minOf(basicPokemon.size, (5-opponent.bench.size).coerceAtLeast(0))} Pokémon Básico(s) para colocar no Banco dela.",
-                                basicPokemon.map { it.id }, 0, minOf(basicPokemon.size, (5-opponent.bench.size).coerceAtLeast(0)),
-                                visibleCards = opponent.hand.map { it.id }))))
-                    }
-                }
-            }
-            is GameAction.Retreat -> {
-                val active = p.active!!
-                val target = p.bench.first { it.id == action.pokemonId }
-                val paid = active.energies.filter { it.id in action.energyIds }
-                update(actor) { it.copy(active = target.copy(enteredActiveTurn = state.turn, conditions = emptySet(), poisonDamageCounters = 1, attackImmunityTurn = -1, incomingDamageReduction = 0, damageReductionTurn = -1, incomingDamageReductionEvolutionOnly = false, outgoingDamageReduction = 0, outgoingDamageReductionTurn = -1, preventBasicNonColorlessDamageTurn = -1, preventBasicPokemonDamageTurn = -1), bench = it.bench - target + active.copy(energies = active.energies - paid.toSet(), restrictions = emptyList(), attackIdsUsedWhileActive = emptyList(), conditions = emptySet(), poisonDamageCounters = 1, attackImmunityTurn = -1, incomingDamageReduction = 0, damageReductionTurn = -1, incomingDamageReductionEvolutionOnly = false, outgoingDamageReduction = 0, outgoingDamageReductionTurn = -1, preventBasicNonColorlessDamageTurn = -1, preventBasicPokemonDamageTurn = -1), discard = it.discard + paid, flags = it.flags.copy(retreat = true)) }
-                emit("Retreated", "Recuou descartando ${paid.size} Energia(s).")
-            }
-            is GameAction.Attack -> {
+        fun resolveAttack(action: GameAction.Attack) {
                 val attack = attackFor(state, p.active!!, action.attackId)!!
                 if (state.pendingCopiedAttackId == action.attackId) next = next.copy(pendingCopiedAttackId = null, pendingCopiedAttack = null)
                 if (state.pendingHandRevealAttackId == action.attackId) next = next.copy(pendingHandRevealAttackId = null, pendingHandRevealCount = 0)
@@ -1268,6 +1060,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     }) }
                     emit("AttackEffectKnockout", "O Pokémon Básico Ativo adversário foi Nocauteado pelo efeito do ataque.")
                 }
+                fun applyPostDamageEffects() {
                 val retaliation = if (appliedDamage > 0 && defender.id == state.players[opponent].active?.id)
                     defenderAbilities.sumOf { it.retaliateDamageCounters * 10 } +
                         if (defender.retaliateDamageCountersTurn == state.turn) defender.retaliateDamageCounters * 10 else 0
@@ -1645,6 +1438,9 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 }
                 if (next.pendingOptionalEnergyAttackId == action.attackId)
                     next = next.copy(pendingOptionalEnergyAttackId = null, pendingOptionalEnergyBonus = 0)
+                }
+                applyPostDamageEffects()
+                fun resolveAttackChoices(): MutableList<ChoiceRequest> {
                 val choices = mutableListOf<ChoiceRequest>()
                 if (Effect.ChooseOpponentAttackToRestrict in attack.effects && !defenderEffectsPrevented) {
                     val opponentAttacks = next.players[opponent].active?.let { definition(it.top).attacks }.orEmpty()
@@ -2125,6 +1921,9 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         "Revele e escolha até $maxCards Pokémon do tipo de uma Energia Básica ligada ao atacante.",
                         eligible.map { it.id }, 0, maxCards, visibleCards = eligible.map { it.id })
                 }
+                    return choices
+                }
+                val choices = resolveAttackChoices()
                 val acceleration = attack.effects.filterIsInstance<Effect.AccelerateEnergy>().firstOrNull()
                 if (choices.isNotEmpty()) next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.ATTACK,
                     resolution = Resolution(choices, shuffleAfter = attack.effects.any { it is Effect.EnergyFromDeck || it is Effect.AttachBasicEnergyFromDeckAny || it is Effect.AttachEnergyFromTopDeck || it is Effect.AttachBasicEnergyToEachBenchedPokemon || it is Effect.SearchPokemonToHand || it is Effect.SearchPokemonTypeAndStadiumToHand || it == Effect.SearchAnyCardToHand || it is Effect.SearchUpToAnyCardsToHand || it == Effect.SearchSupporterToHand || it == Effect.SearchItemToHand || it is Effect.BasicPokemonToBench || it is Effect.NamedPokemonToBench || it == Effect.SearchRotomToBench || it is Effect.SearchPokemonMatchingAttachedBasicEnergy || it is Effect.SearchBasicEnergyToHand || it == Effect.SearchEvolutionForSelfToEvolve || it is Effect.SearchEvolutionForEachBenchedPokemon }))
@@ -2158,7 +1957,216 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     val settled = settle(next, ResolutionEnd.ATTACK); next = settled.state; events += settled.events
                 }
                 }
+        }
+        when (action) {
+            is GameAction.PlayTrainer, is GameAction.UseAbility, is GameAction.UseStadiumAbility, is GameAction.ChooseCards -> {
+                val resolved = content.apply(next, action)
+                next = resolved.state; events += resolved.events
             }
+            is GameAction.ChooseStartingPlayer -> {
+                next = next.copy(startingPlayer = action.player, currentPlayer = action.player, setupPlayer = 0, phase = Phase.SELECT_ACTIVE)
+                emit("StartingPlayerChosen", "Vencedor da moeda: jogador ${actor+1}; começa: jogador ${action.player+1}.")
+            }
+            is GameAction.ChooseActive -> {
+                val card = p.hand.first { it.id == action.cardId }
+                update(actor) { it.copy(hand = it.hand - card, active = PokemonInstance(listOf(card), enteredPlayTurn = 0)) }
+                next = next.copy(phase = Phase.SELECT_BENCH)
+                emit("ActiveSelected", "Jogador ${actor+1}: ${definition(card).name} no Ativo.")
+            }
+            is GameAction.PlayBasic -> {
+                val card = p.hand.first { it.id == action.cardId }
+                update(actor) { it.copy(hand = it.hand - card, bench = it.bench + PokemonInstance(listOf(card), enteredPlayTurn = state.turn)) }
+                emit("BasicPlayed", "${definition(card).name} entrou no Banco.")
+                val playedPokemon = next.players[actor].bench.first { it.cards.last().id == card.id }
+                val onBenchAbilities = effectiveAbilities(next, actor, playedPokemon)
+                val lastDitchAbility = onBenchAbilities.firstOrNull { it.onBenchSearchSupporterFromDeck }
+                val onBenchSwitch = onBenchAbilities.any { it.onBenchSwitchAndMoveEnergy }
+                val onBenchAbility = onBenchAbilities.firstOrNull { it.onBenchAttachBasicEnergyMax > 0 }
+                val eligibleEnergy = onBenchAbility?.let { ability -> next.players[actor].hand.filter {
+                    definition(it).category == Category.ENERGY && definition(it).basicEnergy && definition(it).type == ability.onBenchAttachBasicEnergyType
+                } }.orEmpty()
+                if (state.phase == Phase.MAIN && lastDitchAbility != null && lastDitchAbility.usageKey !in next.players[actor].flags.abilitiesUsed) {
+                    next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN,
+                        resolution = Resolution(listOf(ChoiceRequest(ChoiceKind.ON_BENCH_LAST_DITCH,
+                            "${lastDitchAbility.name}: você pode buscar um Apoiador no deck.", listOf("use"), 0, 1,
+                            sourcePokemonId = playedPokemon.id, optionLabels = mapOf("use" to "Usar Last-Ditch")))))
+                } else if (state.phase == Phase.MAIN && onBenchSwitch) {
+                    next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN,
+                        resolution = Resolution(listOf(ChoiceRequest(ChoiceKind.ON_BENCH_SWITCH_AND_MOVE_ENERGY,
+                            "Você pode trocar o Pokémon que acabou de entrar no Banco com seu Ativo.", listOf(card.id), 0, 1))))
+                } else if (state.phase == Phase.MAIN && onBenchAbility != null && eligibleEnergy.isNotEmpty()) {
+                    next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN, resolution = Resolution(listOf(ChoiceRequest(
+                        ChoiceKind.ABILITY_ATTACH_MULTIPLE_BASIC_ENERGY,
+                        "${onBenchAbility.name}: você pode ligar até ${onBenchAbility.onBenchAttachBasicEnergyMax} Energia(s) Básica(s) da mão a este Pokémon.",
+                        eligibleEnergy.map { it.id }, 0, minOf(onBenchAbility.onBenchAttachBasicEnergyMax, eligibleEnergy.size), sourcePokemonId = card.id))))
+                } else if (state.phase == Phase.MAIN && onBenchAbilities.any { it.onBenchDiscardStadium } && next.stadium != null) {
+                    val stadium = next.stadium!!
+                    val owner = next.stadiumOwner ?: actor
+                    update(owner) { it.copy(discard = it.discard + stadium) }
+                    next = next.copy(stadium = null, stadiumOwner = null)
+                    emit("OnBenchStadiumDiscarded", "${definition(card).name} descartou o Estádio em jogo.")
+                } else if (state.phase == Phase.MAIN && onBenchAbilities.any { it.onBenchDiscardOpponentDeckTop } && next.players[1-actor].deck.isNotEmpty()) {
+                    val top = next.players[1-actor].deck.first()
+                    next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN,
+                        resolution = Resolution(listOf(ChoiceRequest(ChoiceKind.ON_BENCH_DISCARD_OPPONENT_DECK_TOP,
+                            "Você pode descartar a carta do topo do deck do adversário.", listOf(top.id), 0, 1, sourcePokemonId = card.id))))
+                }
+            }
+            GameAction.FinishSetup -> {
+                // Prizes are placed only after the player has selected the initial field.
+                update(actor) { it.copy(prizes = it.deck.take(6), prizePositions = it.deck.take(6).map { card -> card.id }, deck = it.deck.drop(6)) }
+                val finished = next.setupFinished + actor
+                next = next.copy(setupFinished = finished)
+                if (finished.size == 1) next = next.copy(setupPlayer = 1, phase = Phase.SELECT_ACTIVE)
+                else next = next.copy(setupPlayer = 0, phase = Phase.MULLIGAN_BONUS)
+                emit("SetupCompleted", "Jogador ${actor+1}: 6 Prêmios separados.")
+            }
+            is GameAction.MulliganDraw -> {
+                update(actor) { it.copy(hand = it.hand + it.deck.take(action.count), deck = it.deck.drop(action.count), bonusDraws = 0) }
+                emit("MulliganBonus", "Jogador ${actor+1} comprou ${action.count} carta(s) por mulligan.")
+                next = next.copy(phase = Phase.BONUS_BENCH, bonusCardIds = p.deck.take(action.count).map { it.id })
+            }
+            GameAction.FinishBonusSetup -> {
+                next = next.copy(bonusCardIds = emptyList())
+                if (actor == 0) next = next.copy(setupPlayer = 1, phase = Phase.MULLIGAN_BONUS) else startTurn(state.startingPlayer)
+            }
+            is GameAction.AttachEnergy -> {
+                val card = p.hand.first { it.id == action.cardId }
+                updatePokemon(action.pokemonId) { it.copy(energies = it.energies + card) }
+                update(actor) { it.copy(hand = it.hand - card, flags = it.flags.copy(manualEnergy = true)) }
+                emit("ManualEnergyAttached", "${definition(card).name} ligada a ${action.pokemonId}.")
+            }
+            is GameAction.Evolve -> {
+                val card = p.hand.first { it.id == action.cardId }
+                updatePokemon(action.pokemonId) { it.copy(cards = it.cards + card, lastEvolutionTurn = state.turn, restrictions = emptyList(), conditions = emptySet(), poisonDamageCounters = 1, defendingAttackFailsOnTailsTurn = -1, attackImmunityTurn = -1, incomingDamageReduction = 0, damageReductionTurn = -1, incomingDamageReductionEvolutionOnly = false, outgoingDamageReduction = 0, outgoingDamageReductionTurn = -1, preventBasicNonColorlessDamageTurn = -1, preventBasicPokemonDamageTurn = -1) }
+                update(actor) { it.copy(hand = it.hand - card) }
+                emit("PokemonEvolved", "Evoluiu para ${definition(card).name}; dano e Energias preservados.")
+                val evolvedInstance = next.players[actor].pokemon().first { it.id == action.pokemonId }
+                val evolvedAbilities = effectiveAbilities(next, actor, evolvedInstance)
+                evolvedAbilities.filter { it.onEvolveDraw > 0 }.forEach { ability ->
+                    val count = minOf(ability.onEvolveDraw, next.players[actor].deck.size)
+                    update(actor) { it.copy(hand = it.hand + it.deck.take(count), deck = it.deck.drop(count)) }
+                    emit("CardsDrawn", "Comprou $count carta(s) ao evoluir com ${ability.name}.")
+                }
+                if (evolvedAbilities.any { it.onEvolveHealAllEvolutionAndDiscardEnergy }) {
+                    val healedPokemon = next.players[actor].pokemon().filter {
+                        definition(it.top).stage != Stage.BASIC && it.damage > 0
+                    }
+                    if (healedPokemon.isNotEmpty()) {
+                        val discardedEnergy = healedPokemon.flatMap { it.energies }
+                        healedPokemon.forEach { pokemon -> updatePokemon(pokemon.id) { it.copy(damage = 0, energies = emptyList()) } }
+                        update(actor) { it.copy(discard = it.discard + discardedEnergy) }
+                        emit("EvolutionTeamHealed", "Curou ${healedPokemon.size} Pokémon Evoluído(s) e descartou ${discardedEnergy.size} Energia(s) com ${evolvedAbilities.first { it.onEvolveHealAllEvolutionAndDiscardEnergy }.name}.", healedPokemon.size)
+                    }
+                }
+                evolvedAbilities.filter { it.onEvolveShuffleRandomOpponentHandPerHeads > 0 }.forEach { ability ->
+                    val rng = SeededRng(next.rng)
+                    val flips = List(ability.onEvolveShuffleRandomOpponentHandPerHeads) { rng.nextInt(2) == 0 }
+                    emit("CoinFlipped", flips.joinToString { if (it) "CARA — ${ability.name}" else "COROA — ${ability.name}" })
+                    val opponent = 1-actor
+                    val hand = next.players[opponent].hand.toMutableList()
+                    val revealed = mutableListOf<CardInstance>()
+                    repeat(minOf(flips.count { it }, hand.size)) {
+                        revealed += hand.removeAt(rng.nextInt(hand.size))
+                    }
+                    if (revealed.isNotEmpty()) {
+                        val deck = rng.shuffle(next.players[opponent].deck + revealed)
+                        next = next.copy(players = next.players.mapIndexed { owner, player ->
+                            if (owner == opponent) player.copy(hand = hand, deck = deck) else player
+                        })
+                        emit("OpponentHandCardsShuffled", "O adversário revelou ${revealed.joinToString { definition(it).name }} e embaralhou ${revealed.size} carta(s) da mão no deck.", revealed.size)
+                        emit("DeckShuffled", "Deck adversário embaralhado após ${ability.name}.")
+                    }
+                    next = next.copy(rng = rng.state)
+                }
+                val metalAttach = evolvedAbilities.firstOrNull { it.onEvolveAttachMetalFromDiscardMax > 0 }
+                val metalEnergy = next.players[actor].discard.filter { definition(it).category == Category.ENERGY && definition(it).basicEnergy && definition(it).type == EnergyType.METAL }
+                val metalPokemon = next.players[actor].pokemon().filter { definition(it.top).type == EnergyType.METAL }
+                if (metalAttach != null && metalEnergy.isNotEmpty() && metalPokemon.isNotEmpty()) {
+                    next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN, resolution = Resolution(listOf(ChoiceRequest(
+                        ChoiceKind.EVOLUTION_METAL_ENERGY, "${metalAttach.name}: você pode escolher até ${metalAttach.onEvolveAttachMetalFromDiscardMax} Energias Metal Básicas do descarte.",
+                        metalEnergy.map { it.id }, 0, minOf(metalAttach.onEvolveAttachMetalFromDiscardMax, metalEnergy.size)))))
+                } else {
+                    val namedRecovery = evolvedAbilities.firstOrNull { it.onEvolveRecoverNamedTrainerFromDiscard != null }
+                    val eligible = namedRecovery?.let { ability -> next.players[actor].discard.filter {
+                                definition(it).category == Category.TRAINER && !definition(it).cannotBeRecoveredFromDiscard && definition(it).name == ability.onEvolveRecoverNamedTrainerFromDiscard
+                    } }.orEmpty()
+                    if (namedRecovery != null && eligible.isNotEmpty()) {
+                        next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN, resolution = Resolution(listOf(ChoiceRequest(
+                            ChoiceKind.EVOLUTION_RECOVER_NAMED_TRAINER,
+                            "${namedRecovery.name}: você pode recuperar até ${namedRecovery.onEvolveRecoverNamedTrainerMax} ${namedRecovery.onEvolveRecoverNamedTrainerFromDiscard}(s) do descarte.",
+                            eligible.map { it.id }, 0, minOf(namedRecovery.onEvolveRecoverNamedTrainerMax, eligible.size), visibleCards = eligible.map { it.id }))))
+                    }
+                }
+                val teraTrainerSearch = evolvedAbilities.firstOrNull { it.onEvolveSearchTrainerIfTeraMax > 0 }
+                val teraPresent = next.players[actor].pokemon().any { definition(it.top).isTera }
+                if (next.phase != Phase.RESOLVE_CHOICE && teraTrainerSearch != null && teraPresent) {
+                    val eligible = next.players[actor].deck.filter { definition(it).category == Category.TRAINER }
+                    next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN,
+                        resolution = Resolution(listOf(ChoiceRequest(ChoiceKind.EVOLUTION_SEARCH_TRAINER,
+                            "${teraTrainerSearch.name}: revele e escolha até ${minOf(teraTrainerSearch.onEvolveSearchTrainerIfTeraMax, eligible.size)} Treinador(es) do deck.",
+                            eligible.map { it.id }, 0, minOf(teraTrainerSearch.onEvolveSearchTrainerIfTeraMax, eligible.size), visibleCards = eligible.map { it.id })), shuffleAfter = true))
+                }
+                if (next.phase != Phase.RESOLVE_CHOICE && evolvedAbilities.any { it.onEvolveConfuseOpponentActive }) {
+                    val enemyActive = next.players[1-actor].active
+                    if (enemyActive != null && effectiveAbilities(next, 1-actor, enemyActive).none { it.preventOpponentEffects }) {
+                        next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN,
+                            resolution = Resolution(listOf(ChoiceRequest(ChoiceKind.EVOLUTION_CONFUSE_ACTIVE,
+                                "Usar ${evolvedAbilities.first { it.onEvolveConfuseOpponentActive }.name} e Confundir o Pokémon Ativo adversário?",
+                                listOf(enemyActive.id), 0, 1))))
+                    }
+                }
+                val onEvolveSwitch = evolvedAbilities.firstOrNull { it.onEvolveSwitch }
+                val switchCandidates = onEvolveSwitch?.let { ability -> next.players[1-actor].bench.filter { pokemon ->
+                    ability.onEvolveSwitchOpponentBenchMaxRemainingHp <= 0 ||
+                        effectiveHp(next, pokemon) - pokemon.damage <= ability.onEvolveSwitchOpponentBenchMaxRemainingHp
+                } }.orEmpty()
+                if (next.phase != Phase.RESOLVE_CHOICE && onEvolveSwitch != null && switchCandidates.isNotEmpty()) {
+                    next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN, resolution = Resolution(listOf(ChoiceRequest(
+                        ChoiceKind.EVOLUTION_SWITCH, "Usar ${onEvolveSwitch.name}? Escolha um Pokémon do Banco adversário ou pule.", switchCandidates.map { it.id }, 0, 1))))
+                }
+                if (next.phase != Phase.RESOLVE_CHOICE) {
+                    val spreadAbility = evolvedAbilities.firstOrNull { it.onEvolveDamageCounters }
+                    val targets = next.players[1-actor].pokemon().filter { target ->
+                        effectiveAbilities(next, 1-actor, target).none { it.preventOpponentEffects }
+                    }
+                    if (spreadAbility != null && targets.size >= spreadAbility.damageTargets) {
+                        next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN,
+                            resolution = Resolution(listOf(ChoiceRequest(ChoiceKind.EVOLUTION_DAMAGE_TARGETS,
+                                "${spreadAbility.name}: você pode escolher ${spreadAbility.damageTargets} Pokémon adversários para receber ${spreadAbility.damageCounters} contadores de dano cada.",
+                                targets.map { it.id }, 0, spreadAbility.damageTargets, amount = spreadAbility.damageCounters * 10))))
+                    }
+                }
+                if (next.phase != Phase.RESOLVE_CHOICE) {
+                    val ability = evolvedAbilities.firstOrNull { it.onEvolveDiscardOpponentDeckCount > 0 }
+                    if (ability != null && next.players[1-actor].deck.isNotEmpty()) next = next.copy(phase = Phase.RESOLVE_CHOICE,
+                        afterResolution = ResolutionEnd.MAIN, resolution = Resolution(listOf(ChoiceRequest(
+                            ChoiceKind.EVOLUTION_DISCARD_OPPONENT_DECK,
+                            "Usar ${ability.name} e descartar até ${ability.onEvolveDiscardOpponentDeckCount} cartas do topo do deck adversário?",
+                            listOf("use"), 0, 1, amount = ability.onEvolveDiscardOpponentDeckCount,
+                            optionLabels = mapOf("use" to "Usar habilidade")))))
+                }
+                if (next.phase != Phase.RESOLVE_CHOICE && evolvedAbilities.any { it.onEvolveOpponentHandBasicToBench }) {
+                    val opponent = next.players[1-actor]
+                    val basicPokemon = opponent.hand.filter { definition(it).category == Category.POKEMON && definition(it).stage == Stage.BASIC }
+                    if (basicPokemon.isNotEmpty()) {
+                        next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN,
+                            resolution = Resolution(listOf(ChoiceRequest(
+                                ChoiceKind.EVOLUTION_OPPONENT_HAND_BASIC_TO_BENCH,
+                                "${evolvedAbilities.first { it.onEvolveOpponentHandBasicToBench }.name}: revele a mão adversária e escolha até ${minOf(basicPokemon.size, (5-opponent.bench.size).coerceAtLeast(0))} Pokémon Básico(s) para colocar no Banco dela.",
+                                basicPokemon.map { it.id }, 0, minOf(basicPokemon.size, (5-opponent.bench.size).coerceAtLeast(0)),
+                                visibleCards = opponent.hand.map { it.id }))))
+                    }
+                }
+            }
+            is GameAction.Retreat -> {
+                val active = p.active!!
+                val target = p.bench.first { it.id == action.pokemonId }
+                val paid = active.energies.filter { it.id in action.energyIds }
+                update(actor) { it.copy(active = target.copy(enteredActiveTurn = state.turn, conditions = emptySet(), poisonDamageCounters = 1, attackImmunityTurn = -1, incomingDamageReduction = 0, damageReductionTurn = -1, incomingDamageReductionEvolutionOnly = false, outgoingDamageReduction = 0, outgoingDamageReductionTurn = -1, preventBasicNonColorlessDamageTurn = -1, preventBasicPokemonDamageTurn = -1), bench = it.bench - target + active.copy(energies = active.energies - paid.toSet(), restrictions = emptyList(), attackIdsUsedWhileActive = emptyList(), conditions = emptySet(), poisonDamageCounters = 1, attackImmunityTurn = -1, incomingDamageReduction = 0, damageReductionTurn = -1, incomingDamageReductionEvolutionOnly = false, outgoingDamageReduction = 0, outgoingDamageReductionTurn = -1, preventBasicNonColorlessDamageTurn = -1, preventBasicPokemonDamageTurn = -1), discard = it.discard + paid, flags = it.flags.copy(retreat = true)) }
+                emit("Retreated", "Recuou descartando ${paid.size} Energia(s).")
+            }
+            is GameAction.Attack -> resolveAttack(action)
             is GameAction.TakePrize -> {
                 val card = p.prizes.first { it.id == action.cardId }
                 update(actor) { it.copy(prizes = it.prizes - card, hand = it.hand + card) }
