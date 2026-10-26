@@ -1434,6 +1434,7 @@ internal object CatalogRuleCompiler {
                 reduceDefenderAttack != null -> effects += Effect.ReduceDefendingAttackDamageNextTurn(reduceDefenderAttack.groupValues[1].toInt())
                 preventBasicNonColorlessDamage != null -> effects += Effect.PreventBasicNonColorlessDamageNextTurn
                 preventBasicDamage -> effects += Effect.PreventBasicPokemonDamageNextTurn
+                text == "This Pokémon is now Asleep." -> effects += Effect.StatusCondition(SpecialCondition.ASLEEP, onSelf = true)
                 text == "This Pokémon is now Confused." -> effects += Effect.StatusCondition(SpecialCondition.CONFUSED, onSelf = true)
                 text == "Your opponent's Active Pokémon is now Confused." -> effects += Effect.StatusCondition(SpecialCondition.CONFUSED)
                 text == "During your opponent's next turn, the Defending Pokémon can't attack." ||
