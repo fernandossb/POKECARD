@@ -968,10 +968,14 @@ internal class ContentEngine(private val rules: RulesEngine) {
                             }
                         } else if (remaining > 0) {
                             val energies = s.players[actor].discard.filter { def(it).category == Category.ENERGY && def(it).basicEnergy && (choice.energyType == null || def(it).type == choice.energyType) }
-                            if (energies.isNotEmpty() && s.players[actor].bench.isNotEmpty()) remainingChoices = listOf(ChoiceRequest(
+                            val eligibleTargets = (if (choice.benchedOnly) s.players[actor].bench else s.players[actor].pokemon()).filter {
+                                choice.targetPokemonType == null || def(it.top).type == choice.targetPokemonType
+                            }
+                            if (energies.isNotEmpty() && eligibleTargets.isNotEmpty()) remainingChoices = listOf(ChoiceRequest(
                                 ChoiceKind.ABILITY_DISCARD_ENERGY_FROM_DISCARD,
-                                "Você pode ligar outra Energia Básica do descarte ao Banco (até mais $remaining).",
-                                energies.map { it.id }, 0, 1, remaining = remaining, energyType = choice.energyType, benchedOnly = choice.benchedOnly)) + remainingChoices
+                                "Você pode ligar outra Energia Básica do descarte (até mais $remaining).",
+                                energies.map { it.id }, 0, 1, remaining = remaining, energyType = choice.energyType,
+                                benchedOnly = choice.benchedOnly, targetPokemonType = choice.targetPokemonType)) + remainingChoices
                         }
                     }
                     ChoiceKind.ABILITY_ATTACH_ENERGY -> if (ids.isNotEmpty()) {

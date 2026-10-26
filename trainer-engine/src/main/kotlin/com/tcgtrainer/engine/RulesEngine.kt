@@ -1879,6 +1879,19 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         eligible.map { it.id }, if (effect.required) 1 else 0, 1,
                         remaining = minOf(effect.max, eligible.size), energyType = effect.type, benchedOnly = true)
                 }
+                if (Effect.AttachLightningEnergyFromDiscardUpToOpponentEnergyCount in attack.effects) {
+                    val opponentEnergyCount = next.players[1-actor].pokemon().sumOf { it.energies.size }
+                    val eligible = next.players[actor].discard.filter {
+                        definition(it).category == Category.ENERGY && definition(it).basicEnergy && definition(it).type == EnergyType.LIGHTNING
+                    }
+                    val lightningPokemon = next.players[actor].pokemon().filter { definition(it.top).type == EnergyType.LIGHTNING }
+                    val maxCards = minOf(opponentEnergyCount, eligible.size)
+                    if (maxCards > 0 && lightningPokemon.isNotEmpty()) choices += ChoiceRequest(
+                        ChoiceKind.ABILITY_DISCARD_ENERGY_FROM_DISCARD,
+                        "Você pode ligar até $maxCards Energia(s) Básica(s) {L} do descarte aos seus Pokémon {L}.",
+                        eligible.map { it.id }, 0, 1, remaining = maxCards, energyType = EnergyType.LIGHTNING,
+                        targetPokemonType = EnergyType.LIGHTNING)
+                }
                 attack.effects.filterIsInstance<Effect.AttachBasicFightingEnergyFromDiscardToSelf>().forEach { effect ->
                     val eligible = next.players[actor].discard.filter { definition(it).category == Category.ENERGY && definition(it).basicEnergy && definition(it).type == EnergyType.FIGHTING }
                     if (eligible.isNotEmpty()) choices += ChoiceRequest(

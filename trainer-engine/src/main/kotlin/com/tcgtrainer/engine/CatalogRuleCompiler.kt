@@ -798,6 +798,7 @@ internal object CatalogRuleCompiler {
         val attachTypedEnergyFromDeckBench = Regex("Search your deck for up to (\\d+) Basic \\{([GRFLWPMD])\\} Energy cards and attach them to your Benched Pokémon in any way you like\\. Then, shuffle your deck\\.").matchEntire(text)
         val attachTypedEnergyFromDiscardBench = Regex("Attach up to (\\d+) Basic \\{([GRFLWPMD])\\} Energy cards from your discard pile to your Benched Pokémon in any way you like\\.").matchEntire(text)
         val attachBasicEnergyFromDiscardToBenched = text == "Attach a Basic Energy card from your discard pile to 1 of your Benched Pokémon."
+        val attachLightningEnergyFromDiscardByOpponentEnergyCount = text == "Choose Basic {L} Energy cards from your discard pile up to the amount of Energy attached to all of your opponent's Pokémon and attach them to your {L} Pokémon in any way you like."
         val attachBasicFightingEnergyFromDiscardToSelf = Regex("Attach up to (\\d+) Basic \\{F\\} Energy cards from your discard pile to this Pokémon\\.").matchEntire(text)
         val attachEnergyToEachBench = Regex("For each of your Benched Pokémon, search your deck for a Basic \\{([GRFLWPMD])\\} Energy card and attach it to that Pokémon\\. Then, shuffle your deck\\.").matchEntire(text)
         val coinKnockOutBasic = text == "Flip a coin. If heads, Knock Out your opponent's Active Basic Pokémon. If tails, Knock Out 1 of your opponent's Benched Basic Pokémon."
@@ -1134,6 +1135,7 @@ internal object CatalogRuleCompiler {
                 attachTypedEnergyFromDeckBench != null -> effects += Effect.AttachBasicEnergyFromDeckAny(attachTypedEnergyFromDeckBench.groupValues[1].toInt(), symbolType(attachTypedEnergyFromDeckBench.groupValues[2]) ?: return null, benchedOnly = true)
                 attachTypedEnergyFromDiscardBench != null -> effects += Effect.AttachBasicEnergyFromDiscardAny(attachTypedEnergyFromDiscardBench.groupValues[1].toInt(), symbolType(attachTypedEnergyFromDiscardBench.groupValues[2]) ?: return null, benchedOnly = true)
                 attachBasicEnergyFromDiscardToBenched -> effects += Effect.AttachBasicEnergyFromDiscardAny(1, benchedOnly = true, required = true)
+                attachLightningEnergyFromDiscardByOpponentEnergyCount -> effects += Effect.AttachLightningEnergyFromDiscardUpToOpponentEnergyCount
                 attachBasicFightingEnergyFromDiscardToSelf != null -> effects += Effect.AttachBasicFightingEnergyFromDiscardToSelf(attachBasicFightingEnergyFromDiscardToSelf.groupValues[1].toInt())
                 attachEnergyToEachBench != null -> effects += Effect.AttachBasicEnergyToEachBenchedPokemon(symbolType(attachEnergyToEachBench.groupValues[1]) ?: return null)
                 coinKnockOutBasic -> effects += Effect.CoinKnockOutBasic
