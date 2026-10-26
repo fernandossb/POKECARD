@@ -182,7 +182,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             Phase.SELECT_BENCH -> action is GameAction.PlayBasic || action == GameAction.FinishSetup
             Phase.MULLIGAN_BONUS -> action is GameAction.MulliganDraw
             Phase.BONUS_BENCH -> action is GameAction.PlayBasic || action == GameAction.FinishBonusSetup
-            Phase.MAIN -> action is GameAction.PlayBasic || action is GameAction.AttachEnergy || action is GameAction.Evolve || action is GameAction.Attack || action is GameAction.Retreat || action == GameAction.EndTurn || action is GameAction.PlayTrainer || action is GameAction.UseAbility
+            Phase.MAIN -> action is GameAction.PlayBasic || action is GameAction.AttachEnergy || action is GameAction.Evolve || action is GameAction.Attack || action is GameAction.Retreat || action == GameAction.EndTurn || action is GameAction.PlayTrainer || action is GameAction.UseAbility || action == GameAction.UseStadiumAbility
             Phase.RESOLVE_CHOICE -> action is GameAction.ChooseCards
             Phase.SELECT_PRIZES -> action is GameAction.TakePrize
             Phase.PROMOTE -> action is GameAction.Promote
@@ -190,7 +190,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         }
         if (!allowed) return reason("Ação indisponível na fase ${state.phase}.")
         return when (action) {
-            is GameAction.PlayTrainer, is GameAction.UseAbility, is GameAction.ChooseCards -> content.validate(state, action)
+            is GameAction.PlayTrainer, is GameAction.UseAbility, is GameAction.UseStadiumAbility, is GameAction.ChooseCards -> content.validate(state, action)
             is GameAction.ChooseStartingPlayer -> if (action.player in 0..1) Legality.Legal else reason("Jogador inválido.")
             is GameAction.ChooseActive -> if (hand(action.cardId)?.let { isBasic(definition(it)) } == true) Legality.Legal else reason("Escolha um Pokémon Básico da mão.")
             is GameAction.PlayBasic -> when {
@@ -681,7 +681,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         }
         val p = state.players[actor]
         when (action) {
-            is GameAction.PlayTrainer, is GameAction.UseAbility, is GameAction.ChooseCards -> {
+            is GameAction.PlayTrainer, is GameAction.UseAbility, is GameAction.UseStadiumAbility, is GameAction.ChooseCards -> {
                 val resolved = content.apply(next, action)
                 next = resolved.state; events += resolved.events
             }
@@ -2226,6 +2226,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             p.pokemon().forEach { target -> candidates += GameAction.AttachEnergy(card.id, target.id); candidates += GameAction.Evolve(card.id, target.id) }
         }
         p.pokemon().forEach { pokemon -> effectiveAbilities(state, actingPlayer(state), pokemon).forEach { candidates += GameAction.UseAbility(pokemon.id, it.id) } }
+        candidates += GameAction.UseStadiumAbility
         (0..minOf(p.bonusDraws, p.deck.size)).forEach { candidates += GameAction.MulliganDraw(it) }
         p.active?.let { active ->
             definition(active.top).attacks.forEach { attack ->

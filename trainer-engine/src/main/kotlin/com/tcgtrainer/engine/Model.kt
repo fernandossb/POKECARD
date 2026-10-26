@@ -237,6 +237,7 @@ import kotlinx.serialization.Serializable
     @Serializable data object Sonia : TrainerEffect
     @Serializable data object CoinSwitch : TrainerEffect
     @Serializable data object ForestOfVitality : TrainerEffect
+    @Serializable data object MysteryGarden : TrainerEffect
     @Serializable data class DiscardOpponentItemsFromHand(val max: Int) : TrainerEffect
     @Serializable data object Briar : TrainerEffect
     @Serializable data class HealEachOwnPokemonOfType(val amount: Int, val type: EnergyType) : TrainerEffect
@@ -399,7 +400,7 @@ fun PokemonInstance.withAddedTool(card: CardInstance): PokemonInstance =
 @Serializable data class AttackRestriction(val attackId: String?, val blockedTurn: Int)
 @Serializable data class TurnFlags(val manualEnergy: Boolean = false, val supporter: Boolean = false, val retreat: Boolean = false,
     val stadium: Boolean = false, val abilitiesUsed: List<String> = emptyList(), val damageBoosts: Map<EnergyType, Int> = emptyMap(),
-    val teraActiveKnockoutExtraPrize: Boolean = false)
+    val teraActiveKnockoutExtraPrize: Boolean = false, val mysteryGardenUsed: Boolean = false)
 @Serializable data class PlayerState(
     val deck: List<CardInstance>, val hand: List<CardInstance> = emptyList(),
     val discard: List<CardInstance> = emptyList(), val prizes: List<CardInstance> = emptyList(),
@@ -451,6 +452,7 @@ fun PokemonInstance.withAddedTool(card: CardInstance): PokemonInstance =
     @Serializable data class Attack(val attackId: String, val targetId: String? = null) : GameAction
     @Serializable data class PlayTrainer(val cardId: String) : GameAction
     @Serializable data class UseAbility(val pokemonId: String, val abilityId: String) : GameAction
+    @Serializable data object UseStadiumAbility : GameAction
     @Serializable data class ChooseCards(val cardIds: List<String>) : GameAction
     @Serializable data class Retreat(val pokemonId: String, val energyIds: List<String>) : GameAction
     @Serializable data class TakePrize(val cardId: String) : GameAction

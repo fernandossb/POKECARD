@@ -360,6 +360,13 @@ internal object CatalogRuleCompiler {
                     trainerEffect = TrainerEffect.HealEachOwnPokemonOfType(60, EnergyType.LIGHTNING))
             }
             val trainerText = raw.s("effect").orEmpty()
+            if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Stadium" &&
+                trainerText == "Once during each player's turn, that player may discard an Energy card from their hand in order to draw cards until they have as many cards in their hand as they have {P} Pokémon in play.") {
+                return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
+                    category = Category.TRAINER, verified = true, source = source,
+                    artAsset = "remote:$image/high.webp", text = trainerText,
+                    trainerType = TrainerType.STADIUM, trainerEffect = TrainerEffect.MysteryGarden)
+            }
             if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Supporter" &&
                 trainerText.startsWith("You can use this card only if your opponent has exactly 2 Prize cards remaining.") &&
                 trainerText.endsWith("During this turn, if your opponent's Active Pokémon is Knocked Out by damage from an attack used by your Tera Pokémon, take 1 more Prize card.")) {

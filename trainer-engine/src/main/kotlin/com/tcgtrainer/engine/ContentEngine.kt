@@ -104,6 +104,11 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         s.stadium?.let { def(it).name == d.name } == true -> illegal("Já existe um Estádio com esse nome em jogo.")
                         else -> Legality.Legal
                     }
+                    TrainerEffect.MysteryGarden -> when {
+                        p.flags.stadium -> illegal("Você já jogou um Estádio neste turno.")
+                        s.stadium?.let { def(it).name == d.name } == true -> illegal("Já existe um Estádio com esse nome em jogo.")
+                        else -> Legality.Legal
+                    }
                     is TrainerEffect.DiscardOpponentItemsFromHand -> Legality.Legal
                     TrainerEffect.Briar -> if (s.players[1-actor].prizes.size == 2) Legality.Legal else illegal("Briar só pode ser jogada quando o oponente tem exatamente 2 Prêmios restantes.")
                     is TrainerEffect.HealEachOwnPokemonOfType -> Legality.Legal
@@ -111,6 +116,18 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     TrainerEffect.SearchEachEvolutionStage -> if (p.deck.any { def(it).category == Category.POKEMON }) Legality.Legal else illegal("Não há Pokémon no deck para buscar.")
                     is TrainerEffect.HealPokemon -> if ((if (effect.activeOnly) listOfNotNull(p.active) else p.pokemon()).none { it.damage > 0 }) illegal("Não há dano para curar no alvo permitido.") else Legality.Legal
                     is TrainerEffect.RecoverEnergy -> if (p.discard.none { def(it).category == Category.ENERGY }) illegal("Não há Energia Básica no descarte.") else Legality.Legal
+                }
+            }
+            GameAction.UseStadiumAbility -> {
+                val psychicCount = p.pokemon().count { def(it.top).type == EnergyType.PSYCHIC }
+                when {
+                    s.phase != Phase.MAIN -> illegal("Esta habilidade só pode ser usada na fase principal.")
+                    s.stadium?.let { def(it).trainerEffect } != TrainerEffect.MysteryGarden -> illegal("Mystery Garden não está em jogo.")
+                    p.flags.mysteryGardenUsed -> illegal("Você já usou Mystery Garden neste turno.")
+                    psychicCount == 0 -> illegal("É preciso ter um Pokémon Psíquico em jogo.")
+                    p.hand.none { def(it).category == Category.ENERGY } -> illegal("Não há Energia na mão para descartar.")
+                    p.hand.size - 1 >= psychicCount || p.deck.isEmpty() -> illegal("Descartar uma Energia não compraria cartas.")
+                    else -> Legality.Legal
                 }
             }
             is GameAction.UseAbility -> {
@@ -271,6 +288,12 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         if (heads) begin(Resolution(listOf(ChoiceRequest(ChoiceKind.SWITCH_OPPONENT, "Cara: escolha o novo Ativo adversário.", s.players[1-actor].bench.map { it.id }, 1, 1))))
                     }
                     TrainerEffect.ForestOfVitality -> Unit
+                    TrainerEffect.MysteryGarden -> {
+                        val old = s.stadium; val owner = s.stadiumOwner
+                        if (old != null && owner != null) update(owner) { it.copy(discard = it.discard + old) }
+                        s = s.copy(stadium = card, stadiumOwner = actor)
+                        update { it.copy(flags = it.flags.copy(stadium = true)) }
+                    }
                     is TrainerEffect.DiscardOpponentItemsFromHand -> {
                         val opponentHand = s.players[1-actor].hand
                         val items = opponentHand.filter { def(it).trainerType == TrainerType.ITEM }
@@ -316,6 +339,14 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         "Escolha até ${effect.max} Energias Básicas do descarte.", p.discard.filter { def(it).category == Category.ENERGY }.map { it.id }, 0,
                         minOf(effect.max, p.discard.count { def(it).category == Category.ENERGY }))), shuffleAfter = effect.toDeck))
                 }
+            }
+            is GameAction.UseStadiumAbility -> {
+                val psychicCount = p.pokemon().count { def(it.top).type == EnergyType.PSYCHIC }
+                update { it.copy(flags = it.flags.copy(mysteryGardenUsed = true)) }
+                events += GameEvent("StadiumAbilityUsed", "Usou Mystery Garden.")
+                begin(Resolution(listOf(ChoiceRequest(ChoiceKind.DISCARD,
+                    "Mystery Garden: descarte uma Energia da mão.",
+                    p.hand.filter { def(it).category == Category.ENERGY }.map { it.id }, 1, 1)), drawTo = psychicCount))
             }
             is GameAction.UseAbility -> {
                 val p = s.players[actor]; val pokemon = p.pokemon().first { it.id == action.pokemonId }

@@ -421,6 +421,11 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                     if (improvement > 20 && o.ownDeckCount > 0) 35.0+improvement else -5.0
                 } else if (o.ownDeckCount <= 1) -5.0 else 150.0-o.ownHand.size
             }
+            GameAction.UseStadiumAbility -> {
+                val psychicCount = own.count { d(it.top).type == EnergyType.PSYCHIC }
+                val draws = minOf((psychicCount - (o.ownHand.size - 1)).coerceAtLeast(0), o.ownDeckCount)
+                if (draws > 0) 115.0 + draws * 18.0 else -5.0
+            }
             is GameAction.Retreat -> {
                 val improvement = attackValue(pokemon(a.pokemonId)) - (active?.let(::attackValue) ?: 0.0)
                 if (improvement > 5) 30.0+improvement-a.energyIds.size*10 else -5.0
@@ -445,6 +450,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 TrainerEffect.GreatBall, TrainerEffect.Sonia -> if (o.ownDeckCount > 0 && own.size < 5) 90.0 else -5.0
                 TrainerEffect.CoinSwitch -> if (o.opponentField.size > 1) 20.0 else -5.0
                 TrainerEffect.ForestOfVitality -> 30.0
+                TrainerEffect.MysteryGarden -> -5.0
                 is TrainerEffect.DiscardOpponentItemsFromHand -> if (o.opponentHandCount > 0) 45.0 else 15.0
                 TrainerEffect.Briar -> if (o.opponentPrizeCount == 2) 115.0 else -5.0
                 is TrainerEffect.HealEachOwnPokemonOfType -> own.filter { d(it.top).type == effect.type }

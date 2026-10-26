@@ -229,6 +229,12 @@ internal data class DraggedCard(val card: CardInstance, val origin: Rect, val po
                 FilledTonalButton(onClick = action, enabled = !busy && dragged == null,
                     modifier = Modifier.align(Alignment.CenterEnd).offset(y = 42.dp).widthIn(max = 78.dp), contentPadding = PaddingValues(horizontal = 7.dp, vertical = 8.dp), shape = RoundedCornerShape(topStart = 5.dp, bottomStart = 5.dp)) { Text(label, fontSize = 9.sp, fontWeight = FontWeight.Bold) }
             }
+            if (interactive && state.phase == Phase.MAIN && engine.validate(state, GameAction.UseStadiumAbility) == Legality.Legal) {
+                FilledTonalButton(onClick = { dispatch(listOf(GameAction.UseStadiumAbility)) }, enabled = !busy && dragged == null,
+                    modifier = Modifier.align(Alignment.CenterEnd).offset(y = 96.dp).widthIn(max = 78.dp), contentPadding = PaddingValues(horizontal = 7.dp, vertical = 8.dp), shape = RoundedCornerShape(topStart = 5.dp, bottomStart = 5.dp)) {
+                    Text("JARDIM", fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                }
+            }
             if (actor == 0 && (state.phase == Phase.SELECT_ACTIVE || state.phase == Phase.PROMOTE || state.phase == Phase.SELECT_BENCH)) {
                 Text(phaseLabel(state.phase), Modifier.align(Alignment.Center).offset(y = if (state.phase == Phase.SELECT_ACTIVE) 110.dp else 154.dp)
                     .background(Color(0xFF102A3B).copy(alpha = .88f), RoundedCornerShape(5.dp)).padding(8.dp), fontSize = 10.sp, color = Color.White)
