@@ -359,7 +359,12 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 val charge = attack.effects.filterIsInstance<Effect.EnergyFromDeck>().sumOf { it.count }
                 val chargeValue = if (o.ownDeckCount > 0 && active.energies.size < (d(active.top).attacks.maxOfOrNull { it.cost.size } ?: 0)) charge*35.0 else 0.0
                 val drawValue = if (o.ownDeckCount > draw+1) minOf(draw, (6-o.ownHand.size).coerceAtLeast(0))*10.0 else 0.0
-                if (p.damage == 0) chargeValue+drawValue-1 else 10.0+p.damage.coerceAtMost(p.effectiveHp-p.currentDamage)*.35 + chargeValue +
+                val benchSpreadValue = attack.effects.filterIsInstance<Effect.AllOpponentBenchDamage>().sumOf { effect ->
+                    o.opponentField.filter { it.id != o.opponentActiveId }.sumOf { target ->
+                        minOf(effect.amount, (hp(target)-target.damage).coerceAtLeast(0))
+                    }
+                }
+                if (p.damage == 0) chargeValue+drawValue+benchSpreadValue*.35-1 else 10.0+p.damage.coerceAtMost(p.effectiveHp-p.currentDamage)*.35 + benchSpreadValue*.35 + chargeValue +
                     (if (p.knockout) (if (p.uncertain) .5 else 1.0)*(200.0*p.prizes + if (p.prizes >= o.ownPrizeCount) 10000.0 else 0.0) else 0.0)
             }
             is GameAction.UseAbility -> {

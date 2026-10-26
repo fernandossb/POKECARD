@@ -589,6 +589,7 @@ internal object CatalogRuleCompiler {
         val discardAllOpponentSpecialEnergy = text == "Discard all Special Energy from all of your opponent's Pokémon."
         val discardOpponentToolsAndSpecialEnergy = text == "Discard all Pokémon Tools and Special Energy from all of your opponent's Pokémon."
         val benchDamage = Regex("This attack also does (\\d+) damage to 1 of your opponent's Benched Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
+        val allOpponentBenchDamage = Regex("This attack does (\\d+) damage to each of your opponent's Benched Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
         val ownBenchAttackDamage = Regex("This attack also does (\\d+) damage to each of your Benched Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
         val damagedBenchDamage = Regex("This attack also does (\\d+) damage to 1 of your opponent's Benched Pokémon that has any damage counters on it\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
         val selectedPokemonDamage = Regex("This attack does (\\d+) damage to 1 of your opponent's Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
@@ -853,6 +854,7 @@ internal object CatalogRuleCompiler {
         val energySearchSelfPoison = Regex("Search your deck for up to (\\d+) Basic \\{([GFRLWPMD])\\} Energy cards and attach them to this Pokémon\\. Then, shuffle your deck\\. If you attached Energy to a Pokémon in this way, this Pokémon is now Poisoned\\.").matchEntire(text)
             when {
                 text.isEmpty() -> Unit
+                allOpponentBenchDamage != null -> effects += Effect.AllOpponentBenchDamage(allOpponentBenchDamage.groupValues[1].toInt())
                 attachBasicGrassAndHealBenched -> effects += Effect.AttachBasicEnergyFromHandToBenchedThenHealAll(EnergyType.GRASS)
                 healEachPokemonBoth != null -> effects += Effect.HealEachPokemon(healEachPokemonBoth.groupValues[1].toInt())
                 healEachPokemon != null -> effects += Effect.HealEachOwnPokemon(healEachPokemon.groupValues[1].toInt())

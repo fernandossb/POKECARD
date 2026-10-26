@@ -140,6 +140,7 @@ import kotlinx.serialization.Serializable
     @Serializable data object DiscardAllOpponentSpecialEnergy : Effect
     @Serializable data object DiscardOpponentToolsAndSpecialEnergy : Effect
     @Serializable data class BenchDamage(val amount: Int, val requiresDamageCounters: Boolean = false) : Effect
+    @Serializable data class AllOpponentBenchDamage(val amount: Int) : Effect
     @Serializable data class OwnBenchDamage(val amount: Int) : Effect
     @Serializable data class DiscardEnergyThenBenchDamage(val count: Int, val amount: Int) : Effect
     @Serializable data class OptionalShuffleEnergyThenBenchDamage(val count: Int, val amount: Int) : Effect
