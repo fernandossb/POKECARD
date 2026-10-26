@@ -522,6 +522,7 @@ internal object CatalogRuleCompiler {
         val knockOutBothActive = text == "Both Active Pokémon are Knocked Out."
         val repeatedMultiTargetDamage = Regex("Choose 1 of your opponent's Pokémon (\\d+) times\\. \\(You can choose the same Pokémon more than once\\.\\) For each time you chose a Pokémon, do (\\d+) damage to it\\. This damage isn't affected by Weakness or Resistance\\.").matchEntire(text)
         val opponentDiscard = Regex("Discard a random card from your opponent's hand\\.").matchEntire(text)
+        val opponentHandAndDeckDiscard = text == "Discard a random card from your opponent's hand. Discard the top card of your opponent's deck."
         val opponentChoosesHandDiscard = Regex("Your opponent discards (\\d+) cards from their hand\\.").matchEntire(text)
         val opponentChoosesHandShuffle = Regex("Your opponent chooses (\\d+) cards from their hand and shuffles those cards into their deck\\.").matchEntire(text)
         val opponentShuffleRandom = Regex("Choose a random card from your opponent's hand(?:, and your opponent reveals that card and shuffles it into their deck|\\. Your opponent reveals that card and shuffles it into their deck)\\.").matchEntire(text)
@@ -915,6 +916,10 @@ internal object CatalogRuleCompiler {
                 opponentChoosesHandShuffle != null -> effects += Effect.OpponentChoosesHandShuffle(opponentChoosesHandShuffle.groupValues[1].toInt())
                 opponentChoosesHandDiscard != null -> effects += Effect.OpponentChoosesHandDiscard(opponentChoosesHandDiscard.groupValues[1].toInt())
                 revealAndChooseOpponentHandDiscard -> effects += Effect.RevealAndChooseOpponentHandDiscard
+                opponentHandAndDeckDiscard -> {
+                    effects += Effect.DiscardRandomOpponentHand(1)
+                    effects += Effect.DiscardOpponentDeck(1)
+                }
                 opponentDiscard != null -> effects += Effect.DiscardRandomOpponentHand(1)
                 opponentShuffleRandom != null -> effects += Effect.ShuffleRandomOpponentHand(1)
                 opponentDeckDiscard != null -> effects += Effect.DiscardOpponentDeck(opponentDeckDiscard.groupValues[1].toIntOrNull() ?: 1)
