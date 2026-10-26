@@ -59,6 +59,8 @@ internal object CatalogRuleCompiler {
             return AbilityDefinition("$id-ability$index", name, text, checkupDamageCountersPerPokemonWithAbilityExceptFroslass = 1)
         if (text == "If this Pokémon has no Energy attached, it has no Retreat Cost.")
             return AbilityDefinition("$id-ability$index", name, text, freeRetreatWithNoEnergy = true)
+        if (text == "Your Basic Pokémon in play have no Retreat Cost.")
+            return AbilityDefinition("$id-ability$index", name, text, basicPokemonHaveFreeRetreat = true)
         if (text == "Once during your turn, you may use this Ability. Switch your Active Pokémon with 1 of your Benched Pokémon.")
             return AbilityDefinition("$id-ability$index", name, text, usageKey = name, switchOwnActive = true)
         if (text == "Attacks used by this Pokémon cost {C} less for each Kofu card in your discard pile.")

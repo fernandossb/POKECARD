@@ -66,7 +66,10 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                     if (d(target.top).stage != Stage.BASIC) abilities.sumOf { it.opponentActiveEvolutionRetreatCostBonus } else 0
             } else 0
             val targetToolReduction = (target.tool?.let(::d)?.trainerEffect as? TrainerEffect.RetreatReduction)?.amount ?: 0
-            val targetRetreatCost = (d(target.top).retreatCost + retreatTax - targetToolReduction).coerceAtLeast(0)
+            val latiasFreeRetreat = d(target.top).stage == Stage.BASIC && own.any { pokemon ->
+                d(pokemon.top).abilities.any { it.basicPokemonHaveFreeRetreat }
+            }
+            val targetRetreatCost = (if (latiasFreeRetreat) 0 else d(target.top).retreatCost + retreatTax - targetToolReduction).coerceAtLeast(0)
             val nWeaknessChanged = own.any { pokemon -> d(pokemon.top).abilities.any { it.changeOpponentNsPokemonWeaknessToPsychic } } && d(target.top).name.startsWith("N's ")
             val effectiveTarget = if (nWeaknessChanged) target.copy(weaknessOverride = EnergyType.PSYCHIC) else target
             val base = effects.damage(p, effectiveTarget, a.effects + Effect.Damage(extra), input.flags.damageBoosts[d(p.top).type] ?: 0,

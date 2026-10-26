@@ -215,7 +215,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             abilities(source, true).any { ability ->
                 val type = ability.freeRetreatWithAttachedEnergyType
                 type != null && pokemon.energies.any { definition(it).type == type }
-            }
+            } || (definition(pokemon.top).stage == Stage.BASIC && abilities(source, true).any { it.basicPokemonHaveFreeRetreat })
         } || (pokemon.energies.isEmpty() && abilities(pokemon, true).any { it.freeRetreatWithNoEnergy })
         val base = if (free) 0 else definition(pokemon.top).retreatCost
         val increase = opponentPokemon.sumOf { source ->

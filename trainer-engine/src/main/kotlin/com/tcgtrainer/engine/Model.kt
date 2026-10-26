@@ -239,6 +239,7 @@ import kotlinx.serialization.Serializable
     val onEvolveShuffleRandomOpponentHandPerHeads: Int = 0,
     val damageBonusAgainstActiveWhenDamageAtLeast: Int = 0, val damageBonusAmount: Int = 0,
     val freeRetreatWithAttachedEnergyType: EnergyType? = null,
+    val basicPokemonHaveFreeRetreat: Boolean = false,
     val onEvolveAttachMetalFromDiscardMax: Int = 0,
     val devolveOpponentPokemonMax: Int = 0,
     val opponentActiveEvolutionRetreatCostBonus: Int = 0,
