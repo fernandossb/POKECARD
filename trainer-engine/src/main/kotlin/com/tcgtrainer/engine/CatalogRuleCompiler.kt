@@ -464,6 +464,7 @@ internal object CatalogRuleCompiler {
         val coinKnockOutBasic = text == "Flip a coin. If heads, Knock Out your opponent's Active Basic Pokémon. If tails, Knock Out 1 of your opponent's Benched Basic Pokémon."
         val coinStatus = Regex("Flip a coin\\. If heads, your opponent's Active Pokémon is now (Poisoned|Burned|Asleep|Paralyzed|Confused)\\.").matchEntire(text)
         val opponentTypeStatus = Regex("If your opponent's Active Pokémon is a \\{([GRFLWPMDN])\\} Pokémon, it is now (Poisoned|Burned|Asleep|Paralyzed|Confused)\\.").matchEntire(text)
+        val strongPoison = Regex("Your opponent's Active Pokémon is now Poisoned\\. During Pokémon Checkup, put (\\d+) damage counters on that Pokémon instead of 1\\.").matchEntire(text)
         val status = Regex("Your opponent's Active Pokémon is now (Poisoned|Burned|Asleep|Paralyzed|Confused)\\.").matchEntire(text)
         val discardDefendingCoin = Regex("Flip a coin\\. If heads, discard (an|a|1|2) Energy from your opponent's Active Pokémon\\.").matchEntire(text)
         val discardDefendingPerHeads = Regex("Flip (\\d+) coins?\\. For each heads, discard (an|a|1|2) Energy from your opponent's Active Pokémon\\.").matchEntire(text)
@@ -961,6 +962,8 @@ internal object CatalogRuleCompiler {
                     effects += Effect.BenchedCountDamage(benchedDamage.groupValues[1].toInt())
                 }
                 (status != null || coinStatus != null) && condition != null -> effects += Effect.StatusCondition(condition, onHeads = coinStatus != null)
+                strongPoison != null -> effects += Effect.StatusCondition(SpecialCondition.POISONED,
+                    poisonDamageCounters = strongPoison.groupValues[1].toInt())
                 opponentTypeStatus != null -> {
                     effects += Effect.OpponentActiveTypeCondition(symbolType(opponentTypeStatus.groupValues[1]) ?: return null)
                     effects += Effect.StatusCondition(SpecialCondition.valueOf(opponentTypeStatus.groupValues[2].uppercase()))

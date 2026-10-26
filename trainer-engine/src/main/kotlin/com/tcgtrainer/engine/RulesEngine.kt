@@ -497,7 +497,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             }
             is GameAction.Evolve -> {
                 val card = p.hand.first { it.id == action.cardId }
-                updatePokemon(action.pokemonId) { it.copy(cards = it.cards + card, lastEvolutionTurn = state.turn, restrictions = emptyList(), conditions = emptySet(), defendingAttackFailsOnTailsTurn = -1, attackImmunityTurn = -1, incomingDamageReduction = 0, damageReductionTurn = -1, incomingDamageReductionEvolutionOnly = false, outgoingDamageReduction = 0, outgoingDamageReductionTurn = -1, preventBasicNonColorlessDamageTurn = -1, preventBasicPokemonDamageTurn = -1) }
+                updatePokemon(action.pokemonId) { it.copy(cards = it.cards + card, lastEvolutionTurn = state.turn, restrictions = emptyList(), conditions = emptySet(), poisonDamageCounters = 1, defendingAttackFailsOnTailsTurn = -1, attackImmunityTurn = -1, incomingDamageReduction = 0, damageReductionTurn = -1, incomingDamageReductionEvolutionOnly = false, outgoingDamageReduction = 0, outgoingDamageReductionTurn = -1, preventBasicNonColorlessDamageTurn = -1, preventBasicPokemonDamageTurn = -1) }
                 update(actor) { it.copy(hand = it.hand - card) }
                 emit("PokemonEvolved", "Evoluiu para ${definition(card).name}; dano e Energias preservados.")
                 definition(card).abilities.filter { it.onEvolveDraw > 0 }.forEach { ability ->
@@ -573,7 +573,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 val active = p.active!!
                 val target = p.bench.first { it.id == action.pokemonId }
                 val paid = active.energies.filter { it.id in action.energyIds }
-                update(actor) { it.copy(active = target.copy(enteredActiveTurn = state.turn, conditions = emptySet(), attackImmunityTurn = -1, incomingDamageReduction = 0, damageReductionTurn = -1, incomingDamageReductionEvolutionOnly = false, outgoingDamageReduction = 0, outgoingDamageReductionTurn = -1, preventBasicNonColorlessDamageTurn = -1, preventBasicPokemonDamageTurn = -1), bench = it.bench - target + active.copy(energies = active.energies - paid.toSet(), restrictions = emptyList(), attackIdsUsedWhileActive = emptyList(), conditions = emptySet(), attackImmunityTurn = -1, incomingDamageReduction = 0, damageReductionTurn = -1, incomingDamageReductionEvolutionOnly = false, outgoingDamageReduction = 0, outgoingDamageReductionTurn = -1, preventBasicNonColorlessDamageTurn = -1, preventBasicPokemonDamageTurn = -1), discard = it.discard + paid, flags = it.flags.copy(retreat = true)) }
+                update(actor) { it.copy(active = target.copy(enteredActiveTurn = state.turn, conditions = emptySet(), poisonDamageCounters = 1, attackImmunityTurn = -1, incomingDamageReduction = 0, damageReductionTurn = -1, incomingDamageReductionEvolutionOnly = false, outgoingDamageReduction = 0, outgoingDamageReductionTurn = -1, preventBasicNonColorlessDamageTurn = -1, preventBasicPokemonDamageTurn = -1), bench = it.bench - target + active.copy(energies = active.energies - paid.toSet(), restrictions = emptyList(), attackIdsUsedWhileActive = emptyList(), conditions = emptySet(), poisonDamageCounters = 1, attackImmunityTurn = -1, incomingDamageReduction = 0, damageReductionTurn = -1, incomingDamageReductionEvolutionOnly = false, outgoingDamageReduction = 0, outgoingDamageReductionTurn = -1, preventBasicNonColorlessDamageTurn = -1, preventBasicPokemonDamageTurn = -1), discard = it.discard + paid, flags = it.flags.copy(retreat = true)) }
                 emit("Retreated", "Recuou descartando ${paid.size} Energia(s).")
             }
             is GameAction.Attack -> {
@@ -844,7 +844,11 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         (effect.onSelf || opponentTypeRequirement == null || definition(defender.top).type == opponentTypeRequirement)) {
                         val exclusive = setOf(SpecialCondition.ASLEEP, SpecialCondition.PARALYZED, SpecialCondition.CONFUSED)
                         fun applyCondition(target: PokemonInstance) = target.copy(conditions =
-                            (if (effect.condition in exclusive) target.conditions - exclusive else target.conditions) + effect.condition)
+                            (if (effect.condition in exclusive) target.conditions - exclusive else target.conditions) + effect.condition,
+                            poisonDamageCounters = if (effect.condition == SpecialCondition.POISONED) {
+                                if (SpecialCondition.POISONED in target.conditions) maxOf(target.poisonDamageCounters, effect.poisonDamageCounters)
+                                else effect.poisonDamageCounters
+                            } else target.poisonDamageCounters)
                         val owner = if (effect.onSelf) actor else opponent
                         val targetId = if (effect.onSelf) p.active!!.id else defender.id
                         update(owner) { player -> player.copy(
@@ -855,7 +859,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     }
                 }
                 if (Effect.RecoverSelfFromSpecialConditions in attack.effects) {
-                    updatePokemon(p.active.id) { it.copy(conditions = emptySet()) }
+                    updatePokemon(p.active.id) { it.copy(conditions = emptySet(), poisonDamageCounters = 1) }
                     emit("SpecialConditionsRecovered", "${definition(p.active.top).name} se recuperou de todas as Condições Especiais.")
                 }
                 if (Effect.NoWeaknessNextTurn in attack.effects) {
@@ -1433,7 +1437,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             }
             val active = applyDelayedDamage(rawActive)
             var conditions = active.conditions
-            val poison = if (SpecialCondition.POISONED in conditions) 10 else 0
+            val poison = if (SpecialCondition.POISONED in conditions) active.poisonDamageCounters.coerceAtLeast(1) * 10 else 0
             val burn = if (SpecialCondition.BURNED in conditions) 20 else 0
             val abilityDamage = checkupDamage(active)
             if (abilityDamage > 0) events += GameEvent("AbilityCheckupDamage", "Pokémon com Habilidade receberam contadores de dano por Calafrio Maldito.", abilityDamage)

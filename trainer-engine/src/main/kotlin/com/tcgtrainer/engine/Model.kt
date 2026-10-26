@@ -119,7 +119,7 @@ import kotlinx.serialization.Serializable
     @Serializable data class HealOwnPokemon(val amount: Int) : Effect
     @Serializable data class HealEachOwnPokemon(val amount: Int) : Effect
     @Serializable data object CoinKnockOutBasic : Effect
-    @Serializable data class StatusCondition(val condition: SpecialCondition, val onHeads: Boolean = false, val minimumHeads: Int = 1, val onSelf: Boolean = false) : Effect
+    @Serializable data class StatusCondition(val condition: SpecialCondition, val onHeads: Boolean = false, val minimumHeads: Int = 1, val onSelf: Boolean = false, val poisonDamageCounters: Int = 1) : Effect
     @Serializable data class OpponentActiveTypeCondition(val type: EnergyType) : Effect
     @Serializable data class DiscardDefendingEnergy(val count: Int, val onHeads: Boolean = false, val type: EnergyType? = null, val specialOnly: Boolean = false, val perHeads: Boolean = false) : Effect
     @Serializable data object DiscardAllOpponentSpecialEnergy : Effect
@@ -300,7 +300,7 @@ fun CardDefinition.canEvolveFrom(base: CardDefinition): Boolean = category == Ca
     val hpModifier: Int = 0, val damageModifier: Int = 0,
     val tool: CardInstance? = null, val restrictions: List<AttackRestriction> = emptyList(), val retreatBlockedTurn: Int = -1,
     val defendingAttackFailsOnTailsTurn: Int = -1,
-    val conditions: Set<SpecialCondition> = emptySet(), val incomingDamageReduction: Int = 0, val damageReductionTurn: Int = -1,
+    val conditions: Set<SpecialCondition> = emptySet(), val poisonDamageCounters: Int = 1, val incomingDamageReduction: Int = 0, val damageReductionTurn: Int = -1,
     val attackImmunityTurn: Int = -1, val outgoingDamageReduction: Int = 0, val outgoingDamageReductionTurn: Int = -1,
     val preventBasicNonColorlessDamageTurn: Int = -1, val preventBasicPokemonDamageTurn: Int = -1,
     val weaknessSuppressedTurn: Int = -1,
