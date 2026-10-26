@@ -290,6 +290,7 @@ import kotlinx.serialization.Serializable
     val coinFlipPreventAttackDamage: Boolean = false, val coinFlipPreventAttackDamageEnergyType: EnergyType? = null,
     val checkupDamageCountersPerPokemonWithAbilityExceptFroslass: Int = 0,
     val preventDamageFromBasicPokemonEx: Boolean = false,
+    val preventDamageAndEffectsFromTeraAttacks: Boolean = false,
     val switchOwnDarknessExceptPecharunt: Boolean = false, val poisonNewActiveOnSwitch: Boolean = false,
     val requirePecharuntExForPrizeReduction: Boolean = false,
     val teamAttackDamageBonusType: EnergyType? = null, val teamAttackDamageBonus: Int = 0,

@@ -86,6 +86,8 @@ internal object CatalogRuleCompiler {
                 searchColorlessPokemonMaxHpToHand = 3)
         if (text == "Prevent all effects of your opponent's Pokémon's attacks and Abilities done to this Pokémon. (Damage is not an effect.)")
             return AbilityDefinition("$id-ability$index", name, text, preventOpponentEffects = true)
+        if (text == "Prevent all damage from and effects of attacks from your opponent's Tera Pokémon done to this Pokémon.")
+            return AbilityDefinition("$id-ability$index", name, text, preventDamageAndEffectsFromTeraAttacks = true)
         if (text == "Prevent all effects of attacks used by your opponent's Pokémon done to this Pokémon. (Damage is not an effect.)" ||
             text == "Prevent all effects of your opponent's Pokémon's Abilities done to this Pokémon.")
             return AbilityDefinition("$id-ability$index", name, text, preventOpponentEffects = true)

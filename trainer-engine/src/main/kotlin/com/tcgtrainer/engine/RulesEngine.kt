@@ -289,7 +289,9 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             if (state.players[state.currentPlayer].flags.supporter) attack.effects.filterIsInstance<Effect.SupporterBonus>().sumOf { it.damage } else 0
         val resolvedEffects = attack.effects + (if (extra > 0) listOf(Effect.Damage(extra)) else emptyList()) +
             (if (effectDamage > 0) listOf(Effect.Damage(effectDamage)) else emptyList())
-        val damage = if (!hasRequirement || Effect.RequiresStadium in attack.effects && state.stadium == null) 0 else effects.damage(attacker, defender, resolvedEffects, boost,
+        val teraAttackImmune = definition(attacker.top).isTera &&
+            effectiveAbilities(state, 1-state.currentPlayer, defender).any { it.preventDamageAndEffectsFromTeraAttacks }
+        val damage = if (teraAttackImmune || !hasRequirement || Effect.RequiresStadium in attack.effects && state.stadium == null) 0 else effects.damage(attacker, defender, resolvedEffects, boost,
             forceIgnoreWeaknessResistance || attack.effects.contains(Effect.IgnoreWeaknessResistance) || defender.id != opponent.active?.id,
             ownBenchCount = state.players[state.currentPlayer].bench.size, opponentBenchCount = opponent.bench.size,
             ownInPlayCount = state.players[state.currentPlayer].pokemon().size,
@@ -848,8 +850,10 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 } else false
                 val defender = primaryTargetId?.let { id -> next.players[opponent].pokemon().first { it.id == id } } ?: next.players[opponent].active!!
                 val defenderAbilities = effectiveAbilities(next, opponent, defender)
+                val teraAttackImmune = definition(p.active.top).isTera &&
+                    defenderAbilities.any { it.preventDamageAndEffectsFromTeraAttacks }
                 val defenderEffectsPrevented = defender.attackImmunityTurn == state.turn ||
-                    defenderAbilities.any { it.preventOpponentEffects }
+                    defenderAbilities.any { it.preventOpponentEffects } || teraAttackImmune
                 if (attack.effects.any { it is Effect.OpponentHandEnergyCountDamage } || Effect.RevealOpponentHand in attack.effects || Effect.RevealAndChooseOpponentHandDiscard in attack.effects) {
                     val revealed = next.players[opponent].hand.joinToString(", ") { definition(it).name }
                     emit("OpponentHandRevealed", "Mão adversária revelada: ${revealed.ifEmpty { "vazia" }}.")
@@ -873,7 +877,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     result
                 } else false
                 val damageAfterAttack = when {
-                    shieldHeads -> defender.damage
+                    shieldHeads || teraAttackImmune -> defender.damage
                     survivalHeads -> (preview.effectiveHp - headsSurvivalHp).coerceAtLeast(0)
                     survivalHp > 0 && preview.damage >= preview.effectiveHp -> (preview.effectiveHp - survivalHp).coerceAtLeast(0)
                     else -> defender.damage + preview.damage
