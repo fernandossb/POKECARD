@@ -312,10 +312,12 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         val requirement = attack.effects.filterIsInstance<Effect.RequiresBenched>().firstOrNull()
         val exactHandSize = attack.effects.filterIsInstance<Effect.RequiresExactHandSize>().firstOrNull()
         val requiredOwnBenchCount = attack.effects.filterIsInstance<Effect.RequiresOwnBenchCountAtLeast>().firstOrNull()?.count ?: 0
+        val damageOnlyBenchCount = attack.effects.filterIsInstance<Effect.DamageOnlyWithOwnBenchCountAtLeast>().firstOrNull()?.count ?: 0
         val undamagedActiveRequirement = Effect.RequiresUndamagedOpponentActive in attack.effects
         val hasRequirement = (requirement == null || state.players[state.currentPlayer].bench.any { it.top.definitionId == requirement.definitionId }) &&
             (exactHandSize == null || state.players[state.currentPlayer].hand.size == exactHandSize.size) &&
             state.players[state.currentPlayer].bench.size >= requiredOwnBenchCount &&
+            state.players[state.currentPlayer].bench.size >= damageOnlyBenchCount &&
             (!undamagedActiveRequirement || defender.id == opponent.active?.id && defender.damage == 0)
         val boost = if (defender.id == opponent.active?.id) state.players[state.currentPlayer].flags.damageBoosts[definition(attacker.top).type] ?: 0 else 0
         val coin = attack.effects.filterIsInstance<Effect.CoinDamage>().firstOrNull()

@@ -893,7 +893,7 @@ internal object CatalogRuleCompiler {
                     effects += Effect.PreventRetreatNextTurn
                 }
                 exactHandSize != null -> effects += Effect.RequiresExactHandSize(exactHandSize.groupValues[1].toInt())
-                requiresOwnBenchCountAtLeast != null -> effects += Effect.RequiresOwnBenchCountAtLeast(requiresOwnBenchCountAtLeast.groupValues[1].toInt() + 1)
+                requiresOwnBenchCountAtLeast != null -> effects += Effect.DamageOnlyWithOwnBenchCountAtLeast(requiresOwnBenchCountAtLeast.groupValues[1].toInt() + 1)
                 requiresUndamagedOpponentActive -> effects += Effect.RequiresUndamagedOpponentActive
                 multiStatus != null -> multiStatus.forEach { effects += Effect.StatusCondition(it) }
                 selfOnly != null && damage == 0 -> effects += Effect.SelfDamage(selfOnly.groupValues[1].toInt())
