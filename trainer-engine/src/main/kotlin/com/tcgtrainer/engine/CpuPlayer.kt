@@ -476,8 +476,9 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 TrainerEffect.MegatonBlower -> 20.0
                 is TrainerEffect.RecoverSupporters -> if (o.ownDiscard.any { d(it).trainerType == TrainerType.SUPPORTER }) 45.0 else -5.0
                 is TrainerEffect.RecoverPokemonAndBasicEnergy -> if (o.ownDiscard.any {
-                        d(it).category == Category.POKEMON && (!effect.pokemonWithoutRuleBoxOnly || !d(it).hasRuleBox) ||
-                            d(it).category == Category.ENERGY && d(it).basicEnergy
+                        d(it).category == Category.POKEMON && (!effect.pokemonWithoutRuleBoxOnly || !d(it).hasRuleBox) &&
+                            (effect.type == null || d(it).type == effect.type) ||
+                            d(it).category == Category.ENERGY && d(it).basicEnergy && (effect.type == null || d(it).type == effect.type)
                     }) 45.0 else -5.0
                 TrainerEffect.GreatBall, TrainerEffect.Sonia -> if (o.ownDeckCount > 0 && own.size < 5) 90.0 else -5.0
                 TrainerEffect.CoinSwitch -> if (o.opponentField.size > 1) 20.0 else -5.0
