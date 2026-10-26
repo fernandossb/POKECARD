@@ -371,6 +371,14 @@ internal object CatalogRuleCompiler {
             }
             val trainerText = raw.s("effect").orEmpty()
             if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Supporter" &&
+                trainerText == "Switch your Active Pokémon with 1 of your Benched Pokémon. If you moved a Pokémon ex to your Bench in this way, heal 80 damage from that Pokémon.") {
+                return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
+                    category = Category.TRAINER, verified = true, source = source,
+                    artAsset = "remote:$image/high.webp", text = trainerText,
+                    trainerType = TrainerType.SUPPORTER,
+                    trainerEffect = TrainerEffect.SwitchAndHealMovedEx(80))
+            }
+            if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Supporter" &&
                 trainerText == "Discard up to 2 Pokémon that don't have a Rule Box from your hand, and draw 3 cards for each card you discarded in this way. (Pokémon ex, Pokémon V, etc. have Rule Boxes.)") {
                 return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
                     category = Category.TRAINER, verified = true, source = source,

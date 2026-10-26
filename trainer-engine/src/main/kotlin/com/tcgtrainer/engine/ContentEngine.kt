@@ -102,6 +102,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         else -> Legality.Legal
                     }
                     is TrainerEffect.Switch -> if ((if (effect.opponent) s.players[1-s.currentPlayer] else p).bench.isEmpty()) illegal("Não há Pokémon no Banco para trocar.") else Legality.Legal
+                    is TrainerEffect.SwitchAndHealMovedEx -> if (p.bench.isEmpty()) illegal("Não há Pokémon no Banco para trocar.") else Legality.Legal
                     TrainerEffect.Recover -> if (p.discard.none { matches(it, CardFilter.POKEMON_OR_ENERGY) }) illegal("Não há Pokémon ou Energia Básica no descarte.") else Legality.Legal
                     is TrainerEffect.RetreatReduction -> if (p.pokemon().none { rules.canAttachTool(s, actor, it) }) illegal("Seus Pokémon já atingiram o limite de Ferramentas.") else Legality.Legal
                     is TrainerEffect.HpModifier -> when {
@@ -287,6 +288,11 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         } else begin(Resolution(listOf(ChoiceRequest(if (effect.opponent) ChoiceKind.SWITCH_OPPONENT else ChoiceKind.SWITCH_OWN,
                             "Escolha o Pokémon que entrará no Ativo.", s.players[targetPlayer].bench.map { it.id }, 1, 1)), drawTo = effect.drawTo))
                     }
+                    is TrainerEffect.SwitchAndHealMovedEx -> begin(Resolution(listOf(ChoiceRequest(
+                        ChoiceKind.SWITCH_OWN,
+                        "AZ's Tranquility: troque seu Pokémon Ativo por um do Banco; se o Pokémon que foi para o Banco for ex, cure até ${effect.healAmount} de dano.",
+                        p.bench.map { it.id }, 1, 1, healAmount = effect.healAmount, healMovedPokemonEx = true
+                    ))))
                     TrainerEffect.Recover -> begin(Resolution(listOf(ChoiceRequest(ChoiceKind.RECOVER, "Recuperar Pokémon ou Energia Básica.", p.discard.filter { matches(it, CardFilter.POKEMON_OR_ENERGY) }.map { it.id }, 1, 1))))
                     is TrainerEffect.DamageBoost -> update { it.copy(flags = it.flags.copy(damageBoosts = it.flags.damageBoosts + (effect.type to ((it.flags.damageBoosts[effect.type] ?: 0) + effect.amount)))) }
                     is TrainerEffect.RetreatReduction -> begin(Resolution(listOf(ChoiceRequest(ChoiceKind.TOOL_TARGET, "Ligar Ferramenta a qual Pokémon?", p.pokemon().filter { rules.canAttachTool(s, actor, it) }.map { it.id }, 1, 1)), toolCard = card))
@@ -1199,8 +1205,16 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         val owner = if (choice.kind == ChoiceKind.SWITCH_OWN) actor else 1-actor
                         val player = s.players[owner]; val target = player.bench.first { it.id == ids.single() }
                         val targetConditions = if (choice.poisonSwitchedPokemon) (target.conditions - setOf(SpecialCondition.ASLEEP, SpecialCondition.PARALYZED, SpecialCondition.CONFUSED)) + SpecialCondition.POISONED else emptySet()
-                        update(owner) { it.copy(active = target.copy(enteredActiveTurn = if (owner == actor) s.turn else target.enteredActiveTurn, conditions = targetConditions, poisonDamageCounters = 1, attackImmunityTurn = -1, incomingDamageReduction = 0, damageReductionTurn = -1, outgoingDamageReduction = 0, outgoingDamageReductionTurn = -1, preventBasicNonColorlessDamageTurn = -1, preventBasicPokemonDamageTurn = -1), bench = it.bench - target + listOfNotNull(it.active?.copy(restrictions = emptyList(), attackIdsUsedWhileActive = emptyList(), conditions = emptySet(), poisonDamageCounters = 1, attackImmunityTurn = -1, incomingDamageReduction = 0, damageReductionTurn = -1, outgoingDamageReduction = 0, outgoingDamageReductionTurn = -1, preventBasicNonColorlessDamageTurn = -1, preventBasicPokemonDamageTurn = -1))) }
+                        val movedActive = player.active
+                        val healed = movedActive?.takeIf { choice.healMovedPokemonEx && def(it.top).name.endsWith(" ex") }
+                            ?.let { minOf(choice.healAmount, it.damage) } ?: 0
+                        val movedToBench = movedActive?.copy(damage = (movedActive.damage - healed).coerceAtLeast(0),
+                            restrictions = emptyList(), attackIdsUsedWhileActive = emptyList(), conditions = emptySet(), poisonDamageCounters = 1,
+                            attackImmunityTurn = -1, incomingDamageReduction = 0, damageReductionTurn = -1, outgoingDamageReduction = 0,
+                            outgoingDamageReductionTurn = -1, preventBasicNonColorlessDamageTurn = -1, preventBasicPokemonDamageTurn = -1)
+                        update(owner) { it.copy(active = target.copy(enteredActiveTurn = if (owner == actor) s.turn else target.enteredActiveTurn, conditions = targetConditions, poisonDamageCounters = 1, attackImmunityTurn = -1, incomingDamageReduction = 0, damageReductionTurn = -1, outgoingDamageReduction = 0, outgoingDamageReductionTurn = -1, preventBasicNonColorlessDamageTurn = -1, preventBasicPokemonDamageTurn = -1), bench = it.bench - target + listOfNotNull(movedToBench)) }
                         events += GameEvent("ActiveSwitched", "${def(target.top).name} entrou no Ativo do jogador ${owner+1}.")
+                        if (healed > 0) events += GameEvent("PokemonHealed", "Curou $healed de dano do Pokémon ex que foi para o Banco com AZ's Tranquility.", healed)
                     }
                     ChoiceKind.TOOL_TARGET -> {
                         val id = ids.single(); val tool = resolution.toolCard!!
