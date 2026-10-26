@@ -66,6 +66,7 @@ import kotlinx.serialization.Serializable
     @Serializable data class ConditionalOwnDamageCounterBonus(val minimumCounters: Int, val bonus: Int) : Effect
     @Serializable data class OwnDamageCounterPenalty(val perCounter: Int) : Effect
     @Serializable data class OwnUndamagedDamageBonus(val bonus: Int) : Effect
+    @Serializable data class OwnAnyDamageCounterBonus(val bonus: Int) : Effect
     @Serializable data object SwitchOpponent : Effect
     @Serializable data object PullOpponentBench : Effect
     @Serializable data object PullSelectedBenchBeforeDamage : Effect
