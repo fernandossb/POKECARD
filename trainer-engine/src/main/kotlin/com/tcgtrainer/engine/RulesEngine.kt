@@ -108,8 +108,9 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             return printed.copy(effects = printed.effects.filterNot { it is Effect.OwnHandPokemonRevealDamage } +
                 if (revealCount > 0) listOf(Effect.Damage(handRevealDamage.perCard * revealCount)) else emptyList())
         }
-        if (state.pendingCopiedAttackId == attackId && state.pendingCopiedAttack != null)
-            return printed.copy(effects = state.pendingCopiedAttack.effects, text = state.pendingCopiedAttack.text)
+        if (state.pendingCopiedAttackId == attackId)
+            return state.pendingCopiedAttack?.let { printed.copy(effects = it.effects, text = it.text) }
+                ?: printed.copy(effects = emptyList(), text = "")
         if (Effect.CopyBenchedNsAttack in printed.effects) {
             val copied = copiedAttackOptions(state, state.currentPlayer).firstOrNull()?.third ?: return printed
             return printed.copy(effects = copied.effects, text = copied.text)
@@ -516,6 +517,24 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     afterResolution = ResolutionEnd.MAIN,
                     history = state.history + ActionRecord(actor, state.turn, action, listOf(event))), Legality.Legal, listOf(event))
             }
+            if (Effect.CopyAttackFromOpponentDeckTop in printed.effects && state.pendingCopiedAttackId != action.attackId) {
+                val opponentDeckTop = state.players[1-actor].deck.take(10)
+                val options = opponentDeckTop.flatMap { card ->
+                    val cardDefinition = definition(card)
+                    if (cardDefinition.category == Category.POKEMON) cardDefinition.attacks.filter(effects::supported) else emptyList()
+                }.distinctBy { it.id }
+                val labels = options.associate { attack ->
+                    val source = opponentDeckTop.first { card -> definition(card).attacks.any { it.id == attack.id } }
+                    attack.id to "${definition(source).name} — ${attack.name} (${attack.cost.joinToString(" + ") { it.name }})"
+                }
+                val request = ChoiceRequest(ChoiceKind.ATTACK_COPY_OPPONENT_DECK_TOP,
+                    "Revele as 10 cartas do topo do deck adversário. Você pode escolher um ataque de um Pokémon revelado.",
+                    options.map { it.id }, 0, minOf(1, options.size), visibleCards = opponentDeckTop.map { it.id }, optionLabels = labels)
+                val event = GameEvent("OpponentDeckAttackCopyChoiceOpened", "Revelou até 10 cartas do deck adversário para copiar um ataque.")
+                return Transition(state.copy(phase = Phase.RESOLVE_CHOICE, resolution = Resolution(listOf(request)),
+                    afterResolution = ResolutionEnd.MAIN,
+                    history = state.history + ActionRecord(actor, state.turn, action, listOf(event))), Legality.Legal, listOf(event))
+            }
         }
         if (action is GameAction.ChooseCards && state.resolution?.choices?.firstOrNull()?.kind == ChoiceKind.OPTIONAL_ATTACK_ENERGY_BONUS) {
             val active = state.players[actor].active
@@ -584,6 +603,32 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             val prepared = state.copy(phase = Phase.MAIN, resolution = null,
                 pendingCopiedAttackId = attackId, pendingCopiedAttack = option.third)
             return apply(prepared, GameAction.Attack(attackId))
+        }
+        if (action is GameAction.ChooseCards && state.resolution?.choices?.firstOrNull()?.kind == ChoiceKind.ATTACK_COPY_OPPONENT_DECK_TOP) {
+            val choice = state.resolution.choices.first()
+            val key = action.cardIds.singleOrNull()
+            if (action.cardIds.size > 1 || key != null && key !in choice.candidates)
+                return Transition(state, Legality.Illegal("Escolha no máximo um ataque de um Pokémon revelado."))
+            val attacker = state.players[actor].active ?: return Transition(state, Legality.Illegal("Atacante ausente."))
+            val attackId = definition(attacker.top).attacks.firstOrNull { Effect.CopyAttackFromOpponentDeckTop in it.effects }?.id
+                ?: return Transition(state, Legality.Illegal("O ataque copiador não está mais disponível."))
+            val opponent = 1-actor
+            val revealed = state.players[opponent].deck.take(10)
+            val copied = key?.let { selected -> revealed.asSequence().map(::definition)
+                .filter { it.category == Category.POKEMON }.flatMap { it.attacks.asSequence() }
+                .firstOrNull { it.id == selected && effects.supported(it) } }
+            if (key != null && copied == null)
+                return Transition(state, Legality.Illegal("O ataque escolhido não pertence a um Pokémon entre as cartas reveladas."))
+            val rng = SeededRng(state.rng)
+            val shuffledDeck = rng.shuffle(state.players[opponent].deck)
+            val prepared = state.copy(phase = Phase.MAIN, resolution = null,
+                players = state.players.mapIndexed { index, player -> if (index == opponent) player.copy(deck = shuffledDeck) else player },
+                rng = rng.state, pendingCopiedAttackId = attackId, pendingCopiedAttack = copied)
+            val event = GameEvent("OpponentDeckAttackCopyResolved", if (copied == null)
+                "Não escolheu um ataque; as cartas reveladas foram embaralhadas de volta no deck adversário."
+                else "Copiou ${copied.name}; as cartas reveladas foram embaralhadas de volta no deck adversário.")
+            val result = apply(prepared, GameAction.Attack(attackId))
+            return result.copy(events = listOf(event) + result.events)
         }
         var next = state
         val events = mutableListOf<GameEvent>()

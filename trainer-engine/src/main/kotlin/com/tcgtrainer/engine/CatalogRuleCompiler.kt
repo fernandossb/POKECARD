@@ -624,6 +624,12 @@ internal object CatalogRuleCompiler {
         val copyBenchedNAttack = text == "Choose 1 of your Benched N's Pokémon's attacks and use it as this attack."
         val copyOpponentActiveTeraAttack = text == "Choose 1 of your opponent's Active Tera Pokémon's attacks and use it as this attack."
         val copyOpponentActiveAttack = text == "Choose 1 of your opponent's Active Pokémon's attacks and use it as this attack."
+        val copyAttackFromOpponentDeckTop = text == "Reveal the top 10 cards of your opponent's deck. You may choose an attack from a Pokémon you find there and use it as this attack. Shuffle the revealed cards into your opponent's deck."
+        if (copyAttackFromOpponentDeckTop) {
+            val rewritten = JsonObject(raw.toMutableMap().apply { put("effect", JsonPrimitive("")) })
+            val compiled = compileAttack(id, index, rewritten) ?: return null
+            return compiled.copy(effects = compiled.effects + Effect.CopyAttackFromOpponentDeckTop, text = text)
+        }
         val attachAnyBasicEnergy = text == "You may attach any number of Basic Energy cards from your hand to your Pokémon in any way you like."
         val attachOneBasicEnergy = text == "Attach a Basic Energy card from your hand to 1 of your Pokémon."
         val shuffleOwnBenchIntoDeck = text == "Shuffle 1 of your Benched Pokémon and all attached cards into your deck."
