@@ -114,9 +114,11 @@ class EffectEngine(private val catalog: CardCatalog) {
         val opponentExCountDamage = effects.filterIsInstance<Effect.OpponentExCountDamage>().sumOf { effect ->
             effect.perPokemon * friendlyPokemon.count { catalog.get(it.top.definitionId).name.endsWith(" ex") }
         }
+        val storedNextTurnBonus = if (targetIsOpponentActive && attacker.nextTurnAllAttacksDamageBonusTurn == turn)
+            attacker.nextTurnAllAttacksDamageBonus else 0
         val base = effects.filterIsInstance<Effect.Damage>().sumOf { it.amount } +
             effects.filterIsInstance<Effect.StadiumDamageBonus>().filter { stadiumInPlay }.sumOf { it.bonus } + abilityHandBonus + abilityDamageBonus + conditionalEnergyAttackBonus +
-            futureDamageBonus + teamAttackDamageBonus + sameTypeBonus + sameHandSizeBonus + opponentExCountDamage +
+            futureDamageBonus + teamAttackDamageBonus + sameTypeBonus + sameHandSizeBonus + opponentExCountDamage + storedNextTurnBonus +
             (if (targetIsOpponentActive && target.stage != Stage.BASIC) attackerPokemon.flatMap(::abilitiesOf).sumOf { it.attackDamageBonusAgainstEvolutionActive } else 0) +
             effects.filterIsInstance<Effect.TargetedDamage>().sumOf { it.damage } +
             effects.filterIsInstance<Effect.BenchedCountDamage>().sumOf { it.perPokemon * (ownBenchCount + opponentBenchCount) } +
@@ -253,7 +255,7 @@ class EffectEngine(private val catalog: CardCatalog) {
         is Effect.OwnDiscardAbilityCountBonus,
         is Effect.OpponentPrizeTakenDamage, is Effect.OpponentPrizeTakenBenchDamage, is Effect.OpponentPrizeCountDamage, is Effect.OpponentNoRetreatDamage,
         is Effect.OpponentResistanceDamage, is Effect.OwnToolAttachedDamage,
-        is Effect.OwnKnockoutLastTurnDamage, is Effect.MovedFromBenchDamageBonus, is Effect.NextTurnAttackDamageBonus,
+        is Effect.OwnKnockoutLastTurnDamage, is Effect.MovedFromBenchDamageBonus, is Effect.NextTurnAttackDamageBonus, is Effect.NextTurnAllAttacksDamageBonus,
         is Effect.RequiresExactHandSize,
         is Effect.OwnToolCountDamage, is Effect.OwnDamageCounterPenalty,
         is Effect.AllPokemonToolCountDamage,

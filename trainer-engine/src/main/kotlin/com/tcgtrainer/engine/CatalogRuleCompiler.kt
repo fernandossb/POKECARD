@@ -531,6 +531,12 @@ internal object CatalogRuleCompiler {
             return compiled.copy(effects = compiled.effects + Effect.NextTurnAttackDamageBonus(
                 echoedVoiceBonus.groupValues[1], echoedVoiceBonus.groupValues[2].toInt()), text = text)
         }
+        val nextTurnAllAttacksBonus = Regex("During your next turn, attacks used by this Pokémon do (\\d+) more damage to your opponent's Active Pokémon \\(before applying Weakness and Resistance\\)\\.").matchEntire(text)
+        if (nextTurnAllAttacksBonus != null) {
+            val rewritten = JsonObject(raw.toMutableMap().apply { put("effect", JsonPrimitive("")) })
+            val compiled = compileAttack(id, index, rewritten) ?: return null
+            return compiled.copy(effects = compiled.effects + Effect.NextTurnAllAttacksDamageBonus(nextTurnAllAttacksBonus.groupValues[1].toInt()), text = text)
+        }
         val prizeBonusWithRecoil = Regex("This attack does (\\d+) more damage for each Prize card your opponent has taken\\. This Pokémon also does (\\d+) damage to itself\\.").matchEntire(text)
         if (prizeBonusWithRecoil != null) {
             val prizeBonusText = "This attack does ${prizeBonusWithRecoil.groupValues[1]} more damage for each Prize card your opponent has taken."

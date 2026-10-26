@@ -95,6 +95,7 @@ import kotlinx.serialization.Serializable
     @Serializable data class DamageOnlyWithOwnBenchCountAtLeast(val count: Int) : Effect
     @Serializable data object MayAttackFirstTurnIfStarting : Effect
     @Serializable data class NextTurnAttackDamageBonus(val attackName: String, val bonus: Int) : Effect
+    @Serializable data class NextTurnAllAttacksDamageBonus(val bonus: Int) : Effect
     @Serializable data object SearchEvolutionForSelfToEvolve : Effect
     @Serializable data object SearchEvolutionForEachBenchedPokemon : Effect
     @Serializable data class BasicPokemonToBench(val count: Int) : Effect
@@ -403,7 +404,8 @@ fun CardDefinition.canEvolveFrom(base: CardDefinition): Boolean = category == Ca
     val delayedDamageCounters: Int = 0, val delayedDamageTurn: Int = -1,
     val weaknessOverride: EnergyType? = null, val enteredActiveTurn: Int = -1,
     val nextTurnAttackDamageBonusName: String? = null, val nextTurnAttackDamageBonus: Int = 0,
-    val nextTurnAttackDamageBonusTurn: Int = -1
+    val nextTurnAttackDamageBonusTurn: Int = -1,
+    val nextTurnAllAttacksDamageBonus: Int = 0, val nextTurnAllAttacksDamageBonusTurn: Int = -1
 ) { val id: String get() = cards.first().id; val top: CardInstance get() = cards.last(); val tools: List<CardInstance> get() = listOfNotNull(tool) + extraTools }
 fun PokemonInstance.withAddedTool(card: CardInstance): PokemonInstance =
     if (tool == null) copy(tool = card) else copy(extraTools = extraTools + card)

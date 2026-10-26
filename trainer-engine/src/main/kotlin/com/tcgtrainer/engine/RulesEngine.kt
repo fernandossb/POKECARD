@@ -1025,6 +1025,11 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         nextTurnAttackDamageBonus = effect.bonus, nextTurnAttackDamageBonusTurn = state.turn + 2) }
                     emit("NextTurnAttackBonusScheduled", "${effect.attackName} causará ${effect.bonus} de dano adicional no próximo turno deste Pokémon.", effect.bonus)
                 }
+                attack.effects.filterIsInstance<Effect.NextTurnAllAttacksDamageBonus>().forEach { effect ->
+                    updatePokemon(p.active!!.id) { it.copy(nextTurnAllAttacksDamageBonus = effect.bonus,
+                        nextTurnAllAttacksDamageBonusTurn = state.turn + 2) }
+                    emit("NextTurnAllAttacksBonusScheduled", "Os ataques deste Pokémon causarão ${effect.bonus} de dano adicional ao Ativo adversário no próximo turno.", effect.bonus)
+                }
                 val coin = attack.effects.filterIsInstance<Effect.CoinDamage>().firstOrNull()
                 val knockoutHeads = if (Effect.CoinKnockOutBasic in attack.effects) {
                     val rng = SeededRng(next.rng); val result = rng.nextInt(2) == 0
