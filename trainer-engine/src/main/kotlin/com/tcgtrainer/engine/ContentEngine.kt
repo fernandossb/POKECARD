@@ -32,6 +32,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
             CardFilter.MEGA_EVOLUTION_EX -> isMegaEvolutionEx(d)
             CardFilter.TRAINER -> d.category == Category.TRAINER
             CardFilter.TEAM_ROCKET_BASIC_POKEMON -> d.category == Category.POKEMON && d.stage == Stage.BASIC && d.name.startsWith("Team Rocket's ")
+            CardFilter.TEAM_ROCKET_SUPPORTER -> d.trainerType == TrainerType.SUPPORTER && d.name.contains("Team Rocket")
         }
     }
     fun validate(s: GameState, action: GameAction): Legality {
@@ -2011,5 +2012,6 @@ internal class ContentEngine(private val rules: RulesEngine) {
         CardFilter.MEGA_EVOLUTION_EX -> "Mega Evolution Pokémon ex"
         CardFilter.TRAINER -> "Treinador"
         CardFilter.TEAM_ROCKET_BASIC_POKEMON -> "Pokémon Básico da Equipe Rocket"
+        CardFilter.TEAM_ROCKET_SUPPORTER -> "Apoiador da Equipe Rocket"
     }
 }
