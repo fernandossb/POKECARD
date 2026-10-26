@@ -590,6 +590,11 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         delayedDamageTurn = state.turn + 1) }
                     emit("DelayedDamageScheduled", "${effect.counters} contadores de dano serão aplicados ao Pokémon Defensor no fim do próximo turno adversário.", effect.counters * 10)
                 }
+                if (!defenderEffectsPrevented) attack.effects.filterIsInstance<Effect.RetaliateDamageCountersNextTurn>().forEach { effect ->
+                    updatePokemon(p.active.id) { it.copy(retaliateDamageCounters = effect.counters,
+                        retaliateDamageCountersTurn = state.turn + 1) }
+                    emit("RetaliationScheduled", "Se for atingido no próximo turno adversário, aplicará ${effect.counters} contadores de dano ao atacante.", effect.counters * 10)
+                }
                 if (appliedDamage > 0 && Effect.HealSelfByDamageDealt in attack.effects) {
                     updatePokemon(p.active.id) { it.copy(damage = (it.damage - preview.damage).coerceAtLeast(0)) }
                     emit("DamageHealed", "Curou o atacante em até ${preview.damage} de dano pelo ataque.", preview.damage)
@@ -1013,6 +1018,13 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     val candidates = if (targetAvailable) eligible else emptyList()
                     choices += ChoiceRequest(ChoiceKind.ATTACK_DECK_BASIC_ENERGY_ANY,
                         "Você pode buscar até ${effect.max} Energia(s) Básica(s) e ligar aos seus Pokémon.", candidates.map { it.id }, 0, minOf(1, effect.max, candidates.size), remaining = effect.max, energyType = effect.type, benchedOnly = effect.benchedOnly)
+                }
+                attack.effects.filterIsInstance<Effect.AttachBasicEnergyFromDiscardAny>().forEach { effect ->
+                    val eligible = next.players[actor].discard.filter { definition(it).category == Category.ENERGY && definition(it).basicEnergy && (effect.type == null || definition(it).type == effect.type) }
+                    if (next.players[actor].bench.isNotEmpty() && eligible.isNotEmpty()) choices += ChoiceRequest(
+                        ChoiceKind.ABILITY_DISCARD_ENERGY_FROM_DISCARD,
+                        "Você pode ligar até ${minOf(effect.max, eligible.size)} Energia(s) Básica(s) do descarte aos Pokémon do Banco.",
+                        eligible.map { it.id }, 0, 1, remaining = minOf(effect.max, eligible.size), energyType = effect.type, benchedOnly = true)
                 }
                 attack.effects.filterIsInstance<Effect.AttachBasicEnergyToEachBenchedPokemon>().forEach { effect ->
                     val eligible = next.players[actor].deck.filter { definition(it).category == Category.ENERGY && definition(it).basicEnergy && definition(it).type == effect.type }

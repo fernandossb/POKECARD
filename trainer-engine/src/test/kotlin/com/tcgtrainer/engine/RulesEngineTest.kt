@@ -2941,4 +2941,45 @@ class RulesEngineTest {
         assertTrue(moved.state.players[0].bench.first { it.id == "a" }.energies.isEmpty())
         assertEquals(Phase.MAIN, moved.state.phase)
     }
+
+    @Test fun `Mega Lucario attack attaches compatible discard energy to chosen Benched Pokemon and can stop early`() {
+        val attack = CatalogRuleCompiler.compileAttack("mega-lucario-test", 0, buildJsonObject {
+            put("name", "Aura Jab")
+            put("effect", "Attach up to 3 Basic {F} Energy cards from your discard pile to your Benched Pokémon in any way you like.")
+            put("damage", "0")
+            put("cost", buildJsonArray {})
+        })!!
+        val attacker = CardDefinition("mega-lucario-attacker", "Mega Lucario ex", "Test", "1", category = Category.POKEMON, hp = 320, attacks = listOf(attack))
+        val bench = CardDefinition("lucario-bench", "Riolu", "Test", "2", category = Category.POKEMON, hp = 70, type = EnergyType.FIGHTING)
+        val fighting = CardDefinition("lucario-fighting", "Fighting Energy", "Test", "3", category = Category.ENERGY, type = EnergyType.FIGHTING, basicEnergy = true)
+        val water = CardDefinition("lucario-water", "Water Energy", "Test", "4", category = Category.ENERGY, type = EnergyType.WATER, basicEnergy = true)
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            attacker.id -> attacker; bench.id -> bench; fighting.id -> fighting; water.id -> water
+            else -> TestCatalog.definitions[id] ?: TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        val original = main()
+        val start = original.copy(players = original.players.mapIndexed { index, player ->
+            if (index == 0) player.copy(active = field("lucario", attacker.id),
+                bench = listOf(field("riolu-1", bench.id), field("riolu-2", bench.id)),
+                discard = listOf(card("fighting-1", fighting.id), card("fighting-2", fighting.id), card("water-1", water.id))) else player
+        })
+        val started = rules.apply(start, GameAction.Attack(attack.id))
+        assertEquals(Legality.Legal, started.legality)
+        val energyChoice = started.state.resolution!!.choices.single()
+        assertEquals(ChoiceKind.ABILITY_DISCARD_ENERGY_FROM_DISCARD, energyChoice.kind)
+        assertEquals(setOf("fighting-1", "fighting-2"), energyChoice.candidates.toSet())
+        val selected = rules.apply(started.state, GameAction.ChooseCards(listOf("fighting-1")))
+        assertEquals(Legality.Legal, selected.legality)
+        assertEquals(ChoiceKind.ABILITY_DISCARD_ENERGY_TARGET, selected.state.resolution!!.choices.first().kind)
+        val attached = rules.apply(selected.state, GameAction.ChooseCards(listOf("riolu-2")))
+        assertEquals(Legality.Legal, attached.legality)
+        assertEquals(listOf("fighting-1"), attached.state.players[0].bench.first { it.id == "riolu-2" }.energies.map { it.id })
+        assertTrue(attached.state.players[0].discard.any { it.id == "fighting-2" })
+        assertTrue(attached.state.players[0].discard.any { it.id == "water-1" })
+        assertEquals(ChoiceKind.ABILITY_DISCARD_ENERGY_FROM_DISCARD, attached.state.resolution!!.choices.first().kind)
+        val stopped = rules.apply(attached.state, GameAction.ChooseCards(emptyList()))
+        assertEquals(Legality.Legal, stopped.legality)
+        assertEquals(Phase.MAIN, stopped.state.phase)
+    }
 }

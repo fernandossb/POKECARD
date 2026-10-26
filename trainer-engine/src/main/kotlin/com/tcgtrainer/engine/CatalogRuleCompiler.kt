@@ -423,6 +423,7 @@ internal object CatalogRuleCompiler {
         val attachBasicEnergyFromDeckAny = Regex("Search your deck for up to (\\d+) Basic Energy cards and attach them to your Pokémon in any way you like\\. Then, shuffle your deck\\.").matchEntire(text)
         val attachBasicEnergyFromDeckBench = Regex("Search your deck for up to (\\d+) Basic Energy cards and attach them to your Benched Pokémon in any way you like\\. Then, shuffle your deck\\.").matchEntire(text)
         val attachTypedEnergyFromDeckBench = Regex("Search your deck for up to (\\d+) Basic \\{([GRFLWPMD])\\} Energy cards and attach them to your Benched Pokémon in any way you like\\. Then, shuffle your deck\\.").matchEntire(text)
+        val attachTypedEnergyFromDiscardBench = Regex("Attach up to (\\d+) Basic \\{([GRFLWPMD])\\} Energy cards from your discard pile to your Benched Pokémon in any way you like\\.").matchEntire(text)
         val attachEnergyToEachBench = Regex("For each of your Benched Pokémon, search your deck for a Basic \\{([GRFLWPMD])\\} Energy card and attach it to that Pokémon\\. Then, shuffle your deck\\.").matchEntire(text)
         val coinKnockOutBasic = text == "Flip a coin. If heads, Knock Out your opponent's Active Basic Pokémon. If tails, Knock Out 1 of your opponent's Benched Basic Pokémon."
         val coinStatus = Regex("Flip a coin\\. If heads, your opponent's Active Pokémon is now (Poisoned|Burned|Asleep|Paralyzed|Confused)\\.").matchEntire(text)
@@ -472,6 +473,7 @@ internal object CatalogRuleCompiler {
         val discardTypedEnergyFromTeam = Regex("Discard up to (\\d+) \\{([GRFLWPMD])\\} Energy cards from your Pokémon\\. This attack does (\\d+) damage for each card you discarded in this way\\.").matchEntire(text)
         val reduceDamage = Regex("During your opponent's next turn, this Pokémon takes (\\d+) less damage from attacks \\(after applying Weakness and Resistance\\)\\.").matchEntire(text)
         val retaliationCounters = Regex("During your opponent's next turn, if this Pokémon is damaged by an attack \\(even if this Pokémon is Knocked Out\\), put (\\d+) damage counters on the Attacking Pokémon\\.").matchEntire(text)
+        val ironBoulderRetaliationCounters = Regex("During your opponent's next turn, if this Pokémon is damaged by an attack \\(even if it is Knocked Out\\), put (\\d+) damage counters on the Attacking Pokémon\\.").matchEntire(text)
         val reduceEvolutionDamage = Regex("During your opponent's next turn, this Pokémon takes (\\d+) less damage from attacks from Evolution Pokémon \\(after applying Weakness and Resistance\\)\\.").matchEntire(text)
         val reduceDefenderAttack = Regex("During your opponent's next turn, attacks used by the Defending Pokémon do (\\d+) less damage \\(before applying Weakness and Resistance\\)\\.").matchEntire(text)
         val preventBasicNonColorlessDamage = Regex("During your opponent's next turn, prevent all damage done to this Pokémon by attacks from Basic non-\\{C\\} Pokémon\\.").matchEntire(text)
@@ -681,6 +683,7 @@ internal object CatalogRuleCompiler {
                 attachBasicEnergyFromDeckAny != null -> effects += Effect.AttachBasicEnergyFromDeckAny(attachBasicEnergyFromDeckAny.groupValues[1].toInt())
                 attachBasicEnergyFromDeckBench != null -> effects += Effect.AttachBasicEnergyFromDeckAny(attachBasicEnergyFromDeckBench.groupValues[1].toInt(), benchedOnly = true)
                 attachTypedEnergyFromDeckBench != null -> effects += Effect.AttachBasicEnergyFromDeckAny(attachTypedEnergyFromDeckBench.groupValues[1].toInt(), symbolType(attachTypedEnergyFromDeckBench.groupValues[2]) ?: return null, benchedOnly = true)
+                attachTypedEnergyFromDiscardBench != null -> effects += Effect.AttachBasicEnergyFromDiscardAny(attachTypedEnergyFromDiscardBench.groupValues[1].toInt(), symbolType(attachTypedEnergyFromDiscardBench.groupValues[2]) ?: return null, benchedOnly = true)
                 attachEnergyToEachBench != null -> effects += Effect.AttachBasicEnergyToEachBenchedPokemon(symbolType(attachEnergyToEachBench.groupValues[1]) ?: return null)
                 coinKnockOutBasic -> effects += Effect.CoinKnockOutBasic
                 statusThenRetreat != null -> {
@@ -807,6 +810,7 @@ internal object CatalogRuleCompiler {
                 revealOpponentHand -> effects += Effect.RevealOpponentHand
                 searchEvolutionSelf -> effects += Effect.SearchEvolutionForSelfToEvolve
                 delayedDefendingCounters != null -> effects += Effect.DelayedDefendingDamageCounters(delayedDefendingCounters.groupValues[1].toInt())
+                ironBoulderRetaliationCounters != null -> effects += Effect.RetaliateDamageCountersNextTurn(ironBoulderRetaliationCounters.groupValues[1].toInt())
                 drawToHand != null -> effects += Effect.DrawToHand(drawToHand.groupValues[1].toInt())
                 discardHandDraw != null -> effects += Effect.DiscardHandDraw(discardHandDraw.groupValues[1].toInt())
                 coinBonus != null || coinBonusMultiple != null || coinBonusAllHeads != null || coinBonusUntilTails != null -> {

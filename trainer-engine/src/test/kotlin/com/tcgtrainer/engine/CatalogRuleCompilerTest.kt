@@ -742,6 +742,24 @@ class CatalogRuleCompilerTest {
         val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv08-151"), emptyMap())!!
         assertTrue(Effect.RetaliateDamageCountersNextTurn(6) in card.attacks.single { it.name == "Ready to Ram" }.effects)
     }
+    @Test fun `Iron Boulder retaliation wording compiles for every Standard print`() {
+        val ids = listOf("sv05-099", "sv05-192", "sv05-207", "sv05-217", "svp-147")
+        ids.forEach { id ->
+            val raw = CatalogRuleCompiler.rows.getValue(id)
+            val compiled = CatalogRuleCompiler.compile(raw, emptyMap())
+            assertNotNull(compiled, id)
+            assertTrue(compiled.attacks.flatMap { it.effects }.contains(Effect.RetaliateDamageCountersNextTurn(8)), id)
+        }
+    }
+    @Test fun `Mega Lucario recovers Fighting Energy to its Bench on every Standard print`() {
+        val ids = listOf("me01-160", "me01-179", "me01-188", "me02.5-113", "mep-012", "mep-033")
+        ids.forEach { id ->
+            val raw = CatalogRuleCompiler.rows.getValue(id)
+            val compiled = CatalogRuleCompiler.compile(raw, emptyMap())
+            assertNotNull(compiled, id)
+            assertTrue(compiled.attacks.flatMap { it.effects }.contains(Effect.AttachBasicEnergyFromDiscardAny(3, EnergyType.FIGHTING, benchedOnly = true)), id)
+        }
+    }
     @Test fun `Boltund Electrifying Dash selects only Lightning Energy for Benched targets`() {
         val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("sv05-059"), emptyMap())!!
         assertTrue(Effect.AttachBasicEnergyFromDeckAny(2, EnergyType.LIGHTNING, benchedOnly = true) in card.attacks.single { it.name == "Electrifying Dash" }.effects)
