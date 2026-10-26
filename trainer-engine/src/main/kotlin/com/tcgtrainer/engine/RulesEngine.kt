@@ -1046,6 +1046,11 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     update(actor) { it.copy(deck = it.deck.drop(1), discard = it.discard + discarded) }
                     emit("OwnDeckDiscarded", "Descartou a carta do topo do próprio deck: ${definition(discarded).name}.")
                 }
+                attack.effects.filterIsInstance<Effect.DiscardOwnDeckTopCards>().forEach { effect ->
+                    val discarded = next.players[actor].deck.take(effect.count)
+                    update(actor) { it.copy(deck = it.deck.drop(discarded.size), discard = it.discard + discarded) }
+                    emit("OwnDeckDiscarded", "Descartou ${discarded.size} carta(s) do topo do próprio deck pelo ataque.", discarded.size)
+                }
                 val pullSelected = Effect.PullSelectedBenchBeforeDamage in attack.effects
                 if (pullSelected) {
                     val pulledId = action.targetId ?: error("É necessário selecionar o Pokémon do Banco")

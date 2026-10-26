@@ -179,6 +179,7 @@ import kotlinx.serialization.Serializable
     @Serializable data object DiscardOpponentDeckPerCoinHead : Effect
     @Serializable data class ReorderOpponentDeckTop(val count: Int) : Effect
     @Serializable data object DiscardOwnDeckTop : Effect
+    @Serializable data class DiscardOwnDeckTopCards(val count: Int) : Effect
     @Serializable data object OptionalDiscardOwnDeckTop : Effect
     @Serializable data object TakePrizeCard : Effect
     @Serializable data object RevealOpponentHand : Effect
