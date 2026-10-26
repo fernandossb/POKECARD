@@ -589,8 +589,12 @@ internal class ContentEngine(private val rules: RulesEngine) {
                 else if (ability.attachHandEnergyType != null) {
                     val candidates = p.hand.filter { def(it).category == Category.ENERGY && def(it).basicEnergy && def(it).type == ability.attachHandEnergyType }.map { it.id }
                     begin(Resolution(listOf(ChoiceRequest(ChoiceKind.ABILITY_ATTACH_ENERGY,
-                        if (ability.attachHandEnergyToPokemonType == null) "Você pode ligar uma Energia Básica de ${ability.attachHandEnergyType} da mão a este Pokémon."
-                        else "Escolha uma Energia Básica de ${ability.attachHandEnergyType} da mão para ligar a um Pokémon de ${ability.attachHandEnergyToPokemonType}.",
+                        when {
+                            ability.attachHandEnergyToPokemonType != null -> "Escolha uma Energia Básica de ${ability.attachHandEnergyType} da mão para ligar a um Pokémon de ${ability.attachHandEnergyToPokemonType}."
+                            ability.attachHandEnergyToPokemonNamePrefix != null && ability.attachHandEnergyToPokemonNamePrefix.isEmpty() -> "Escolha uma Energia Básica de ${ability.attachHandEnergyType} da mão para ligar a qualquer um dos seus Pokémon."
+                            ability.attachHandEnergyToPokemonNamePrefix != null -> "Escolha uma Energia Básica de ${ability.attachHandEnergyType} da mão para ligar a um Pokémon ${ability.attachHandEnergyToPokemonNamePrefix}."
+                            else -> "Você pode ligar uma Energia Básica de ${ability.attachHandEnergyType} da mão a este Pokémon."
+                        },
                         candidates, if (ability.attachHandEnergyToPokemonType == null && ability.attachHandEnergyToPokemonNamePrefix == null) 0 else 1, minOf(1, candidates.size),
                         amount = ability.drawIfAttached, sourcePokemonId = pokemon.id, energyType = ability.attachHandEnergyToPokemonType,
                         targetNamePrefix = ability.attachHandEnergyToPokemonNamePrefix, healAmount = ability.healIfAttached,

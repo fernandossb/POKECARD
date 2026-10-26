@@ -184,6 +184,10 @@ internal object CatalogRuleCompiler {
         if (text == "As often as you like during your turn, you may attach a Basic {L} Energy card from your hand to 1 of your Iono's Pokémon.")
             return AbilityDefinition("$id-ability$index", name, text, usageKey = name, unlimitedUse = true,
                 attachHandEnergyType = EnergyType.LIGHTNING, attachHandEnergyToPokemonNamePrefix = "Iono's")
+        val unlimitedEnergy = Regex("As often as you like during your turn, you may attach a Basic \\{([GRFLWPMD])\\} Energy card from your hand to 1 of your Pokémon\\.").matchEntire(text)
+        if (unlimitedEnergy != null) return AbilityDefinition("$id-ability$index", name, text, usageKey = name, unlimitedUse = true,
+            attachHandEnergyType = symbolType(unlimitedEnergy.groupValues[1]) ?: return null,
+            attachHandEnergyToPokemonNamePrefix = "")
         if (text == "Once during your turn, you may attach a Basic {G} Energy card from your hand to 1 of your Pokémon. If you attached Energy to a Pokémon in this way, heal 30 damage from that Pokémon.")
             return AbilityDefinition("$id-ability$index", name, text, usageKey = name,
                 attachHandEnergyType = EnergyType.GRASS, healIfAttached = 30)
