@@ -501,6 +501,7 @@ internal object CatalogRuleCompiler {
         val coin = coinFixed != null || coinUntilTails != null || coinPerEnergy != null || coinPerEnergyBoth != null || discardDefendingPerHeads != null
         val discardDefending = Regex("Discard (an|a|1|2) (?:(\\{[GRFLWPMD]\\}|Special) )?Energy from your opponent's Active Pokémon\\.").matchEntire(text)
         val discardAllOpponentSpecialEnergy = text == "Discard all Special Energy from all of your opponent's Pokémon."
+        val discardOpponentToolsAndSpecialEnergy = text == "Discard all Pokémon Tools and Special Energy from all of your opponent's Pokémon."
         val benchDamage = Regex("This attack also does (\\d+) damage to 1 of your opponent's Benched Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
         val ownBenchAttackDamage = Regex("This attack also does (\\d+) damage to each of your Benched Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
         val damagedBenchDamage = Regex("This attack also does (\\d+) damage to 1 of your opponent's Benched Pokémon that has any damage counters on it\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
@@ -1040,6 +1041,7 @@ internal object CatalogRuleCompiler {
                     type = discardDefending.groupValues[2].takeIf { it.startsWith("{") }?.let { symbolType(it.removeSurrounding("{", "}")) },
                     specialOnly = discardDefending.groupValues[2] == "Special")
                 discardAllOpponentSpecialEnergy -> effects += Effect.DiscardAllOpponentSpecialEnergy
+                discardOpponentToolsAndSpecialEnergy -> effects += Effect.DiscardOpponentToolsAndSpecialEnergy
                 draw != null -> effects += Effect.Draw(if (draw.groupValues[1] == "a") 1 else draw.groupValues[1].toInt())
                 eachPlayerDraw != null -> effects += Effect.EachPlayerDraw(eachPlayerDraw.groupValues[1].toInt())
                 shuffleHandDraw != null -> effects += Effect.ShuffleHandDraw(shuffleHandDraw.groupValues[1].toInt())

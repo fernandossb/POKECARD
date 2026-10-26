@@ -126,6 +126,7 @@ import kotlinx.serialization.Serializable
     @Serializable data class OpponentActiveTypeCondition(val type: EnergyType) : Effect
     @Serializable data class DiscardDefendingEnergy(val count: Int, val onHeads: Boolean = false, val type: EnergyType? = null, val specialOnly: Boolean = false, val perHeads: Boolean = false) : Effect
     @Serializable data object DiscardAllOpponentSpecialEnergy : Effect
+    @Serializable data object DiscardOpponentToolsAndSpecialEnergy : Effect
     @Serializable data class BenchDamage(val amount: Int, val requiresDamageCounters: Boolean = false) : Effect
     @Serializable data class OwnBenchDamage(val amount: Int) : Effect
     @Serializable data class DiscardEnergyThenBenchDamage(val count: Int, val amount: Int) : Effect

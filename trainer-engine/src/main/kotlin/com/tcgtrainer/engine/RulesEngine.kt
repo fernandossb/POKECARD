@@ -949,6 +949,30 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         emit("OpponentSpecialEnergyDiscarded", "Descartou ${discarded.size} Energia(s) Especial(is) do campo adversário.")
                     }
                 }
+                if (Effect.DiscardOpponentToolsAndSpecialEnergy in attack.effects) {
+                    val affected = next.players[opponent].pokemon().filter { pokemon ->
+                        definition(pokemon.top).abilities.none { it.preventOpponentEffects }
+                    }
+                    val affectedIds = affected.mapTo(mutableSetOf()) { it.id }
+                    val discardedEnergies = affected.flatMap { pokemon -> pokemon.energies.filter { energy ->
+                        definition(energy).category == Category.ENERGY && !definition(energy).basicEnergy
+                    } }
+                    val discardedTools = affected.mapNotNull { it.tool }
+                    if (discardedEnergies.isNotEmpty() || discardedTools.isNotEmpty()) {
+                        update(opponent) { player ->
+                            player.copy(
+                                active = player.active?.let { active ->
+                                    if (active.id in affectedIds) active.copy(energies = active.energies - discardedEnergies.toSet(), tool = null) else active
+                                },
+                                bench = player.bench.map { pokemon ->
+                                    if (pokemon.id in affectedIds) pokemon.copy(energies = pokemon.energies - discardedEnergies.toSet(), tool = null) else pokemon
+                                },
+                                discard = player.discard + discardedEnergies + discardedTools
+                            )
+                        }
+                        emit("OpponentToolsAndSpecialEnergyDiscarded", "Descartou ${discardedTools.size} Ferramenta(s) e ${discardedEnergies.size} Energia(s) Especial(is) do campo adversário.", discardedTools.size + discardedEnergies.size)
+                    }
+                }
                 if (immunityHeads) {
                     updatePokemon(p.active!!.id) { it.copy(attackImmunityTurn = state.turn + 1) }
                     emit("AttackImmunityNextTurn", "O atacante impedirá dano e efeitos de ataques no próximo turno adversário.")
