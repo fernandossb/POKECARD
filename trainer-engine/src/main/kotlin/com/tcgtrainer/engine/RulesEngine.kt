@@ -29,6 +29,10 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         }.orEmpty()
     private fun attackFor(state: GameState, active: PokemonInstance, attackId: String): AttackDefinition? {
         val printed = definition(active.top).attacks.find { it.id == attackId } ?: return null
+        if (active.nextTurnAttackDamageBonusTurn == state.turn && active.nextTurnAttackDamageBonus > 0 &&
+            active.nextTurnAttackDamageBonusName == printed.name) {
+            return printed.copy(effects = printed.effects + Effect.Damage(active.nextTurnAttackDamageBonus))
+        }
         val optionalEnergyBonus = printed.effects.filterIsInstance<Effect.OptionalReturnWaterEnergyDamageBonus>().firstOrNull()
         if (optionalEnergyBonus != null) {
             val effects = printed.effects.filterNot { it is Effect.OptionalReturnWaterEnergyDamageBonus } +
@@ -131,7 +135,9 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 val rocketRequirement = definition(active.top).abilities.maxOfOrNull { it.requiresTeamRocketPokemonCount } ?: 0
                 val rocketCount = p.pokemon().count { definition(it.top).name.startsWith("Team Rocket's ") }
                 when {
-                    state.turn == 1 && !(state.currentPlayer == state.startingPlayer && Effect.MayAttackFirstTurnIfStarting in attack.effects) -> reason("Quem começa não pode atacar no primeiro turno.")
+                    state.turn == 1 && !(state.currentPlayer == state.startingPlayer &&
+                        (Effect.MayAttackFirstTurnIfStarting in attack.effects ||
+                            definition(active.top).abilities.any { it.mayAttackFirstTurnIfStarting })) -> reason("Quem começa não pode atacar no primeiro turno.")
                     Effect.RestrictIfSecondPlayerFirstTurn in attack.effects && state.turn == 2 && state.currentPlayer != state.startingPlayer -> reason("Quem começa em segundo lugar não pode usar este ataque no seu primeiro turno.")
                     SpecialCondition.PARALYZED in active.conditions || SpecialCondition.ASLEEP in active.conditions -> reason("Este Pokémon não pode atacar enquanto está Paralisado ou Adormecido.")
                     Effect.CopyBenchedNsAttack in printedAttack.effects && copiedAttackOptions(state, state.currentPlayer).isEmpty() -> reason("Não há ataques suportados de Pokémon de N no seu Banco para copiar.")
@@ -630,6 +636,11 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     else emit("AttackEffectFailed", "Condição do ataque não atendida; o ataque não causou dano nem aplicou efeitos.")
                     val settled = settle(next, ResolutionEnd.ATTACK); next = settled.state; events += settled.events
                 } else {
+                attack.effects.filterIsInstance<Effect.NextTurnAttackDamageBonus>().forEach { effect ->
+                    updatePokemon(p.active!!.id) { it.copy(nextTurnAttackDamageBonusName = effect.attackName,
+                        nextTurnAttackDamageBonus = effect.bonus, nextTurnAttackDamageBonusTurn = state.turn + 2) }
+                    emit("NextTurnAttackBonusScheduled", "${effect.attackName} causará ${effect.bonus} de dano adicional no próximo turno deste Pokémon.", effect.bonus)
+                }
                 val coin = attack.effects.filterIsInstance<Effect.CoinDamage>().firstOrNull()
                 val knockoutHeads = if (Effect.CoinKnockOutBasic in attack.effects) {
                     val rng = SeededRng(next.rng); val result = rng.nextInt(2) == 0

@@ -208,7 +208,7 @@ class EffectEngine(private val catalog: CardCatalog) {
         is Effect.OwnDiscardAbilityCountBonus,
         is Effect.OpponentPrizeTakenDamage, is Effect.OpponentPrizeCountDamage, is Effect.OpponentNoRetreatDamage,
         is Effect.OpponentResistanceDamage, is Effect.OwnToolAttachedDamage,
-        is Effect.OwnKnockoutLastTurnDamage, is Effect.MovedFromBenchDamageBonus,
+        is Effect.OwnKnockoutLastTurnDamage, is Effect.MovedFromBenchDamageBonus, is Effect.NextTurnAttackDamageBonus,
         is Effect.RequiresExactHandSize,
         is Effect.OwnToolCountDamage, is Effect.OwnDamageCounterPenalty,
         is Effect.AllPokemonToolCountDamage,

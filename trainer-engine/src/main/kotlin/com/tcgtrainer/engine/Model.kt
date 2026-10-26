@@ -81,6 +81,7 @@ import kotlinx.serialization.Serializable
     @Serializable data object RequiresStadium : Effect
     @Serializable data class RequiresOwnBenchCountAtLeast(val count: Int) : Effect
     @Serializable data object MayAttackFirstTurnIfStarting : Effect
+    @Serializable data class NextTurnAttackDamageBonus(val attackName: String, val bonus: Int) : Effect
     @Serializable data object SearchEvolutionForSelfToEvolve : Effect
     @Serializable data object SearchEvolutionForEachBenchedPokemon : Effect
     @Serializable data class BasicPokemonToBench(val count: Int) : Effect
@@ -278,7 +279,8 @@ import kotlinx.serialization.Serializable
     val preventOpponentItemSupporterEffects: Boolean = false,
     val opponentShuffleHandAndDraw: Int = 0,
     val eachPlayerDraw: Int = 0,
-    val onEvolveHealAllEvolutionAndDiscardEnergy: Boolean = false
+    val onEvolveHealAllEvolutionAndDiscardEnergy: Boolean = false,
+    val mayAttackFirstTurnIfStarting: Boolean = false
 )
 @Serializable data class CardDefinition(
     val id: String, val name: String, val set: String, val number: String, val variant: String = "normal",
@@ -312,7 +314,9 @@ fun CardDefinition.canEvolveFrom(base: CardDefinition): Boolean = category == Ca
     val incomingDamageReductionEvolutionOnly: Boolean = false,
     val attackIdsUsedWhileActive: List<String> = emptyList(),
     val delayedDamageCounters: Int = 0, val delayedDamageTurn: Int = -1,
-    val weaknessOverride: EnergyType? = null, val enteredActiveTurn: Int = -1
+    val weaknessOverride: EnergyType? = null, val enteredActiveTurn: Int = -1,
+    val nextTurnAttackDamageBonusName: String? = null, val nextTurnAttackDamageBonus: Int = 0,
+    val nextTurnAttackDamageBonusTurn: Int = -1
 ) { val id: String get() = cards.first().id; val top: CardInstance get() = cards.last() }
 @Serializable data class AttackRestriction(val attackId: String?, val blockedTurn: Int)
 @Serializable data class TurnFlags(val manualEnergy: Boolean = false, val supporter: Boolean = false, val retreat: Boolean = false,

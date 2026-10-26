@@ -29,6 +29,8 @@ internal object CatalogRuleCompiler {
     internal fun compileAbility(id: String, index: Int, raw: JsonObject): AbilityDefinition? {
         val name = raw.s("name") ?: return null
         val text = raw.s("effect")?.trim().orEmpty()
+        if (text == "If you go first, this Pokémon can use attacks during your first turn.")
+            return AbilityDefinition("$id-ability$index", name, text, mayAttackFirstTurnIfStarting = true)
         if (text == "The Weakness of each of your opponent's {N} Pokémon in play is now {P}. (Apply Weakness as ×2.)")
             return AbilityDefinition("$id-ability$index", name, text, changeOpponentNsPokemonWeaknessToPsychic = true)
         if (text == "If 1 of your {D} Pokémon is Knocked Out by damage from an attack from your opponent's Pokémon ex, that player takes 1 fewer Prize card. The effect of Shadowy Concealment doesn't stack.")
@@ -301,6 +303,14 @@ internal object CatalogRuleCompiler {
     fun compileAttack(id: String, index: Int, raw: JsonObject): AttackDefinition? {
         val cost = raw.a("cost").map { type(it.jsonPrimitive.content) ?: return null }
         val text = raw.s("effect").orEmpty().trim()
+        val echoedVoiceBonus = Regex("During your next turn, this Pokémon's (.+) attack does (\\d+) more damage \\(before applying Weakness and Resistance\\)\\.").matchEntire(text)
+        if (echoedVoiceBonus != null) {
+            if (raw.s("name") != echoedVoiceBonus.groupValues[1]) return null
+            val rewritten = JsonObject(raw.toMutableMap().apply { put("effect", JsonPrimitive("")) })
+            val compiled = compileAttack(id, index, rewritten) ?: return null
+            return compiled.copy(effects = compiled.effects + Effect.NextTurnAttackDamageBonus(
+                echoedVoiceBonus.groupValues[1], echoedVoiceBonus.groupValues[2].toInt()), text = text)
+        }
         val prizeBonusWithRecoil = Regex("This attack does (\\d+) more damage for each Prize card your opponent has taken\\. This Pokémon also does (\\d+) damage to itself\\.").matchEntire(text)
         if (prizeBonusWithRecoil != null) {
             val prizeBonusText = "This attack does ${prizeBonusWithRecoil.groupValues[1]} more damage for each Prize card your opponent has taken."
