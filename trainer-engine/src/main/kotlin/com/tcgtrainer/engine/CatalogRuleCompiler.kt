@@ -404,6 +404,7 @@ internal object CatalogRuleCompiler {
         val ownToolAttachedDamage = Regex("If this Pokémon has a Pokémon Tool attached, this attack does (\\d+) more damage\\.").matchEntire(text)
         val benchedDamage = Regex("This attack does (\\d+) more damage for each Benched Pokémon \\(both yours and your opponent's\\)\\.").matchEntire(text)
         val ownInPlayDamage = Regex("This attack does (\\d+) damage for each of your Pokémon in play\\.").matchEntire(text)
+        val ownAttackNameDamage = Regex("This attack does (\\d+) damage for each of your Pokémon in play that has the (.+) attack\\.").matchEntire(text)
         val ownSpeciesDamage = Regex("This attack does (\\d+) damage for each of your (.+?) and (.+) in play\\.").matchEntire(text)
         val ownBenchDamage = Regex("This attack does (\\d+) damage for each of your Benched Pokémon\\.").matchEntire(text)
         val ownBenchDamageBonus = Regex("This attack does (\\d+) more damage for each of your Benched Pokémon\\.").matchEntire(text)
@@ -602,8 +603,8 @@ internal object CatalogRuleCompiler {
             if (damageText != "${perEnergy}×" && damageText != "${perEnergy}x") return null
             effects += Effect.DiscardTopDeckEnergyDamage(discardTopEnergyDamage.groupValues[1].toInt(),
                 symbolType(discardTopEnergyDamage.groupValues[3]) ?: return null, perEnergy)
-        } else if (ownInPlayDamage != null || ownBenchDamage != null || ownDamagedPokemon != null || ownDamageCounters != null || ownHandCounters != null || ownToolDamage != null || allToolDamage != null) {
-            val formula = ownInPlayDamage ?: ownBenchDamage ?: ownDamagedPokemon ?: ownDamageCounters ?: ownHandCounters ?: allToolDamage ?: ownToolDamage!!
+        } else if (ownInPlayDamage != null || ownAttackNameDamage != null || ownBenchDamage != null || ownDamagedPokemon != null || ownDamageCounters != null || ownHandCounters != null || ownToolDamage != null || allToolDamage != null) {
+            val formula = ownInPlayDamage ?: ownAttackNameDamage ?: ownBenchDamage ?: ownDamagedPokemon ?: ownDamageCounters ?: ownHandCounters ?: allToolDamage ?: ownToolDamage!!
             val amount = formula.groupValues[1].toInt()
             if (ownHandCounters != null) {
                 if (damageText.isNotEmpty()) return null
@@ -620,6 +621,9 @@ internal object CatalogRuleCompiler {
             } else if (ownDamagedPokemon != null) {
                 if (damageText != "${amount}×" && damageText != "${amount}x") return null
                 effects += Effect.OwnDamagedPokemonCountDamage(amount)
+            } else if (ownAttackNameDamage != null) {
+                if (damageText != "${amount}×" && damageText != "${amount}x") return null
+                effects += Effect.OwnAttackNameCountDamage(ownAttackNameDamage.groupValues[2], amount)
             } else {
                 if (damageText != "${amount}×" && damageText != "${amount}x") return null
                 if (ownInPlayDamage != null) effects += Effect.OwnInPlayCountDamage(amount)
