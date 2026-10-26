@@ -108,6 +108,7 @@ import kotlinx.serialization.Serializable
     @Serializable data object AttachOneBasicEnergyFromHand : Effect
     @Serializable data object ShuffleOwnBenchedPokemonIntoDeck : Effect
     @Serializable data object DevolveOpponentActive : Effect
+    @Serializable data object DevolveOpponentPokemonIntoDeck : Effect
     @Serializable data object DiscardStadium : Effect
     @Serializable data object ReturnSelfAndAttachmentsToHand : Effect
     @Serializable data object OptionalReturnSelfAndAttachmentsToHand : Effect

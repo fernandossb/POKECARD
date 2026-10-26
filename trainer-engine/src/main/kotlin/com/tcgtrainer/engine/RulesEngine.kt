@@ -836,6 +836,41 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 }
                 val remainingHpAfterDamage = (preview.effectiveHp - damageAfterAttack).coerceAtLeast(0)
                 emit("DamageDealt", "HP restante: $remainingHpAfterDamage.")
+                if (Effect.DevolveOpponentPokemonIntoDeck in attack.effects) {
+                    val evolvedTargets = next.players[opponent].pokemon().filter { pokemon ->
+                        pokemon.cards.size > 1 && pokemon.attackImmunityTurn != state.turn &&
+                            definition(pokemon.top).abilities.none { it.preventOpponentEffects }
+                    }
+                    if (evolvedTargets.isNotEmpty()) {
+                        val targetIds = evolvedTargets.map { it.id }.toSet()
+                        val returnedEvolutions = evolvedTargets.map { it.cards.last() }
+                        fun devolve(pokemon: PokemonInstance): PokemonInstance {
+                            if (pokemon.id !in targetIds) return pokemon
+                            return pokemon.copy(
+                                cards = pokemon.cards.dropLast(1),
+                                restrictions = emptyList(), retreatBlockedTurn = -1,
+                                defendingAttackFailsOnTailsTurn = -1, conditions = emptySet(), poisonDamageCounters = 1,
+                                damageModifier = 0, incomingDamageReduction = 0, damageReductionTurn = -1,
+                                incomingDamageReductionEvolutionOnly = false, attackImmunityTurn = -1,
+                                outgoingDamageReduction = 0, outgoingDamageReductionTurn = -1,
+                                preventBasicNonColorlessDamageTurn = -1, preventBasicPokemonDamageTurn = -1,
+                                weaknessSuppressedTurn = -1, weaknessOverride = null,
+                                retaliateDamageCounters = 0, retaliateDamageCountersTurn = -1,
+                                delayedDamageCounters = 0, delayedDamageTurn = -1,
+                                nextTurnAttackDamageBonusName = null, nextTurnAttackDamageBonus = 0,
+                                nextTurnAttackDamageBonusTurn = -1
+                            )
+                        }
+                        val rng = SeededRng(next.rng)
+                        update(opponent) { player -> player.copy(
+                            active = player.active?.let(::devolve),
+                            bench = player.bench.map(::devolve),
+                            deck = rng.shuffle(player.deck + returnedEvolutions)
+                        ) }
+                        next = next.copy(rng = rng.state)
+                        emit("PokemonDevolvedIntoDeck", "Desvolveu ${returnedEvolutions.size} Pokémon adversário(s) e embaralhou a evolução mais alta de cada um no deck.", returnedEvolutions.size)
+                    }
+                }
                 if (damageAfterAttack < preview.effectiveHp && wouldBeKnockedOutByDamage)
                     emit("KnockoutPrevented", "${definition(defender.top).name} sobreviveu ao ataque e ficou com $remainingHpAfterDamage HP.", appliedDamage)
                 if (!defenderEffectsPrevented && knockoutHeads == 1) {

@@ -504,6 +504,7 @@ internal object CatalogRuleCompiler {
         val attachOneBasicEnergy = text == "Attach a Basic Energy card from your hand to 1 of your Pokémon."
         val shuffleOwnBenchIntoDeck = text == "Shuffle 1 of your Benched Pokémon and all attached cards into your deck."
         val devolveOpponentActive = text == "If your opponent's Active Pokémon is an evolved Pokémon, devolve it by putting the highest Stage Evolution card on it into your opponent's hand."
+        val devolveOpponentAllIntoDeck = text == "Devolve each of your opponent's evolved Pokémon by shuffling the highest Stage Evolution card on it into your opponent's deck."
         val discardStadium = text == "Discard a Stadium in play."
         val stadiumDamageBonus = Regex("If a Stadium is in play, this attack does (\\d+) more damage\\. Then, discard that Stadium\\.").matchEntire(text)
         val returnSelfAndAttachments = text == "Put this Pokémon and all attached cards into your hand."
@@ -811,6 +812,7 @@ internal object CatalogRuleCompiler {
                 attachOneBasicEnergy -> effects += Effect.AttachOneBasicEnergyFromHand
                 shuffleOwnBenchIntoDeck -> effects += Effect.ShuffleOwnBenchedPokemonIntoDeck
                 devolveOpponentActive -> effects += Effect.DevolveOpponentActive
+                devolveOpponentAllIntoDeck -> effects += Effect.DevolveOpponentPokemonIntoDeck
                 discardStadium -> effects += Effect.DiscardStadium
                 returnSelfAndAttachments -> effects += Effect.ReturnSelfAndAttachmentsToHand
                 optionalReturnSelf -> effects += Effect.OptionalReturnSelfAndAttachmentsToHand
