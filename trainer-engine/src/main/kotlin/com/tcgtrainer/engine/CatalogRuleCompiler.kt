@@ -29,6 +29,11 @@ internal object CatalogRuleCompiler {
     internal fun compileAbility(id: String, index: Int, raw: JsonObject): AbilityDefinition? {
         val name = raw.s("name") ?: return null
         val text = raw.s("effect")?.trim().orEmpty()
+        val benchToActiveEnergySearch = Regex("Once during your turn, when this Pokémon moves from your Bench to the Active Spot, you may use this Ability\\. Search your deck for up to (\\d+) Basic \\{([GRFLWPMD])\\} Energy cards and attach them to this Pokémon\\. Then, shuffle your deck\\.").matchEntire(text)
+        if (benchToActiveEnergySearch != null) return AbilityDefinition("$id-ability$index", name, text,
+            usageKey = name, usagePerPokemon = true, triggersWhenMovedFromBenchToActive = true,
+            attachBasicEnergyFromDeckToSelfType = symbolType(benchToActiveEnergySearch.groupValues[2]) ?: return null,
+            attachBasicEnergyFromDeckToSelfMax = benchToActiveEnergySearch.groupValues[1].toInt())
         if (text == "Attacks used by your Cynthia's Pokémon do 30 more damage to your opponent's Active Pokémon (before applying Weakness and Resistance).")
             return AbilityDefinition("$id-ability$index", name, text, teamAttackDamageBonusAnyType = 30,
                 teamAttackDamageBonusPokemonNamePrefix = "Cynthia's ")

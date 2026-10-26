@@ -166,11 +166,12 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     ability.onEvolveDiscardOpponentDeckCount > 0 -> illegal("Esta habilidade só pode ser usada ao evoluir da mão ou quando este Pokémon Ativo é nocauteado por dano de ataque.")
                     ability.onBenchSwitchAndMoveEnergy -> illegal("Esta habilidade só pode ser usada quando o Pokémon entra no Banco pela mão.")
                     ability.triggersWhenMovedFromActiveToBench -> illegal("Zero to Hero dispara quando Palafin é movido do Ativo para o Banco.")
+                    ability.triggersWhenMovedFromBenchToActive -> illegal("Buzzing Boost dispara quando Yanmega ex passa do Banco para o Ativo.")
                     ability.onEvolveAttachMetalFromDiscardMax > 0 -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
                     ability.onEvolveRecoverNamedTrainerFromDiscard != null -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
                     ability.devolveOpponentPokemonMax > 0 && s.players[1-s.currentPlayer].pokemon().none { it.cards.size > 1 && rules.effectiveAbilities(s, 1-rules.actingPlayer(s), it).none { targetAbility -> targetAbility.preventOpponentEffects } } -> illegal("Não há Pokémon adversário evoluído e sem proteção para desvoluir.")
                     ability.attackDiscountPerOpponentPrize -> illegal("Esta habilidade é aplicada automaticamente ao custo do ataque.")
-                    ability.hpBonusPerOpponentPrizeTaken > 0 || ability.hpBonusPerAttachedEnergyType != null || ability.teamDamageReduction > 0 || ability.additionalPokemonTypes.isNotEmpty() || ability.attackDamageBonusAgainstEvolutionActive > 0 || ability.futurePokemonDamageBonus > 0 || ability.teamAttackDamageBonusType != null || ability.teamAttackDamageBonusAnyType > 0 || ability.freeRetreatWithNoEnergy || ability.attackDiscountPerKofuDiscard || ability.coinFlipPreventAttackDamage || ability.preventOpponentItemSupporterEffects || ability.preventOpponentItemAndToolPlayFromHand || ability.triggersWhenMovedFromActiveToBench || ability.changeOpponentNsPokemonWeaknessToPsychic || ability.reducePrizeForDarknessKnockoutByEx || ability.mayAttackFirstTurnIfStarting || ability.suppressSelfKnockoutAbilities || ability.opponentActiveAbilityException != null || ability.rotomToolCapacityBonus -> illegal("Esta habilidade passiva se aplica automaticamente.")
+                    ability.hpBonusPerOpponentPrizeTaken > 0 || ability.hpBonusPerAttachedEnergyType != null || ability.teamDamageReduction > 0 || ability.additionalPokemonTypes.isNotEmpty() || ability.attackDamageBonusAgainstEvolutionActive > 0 || ability.futurePokemonDamageBonus > 0 || ability.teamAttackDamageBonusType != null || ability.teamAttackDamageBonusAnyType > 0 || ability.freeRetreatWithNoEnergy || ability.attackDiscountPerKofuDiscard || ability.coinFlipPreventAttackDamage || ability.preventOpponentItemSupporterEffects || ability.preventOpponentItemAndToolPlayFromHand || ability.triggersWhenMovedFromActiveToBench || ability.triggersWhenMovedFromBenchToActive || ability.changeOpponentNsPokemonWeaknessToPsychic || ability.reducePrizeForDarknessKnockoutByEx || ability.mayAttackFirstTurnIfStarting || ability.suppressSelfKnockoutAbilities || ability.opponentActiveAbilityException != null || ability.rotomToolCapacityBonus -> illegal("Esta habilidade passiva se aplica automaticamente.")
                     ability.hpBonusPerOpponentPrizeTaken > 0 || ability.hpBonusPerAttachedEnergyType != null || ability.teamDamageReduction > 0 || ability.additionalPokemonTypes.isNotEmpty() || ability.attackDamageBonusAgainstEvolutionActive > 0 || ability.futurePokemonDamageBonus > 0 || ability.teamAttackDamageBonusType != null || ability.teamAttackDamageBonusAnyType > 0 || ability.freeRetreatWithNoEnergy || ability.attackDiscountPerKofuDiscard || ability.coinFlipPreventAttackDamage || ability.preventOpponentItemSupporterEffects || ability.preventOpponentItemAndToolPlayFromHand || ability.onlyPlayableWithPalafinZeroToHero || ability.changeOpponentNsPokemonWeaknessToPsychic || ability.reducePrizeForDarknessKnockoutByEx || ability.mayAttackFirstTurnIfStarting || ability.suppressSelfKnockoutAbilities || ability.suppressRuleBoxAbilitiesExceptFuture || ability.opponentActiveAbilityException != null || ability.rotomToolCapacityBonus -> illegal("Esta habilidade passiva se aplica automaticamente.")
                     ability.selfKnockout && s.players.any { player -> player.pokemon().any { source ->
                         rules.effectiveAbilities(s, s.players.indexOf(player), source).any { it.suppressSelfKnockoutAbilities }
@@ -1369,6 +1370,29 @@ internal class ContentEngine(private val rules: RulesEngine) {
                             player.copy(active = player.active?.let(::transfer), bench = player.bench.map(::transfer))
                         }
                         events += GameEvent("OnBenchAbilityEnergyMoved", "Moveu ${moving.size} Energia(s) para o Ativo pela habilidade.", moving.size)
+                    }
+                    ChoiceKind.ON_BENCH_TO_ACTIVE_ATTACH_ENERGY -> {
+                        val sourceId = checkNotNull(choice.sourcePokemonId)
+                        val source = p.active?.takeIf { it.id == sourceId }
+                            ?: return illegal("Yanmega ex não está mais no Ativo.")
+                        val energyType = checkNotNull(choice.energyType)
+                        val selected = p.deck.filter { card ->
+                            card.id in ids && def(card).category == Category.ENERGY &&
+                                def(card).basicEnergy && def(card).type == energyType
+                        }
+                        if (selected.size != ids.size || selected.size > choice.max)
+                            return illegal("Escolha apenas Energias Básicas elegíveis do deck.")
+                        if (selected.isNotEmpty()) {
+                            val ability = def(source.top).abilities.firstOrNull { it.triggersWhenMovedFromBenchToActive }
+                                ?: return illegal("Buzzing Boost não está disponível.")
+                            val usageKey = if (ability.usagePerPokemon) "$sourceId:${ability.usageKey}" else ability.usageKey
+                            update(actor) { player -> player.copy(
+                                deck = player.deck - selected.toSet(),
+                                active = player.active?.copy(energies = player.active!!.energies + selected),
+                                flags = player.flags.copy(abilitiesUsed = player.flags.abilitiesUsed + usageKey)
+                            ) }
+                            events += GameEvent("YanmegaBuzzingBoost", "Ligou ${selected.size} Energia(s) Básica(s) de ${energyType} a Yanmega ex.", selected.size)
+                        }
                     }
                     ChoiceKind.ATTACK_RECOVER_POKEMON -> {
                         val cards = p.discard.filter { it.id in ids && def(it).category == Category.POKEMON && def(it).stage == Stage.BASIC }

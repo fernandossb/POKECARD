@@ -212,7 +212,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 }
                 ChoiceKind.SEARCH, ChoiceKind.RECOVER, ChoiceKind.SONIA, ChoiceKind.EVOLUTION_RECOVER_NAMED_TRAINER, ChoiceKind.EVOLUTION_SEARCH_TRAINER -> keepValue(checkNotNull(card(id)))
                 ChoiceKind.ABILITY_SEARCH_BASIC_ENERGY_TO_HAND -> keepValue(checkNotNull(card(id)))
-                ChoiceKind.ABILITY_ATTACH_BASIC_ENERGY_FROM_DECK -> keepValue(checkNotNull(card(id)))
+                ChoiceKind.ABILITY_ATTACH_BASIC_ENERGY_FROM_DECK, ChoiceKind.ON_BENCH_TO_ACTIVE_ATTACH_ENERGY -> keepValue(checkNotNull(card(id)))
                 ChoiceKind.ABILITY_ATTACH_BASIC_ENERGY_DECK_TARGET -> {
                     val target = pokemon(id)
                     potential(target.copy(energies = target.energies + checkNotNull(card(choice.selectedEnergy!!)), damage = target.damage + choice.amount * 10)) - potential(target)

@@ -58,6 +58,37 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
     }
     internal fun enqueuePalafinZeroToHero(before: GameState, after: GameState, owner: Int): GameState {
         if (before.currentPlayer != owner) return after
+        val priorActiveId = before.players[owner].active?.id
+        val enteredActive = after.players[owner].active?.takeIf { active ->
+            active.id != priorActiveId && before.players[owner].bench.any { it.id == active.id }
+        }
+        if (enteredActive != null) {
+            val ability = effectiveAbilities(after, owner, enteredActive).firstOrNull { it.triggersWhenMovedFromBenchToActive }
+            if (ability != null) {
+                val usageKey = if (ability.usagePerPokemon) "${enteredActive.id}:${ability.usageKey}" else ability.usageKey
+                val alreadyPending = after.resolution?.choices?.any {
+                    it.kind == ChoiceKind.ON_BENCH_TO_ACTIVE_ATTACH_ENERGY && it.sourcePokemonId == enteredActive.id
+                } == true
+                if (usageKey !in after.players[owner].flags.abilitiesUsed && !alreadyPending) {
+                    val type = ability.attachBasicEnergyFromDeckToSelfType
+                    val candidates = after.players[owner].deck.filter { card ->
+                        val cardDefinition = definition(card)
+                        cardDefinition.category == Category.ENERGY && cardDefinition.basicEnergy && cardDefinition.type == type
+                    }
+                    if (candidates.isNotEmpty()) {
+                        val choice = ChoiceRequest(ChoiceKind.ON_BENCH_TO_ACTIVE_ATTACH_ENERGY,
+                            "Buzzing Boost: você pode ligar até ${minOf(ability.attachBasicEnergyFromDeckToSelfMax, candidates.size)} Energia(s) Básica(s) de ${type} a este Pokémon.",
+                            candidates.map { it.id }, 0, minOf(ability.attachBasicEnergyFromDeckToSelfMax, candidates.size),
+                            sourcePokemonId = enteredActive.id, energyType = type)
+                        val resolution = after.resolution
+                        return after.copy(phase = Phase.RESOLVE_CHOICE, currentPlayer = owner,
+                            resolution = if (resolution == null) Resolution(listOf(choice), shuffleAfter = true)
+                                else resolution.copy(choices = listOf(choice) + resolution.choices, shuffleAfter = true),
+                            afterResolution = if (resolution == null) ResolutionEnd.MAIN else after.afterResolution)
+                    }
+                }
+            }
+        }
         val previousActive = before.players[owner].active ?: return after
         val movedPalafin = after.players[owner].bench.firstOrNull { it.id == previousActive.id } ?: return after
         val ability = effectiveAbilities(after, owner, movedPalafin).firstOrNull { it.triggersWhenMovedFromActiveToBench } ?: return after
