@@ -50,6 +50,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         target == null || target.second.id == choice.sourcePokemonId ||
                             target.first != rules.actingPlayer(s) && rules.attackTargetEffectsPrevented(s, target.first, target.second)
                     } -> illegal("Escolha apenas um Pokémon elegível, não protegido e diferente do atacante.")
+                    choice.kind == ChoiceKind.TRAINER_MOVE_BENCH_ENERGY && (p.active == null || action.cardIds.any { id -> p.bench.none { pokemon -> pokemon.energies.any { it.id == id } } }) -> illegal("Escolha Energias ligadas aos seus Pokémon do Banco com um Pokémon Ativo em jogo.")
                     choice.kind == ChoiceKind.PALAFIN_ZERO_TO_HERO && action.cardIds.isNotEmpty() && action.cardIds.any { id ->
                         p.deck.none { it.id == id && def(it).name == "Palafin ex" }
                     } -> illegal("Escolha um Palafin ex que ainda esteja no deck.")
@@ -105,6 +106,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     is TrainerEffect.DiscardOpponentItemsFromHand -> Legality.Legal
                     TrainerEffect.Briar -> if (s.players[1-actor].prizes.size == 2) Legality.Legal else illegal("Briar só pode ser jogada quando o oponente tem exatamente 2 Prêmios restantes.")
                     is TrainerEffect.HealEachOwnPokemonOfType -> Legality.Legal
+                    is TrainerEffect.MoveBenchedEnergyToActive -> Legality.Legal
                     is TrainerEffect.HealPokemon -> if ((if (effect.activeOnly) listOfNotNull(p.active) else p.pokemon()).none { it.damage > 0 }) illegal("Não há dano para curar no alvo permitido.") else Legality.Legal
                     is TrainerEffect.RecoverEnergy -> if (p.discard.none { def(it).category == Category.ENERGY }) illegal("Não há Energia Básica no descarte.") else Legality.Legal
                 }
@@ -288,6 +290,15 @@ internal class ContentEngine(private val rules: RulesEngine) {
                             ) }
                             events += GameEvent("PokemonHealed", "Curou $healed de dano de ${def(target.top).name}.", healed)
                         }
+                    }
+                    is TrainerEffect.MoveBenchedEnergyToActive -> {
+                        val energies = s.players[actor].bench.flatMap { it.energies }
+                        val max = minOf(effect.max, energies.size)
+                        if (s.players[actor].active != null && max > 0) begin(Resolution(listOf(ChoiceRequest(
+                            ChoiceKind.TRAINER_MOVE_BENCH_ENERGY,
+                            "Escolha até $max Energia(s) do Banco para mover ao seu Pokémon Ativo.",
+                            energies.map { it.id }, 0, max
+                        ))))
                     }
                     is TrainerEffect.HealPokemon -> begin(Resolution(listOf(ChoiceRequest(ChoiceKind.HEAL_TARGET, "Curar até ${effect.amount} de dano.",
                         (if (effect.activeOnly) listOfNotNull(p.active) else p.pokemon()).filter { it.damage > 0 }.map { it.id }, 1, 1, amount = effect.amount))))
@@ -977,6 +988,18 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         update(1-actor) { it.copy(hand = it.hand - cards.toSet(), discard = it.discard + cards) }
                         if (cards.isNotEmpty()) events += GameEvent("OpponentCardChosenAndDiscarded",
                             "Escolheu ${cards.joinToString { def(it).name }} da mão revelada do adversário para descartar.", cards.size)
+                    }
+                    ChoiceKind.TRAINER_MOVE_BENCH_ENERGY -> {
+                        val benchedEnergies = p.bench.flatMap { it.energies }
+                        val moving = benchedEnergies.filter { it.id in ids && it.id in choice.candidates }
+                        if (moving.size != ids.size) return illegal("Escolha apenas Energias atualmente ligadas aos seus Pokémon do Banco.")
+                        if (moving.isNotEmpty()) {
+                            update(actor) { player -> player.copy(
+                                active = player.active?.copy(energies = player.active.energies + moving),
+                                bench = player.bench.map { pokemon -> pokemon.copy(energies = pokemon.energies - moving.toSet()) }
+                            ) }
+                            events += GameEvent("TrainerEnergyMoved", "Moveu ${moving.size} Energia(s) do Banco para o Pokémon Ativo.", moving.size)
+                        }
                     }
                     ChoiceKind.RECOVER -> {
                         val cards = p.discard.filter { it.id in ids }

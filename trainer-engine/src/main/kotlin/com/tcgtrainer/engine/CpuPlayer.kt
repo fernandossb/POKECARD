@@ -312,6 +312,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                     if (target.damage >= hp(devolved)) 1300.0 + d(target.top).prizes * 100.0 else 100.0 + (target.damage.toDouble() / hp(devolved).coerceAtLeast(1))
                 } ?: 0.0
                 ChoiceKind.ATTACK_ENERGY, ChoiceKind.ATTACK_HAND_ENERGY, ChoiceKind.ATTACK_DECK_BASIC_ENERGY_ANY -> -keepValue(checkNotNull(card(id)))
+                ChoiceKind.TRAINER_MOVE_BENCH_ENERGY -> 1.0
                 ChoiceKind.ATTACK_OPPONENT_ENERGY -> o.opponentField.firstOrNull { source -> source.energies.any { it.id == id } }?.let { source ->
                     (if (source.id == o.opponentActiveId) 120.0 else 20.0) + source.energies.size
                 } ?: 0.0
@@ -442,6 +443,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 TrainerEffect.Briar -> if (o.opponentPrizeCount == 2) 115.0 else -5.0
                 is TrainerEffect.HealEachOwnPokemonOfType -> own.filter { d(it.top).type == effect.type }
                     .sumOf { minOf(effect.amount, it.damage).toDouble() }.let { if (it > 0) 65.0 + it else -5.0 }
+                is TrainerEffect.MoveBenchedEnergyToActive -> if (active != null && own.filter { it.id != active.id }.sumOf { it.energies.size } > 0) 70.0 else -5.0
                 is TrainerEffect.HealPokemon -> own.filter { !effect.activeOnly || it.id == active?.id }.maxOfOrNull { minOf(it.damage, effect.amount).toDouble() } ?: -5.0
                 is TrainerEffect.RecoverEnergy -> if (o.ownDiscard.any { d(it).category == Category.ENERGY }) 45.0 else -5.0
             }
