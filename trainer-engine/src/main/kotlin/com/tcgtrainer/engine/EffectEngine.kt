@@ -6,8 +6,12 @@ class EffectEngine(private val catalog: CardCatalog) {
         val stadiumEffect = state?.stadium?.let { catalog.get(it.definitionId).trainerEffect } as? TrainerEffect.HpModifier
         val owner = state?.players?.indexOfFirst { player -> player.pokemon().any { it.id == pokemon.id } } ?: -1
         val prizesRemaining = if (owner >= 0) state!!.players[1-owner].prizes.size else opponentPrizeCardsRemaining
-        val prizeBonus = def.abilities.sumOf { it.hpBonusPerOpponentPrizeTaken } * (6-prizesRemaining).coerceAtLeast(0)
-        val energyBonus = def.abilities.sumOf { ability -> ability.hpBonusPerAttachedEnergy * pokemon.energies.count {
+        val suppressor = if (owner >= 0 && state!!.players[owner].active?.id == pokemon.id) {
+            state.players[1-owner].active?.let { catalog.get(it.top.definitionId).abilities.firstOrNull { ability -> ability.opponentActiveAbilityException != null } }
+        } else null
+        val abilities = if (suppressor == null) def.abilities else def.abilities.filter { it.name == suppressor.opponentActiveAbilityException }
+        val prizeBonus = abilities.sumOf { it.hpBonusPerOpponentPrizeTaken } * (6-prizesRemaining).coerceAtLeast(0)
+        val energyBonus = abilities.sumOf { ability -> ability.hpBonusPerAttachedEnergy * pokemon.energies.count {
             ability.hpBonusPerAttachedEnergyType != null && catalog.get(it.definitionId).type == ability.hpBonusPerAttachedEnergyType
         } }
         return (def.hp + pokemon.hpModifier + prizeBonus + energyBonus + if (stadiumEffect?.stage == def.stage) stadiumEffect.amount else 0).coerceAtLeast(0)
@@ -31,17 +35,25 @@ class EffectEngine(private val catalog: CardCatalog) {
         ownDiscardPokemonAbilityNames: List<String> = emptyList(),
         ownBenchPokemonDetails: List<Pair<String, Int>> = emptyList(),
         ownBenchPokemonTypeDetails: List<Pair<EnergyType, Int>> = emptyList(),
+        sourceAbilityOverride: List<AbilityDefinition>? = null, targetAbilityOverride: List<AbilityDefinition>? = null,
         allPokemonToolCount: Int = 0, attackerPokemon: List<PokemonInstance> = listOf(attacker)): Int {
         if (defender.attackImmunityTurn >= 0 && turn == defender.attackImmunityTurn) return 0
         val source = catalog.get(attacker.top.definitionId)
         val target = catalog.get(defender.top.definitionId)
+        val sourceAbilities = sourceAbilityOverride ?: source.abilities
+        val targetAbilities = targetAbilityOverride ?: target.abilities
+        fun abilitiesOf(pokemon: PokemonInstance): List<AbilityDefinition> = when (pokemon.id) {
+            attacker.id -> sourceAbilities
+            defender.id -> targetAbilities
+            else -> catalog.get(pokemon.top.definitionId).abilities
+        }
         if (Effect.RequiresOpponentBurned in effects && (!targetIsOpponentActive || SpecialCondition.BURNED !in defender.conditions)) return 0
-        if (target.abilities.any { it.preventDamageFromPokemonWithAbilities } && source.abilities.isNotEmpty()) return 0
-        if (target.abilities.any { it.preventDamageFromSpecialEnergyAttacker } && attacker.energies.any {
+        if (targetAbilities.any { it.preventDamageFromPokemonWithAbilities } && sourceAbilities.isNotEmpty()) return 0
+        if (targetAbilities.any { it.preventDamageFromSpecialEnergyAttacker } && attacker.energies.any {
                 catalog.get(it.definitionId).category == Category.ENERGY && !catalog.get(it.definitionId).basicEnergy
             }) return 0
-        if (target.abilities.any { it.preventDamageFromOpponentEx } && source.name.endsWith(" ex")) return 0
-        if (target.abilities.any { it.preventDamageFromBasicPokemonEx } && source.stage == Stage.BASIC && source.name.endsWith(" ex")) return 0
+        if (targetAbilities.any { it.preventDamageFromOpponentEx } && source.name.endsWith(" ex")) return 0
+        if (targetAbilities.any { it.preventDamageFromBasicPokemonEx } && source.stage == Stage.BASIC && source.name.endsWith(" ex")) return 0
         if (friendlyBenchPokemon.any { benchPokemon ->
                 catalog.get(benchPokemon.top.definitionId).abilities.any { ability ->
                     ability.benchDamageImmunityForAttackerMaxEnergy > 0 && attacker.energies.size <= ability.benchDamageImmunityForAttackerMaxEnergy
@@ -50,30 +62,30 @@ class EffectEngine(private val catalog: CardCatalog) {
         if (defender.preventBasicNonColorlessDamageTurn >= 0 && defender.preventBasicNonColorlessDamageTurn == turn &&
             source.stage == Stage.BASIC && source.type != EnergyType.COLORLESS) return 0
         if (defender.preventBasicPokemonDamageTurn >= 0 && defender.preventBasicPokemonDamageTurn == turn && source.stage == Stage.BASIC) return 0
-        val targetPreventsEffects = target.abilities.any { it.preventOpponentEffects ||
+        val targetPreventsEffects = targetAbilities.any { it.preventOpponentEffects ||
             it.preventDamageFromSpecialEnergyAttacker && attacker.energies.any { energy ->
                 catalog.get(energy.definitionId).category == Category.ENERGY && !catalog.get(energy.definitionId).basicEnergy
             } }
         val counterDamage = if (targetPreventsEffects) 0 else effects.filterIsInstance<Effect.OwnHandCounterDamage>().sumOf { it.countersPerCard * 10 * ownHandCount }
-        val abilityHandBonus = if (ownHandCount == opponentHandCount) source.abilities.sumOf { it.damageBonusIfHandsEqual } else 0
-        val abilityDamageBonus = if (targetIsOpponentActive) source.abilities.sumOf { ability ->
+        val abilityHandBonus = if (ownHandCount == opponentHandCount) sourceAbilities.sumOf { it.damageBonusIfHandsEqual } else 0
+        val abilityDamageBonus = if (targetIsOpponentActive) sourceAbilities.sumOf { ability ->
             if (ability.damageBonusAgainstActiveWhenDamageAtLeast > 0 && attacker.damage >= ability.damageBonusAgainstActiveWhenDamageAtLeast)
                 ability.damageBonusAmount else 0
         } else 0
         val futureDamageBonus = if (targetIsOpponentActive && source.name != "Iron Crown ex" &&
             (source.name.startsWith("Iron ") || source.name.startsWith("Miraidon")))
-            attackerPokemon.flatMap { catalog.get(it.top.definitionId).abilities }.sumOf { it.futurePokemonDamageBonus } else 0
-        val attackerTypes = setOf(source.type) + source.abilities.flatMap { it.additionalPokemonTypes }
+            attackerPokemon.flatMap(::abilitiesOf).sumOf { it.futurePokemonDamageBonus } else 0
+        val attackerTypes = setOf(source.type) + sourceAbilities.flatMap { it.additionalPokemonTypes }
         val teamAttackDamageBonus = if (targetIsOpponentActive)
-            attackerPokemon.sumOf { pokemon -> catalog.get(pokemon.top.definitionId).abilities.filter { it.teamAttackDamageBonusType in attackerTypes }.sumOf { it.teamAttackDamageBonus } }
+            attackerPokemon.sumOf { pokemon -> abilitiesOf(pokemon).filter { it.teamAttackDamageBonusType in attackerTypes }.sumOf { it.teamAttackDamageBonus } }
         else 0
         val ownInPlayTypes = attackerPokemon.flatMap { pokemon ->
             val def = catalog.get(pokemon.top.definitionId)
-            listOf(def.type) + def.abilities.flatMap { it.additionalPokemonTypes }
+            listOf(def.type) + abilitiesOf(pokemon).flatMap { it.additionalPokemonTypes }
         }.toSet()
         val opponentInPlayTypes = friendlyPokemon.flatMap { pokemon ->
             val def = catalog.get(pokemon.top.definitionId)
-            listOf(def.type) + def.abilities.flatMap { it.additionalPokemonTypes }
+            listOf(def.type) + abilitiesOf(pokemon).flatMap { it.additionalPokemonTypes }
         }.toSet()
         val sameTypeBonus = if (targetIsOpponentActive && ownInPlayTypes.intersect(opponentInPlayTypes).isNotEmpty())
             effects.filterIsInstance<Effect.SameTypePokemonInPlayDamageBonus>().sumOf { it.bonus } else 0
@@ -85,7 +97,7 @@ class EffectEngine(private val catalog: CardCatalog) {
         val base = effects.filterIsInstance<Effect.Damage>().sumOf { it.amount } +
             effects.filterIsInstance<Effect.StadiumDamageBonus>().filter { stadiumInPlay }.sumOf { it.bonus } + abilityHandBonus + abilityDamageBonus +
             futureDamageBonus + teamAttackDamageBonus + sameTypeBonus + sameHandSizeBonus + opponentExCountDamage +
-            (if (targetIsOpponentActive && target.stage != Stage.BASIC) attackerPokemon.flatMap { catalog.get(it.top.definitionId).abilities }.sumOf { it.attackDamageBonusAgainstEvolutionActive } else 0) +
+            (if (targetIsOpponentActive && target.stage != Stage.BASIC) attackerPokemon.flatMap(::abilitiesOf).sumOf { it.attackDamageBonusAgainstEvolutionActive } else 0) +
             effects.filterIsInstance<Effect.TargetedDamage>().sumOf { it.damage } +
             effects.filterIsInstance<Effect.BenchedCountDamage>().sumOf { it.perPokemon * (ownBenchCount + opponentBenchCount) } +
             effects.filterIsInstance<Effect.OpponentBenchCountDamage>().sumOf { it.perPokemon * opponentBenchCount } +
@@ -169,23 +181,23 @@ class EffectEngine(private val catalog: CardCatalog) {
         val attackBase = (base - if (turn == attacker.outgoingDamageReductionTurn) attacker.outgoingDamageReduction else 0).coerceAtLeast(0)
         if (attackBase == 0) return counterDamage
         var value = (attackBase + attacker.damageModifier + boost).coerceAtLeast(0)
-        val sourceTypes = setOf(source.type) + source.abilities.flatMap { it.additionalPokemonTypes }
+        val sourceTypes = setOf(source.type) + sourceAbilities.flatMap { it.additionalPokemonTypes }
         val weakness = defender.weaknessOverride ?: target.weakness
         if (!ignoreWeaknessResistance && !ignoreWeakness && !(defender.weaknessSuppressedTurn >= 0 && defender.weaknessSuppressedTurn == turn) && weakness in sourceTypes) value *= 2
         if (!ignoreWeaknessResistance && !ignoreResistance && target.resistance in sourceTypes) value -= target.resistanceAmount
-        val ignoresOpponentActiveEffects = ignoreOpponentActiveEffects || source.abilities.any { it.ignoreOpponentActiveEffects }
+        val ignoresOpponentActiveEffects = ignoreOpponentActiveEffects || sourceAbilities.any { it.ignoreOpponentActiveEffects }
         if (!ignoresOpponentActiveEffects) {
             val curlyWall = if (target.stage == Stage.BASIC && target.type == EnergyType.COLORLESS && friendlyPokemon.count {
                     catalog.get(it.top.definitionId).name == "Bouffalant"
-                } >= 2) friendlyPokemon.flatMap { catalog.get(it.top.definitionId).abilities }
+                } >= 2) friendlyPokemon.flatMap(::abilitiesOf)
                     .maxOfOrNull { it.protectBasicColorlessWithSecondBouffalant } ?: 0 else 0
-            value -= target.abilities.sumOf { if (it.damageReductionTypes.isEmpty() || source.type in it.damageReductionTypes) it.damageReduction else 0 } + curlyWall
+            value -= targetAbilities.sumOf { if (it.damageReductionTypes.isEmpty() || source.type in it.damageReductionTypes) it.damageReduction else 0 } + curlyWall
         }
         val tundraWallReduction = if (defender.energies.any { catalog.get(it.definitionId).type == EnergyType.WATER })
-            friendlyPokemon.flatMap { catalog.get(it.top.definitionId).abilities }
+            friendlyPokemon.flatMap(::abilitiesOf)
                 .maxOfOrNull { it.tundraWallWaterDamageReduction } ?: 0 else 0
         value -= tundraWallReduction
-        value -= friendlyPokemon.flatMap { catalog.get(it.top.definitionId).abilities }.sumOf { it.teamDamageReduction }
+        value -= friendlyPokemon.flatMap(::abilitiesOf).sumOf { it.teamDamageReduction }
         if (!ignoresOpponentActiveEffects && turn == defender.damageReductionTurn && (!defender.incomingDamageReductionEvolutionOnly || source.stage != Stage.BASIC)) value -= defender.incomingDamageReduction
         return value.coerceAtLeast(0) + counterDamage
     }

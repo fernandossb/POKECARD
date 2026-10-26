@@ -35,6 +35,8 @@ internal object CatalogRuleCompiler {
             return AbilityDefinition("$id-ability$index", name, text, usageKey = name, onEvolveDiscardOpponentDeckCount = 2)
         if (text == "If you go first, this Pokémon can use attacks during your first turn.")
             return AbilityDefinition("$id-ability$index", name, text, mayAttackFirstTurnIfStarting = true)
+        if (text == "As long as this Pokémon is in the Active Spot, your opponent's Active Pokémon has no Abilities, except for Midnight Fluttering.")
+            return AbilityDefinition("$id-ability$index", name, text, opponentActiveAbilityException = "Midnight Fluttering")
         if (text == "The Weakness of each of your opponent's {N} Pokémon in play is now {P}. (Apply Weakness as ×2.)")
             return AbilityDefinition("$id-ability$index", name, text, changeOpponentNsPokemonWeaknessToPsychic = true)
         if (text == "If 1 of your {D} Pokémon is Knocked Out by damage from an attack from your opponent's Pokémon ex, that player takes 1 fewer Prize card. The effect of Shadowy Concealment doesn't stack.")

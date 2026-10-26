@@ -294,7 +294,8 @@ import kotlinx.serialization.Serializable
     val onEvolveHealAllEvolutionAndDiscardEnergy: Boolean = false,
     val onEvolveSearchTrainerIfTeraMax: Int = 0,
     val mayAttackFirstTurnIfStarting: Boolean = false,
-    val onEvolveDiscardOpponentDeckCount: Int = 0
+    val onEvolveDiscardOpponentDeckCount: Int = 0,
+    val opponentActiveAbilityException: String? = null
 )
 @Serializable data class CardDefinition(
     val id: String, val name: String, val set: String, val number: String, val variant: String = "normal",
