@@ -1440,6 +1440,17 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         update(1-actor) { opponent -> opponent.copy(active = opponent.active?.copy(damage = opponent.active!!.damage + bonus)) }
                         events += GameEvent("PokemonEnergyDiscardedForDamage", "Descartou ${discarded.size} Energia(s) dos seus Pokémon e causou $bonus de dano adicional.", bonus)
                     }
+                    ChoiceKind.ATTACK_DISCARD_BASIC_ENERGY_TO_SELF -> if (ids.isNotEmpty()) {
+                        val targetId = checkNotNull(choice.sourcePokemonId) { "Atacante ausente durante a ligação de Energia do descarte." }
+                        val energies = ids.map { id -> p.discard.firstOrNull { it.id == id && def(it).category == Category.ENERGY && def(it).basicEnergy && def(it).type == EnergyType.FIGHTING }
+                            ?: return illegal("Escolha apenas Energias Básicas de Luta do descarte.") }
+                        val target = p.pokemon().firstOrNull { it.id == targetId }
+                            ?: return illegal("O Pokémon que usou o ataque não está mais em jogo.")
+                        update(actor) { player -> player.copy(discard = player.discard - energies.toSet(),
+                            active = player.active?.let { pokemon -> if (pokemon.id == targetId) pokemon.copy(energies = pokemon.energies + energies) else pokemon },
+                            bench = player.bench.map { pokemon -> if (pokemon.id == targetId) pokemon.copy(energies = pokemon.energies + energies) else pokemon }) }
+                        events += GameEvent("AttackDiscardEnergyAttached", "Ligou ${energies.size} Energia(s) Básica(s) de Luta do descarte a ${def(target.top).name}.", energies.size)
+                    }
                     ChoiceKind.ATTACK_RESTRICT_OPPONENT_ATTACK -> {
                         val pokemonId = s.players[1-actor].active?.id ?: error("Pokémon ativo adversário ausente.")
                         val attackId = ids.single()

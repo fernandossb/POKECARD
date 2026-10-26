@@ -1582,6 +1582,13 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         "Você pode ligar até ${minOf(effect.max, eligible.size)} Energia(s) Básica(s) do descarte aos Pokémon do Banco.",
                         eligible.map { it.id }, 0, 1, remaining = minOf(effect.max, eligible.size), energyType = effect.type, benchedOnly = true)
                 }
+                attack.effects.filterIsInstance<Effect.AttachBasicFightingEnergyFromDiscardToSelf>().forEach { effect ->
+                    val eligible = next.players[actor].discard.filter { definition(it).category == Category.ENERGY && definition(it).basicEnergy && definition(it).type == EnergyType.FIGHTING }
+                    if (eligible.isNotEmpty()) choices += ChoiceRequest(
+                        ChoiceKind.ATTACK_DISCARD_BASIC_ENERGY_TO_SELF,
+                        "Você pode ligar até ${minOf(effect.max, eligible.size)} Energia(s) Básica(s) de Luta do descarte a este Pokémon.",
+                        eligible.map { it.id }, 0, minOf(effect.max, eligible.size), sourcePokemonId = next.players[actor].active!!.id)
+                }
                 attack.effects.filterIsInstance<Effect.AttachBasicEnergyToEachBenchedPokemon>().forEach { effect ->
                     val eligible = next.players[actor].deck.filter { definition(it).category == Category.ENERGY && definition(it).basicEnergy && definition(it).type == effect.type }
                     val count = minOf(next.players[actor].bench.size, eligible.size)
