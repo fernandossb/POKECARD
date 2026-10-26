@@ -378,6 +378,13 @@ internal object CatalogRuleCompiler {
             }
             val trainerText = raw.s("effect").orEmpty()
             if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Item" &&
+                trainerText == "Put up to 2 Basic Energy cards from your discard pile into your hand.") {
+                return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
+                    category = Category.TRAINER, verified = true, source = source,
+                    artAsset = "remote:$image/high.webp", text = trainerText,
+                    trainerType = TrainerType.ITEM, trainerEffect = TrainerEffect.RecoverEnergy(max = 2))
+            }
+            if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Item" &&
                 trainerText == "Put up to 2 Supporter cards from your discard pile into your hand.") {
                 return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
                     category = Category.TRAINER, verified = true, source = source,
