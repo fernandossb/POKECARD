@@ -369,7 +369,8 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     val eligible = p.discard.filter { def(it).category == Category.ENERGY && def(it).basicEnergy &&
                         (ability.attachBasicEnergyFromDiscardType == null || def(it).type == ability.attachBasicEnergyFromDiscardType) }
                     begin(Resolution(listOf(ChoiceRequest(ChoiceKind.ABILITY_DISCARD_ENERGY_FROM_DISCARD,
-                        "Você pode ligar uma Energia Básica do descarte a um dos seus Pokémon.",
+                        if (ability.attachBasicEnergyFromDiscardToSelf) "Você pode ligar uma Energia Básica do descarte a este Pokémon."
+                        else "Você pode ligar uma Energia Básica do descarte a um dos seus Pokémon.",
                         eligible.map { it.id }, 0, minOf(1, eligible.size), sourcePokemonId = pokemon.id))))
                 }
                 else if (ability.lookAtTopCardsChooseOne > 0) {
@@ -647,16 +648,26 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         if (ids.isNotEmpty()) {
                             val energy = p.discard.firstOrNull { it.id == ids.single() && def(it).category == Category.ENERGY && def(it).basicEnergy }
                                 ?: return illegal("A Energia selecionada não está mais no descarte.")
-                            val benchOnly = choice.benchedOnly || sourceAbility?.attachBasicEnergyFromDiscardBenchOnly == true
-                            val targets = (if (benchOnly) p.bench else p.pokemon()).filter {
-                                choice.targetPokemonType == null || def(it.top).type == choice.targetPokemonType
+                            if (sourceAbility?.attachBasicEnergyFromDiscardToSelf == true) {
+                                val sourceId = checkNotNull(choice.sourcePokemonId) { "Pokémon da habilidade ausente." }
+                                val target = p.pokemon().firstOrNull { it.id == sourceId }
+                                    ?: return illegal("O Pokémon da habilidade não está mais em jogo.")
+                                update(actor) { player -> player.copy(discard = player.discard - energy,
+                                    active = player.active?.let { if (it.id == sourceId) it.copy(energies = it.energies + energy) else it },
+                                    bench = player.bench.map { if (it.id == sourceId) it.copy(energies = it.energies + energy) else it }) }
+                                events += GameEvent("AbilityEnergyAttached", "${def(energy).name} do descarte foi ligada a ${def(target.top).name}.")
+                            } else {
+                                val benchOnly = choice.benchedOnly || sourceAbility?.attachBasicEnergyFromDiscardBenchOnly == true
+                                val targets = (if (benchOnly) p.bench else p.pokemon()).filter {
+                                    choice.targetPokemonType == null || def(it.top).type == choice.targetPokemonType
+                                }
+                                if (targets.isEmpty()) return illegal("Não há Pokémon elegível para receber a Energia.")
+                                remainingChoices = listOf(ChoiceRequest(ChoiceKind.ABILITY_DISCARD_ENERGY_TARGET,
+                                    "Escolha um dos seus Pokémon para receber ${def(energy).name}.",
+                                    targets.map { it.id }, 1, 1, remaining = choice.remaining, selectedEnergy = energy.id,
+                                    energyType = choice.energyType, sourcePokemonId = choice.sourcePokemonId, benchedOnly = benchOnly,
+                                    targetPokemonType = choice.targetPokemonType)) + remainingChoices
                             }
-                            if (targets.isEmpty()) return illegal("Não há Pokémon elegível para receber a Energia.")
-                            remainingChoices = listOf(ChoiceRequest(ChoiceKind.ABILITY_DISCARD_ENERGY_TARGET,
-                                "Escolha um dos seus Pokémon para receber ${def(energy).name}.",
-                                targets.map { it.id }, 1, 1, remaining = choice.remaining, selectedEnergy = energy.id,
-                                energyType = choice.energyType, sourcePokemonId = choice.sourcePokemonId, benchedOnly = benchOnly,
-                                targetPokemonType = choice.targetPokemonType)) + remainingChoices
                         } else if (sourceAbility?.selfKnockoutAfterUse == true) {
                             knockOutOwnPokemon(checkNotNull(choice.sourcePokemonId))
                         }

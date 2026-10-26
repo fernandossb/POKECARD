@@ -144,6 +144,9 @@ internal object CatalogRuleCompiler {
                 moveBasicEnergyBetweenOwnPokemon = true, moveBasicEnergyType = EnergyType.GRASS)
         if (text == "Once during your turn, you may attach a Basic Energy card from your discard pile to 1 of your Pokémon.")
             return AbilityDefinition("$id-ability$index", name, text, usageKey = name, attachBasicEnergyFromDiscard = true)
+        if (text == "Once during your turn, you may attach a Basic Energy card from your discard pile to this Pokémon.")
+            return AbilityDefinition("$id-ability$index", name, text, usageKey = name,
+                attachBasicEnergyFromDiscard = true, attachBasicEnergyFromDiscardToSelf = true)
         val ethanEnergy = Regex("Once during your turn, you may attach up to (\\d+) Basic \\{([GRFLWPMD])\\} Energy cards from your hand to 1 of your Benched (.+) Pokémon\\.").matchEntire(text)
         if (ethanEnergy != null) return AbilityDefinition("$id-ability$index", name, text, usageKey = name,
             attachHandEnergyType = symbolType(ethanEnergy.groupValues[2]) ?: return null,
