@@ -772,6 +772,14 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     }
                     emit("AttackEffectKnockout", "O ataque Nocauteou ambos os Pokémon Ativos por efeito.")
                 }
+                if (Effect.KnockOutOpponentActiveIfSpecialCondition in attack.effects &&
+                    !defenderEffectsPrevented && defender.id == next.players[opponent].active?.id && defender.conditions.isNotEmpty()) {
+                    val hp = effects.effectiveHp(defender, next)
+                    update(opponent) { player -> player.copy(active = player.active?.let {
+                        if (it.id == defender.id) it.copy(damage = maxOf(it.damage, hp)) else it
+                    }) }
+                    emit("AttackEffectKnockout", "O Pokémon Ativo adversário foi Nocauteado pela Condição Especial.")
+                }
                 val retaliation = if (appliedDamage > 0 && defender.id == state.players[opponent].active?.id)
                     definition(defender.top).abilities.sumOf { it.retaliateDamageCounters * 10 } +
                         if (defender.retaliateDamageCountersTurn == state.turn) defender.retaliateDamageCounters * 10 else 0

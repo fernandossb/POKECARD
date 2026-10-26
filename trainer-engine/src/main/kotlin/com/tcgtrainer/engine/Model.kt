@@ -52,6 +52,7 @@ import kotlinx.serialization.Serializable
     @Serializable data class BenchPokemonPresenceDamageBonus(val speciesName: String, val bonus: Int) : Effect
     @Serializable data class BenchTypePresenceDamageBonus(val type: EnergyType, val bonus: Int) : Effect
     @Serializable data class AllOwnBenchedPokemonDamagedBonus(val bonus: Int) : Effect
+    @Serializable data class AnyOwnBenchedPokemonDamagedBonus(val bonus: Int) : Effect
     @Serializable data class SameTypePokemonInPlayDamageBonus(val bonus: Int) : Effect
     @Serializable data class SameHandSizeDamageBonus(val bonus: Int) : Effect
     @Serializable data class OpponentExCountDamage(val perPokemon: Int) : Effect
@@ -128,6 +129,7 @@ import kotlinx.serialization.Serializable
     @Serializable data class MultiTargetDamage(val amount: Int, val targets: Int, val allowRepeat: Boolean = false, val ignoreWeaknessResistance: Boolean = false, val discardBeforeDamage: Boolean = false) : Effect
     @Serializable data class CoinDamageEachOpponentPokemon(val amount: Int) : Effect
     @Serializable data object KnockOutBothActive : Effect
+    @Serializable data object KnockOutOpponentActiveIfSpecialCondition : Effect
     @Serializable data object RecoverSelfFromSpecialConditions : Effect
     @Serializable data object NoWeaknessNextTurn : Effect
     @Serializable data class OpponentActiveRetreatCostDamage(val perCost: Int) : Effect
