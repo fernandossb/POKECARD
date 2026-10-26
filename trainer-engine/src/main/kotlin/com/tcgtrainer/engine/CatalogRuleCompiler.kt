@@ -984,6 +984,7 @@ internal object CatalogRuleCompiler {
                 }
                 text == "This Pokémon recovers from all Special Conditions." -> effects += Effect.RecoverSelfFromSpecialConditions
                 text == "Move an Energy from 1 of your opponent's Pokémon to another of their Pokémon." -> effects += Effect.MoveEnergyBetweenOpponentPokemon
+                text == "You may move an Energy from your opponent's Active Pokémon to 1 of their Benched Pokémon." -> effects += Effect.MoveEnergyFromOpponentActiveToBench
                 text == "Move all damage counters from 1 of your Benched Pokémon to 1 of your opponent's Pokémon." -> effects += Effect.MoveOwnBenchDamageCountersToOpponent
                 text == "During your opponent's next turn, this Pokémon has no Weakness." -> effects += Effect.NoWeaknessNextTurn
                 discardDefendingCoin != null -> effects += Effect.DiscardDefendingEnergy(if (discardDefendingCoin.groupValues[1] in listOf("an", "a")) 1 else discardDefendingCoin.groupValues[1].toInt(), onHeads = true)

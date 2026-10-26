@@ -95,6 +95,7 @@ import kotlinx.serialization.Serializable
     @Serializable data object MoveOpponentDamageCounters : Effect
     @Serializable data object MoveOwnBenchDamageCountersToOpponent : Effect
     @Serializable data object MoveEnergyBetweenOpponentPokemon : Effect
+    @Serializable data object MoveEnergyFromOpponentActiveToBench : Effect
     @Serializable data class SearchPokemonMatchingAttachedBasicEnergy(val max: Int) : Effect
     @Serializable data object AttachAnyBasicEnergyFromHand : Effect
     @Serializable data object AttachOneBasicEnergyFromHand : Effect

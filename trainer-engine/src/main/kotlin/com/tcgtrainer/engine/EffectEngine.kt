@@ -213,7 +213,7 @@ class EffectEngine(private val catalog: CardCatalog) {
         is Effect.OwnToolCountDamage, is Effect.OwnDamageCounterPenalty,
         is Effect.AllPokemonToolCountDamage,
         is Effect.BothActiveEnergyCountDamage,
-        Effect.MoveOpponentDamageCounters, Effect.MoveOwnBenchDamageCountersToOpponent, Effect.MoveEnergyBetweenOpponentPokemon,
+        Effect.MoveOpponentDamageCounters, Effect.MoveOwnBenchDamageCountersToOpponent, Effect.MoveEnergyBetweenOpponentPokemon, Effect.MoveEnergyFromOpponentActiveToBench,
         is Effect.SearchPokemonMatchingAttachedBasicEnergy,
         Effect.AttachAnyBasicEnergyFromHand, Effect.AttachOneBasicEnergyFromHand, Effect.ShuffleOwnBenchedPokemonIntoDeck, Effect.DevolveOpponentActive, Effect.DiscardStadium, Effect.ReturnSelfAndAttachmentsToHand, is Effect.AttachBasicEnergyFromDeckAny, is Effect.AttachBasicEnergyFromDiscardAny, Effect.CoinKnockOutBasic,
         Effect.PreventAttackDamageNextTurnOnHeads, Effect.CopyBenchedNsAttack, Effect.CopyOpponentActiveAttack, is Effect.OptionalReturnWaterEnergyDamageBonus,

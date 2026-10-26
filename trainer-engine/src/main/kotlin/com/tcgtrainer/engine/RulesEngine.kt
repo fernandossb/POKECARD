@@ -1113,6 +1113,16 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     if (energies.isNotEmpty() && field.size >= 2) choices += ChoiceRequest(ChoiceKind.ATTACK_OPPONENT_ENERGY,
                         "Escolha uma Energia ligada ao Pokémon adversário que será movida.", energies.map { it.id }, 1, 1)
                 }
+                if (!defenderEffectsPrevented && Effect.MoveEnergyFromOpponentActiveToBench in attack.effects) {
+                    val active = next.players[opponent].active
+                    val bench = next.players[opponent].bench.filter { definition(it.top).abilities.none { ability -> ability.preventOpponentEffects } }
+                    if (active != null && active.energies.isNotEmpty() && bench.isNotEmpty() &&
+                        definition(active.top).abilities.none { it.preventOpponentEffects }) {
+                        choices += ChoiceRequest(ChoiceKind.ATTACK_OPPONENT_ENERGY,
+                            "Opcional: mova uma Energia do Ativo adversário para um Pokémon do Banco dele.",
+                            active.energies.map { it.id }, 0, 1)
+                    }
+                }
                 attack.effects.filterIsInstance<Effect.BenchDamage>().forEach { effect ->
                     val bench = next.players[opponent].bench.filter { it.attackImmunityTurn != state.turn &&
                         (!effect.requiresDamageCounters || it.damage > 0) }
