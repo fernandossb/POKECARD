@@ -279,7 +279,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 }
                 ChoiceKind.TOOL_TARGET -> if (id == active?.id) 50.0 else 15.0-pokemon(id).energies.size
                 ChoiceKind.ENERGY_FROM_DISCARD -> 10.0
-                ChoiceKind.ATTACH_DECK_ENERGY, ChoiceKind.RECYCLE_ENERGY -> 10.0
+                ChoiceKind.ATTACH_DECK_ENERGY, ChoiceKind.RECYCLE_ENERGY, ChoiceKind.RECYCLE_POKEMON -> 10.0
                 ChoiceKind.ATTACK_TOP_DECK_ENERGY -> 10.0
                 ChoiceKind.HEAL_TARGET -> minOf(pokemon(id).damage, choice.amount).toDouble()
                 ChoiceKind.ATTACK_HEAL_TARGET -> minOf(pokemon(id).damage, choice.amount).toDouble()
@@ -485,6 +485,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 is TrainerEffect.HealPokemon -> own.filter { (!effect.activeOnly || it.id == active?.id) && (effect.pokemonType == null || d(it.top).type == effect.pokemonType) }
                     .maxOfOrNull { minOf(it.damage, effect.amount).toDouble() } ?: -5.0
                 is TrainerEffect.RecoverEnergy -> if (o.ownDiscard.any { d(it).category == Category.ENERGY && d(it).basicEnergy }) 45.0 else -5.0
+                is TrainerEffect.RecoverPokemonToDeck -> if (o.ownDiscard.any { d(it).category == Category.POKEMON }) 35.0 else -5.0
             }
             GameAction.FinishSetup, GameAction.FinishBonusSetup, GameAction.EndTurn -> 0.0
             is GameAction.TakePrize -> 0.0 // All facedown slots have equal value.

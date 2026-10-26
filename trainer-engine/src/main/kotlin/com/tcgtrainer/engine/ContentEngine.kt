@@ -147,6 +147,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     TrainerEffect.SearchEachEvolutionStage -> if (p.deck.any { def(it).category == Category.POKEMON }) Legality.Legal else illegal("Não há Pokémon no deck para buscar.")
                     is TrainerEffect.HealPokemon -> if ((if (effect.activeOnly) listOfNotNull(p.active) else p.pokemon()).none { it.damage > 0 && (effect.pokemonType == null || def(it.top).type == effect.pokemonType) }) illegal("Não há dano para curar no alvo permitido.") else Legality.Legal
                     is TrainerEffect.RecoverEnergy -> if (p.discard.none { def(it).category == Category.ENERGY && def(it).basicEnergy }) illegal("Não há Energia Básica no descarte.") else Legality.Legal
+                    is TrainerEffect.RecoverPokemonToDeck -> if (p.discard.none { def(it).category == Category.POKEMON }) illegal("Não há Pokémon no descarte.") else Legality.Legal
                 }
             }
             GameAction.UseStadiumAbility -> {
@@ -449,6 +450,10 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     is TrainerEffect.RecoverEnergy -> begin(Resolution(listOf(ChoiceRequest(if (effect.toDeck) ChoiceKind.RECYCLE_ENERGY else ChoiceKind.RECOVER,
                         "Escolha até ${effect.max} Energias Básicas do descarte.", p.discard.filter { def(it).category == Category.ENERGY && def(it).basicEnergy }.map { it.id }, 0,
                         minOf(effect.max, p.discard.count { def(it).category == Category.ENERGY && def(it).basicEnergy }))), shuffleAfter = effect.toDeck))
+                    is TrainerEffect.RecoverPokemonToDeck -> begin(Resolution(listOf(ChoiceRequest(ChoiceKind.RECYCLE_POKEMON,
+                        "Escolha até ${effect.max} Pokémon do seu descarte para embaralhar no deck.",
+                        p.discard.filter { def(it).category == Category.POKEMON }.map { it.id }, 0,
+                        minOf(effect.max, p.discard.count { def(it).category == Category.POKEMON }))), shuffleAfter = true))
                 }
             }
             is GameAction.UseStadiumAbility -> {
@@ -2020,6 +2025,11 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         val cards = p.discard.filter { it.id in ids }
                         update { it.copy(discard = it.discard - cards.toSet(), deck = it.deck + cards) }
                         events += GameEvent("EnergyRecycled", "Devolveu ${cards.size} Energia(s) ao deck.")
+                    }
+                    ChoiceKind.RECYCLE_POKEMON -> {
+                        val cards = p.discard.filter { it.id in ids && def(it).category == Category.POKEMON }
+                        update { it.copy(discard = it.discard - cards.toSet(), deck = it.deck + cards) }
+                        events += GameEvent("PokemonRecycled", "Devolveu ${cards.size} Pokémon ao deck.", cards.size)
                     }
                     ChoiceKind.ATTACK_COPY_BENCHED_N -> error("A escolha do ataque copiado deve ser consumida pelo RulesEngine antes do ContentEngine.")
                     ChoiceKind.ATTACK_COPY_OPPONENT_ACTIVE -> error("A escolha do ataque adversário copiado deve ser consumida pelo RulesEngine antes do ContentEngine.")
