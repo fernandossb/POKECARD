@@ -39,7 +39,11 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
         fun pokemon(id: String) = (own + o.opponentField).first { it.id == id }
         fun hp(p: PokemonInstance): Int {
             val modifier = input.stadium?.let { d(it).trainerEffect as? TrainerEffect.HpModifier }
-            return effects.effectiveHp(p, opponentPrizeCardsRemaining = o.opponentPrizeCount) + if (modifier?.stage == d(p.top).stage) modifier.amount else 0
+            val conditionalEnergyBonus = d(p.top).abilities.sumOf { ability ->
+                val requiredType = ability.hpAndAttackBonusWithAttachedEnergyType
+                if (requiredType != null && p.energies.any { d(it).type == requiredType }) ability.hpAndAttackBonusWithAttachedEnergy else 0
+            }
+            return effects.effectiveHp(p, opponentPrizeCardsRemaining = o.opponentPrizeCount) + conditionalEnergyBonus + if (modifier?.stage == d(p.top).stage) modifier.amount else 0
         }
         fun missing(p: PokemonInstance, a: AttackDefinition): Int {
             val energy = p.energies.map { d(it).type }.toMutableList()
@@ -72,6 +76,10 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
             val targetRetreatCost = (if (latiasFreeRetreat) 0 else d(target.top).retreatCost + retreatTax - targetToolReduction).coerceAtLeast(0)
             val nWeaknessChanged = own.any { pokemon -> d(pokemon.top).abilities.any { it.changeOpponentNsPokemonWeaknessToPsychic } } && d(target.top).name.startsWith("N's ")
             val effectiveTarget = if (nWeaknessChanged) target.copy(weaknessOverride = EnergyType.PSYCHIC) else target
+            val sourceAbilities = d(p.top).abilities.filter { ability ->
+                val requiredType = ability.hpAndAttackBonusWithAttachedEnergyType
+                requiredType == null || p.energies.any { d(it).type == requiredType }
+            }
             val base = effects.damage(p, effectiveTarget, a.effects + Effect.Damage(extra), input.flags.damageBoosts[d(p.top).type] ?: 0,
                 Effect.IgnoreWeaknessResistance in a.effects || (a.effects.any { it is Effect.TargetedDamage } && target.id != enemy?.id),
                 ownBenchCount = own.count { it.id != o.ownActiveId },
@@ -97,7 +105,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 opponentActiveRetreatCost = if (targetIsActive) targetRetreatCost else 0,
                 ownBenchWithEnergyCounts = EnergyType.entries.associateWith { type ->
                     own.filter { it.id != p.id }.count { pokemon -> pokemon.energies.any { d(it).type == type } }
-                })
+                }, sourceAbilityOverride = sourceAbilities)
             val discardEffect = a.effects.filterIsInstance<Effect.DiscardBenchEnergyDamage>().firstOrNull()
             val discarded = minOf(discardEffect?.max ?: 0, own.filter { it.id != o.ownActiveId }.sumOf { it.energies.size })
             val multiplier = if (target.id == enemy?.id && !(target.weaknessSuppressedTurn >= 0 && target.weaknessSuppressedTurn == input.turn) && Effect.IgnoreWeaknessResistance !in a.effects && (effectiveTarget.weaknessOverride ?: d(target.top).weakness) == d(p.top).type) 2 else 1

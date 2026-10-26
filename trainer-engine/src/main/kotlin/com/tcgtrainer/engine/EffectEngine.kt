@@ -14,7 +14,12 @@ class EffectEngine(private val catalog: CardCatalog) {
         val energyBonus = abilities.sumOf { ability -> ability.hpBonusPerAttachedEnergy * pokemon.energies.count {
             ability.hpBonusPerAttachedEnergyType != null && catalog.get(it.definitionId).type == ability.hpBonusPerAttachedEnergyType
         } }
-        return (def.hp + pokemon.hpModifier + prizeBonus + energyBonus + if (stadiumEffect?.stage == def.stage) stadiumEffect.amount else 0).coerceAtLeast(0)
+        val conditionalEnergyBonus = abilities.sumOf { ability ->
+            val requiredType = ability.hpAndAttackBonusWithAttachedEnergyType
+            if (requiredType != null && pokemon.energies.any { catalog.get(it.definitionId).type == requiredType })
+                ability.hpAndAttackBonusWithAttachedEnergy else 0
+        }
+        return (def.hp + pokemon.hpModifier + prizeBonus + energyBonus + conditionalEnergyBonus + if (stadiumEffect?.stage == def.stage) stadiumEffect.amount else 0).coerceAtLeast(0)
     }
     fun damage(attacker: PokemonInstance, defender: PokemonInstance, effects: List<Effect>, boost: Int = 0,
         ignoreWeaknessResistance: Boolean = false, ownBenchCount: Int = 0, opponentBenchCount: Int = 0,
@@ -74,6 +79,11 @@ class EffectEngine(private val catalog: CardCatalog) {
             if (ability.damageBonusAgainstActiveWhenDamageAtLeast > 0 && attacker.damage >= ability.damageBonusAgainstActiveWhenDamageAtLeast)
                 ability.damageBonusAmount else 0
         } else 0
+        val conditionalEnergyAttackBonus = if (targetIsOpponentActive) sourceAbilities.sumOf { ability ->
+            val requiredType = ability.hpAndAttackBonusWithAttachedEnergyType
+            if (requiredType != null && attacker.energies.any { catalog.get(it.definitionId).type == requiredType })
+                ability.hpAndAttackBonusWithAttachedEnergy else 0
+        } else 0
         val futureDamageBonus = if (targetIsOpponentActive && source.name != "Iron Crown ex" &&
             (source.name.startsWith("Iron ") || source.name.startsWith("Miraidon")))
             attackerPokemon.flatMap(::abilitiesOf).sumOf { it.futurePokemonDamageBonus } else 0
@@ -97,7 +107,7 @@ class EffectEngine(private val catalog: CardCatalog) {
             effect.perPokemon * friendlyPokemon.count { catalog.get(it.top.definitionId).name.endsWith(" ex") }
         }
         val base = effects.filterIsInstance<Effect.Damage>().sumOf { it.amount } +
-            effects.filterIsInstance<Effect.StadiumDamageBonus>().filter { stadiumInPlay }.sumOf { it.bonus } + abilityHandBonus + abilityDamageBonus +
+            effects.filterIsInstance<Effect.StadiumDamageBonus>().filter { stadiumInPlay }.sumOf { it.bonus } + abilityHandBonus + abilityDamageBonus + conditionalEnergyAttackBonus +
             futureDamageBonus + teamAttackDamageBonus + sameTypeBonus + sameHandSizeBonus + opponentExCountDamage +
             (if (targetIsOpponentActive && target.stage != Stage.BASIC) attackerPokemon.flatMap(::abilitiesOf).sumOf { it.attackDamageBonusAgainstEvolutionActive } else 0) +
             effects.filterIsInstance<Effect.TargetedDamage>().sumOf { it.damage } +

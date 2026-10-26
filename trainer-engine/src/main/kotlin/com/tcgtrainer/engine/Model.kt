@@ -296,6 +296,8 @@ import kotlinx.serialization.Serializable
     val requirePecharuntExForPrizeReduction: Boolean = false,
     val teamAttackDamageBonusType: EnergyType? = null, val teamAttackDamageBonus: Int = 0,
     val hpBonusPerAttachedEnergyType: EnergyType? = null, val hpBonusPerAttachedEnergy: Int = 0,
+    val hpAndAttackBonusWithAttachedEnergyType: EnergyType? = null,
+    val hpAndAttackBonusWithAttachedEnergy: Int = 0,
     val searchPokemonNamePrefixToHand: String? = null, val searchPokemonEvolutionTypeToHand: EnergyType? = null,
     val searchPokemonMaxToHand: Int = 0, val festivalGroundsMayAttackAgain: Boolean = false,
     val preventOpponentItemSupporterEffects: Boolean = false,

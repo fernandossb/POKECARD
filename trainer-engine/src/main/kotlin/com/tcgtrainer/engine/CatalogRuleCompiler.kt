@@ -161,6 +161,9 @@ internal object CatalogRuleCompiler {
             return AbilityDefinition("$id-ability$index", name, text, additionalPokemonTypes = listOf(EnergyType.PSYCHIC))
         if (text == "This Pokémon gets +50 HP for each Prize card your opponent has taken.")
             return AbilityDefinition("$id-ability$index", name, text, hpBonusPerOpponentPrizeTaken = 50)
+        if (text == "If this Pokémon has any {D} Energy attached, it gets +100 HP, and the attacks it uses do 100 more damage to your opponent's Active Pokémon (before applying Weakness and Resistance).")
+            return AbilityDefinition("$id-ability$index", name, text,
+                hpAndAttackBonusWithAttachedEnergyType = EnergyType.DARKNESS, hpAndAttackBonusWithAttachedEnergy = 100)
         if (text == "Attacks used by your Pokémon do 30 more damage to your opponent's Active Evolution Pokémon (before applying Weakness and Resistance).")
             return AbilityDefinition("$id-ability$index", name, text, attackDamageBonusAgainstEvolutionActive = 30)
         if (text == "Attacks used by your Future Pokémon, except any Iron Crown ex, do 20 more damage to your opponent's Active Pokémon (before applying Weakness and Resistance).")
