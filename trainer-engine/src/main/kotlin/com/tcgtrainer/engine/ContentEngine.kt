@@ -1481,6 +1481,21 @@ internal class ContentEngine(private val rules: RulesEngine) {
                             bench = player.bench.map { pokemon -> if (pokemon.id == targetId) pokemon.copy(energies = pokemon.energies + energies) else pokemon }) }
                         events += GameEvent("AttackDiscardEnergyAttached", "Ligou ${energies.size} Energia(s) Básica(s) de Luta do descarte a ${def(target.top).name}.", energies.size)
                     }
+                    ChoiceKind.ATTACK_TEAM_ROCKET_ENERGY_DISCARD -> if (ids.isNotEmpty()) {
+                        val energy = p.active?.energies?.firstOrNull { it.id == ids.single() && def(it).name == "Team Rocket's Energy" }
+                            ?: return illegal("Escolha uma Team Rocket's Energy ligada ao seu Pokémon Ativo.")
+                        val opponent = 1-actor
+                        val target = s.players[opponent].active ?: return illegal("Não há Pokémon Ativo adversário para descartar.")
+                        if (rules.attackTargetEffectsPrevented(s, opponent, target))
+                            return illegal("O Pokémon Ativo adversário está protegido contra efeitos de ataques.")
+                        val attached = target.cards + target.energies + listOfNotNull(target.tool)
+                        update(actor) { player -> player.copy(
+                            active = player.active?.let { attacker -> attacker.copy(energies = attacker.energies - energy) },
+                            discard = player.discard + energy)
+                        }
+                        update(opponent) { player -> player.copy(active = null, discard = player.discard + attached) }
+                        events += GameEvent("OpponentActiveDiscarded", "Descartou ${def(target.top).name} e todas as cartas ligadas pelo ataque Evil Incineration.", attached.size)
+                    }
                     ChoiceKind.ATTACK_RESTRICT_OPPONENT_ATTACK -> {
                         val pokemonId = s.players[1-actor].active?.id ?: error("Pokémon ativo adversário ausente.")
                         val attackId = ids.single()

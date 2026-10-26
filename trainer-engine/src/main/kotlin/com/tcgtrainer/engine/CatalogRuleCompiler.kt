@@ -485,6 +485,7 @@ internal object CatalogRuleCompiler {
         val allOwnBenchedDamagedBonus = Regex("If all of your Benched Pokémon have at least 1 damage counter on them, this attack does (\\d+) more damage\\.").matchEntire(text)
         val anyOwnBenchedDamagedBonus = Regex("If your Benched Pokémon have any damage counters on them, this attack does (\\d+) more damage\\.").matchEntire(text)
         val opponentActiveSpecialConditionKnockout = text == "If your opponent's Active Pokémon is affected by a Special Condition, it is Knocked Out."
+        val discardTeamRocketEnergyToDiscardOpponentActive = text == "Discard a Team Rocket's Energy from this Pokémon. If you do, discard your opponent's Active Pokémon and all attached cards."
         val opponentActiveExactlySixCountersKnockout = text == "If your opponent's Active Pokémon has exactly 6 damage counters on it, that Pokémon is Knocked Out."
         val knockOutLeastHpPokemon = text == "Choose a Pokémon in play (yours or your opponent's) that has the least HP remaining, except for this Pokémon, and it is Knocked Out."
         val protectAttackerOnDamageKnockout = text == "If your opponent's Pokémon is Knocked Out by damage from this attack, during your opponent's next turn, prevent all damage from and effects of attacks done to this Pokémon."
@@ -1170,6 +1171,7 @@ internal object CatalogRuleCompiler {
                 benchDamageCounters != null || spreadBenchDamageCounters != null -> effects += Effect.BenchDamageCounters(
                     (benchDamageCounters ?: spreadBenchDamageCounters!!).groupValues[1].toInt(), distribute = spreadBenchDamageCounters != null)
                 placeDamageCounter -> effects += Effect.PlaceDamageCounter
+                discardTeamRocketEnergyToDiscardOpponentActive -> effects += Effect.DiscardTeamRocketEnergyToDiscardOpponentActive
                 multiTargetDamage != null -> {
                     effects += Effect.DiscardAttackEnergy(multiTargetDamage.groupValues[1].toInt())
                     effects += Effect.MultiTargetDamage(multiTargetDamage.groupValues[2].toInt(), multiTargetDamage.groupValues[3].toInt())

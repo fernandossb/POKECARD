@@ -1603,6 +1603,14 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         choices += ChoiceRequest(ChoiceKind.DISCARD_ATTACK_ENERGY, "Descarte $n Energia(s) do atacante.", eligible.map { it.id }, n, n)
                     }
                 }
+                if (Effect.DiscardTeamRocketEnergyToDiscardOpponentActive in attack.effects) {
+                    val energies = next.players[actor].active!!.energies.filter { definition(it).name == "Team Rocket's Energy" }
+                    val target = next.players[opponent].active
+                    if (energies.isNotEmpty() && target != null && !attackTargetEffectsPrevented(next, opponent, target))
+                        choices += ChoiceRequest(ChoiceKind.ATTACK_TEAM_ROCKET_ENERGY_DISCARD,
+                            "Opcional: descarte uma Team Rocket's Energy deste Pokémon para descartar o Pokémon Ativo adversário e todas as cartas ligadas.",
+                            energies.map { it.id }, 0, 1)
+                }
                 if (attack.effects.filterIsInstance<Effect.MultiTargetDamage>().any { it.discardBeforeDamage } && choices.any { it.kind == ChoiceKind.DISCARD_ATTACK_ENERGY }) {
                     val discardChoices = choices.filter { it.kind == ChoiceKind.DISCARD_ATTACK_ENERGY }
                     choices.removeAll { it.kind == ChoiceKind.DISCARD_ATTACK_ENERGY }
