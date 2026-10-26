@@ -112,6 +112,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     }
                     is TrainerEffect.DamageBoost -> Legality.Legal
                     is TrainerEffect.ShuffleHandDraw -> if (p.deck.isEmpty() && p.hand.size <= 1) illegal("Não há cartas para embaralhar ou comprar.") else Legality.Legal
+                    is TrainerEffect.DrawCardsIfOpponentPrizesAtMost -> Legality.Legal
                     is TrainerEffect.DrawCards, TrainerEffect.GreatBall, TrainerEffect.Sonia -> if (p.deck.isEmpty()) illegal("Seu deck está vazio.") else Legality.Legal
                     TrainerEffect.CoinSwitch -> if (s.players[1-s.currentPlayer].bench.isEmpty()) illegal("Não há Pokémon adversário no Banco.") else Legality.Legal
                     TrainerEffect.ForestOfVitality -> when {
@@ -309,6 +310,10 @@ internal class ContentEngine(private val rules: RulesEngine) {
                             events += GameEvent("CoinFlipped", if (heads) "CARA" else "COROA")
                             if (heads) draw(effect.coinBonus)
                         }
+                    }
+                    is TrainerEffect.DrawCardsIfOpponentPrizesAtMost -> {
+                        val bonus = if (s.players[1-actor].prizes.size <= effect.prizeThreshold) effect.bonus else 0
+                        draw(effect.count + bonus)
                     }
                     TrainerEffect.GreatBall -> begin(Resolution(listOf(ChoiceRequest(ChoiceKind.SEARCH, "Olhe as 7 primeiras cartas: escolha até 1 Pokémon.",
                         p.deck.take(7).filter { def(it).category == Category.POKEMON }.map { it.id }, 0, 1, visibleCards = p.deck.take(7).map { it.id })), shuffleAfter = true))

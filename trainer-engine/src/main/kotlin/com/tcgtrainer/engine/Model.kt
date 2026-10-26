@@ -241,6 +241,7 @@ import kotlinx.serialization.Serializable
     @Serializable data class RetreatReduction(val amount: Int) : TrainerEffect
     @Serializable data class HpModifier(val stage: Stage, val amount: Int) : TrainerEffect
     @Serializable data class DrawCards(val count: Int, val coinBonus: Int = 0) : TrainerEffect
+    @Serializable data class DrawCardsIfOpponentPrizesAtMost(val count: Int, val bonus: Int, val prizeThreshold: Int) : TrainerEffect
     @Serializable data class HealPokemon(val amount: Int, val activeOnly: Boolean = false, val pokemonType: EnergyType? = null) : TrainerEffect
     @Serializable data object GreatBall : TrainerEffect
     @Serializable data object Sonia : TrainerEffect
