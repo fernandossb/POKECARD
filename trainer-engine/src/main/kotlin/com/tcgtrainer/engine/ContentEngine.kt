@@ -1441,7 +1441,10 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         }
                     }
                     ChoiceKind.ATTACK_RECOVER_POKEMON -> {
-                        val cards = p.discard.filter { it.id in ids && def(it).category == Category.POKEMON && def(it).stage == Stage.BASIC }
+                        val cards = p.discard.filter { card -> card.id in ids && def(card).category == Category.POKEMON &&
+                            if (choice.energyType != null) def(card).type == choice.energyType else def(card).stage == Stage.BASIC }
+                        if (cards.size != ids.size || cards.size > choice.max || cards.size > 5-p.bench.size)
+                            return illegal("Escolha apenas Pokémon elegíveis do descarte e dentro dos espaços disponíveis no Banco.")
                         update { it.copy(discard = it.discard - cards.toSet(), bench = it.bench + cards.map { card -> PokemonInstance(listOf(card), enteredPlayTurn = s.turn) }) }
                         events += GameEvent("PokemonRecoveredToBench", "Colocou ${cards.size} Pokémon do descarte no Banco.", cards.size)
                     }

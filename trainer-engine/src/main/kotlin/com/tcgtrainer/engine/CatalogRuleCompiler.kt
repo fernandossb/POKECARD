@@ -746,6 +746,7 @@ internal object CatalogRuleCompiler {
         val benchSearch = Regex("Search your deck for up to (\\d+) Basic Pokémon and put them onto your Bench\\. Then, shuffle your deck\\.|Search your deck for a Basic Pokémon and put it onto your Bench\\. Then, shuffle your deck\\.").matchEntire(text)
         val namedPokemonBenchSearch = Regex("Search your deck for up to (\\d+) (.+?) and put them onto your Bench\\. Then, shuffle your deck\\.").matchEntire(text)
         val recoverNamedPokemon = Regex("Put up to (\\d+) (.+?) from your discard pile onto your Bench\\.").matchEntire(text)
+        val recoverPokemonType = Regex("Put up to (\\d+) \\{([GRFLWPMD])\\} Pokémon from your discard pile onto your Bench\\.").matchEntire(text)
         val rotomSearch = Regex("""You may search your deck for any number of Pokémon that have "Rotom" in their name and put them onto your Bench\. Then, shuffle your deck\.""").matchEntire(text)
         val matchingEnergySearch = Regex("Search your deck for up to (\\d+) Pokémon that are the same type as any Basic Energy attached to this Pokémon, reveal them, and put them into your hand\\. Then, shuffle your deck\\.").matchEntire(text)
         val basicEnergyToHandSearch = Regex("Search your deck for up to (\\d+) Basic Energy cards, reveal them, and put them into your hand\\. Then, shuffle your deck\\.").matchEntire(text)
@@ -1452,6 +1453,8 @@ internal object CatalogRuleCompiler {
                     symbolType(energySearchUpTo?.groupValues?.get(2) ?: energySearch!!.groupValues[1]) ?: return null)
                 namedPokemonBenchSearch != null && namedPokemonBenchSearch.groupValues[2] != "Basic Pokémon" -> effects += Effect.NamedPokemonToBench(namedPokemonBenchSearch.groupValues[2], namedPokemonBenchSearch.groupValues[1].toInt())
                 benchSearch != null -> effects += Effect.BasicPokemonToBench(benchSearch.groupValues[1].toIntOrNull() ?: 1)
+                recoverPokemonType != null -> effects += Effect.RecoverPokemonTypeToBench(
+                    symbolType(recoverPokemonType.groupValues[2]) ?: return null, recoverPokemonType.groupValues[1].toInt())
                 recoverNamedPokemon != null -> effects += Effect.RecoverNamedPokemonToBench(recoverNamedPokemon.groupValues[2], recoverNamedPokemon.groupValues[1].toInt())
                 rotomSearch != null -> effects += Effect.SearchRotomToBench
                 recoil != null -> effects += Effect.Recoil(recoil.groupValues[1].toInt())

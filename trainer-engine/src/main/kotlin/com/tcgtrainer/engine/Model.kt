@@ -101,6 +101,7 @@ import kotlinx.serialization.Serializable
     @Serializable data class BasicPokemonToBench(val count: Int) : Effect
     @Serializable data class NamedPokemonToBench(val name: String, val count: Int) : Effect
     @Serializable data class RecoverNamedPokemonToBench(val name: String, val count: Int) : Effect
+    @Serializable data class RecoverPokemonTypeToBench(val type: EnergyType, val count: Int) : Effect
     @Serializable data object SearchRotomToBench : Effect
     @Serializable data object RestrictIfSecondPlayerFirstTurn : Effect
     @Serializable data object PreventBasicNonColorlessDamageNextTurn : Effect
