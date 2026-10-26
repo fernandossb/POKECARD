@@ -28,6 +28,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
             CardFilter.DARKNESS_POKEMON -> d.category == Category.POKEMON && d.type == EnergyType.DARKNESS
             CardFilter.METAL_POKEMON -> d.category == Category.POKEMON && d.type == EnergyType.METAL
             CardFilter.LIGHTNING_POKEMON -> d.category == Category.POKEMON && d.type == EnergyType.LIGHTNING
+            CardFilter.POKEMON_WITHOUT_RULE_BOX -> d.category == Category.POKEMON && !d.hasRuleBox
             CardFilter.MEGA_EVOLUTION_EX -> isMegaEvolutionEx(d)
             CardFilter.TRAINER -> d.category == Category.TRAINER
             CardFilter.TEAM_ROCKET_BASIC_POKEMON -> d.category == Category.POKEMON && d.stage == Stage.BASIC && d.name.startsWith("Team Rocket's ")
@@ -2006,6 +2007,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
         CardFilter.BASIC_POKEMON -> "Pokémon Básico"; CardFilter.BASIC_ENERGY -> "Energia Básica"
         CardFilter.ENERGY -> "Energia"; CardFilter.DARKNESS_POKEMON -> "Pokémon de Escuridão"; CardFilter.METAL_POKEMON -> "Pokémon Metal"
         CardFilter.LIGHTNING_POKEMON -> "Pokémon de Raio"
+        CardFilter.POKEMON_WITHOUT_RULE_BOX -> "Pokémon sem Rule Box"
         CardFilter.MEGA_EVOLUTION_EX -> "Mega Evolution Pokémon ex"
         CardFilter.TRAINER -> "Treinador"
         CardFilter.TEAM_ROCKET_BASIC_POKEMON -> "Pokémon Básico da Equipe Rocket"
