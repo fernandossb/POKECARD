@@ -1571,6 +1571,12 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         "Escolha uma carta revelada da mão adversária para descartar.", hand.map { it.id }, 1, 1,
                         visibleCards = hand.map { it.id })
                 }
+                attack.effects.filterIsInstance<Effect.ReorderOpponentDeckTop>().forEach { effect ->
+                    val top = next.players[opponent].deck.take(effect.count)
+                    if (top.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.ATTACK_REORDER_OPPONENT_TOP,
+                        "Olhe as ${top.size} cartas do topo do deck adversário e selecione-as na ordem em que devem ficar (1ª carta no topo).",
+                        top.map { it.id }, top.size, top.size, visibleCards = top.map { it.id })
+                }
                 attack.effects.filterIsInstance<Effect.HealOwnPokemon>().forEach { effect ->
                     val damaged = next.players[actor].pokemon().filter { it.damage > 0 }
                     if (damaged.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.ATTACK_HEAL_TARGET,
@@ -1861,7 +1867,17 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     yieldAll(combinations(ids.drop(1), count))
                 }
             }
-            return (choice.min..minOf(choice.max, choice.candidates.size)).flatMap { n -> combinations(choice.candidates, n).map { GameAction.ChooseCards(it) }.toList() }
+            fun permutations(ids: List<String>): Sequence<List<String>> = sequence {
+                if (ids.isEmpty()) yield(emptyList()) else ids.forEachIndexed { index, id ->
+                    for (tail in permutations(ids.filterIndexed { i, _ -> i != index })) yield(listOf(id) + tail)
+                }
+            }
+            val actions = if (choice.kind == ChoiceKind.ATTACK_REORDER_OPPONENT_TOP) {
+                permutations(choice.candidates).map { GameAction.ChooseCards(it) }.toList()
+            } else (choice.min..minOf(choice.max, choice.candidates.size)).flatMap { n ->
+                combinations(choice.candidates, n).map { GameAction.ChooseCards(it) }.toList()
+            }
+            return actions
                 .filter { validate(state, it) == Legality.Legal }
         }
         val p = state.players[actingPlayer(state)]

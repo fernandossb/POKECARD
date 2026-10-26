@@ -100,6 +100,7 @@ import com.tcgtrainer.engine.*
     var selected by remember(choice) { mutableStateOf<List<String>>(emptyList()) }
     val player = state.players[state.currentPlayer]
     fun candidate(id: String): CardInstance? = (player.hand + player.deck + player.discard + player.pokemon().flatMap { it.energies }).find { it.id == id }
+        ?: state.players[1-state.currentPlayer].deck.find { it.id == id }
         ?: state.players.flatMap { it.pokemon() }.find { it.id == id }?.top
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -121,6 +122,8 @@ import com.tcgtrainer.engine.*
                         }.padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                             CardArt(engine.definition(card), Modifier.fillMaxWidth().height(130.dp))
                             Text(engine.definition(card).name, fontSize = 10.sp, maxLines = 2)
+                            if (choice.kind == ChoiceKind.ATTACK_REORDER_OPPONENT_TOP && id in selected)
+                                Text("Posição ${selected.indexOf(id) + 1}", color = Aqua, fontSize = 9.sp)
                             Text("${engine.definition(card).set} ${engine.definition(card).number}", color = Muted, fontSize = 8.sp)
                             if (id !in choice.candidates) Text("Vista · não selecionável", color = Muted, fontSize = 8.sp)
                         }

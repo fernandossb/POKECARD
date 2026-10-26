@@ -1,6 +1,6 @@
 package com.tcgtrainer.engine
 
-/** No GameState, RNG, hidden prizes, opponent hand or deck order crosses this boundary. */
+/** No GameState, RNG, hidden prizes, opponent hand or unrevealed deck order crosses this boundary. */
 data class CpuInput(
     val observation: PlayerObservation, val phase: Phase, val turn: Int, val flags: TurnFlags,
     val choice: ChoiceRequest?, val selectableCards: List<CardInstance>,
@@ -14,11 +14,15 @@ fun RulesEngine.cpuInput(state: GameState): CpuInput {
     val own = state.players[actor]
     val choice = state.resolution?.choices?.firstOrNull()
     val revealedOpponentHand = if (choice?.kind in listOf(ChoiceKind.ATTACK_CHOOSE_OPPONENT_HAND_DISCARD, ChoiceKind.EVOLUTION_OPPONENT_HAND_BASIC_TO_BENCH)) state.players[1-actor].hand else emptyList()
+    val revealedOpponentDeckTop = if (choice?.kind == ChoiceKind.ATTACK_REORDER_OPPONENT_TOP)
+        state.players[1-actor].deck.take(choice.candidates.size) else emptyList()
     val selectable = if (state.phase == Phase.RESOLVE_CHOICE && choice != null)
-        (own.hand + own.deck + own.discard + revealedOpponentHand).filter { it.id in choice.candidates || it.id in choice.visibleCards }.sortedBy { it.id }
+        (own.hand + own.deck + own.discard + revealedOpponentHand + revealedOpponentDeckTop).filter { it.id in choice.candidates || it.id in choice.visibleCards }.sortedBy { it.id }
     else emptyList()
     // Sorting prevents eligible deck search results from disclosing their order.
-    val safeChoice = choice?.copy(candidates = choice.candidates.sorted(), visibleCards = choice.visibleCards.sorted())
+    val preserveOrder = choice?.kind == ChoiceKind.ATTACK_REORDER_OPPONENT_TOP
+    val safeChoice = choice?.copy(candidates = if (preserveOrder) choice.candidates else choice.candidates.sorted(),
+        visibleCards = if (preserveOrder) choice.visibleCards else choice.visibleCards.sorted())
     val actions = if (safeChoice != null && state.phase == Phase.RESOLVE_CHOICE) emptyList() else legalActions(state)
     return CpuInput(PlayerObservation.from(state, actor), state.phase, state.turn, own.flags, safeChoice,
         selectable, actions, actions.filterIsInstance<GameAction.Attack>().associateWith { checkNotNull(preview(state, it.attackId, it.targetId)) }, state.stadium)
@@ -151,6 +155,23 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 }
             }
         }
+        fun opponentDrawValue(c: CardInstance): Double {
+            val def = d(c)
+            return when (def.category) {
+                Category.TRAINER -> when (def.trainerType) {
+                    TrainerType.SUPPORTER -> 80.0
+                    TrainerType.ITEM -> 65.0
+                    TrainerType.STADIUM -> 50.0
+                    TrainerType.TOOL -> 35.0
+                    null -> 45.0
+                }
+                Category.ENERGY -> 45.0
+                Category.POKEMON -> when (def.stage) {
+                    Stage.BASIC -> 60.0 + def.prizes * 2
+                    else -> 20.0 + def.prizes * 2
+                }
+            }
+        }
         fun setupValue(c: CardInstance): Double {
             val p = PokemonInstance(listOf(c), enteredPlayTurn = 0)
             val available = o.ownHand + own.map { it.top }
@@ -216,6 +237,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 ChoiceKind.OPPONENT_DISCARDS_OWN_HAND -> 10.0 - keepValue(checkNotNull(card(id)))
                 ChoiceKind.ATTACK_CHOOSE_OPPONENT_HAND_DISCARD -> keepValue(checkNotNull(card(id)))
                 ChoiceKind.ATTACK_OPTIONAL_DISCARD_TOP_CARD -> 25.0 - keepValue(checkNotNull(card(id)))
+                ChoiceKind.ATTACK_REORDER_OPPONENT_TOP -> opponentDrawValue(checkNotNull(card(id)))
                 ChoiceKind.SWITCH_OPPONENT, ChoiceKind.EVOLUTION_SWITCH -> active?.let { attackValue(it, pokemon(id)) } ?: 0.0
                 ChoiceKind.EVOLUTION_CONFUSE_ACTIVE -> 80.0
                 ChoiceKind.SWITCH_OWN -> attackValue(pokemon(id)) - (active?.let(::attackValue) ?: 0.0) + potential(pokemon(id))*.05
@@ -301,6 +323,8 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 val best = groups.maxByOrNull { group -> group.sortedByDescending(::value).take(choice.max).sumOf(::value) }.orEmpty()
                 return GameAction.ChooseCards(best.sortedByDescending(::value).take(choice.max))
             }
+            if (choice.kind == ChoiceKind.ATTACK_REORDER_OPPONENT_TOP)
+                return GameAction.ChooseCards(choice.candidates.sortedBy { opponentDrawValue(checkNotNull(card(it))) })
             val ranked = choice.candidates.sortedByDescending(::value)
             val desired = if (choice.kind == ChoiceKind.SWITCH_OWN || choice.kind == ChoiceKind.EVOLUTION_SWITCH || choice.kind == ChoiceKind.ATTACK_OPTIONAL_RETURN_SELF || choice.kind == ChoiceKind.ATTACK_OPTIONAL_DISCARD_TOP_CARD)
                 ranked.filter { value(it) > 0 }.size else ranked.size

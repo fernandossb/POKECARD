@@ -44,6 +44,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         s.players[1-rules.actingPlayer(s)].hand.none { it.id == id && def(it).category == Category.POKEMON && def(it).stage == Stage.BASIC }
                     } -> illegal("Escolha apenas Pokémon Básicos ainda na mão revelada do adversário.")
                     choice.kind == ChoiceKind.ABILITY_ATTACH_ENERGY_TARGET && choice.benchedOnly && action.cardIds.any { id -> p.bench.none { it.id == id } } -> illegal("O alvo precisa estar no Banco.")
+                    choice.kind == ChoiceKind.ATTACK_REORDER_OPPONENT_TOP && s.players[1-rules.actingPlayer(s)].deck.take(choice.candidates.size).map { it.id }.toSet() != choice.candidates.toSet() -> illegal("As cartas do topo do deck adversário mudaram durante a escolha.")
                     choice.kind == ChoiceKind.SONIA && p.deck.filter { it.id in action.cardIds }.map { def(it).category }.distinct().size > 1 -> illegal("Sonia busca Pokémon Básicos OU Energias Básicas; não misture as categorias.")
                     else -> Legality.Legal
                 }
@@ -400,6 +401,14 @@ internal class ContentEngine(private val rules: RulesEngine) {
                 var remainingChoices = resolution.choices.drop(1)
                 val p = s.players[actor]
                 when (choice.kind) {
+                    ChoiceKind.ATTACK_REORDER_OPPONENT_TOP -> {
+                        val opponent = s.players[1-actor]
+                        val count = choice.candidates.size
+                        val top = opponent.deck.take(count).associateBy { it.id }
+                        val reordered = ids.map { top.getValue(it) } + opponent.deck.drop(count)
+                        update(1-actor) { it.copy(deck = reordered) }
+                        events += GameEvent("OpponentDeckTopReordered", "Reorganizou as $count cartas do topo do deck adversário; todas continuam no deck.", count)
+                    }
                     ChoiceKind.EVOLUTION_DISCARD_OPPONENT_DECK, ChoiceKind.KNOCKOUT_DISCARD_OPPONENT_DECK -> if (ids.isNotEmpty()) {
                         val opponent = s.players[1-actor]
                         val discarded = opponent.deck.take(choice.amount)

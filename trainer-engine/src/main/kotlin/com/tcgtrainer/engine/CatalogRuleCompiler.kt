@@ -604,6 +604,7 @@ internal object CatalogRuleCompiler {
         val requiresStadium = text == "If there is no Stadium in play, this attack does nothing."
         val requiresOwnBenchCountAtLeast = Regex("If you have (\\d+) or fewer Benched Pokémon, this attack does nothing\\.").matchEntire(text)
         val opponentDeckDiscard = Regex("Discard the top (?:card|([2-5]) cards) of your opponent's deck\\.").matchEntire(text)
+        val reorderOpponentDeckTop = Regex("Look at the top ([1-5]) cards of your opponent's deck and put them back in any order\\.").matchEntire(text)
         val discardOwnDeckTop = text == "Discard the top card of your deck."
         val optionalDiscardOwnDeckTop = text == "Look at the top card of your deck. You may discard that card."
         val searchEvolutionSelf = text == "Search your deck for a card that evolves from this Pokémon and put it onto this Pokémon to evolve it. Then, shuffle your deck."
@@ -1009,6 +1010,7 @@ internal object CatalogRuleCompiler {
                 opponentDiscard != null -> effects += Effect.DiscardRandomOpponentHand(1)
                 opponentShuffleRandom != null -> effects += Effect.ShuffleRandomOpponentHand(1)
                 opponentDeckDiscard != null -> effects += Effect.DiscardOpponentDeck(opponentDeckDiscard.groupValues[1].toIntOrNull() ?: 1)
+                reorderOpponentDeckTop != null -> effects += Effect.ReorderOpponentDeckTop(reorderOpponentDeckTop.groupValues[1].toInt())
                 discardOwnDeckTop -> effects += Effect.DiscardOwnDeckTop
                 optionalDiscardOwnDeckTop -> effects += Effect.OptionalDiscardOwnDeckTop
                 revealOpponentHand -> effects += Effect.RevealOpponentHand
