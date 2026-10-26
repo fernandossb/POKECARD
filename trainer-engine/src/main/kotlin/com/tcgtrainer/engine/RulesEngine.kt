@@ -1297,6 +1297,14 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         "Escolha uma evolução do seu deck para evoluir este Pokémon Ativo.", evolutions.map { it.id }, 1, 1,
                         visibleCards = evolutions.map { it.id })
                 }
+                if (Effect.SearchEvolutionForEachBenchedPokemon in attack.effects) {
+                    next.players[actor].bench.forEach { target ->
+                        val evolutions = next.players[actor].deck.filter { definition(it).canEvolveFrom(definition(target.top)) }
+                        if (evolutions.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.ATTACK_EVOLVE_BENCHED,
+                            "Você pode evoluir ${definition(target.top).name} com uma carta do seu deck.",
+                            evolutions.map { it.id }, 0, 1, visibleCards = evolutions.map { it.id }, sourcePokemonId = target.id)
+                    }
+                }
                 attack.effects.filterIsInstance<Effect.SearchBasicEnergyToHand>().forEach { effect ->
                     val eligible = next.players[actor].deck.filter { definition(it).category == Category.ENERGY && definition(it).basicEnergy }
                     if (eligible.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.SEARCH,
@@ -1396,7 +1404,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 }
                 val acceleration = attack.effects.filterIsInstance<Effect.AccelerateEnergy>().firstOrNull()
                 if (choices.isNotEmpty()) next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.ATTACK,
-                    resolution = Resolution(choices, shuffleAfter = attack.effects.any { it is Effect.EnergyFromDeck || it is Effect.AttachBasicEnergyFromDeckAny || it is Effect.AttachBasicEnergyToEachBenchedPokemon || it is Effect.SearchPokemonToHand || it is Effect.SearchPokemonTypeAndStadiumToHand || it == Effect.SearchAnyCardToHand || it == Effect.SearchSupporterToHand || it == Effect.SearchItemToHand || it is Effect.BasicPokemonToBench || it is Effect.NamedPokemonToBench || it == Effect.SearchRotomToBench || it is Effect.SearchPokemonMatchingAttachedBasicEnergy || it is Effect.SearchBasicEnergyToHand || it == Effect.SearchEvolutionForSelfToEvolve }))
+                    resolution = Resolution(choices, shuffleAfter = attack.effects.any { it is Effect.EnergyFromDeck || it is Effect.AttachBasicEnergyFromDeckAny || it is Effect.AttachBasicEnergyToEachBenchedPokemon || it is Effect.SearchPokemonToHand || it is Effect.SearchPokemonTypeAndStadiumToHand || it == Effect.SearchAnyCardToHand || it == Effect.SearchSupporterToHand || it == Effect.SearchItemToHand || it is Effect.BasicPokemonToBench || it is Effect.NamedPokemonToBench || it == Effect.SearchRotomToBench || it is Effect.SearchPokemonMatchingAttachedBasicEnergy || it is Effect.SearchBasicEnergyToHand || it == Effect.SearchEvolutionForSelfToEvolve || it is Effect.SearchEvolutionForEachBenchedPokemon }))
                 else if (acceleration != null && p.bench.isNotEmpty()) {
                     val eligible = next.players[actor].discard.filter { definition(it).category == Category.ENERGY && definition(it).type == acceleration.type }.map { it.id }
                     if (eligible.isNotEmpty()) next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.ATTACK,
@@ -1412,6 +1420,12 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         val settled = settle(next, ResolutionEnd.ATTACK); next = settled.state; events += settled.events
                     }
                 } else {
+                    if (Effect.SearchEvolutionForEachBenchedPokemon in attack.effects) {
+                        val rng = SeededRng(next.rng)
+                        update(actor) { it.copy(deck = rng.shuffle(it.deck)) }
+                        next = next.copy(rng = rng.state)
+                        emit("DeckShuffled", "Deck embaralhado após a busca por evoluções no Banco.")
+                    }
                     if (Effect.SearchRotomToBench in attack.effects) {
                         val rng = SeededRng(next.rng)
                         update(actor) { it.copy(deck = rng.shuffle(it.deck)) }

@@ -219,6 +219,11 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 ChoiceKind.ATTACK_HEAL_TARGET -> minOf(pokemon(id).damage, choice.amount).toDouble()
                 ChoiceKind.ATTACK_BENCH_POKEMON, ChoiceKind.ATTACK_NAMED_POKEMON_TO_BENCH, ChoiceKind.ATTACK_ROTOM_SEARCH, ChoiceKind.ATTACK_MATCHING_ENERGY_SEARCH, ChoiceKind.ATTACK_EVOLVE_SELF,
                 ChoiceKind.ATTACK_POKEMON_SEARCH, ChoiceKind.ATTACK_ANY_CARD_SEARCH, ChoiceKind.ABILITY_BASIC_POKEMON_TO_BENCH -> setupValue(checkNotNull(card(id)))
+                ChoiceKind.ATTACK_EVOLVE_BENCHED -> {
+                    val target = own.firstOrNull { it.id == choice.sourcePokemonId }
+                    val evolution = card(id)
+                    if (target == null || evolution == null) 0.0 else 100.0 + potential(target.copy(cards = target.cards + evolution)) - potential(target)
+                }
                 ChoiceKind.ATTACK_DAMAGE_TARGET, ChoiceKind.ATTACK_DISCARD_THEN_BENCH_TARGET, ChoiceKind.ATTACK_DAMAGE_COUNTER_TARGET, ChoiceKind.ATTACK_MULTI_DAMAGE_TARGETS,
                 ChoiceKind.ATTACK_MULTI_DAMAGE_SINGLE_TARGET -> o.opponentField.find { it.id == id }?.let { target ->
                     if (target.damage + choice.amount >= hp(target)) 1000.0 else (target.damage.toDouble() / hp(target).coerceAtLeast(1))

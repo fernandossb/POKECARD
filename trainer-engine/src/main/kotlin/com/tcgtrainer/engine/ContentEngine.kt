@@ -783,6 +783,93 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         update { it.copy(deck = it.deck - evolution, active = it.active!!.copy(cards = it.active.cards + evolution, lastEvolutionTurn = s.turn)) }
                         events += GameEvent("PokemonEvolvedByAttack", "${def(evolution).name} evoluiu do seu Pokémon Ativo pelo efeito do ataque.")
                     }
+                    ChoiceKind.ATTACK_EVOLVE_BENCHED -> {
+                        val targetId = checkNotNull(choice.sourcePokemonId)
+                        if (ids.isNotEmpty()) {
+                            val target = s.players[actor].bench.firstOrNull { it.id == targetId }
+                                ?: return illegal("O Pokémon do Banco escolhido não está mais em jogo.")
+                            val evolution = s.players[actor].deck.firstOrNull { it.id == ids.single() && it.id in choice.candidates && def(it).canEvolveFrom(def(target.top)) }
+                                ?: return illegal("A carta escolhida não evolui do Pokémon selecionado ou já saiu do deck.")
+                            update { player -> player.copy(deck = player.deck - evolution, bench = player.bench.map { pokemon ->
+                                if (pokemon.id != targetId) pokemon else pokemon.copy(cards = pokemon.cards + evolution,
+                                    lastEvolutionTurn = s.turn, restrictions = emptyList(), conditions = emptySet(), poisonDamageCounters = 1,
+                                    defendingAttackFailsOnTailsTurn = -1, attackImmunityTurn = -1,
+                                    incomingDamageReduction = 0, damageReductionTurn = -1, incomingDamageReductionEvolutionOnly = false,
+                                    outgoingDamageReduction = 0, outgoingDamageReductionTurn = -1,
+                                    preventBasicNonColorlessDamageTurn = -1, preventBasicPokemonDamageTurn = -1)
+                            }) }
+                            events += GameEvent("PokemonEvolvedByAttack", "${def(target.top).name} evoluiu para ${def(evolution).name} pelo efeito do ataque.")
+                            def(evolution).abilities.filter { it.onEvolveDraw > 0 }.forEach { ability ->
+                                val count = minOf(ability.onEvolveDraw, s.players[actor].deck.size)
+                                update { it.copy(hand = it.hand + it.deck.take(count), deck = it.deck.drop(count)) }
+                                events += GameEvent("CardsDrawn", "Comprou $count carta(s) ao evoluir com ${ability.name}.", count)
+                            }
+                            if (def(evolution).abilities.any { it.onEvolveHealAllEvolutionAndDiscardEnergy }) {
+                                val evolutionTargets = s.players[actor].pokemon().filter { def(it.top).stage != Stage.BASIC && it.damage > 0 }
+                                val energyToDiscard = evolutionTargets.flatMap { it.energies }
+                                evolutionTargets.forEach { pokemon ->
+                                    update { player -> player.copy(
+                                        active = player.active?.let { if (it.id == pokemon.id) it.copy(damage = 0, energies = emptyList()) else it },
+                                        bench = player.bench.map { if (it.id == pokemon.id) it.copy(damage = 0, energies = emptyList()) else it }) }
+                                }
+                                if (energyToDiscard.isNotEmpty()) update { it.copy(discard = it.discard + energyToDiscard) }
+                                events += GameEvent("EvolutionTeamHealed", "Curou ${evolutionTargets.size} Pokémon Evoluído(s) e descartou ${energyToDiscard.size} Energia(s).", evolutionTargets.size)
+                            }
+                            def(evolution).abilities.filter { it.onEvolveShuffleRandomOpponentHandPerHeads > 0 }.forEach { ability ->
+                                val rng = SeededRng(s.rng)
+                                val heads = List(ability.onEvolveShuffleRandomOpponentHandPerHeads) { rng.nextInt(2) == 0 }.count { it }
+                                val opponent = 1 - actor
+                                val opponentHand = s.players[opponent].hand.toMutableList()
+                                val shuffledCards = mutableListOf<CardInstance>()
+                                repeat(minOf(heads, opponentHand.size)) { shuffledCards += opponentHand.removeAt(rng.nextInt(opponentHand.size)) }
+                                if (shuffledCards.isNotEmpty()) update(opponent) { it.copy(hand = opponentHand, deck = rng.shuffle(it.deck + shuffledCards)) }
+                                s = s.copy(rng = rng.state)
+                                events += GameEvent("OpponentHandCardsShuffled", "${ability.name}: o oponente embaralhou ${shuffledCards.size} carta(s) da mão no deck.", shuffledCards.size)
+                            }
+                            val evolvedAbilities = def(evolution).abilities
+                            val metalAbility = evolvedAbilities.firstOrNull { it.onEvolveAttachMetalFromDiscardMax > 0 }
+                            val metalEnergies = s.players[actor].discard.filter { def(it).category == Category.ENERGY && def(it).basicEnergy && def(it).type == EnergyType.METAL }
+                            val metalTargets = s.players[actor].pokemon().filter { def(it.top).type == EnergyType.METAL }
+                            if (metalAbility != null && metalEnergies.isNotEmpty() && metalTargets.isNotEmpty()) remainingChoices = listOf(ChoiceRequest(
+                                ChoiceKind.EVOLUTION_METAL_ENERGY,
+                                "${metalAbility.name}: escolha até ${metalAbility.onEvolveAttachMetalFromDiscardMax} Energias Metal Básicas do descarte.",
+                                metalEnergies.map { it.id }, 0, minOf(metalAbility.onEvolveAttachMetalFromDiscardMax, metalEnergies.size))) + remainingChoices
+                            val namedRecovery = evolvedAbilities.firstOrNull { it.onEvolveRecoverNamedTrainerFromDiscard != null }
+                            val namedCards = namedRecovery?.let { ability -> s.players[actor].discard.filter {
+                                def(it).category == Category.TRAINER && def(it).name == ability.onEvolveRecoverNamedTrainerFromDiscard
+                            } }.orEmpty()
+                            if (namedRecovery != null && namedCards.isNotEmpty()) remainingChoices = listOf(ChoiceRequest(
+                                ChoiceKind.EVOLUTION_RECOVER_NAMED_TRAINER,
+                                "${namedRecovery.name}: recupere até ${namedRecovery.onEvolveRecoverNamedTrainerMax} carta(s) do descarte.",
+                                namedCards.map { it.id }, 0, minOf(namedRecovery.onEvolveRecoverNamedTrainerMax, namedCards.size), visibleCards = namedCards.map { it.id })) + remainingChoices
+                            val opponentActive = s.players[1 - actor].active
+                            if (evolvedAbilities.any { it.onEvolveConfuseOpponentActive } && opponentActive != null &&
+                                def(opponentActive.top).abilities.none { it.preventOpponentEffects }) remainingChoices = listOf(ChoiceRequest(
+                                ChoiceKind.EVOLUTION_CONFUSE_ACTIVE, "Usar a habilidade da evolução para Confundir o Pokémon Ativo adversário?",
+                                listOf(opponentActive.id), 0, 1)) + remainingChoices
+                            if (evolvedAbilities.any { it.onEvolveSwitch } && s.players[1 - actor].bench.isNotEmpty()) remainingChoices = listOf(ChoiceRequest(
+                                ChoiceKind.EVOLUTION_SWITCH, "A habilidade da evolução pode trocar o Pokémon Ativo adversário. Escolha um Pokémon do Banco ou pule.",
+                                s.players[1 - actor].bench.map { it.id }, 0, 1)) + remainingChoices
+                            val spread = evolvedAbilities.firstOrNull { it.onEvolveDamageCounters }
+                            val damageTargets = s.players[1 - actor].pokemon().filter { target ->
+                                def(target.top).abilities.none { it.preventOpponentEffects }
+                            }
+                            if (spread != null && damageTargets.size >= spread.damageTargets) remainingChoices = listOf(ChoiceRequest(
+                                ChoiceKind.EVOLUTION_DAMAGE_TARGETS,
+                                "${spread.name}: escolha ${spread.damageTargets} Pokémon adversários ou pule.",
+                                damageTargets.map { it.id }, 0, spread.damageTargets, amount = spread.damageCounters * 10)) + remainingChoices
+                        }
+                        remainingChoices = remainingChoices.mapNotNull { pending ->
+                            if (pending.kind != ChoiceKind.ATTACK_EVOLVE_BENCHED) pending else {
+                                val pendingTarget = s.players[actor].bench.firstOrNull { it.id == pending.sourcePokemonId }
+                                val eligible = pendingTarget?.let { target ->
+                                    s.players[actor].deck.filter { def(it).canEvolveFrom(def(target.top)) }
+                                }.orEmpty()
+                                if (eligible.isEmpty()) null else pending.copy(
+                                    candidates = eligible.map { it.id }, visibleCards = eligible.map { it.id })
+                            }
+                        }
+                    }
                     ChoiceKind.ATTACK_HEAL_TARGET -> {
                         val targetId = ids.single()
                         update { it.copy(active = it.active?.let { pokemon -> if (pokemon.id == targetId) pokemon.copy(damage = (pokemon.damage-choice.amount).coerceAtLeast(0)) else pokemon },
