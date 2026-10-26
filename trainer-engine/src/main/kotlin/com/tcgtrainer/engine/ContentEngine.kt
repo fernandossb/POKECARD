@@ -97,6 +97,11 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     is TrainerEffect.ShuffleHandDraw -> if (p.deck.isEmpty() && p.hand.size <= 1) illegal("Não há cartas para embaralhar ou comprar.") else Legality.Legal
                     is TrainerEffect.DrawCards, TrainerEffect.GreatBall, TrainerEffect.Sonia -> if (p.deck.isEmpty()) illegal("Seu deck está vazio.") else Legality.Legal
                     TrainerEffect.CoinSwitch -> if (s.players[1-s.currentPlayer].bench.isEmpty()) illegal("Não há Pokémon adversário no Banco.") else Legality.Legal
+                    TrainerEffect.ForestOfVitality -> when {
+                        p.flags.stadium -> illegal("Você já jogou um Estádio neste turno.")
+                        s.stadium?.let { def(it).name == d.name } == true -> illegal("Já existe um Estádio com esse nome em jogo.")
+                        else -> Legality.Legal
+                    }
                     is TrainerEffect.HealPokemon -> if ((if (effect.activeOnly) listOfNotNull(p.active) else p.pokemon()).none { it.damage > 0 }) illegal("Não há dano para curar no alvo permitido.") else Legality.Legal
                     is TrainerEffect.RecoverEnergy -> if (p.discard.none { def(it).category == Category.ENERGY }) illegal("Não há Energia Básica no descarte.") else Legality.Legal
                 }
@@ -258,6 +263,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         events += GameEvent("CoinFlipped", if (heads) "CARA" else "COROA")
                         if (heads) begin(Resolution(listOf(ChoiceRequest(ChoiceKind.SWITCH_OPPONENT, "Cara: escolha o novo Ativo adversário.", s.players[1-actor].bench.map { it.id }, 1, 1))))
                     }
+                    TrainerEffect.ForestOfVitality -> Unit
                     is TrainerEffect.HealPokemon -> begin(Resolution(listOf(ChoiceRequest(ChoiceKind.HEAL_TARGET, "Curar até ${effect.amount} de dano.",
                         (if (effect.activeOnly) listOfNotNull(p.active) else p.pokemon()).filter { it.damage > 0 }.map { it.id }, 1, 1, amount = effect.amount))))
                     is TrainerEffect.RecoverEnergy -> begin(Resolution(listOf(ChoiceRequest(if (effect.toDeck) ChoiceKind.RECYCLE_ENERGY else ChoiceKind.RECOVER,

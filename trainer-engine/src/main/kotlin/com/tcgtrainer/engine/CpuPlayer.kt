@@ -435,6 +435,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 is TrainerEffect.DrawCards -> if (o.ownDeckCount > effect.count+1 && o.ownHand.size < 9) 100.0 else -5.0
                 TrainerEffect.GreatBall, TrainerEffect.Sonia -> if (o.ownDeckCount > 0 && own.size < 5) 90.0 else -5.0
                 TrainerEffect.CoinSwitch -> if (o.opponentField.size > 1) 20.0 else -5.0
+                TrainerEffect.ForestOfVitality -> 30.0
                 is TrainerEffect.HealPokemon -> own.filter { !effect.activeOnly || it.id == active?.id }.maxOfOrNull { minOf(it.damage, effect.amount).toDouble() } ?: -5.0
                 is TrainerEffect.RecoverEnergy -> if (o.ownDiscard.any { d(it).category == Category.ENERGY }) 45.0 else -5.0
             }

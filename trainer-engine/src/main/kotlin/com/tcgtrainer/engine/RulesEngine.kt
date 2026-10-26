@@ -187,11 +187,13 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 val target = pokemon(state, action.pokemonId) ?: return reason("Pokémon fora de jogo.")
                 val evolution = hand(action.cardId)?.let(::definition) ?: return reason("Carta fora da mão.")
                 val canEvolveImmediately = target.id == state.players[state.currentPlayer].active?.id && effectiveAbilities(state, state.currentPlayer, target).any { it.mayEvolveFirstTurnIfActive }
+                val forestOfVitalityAllowsSameTurn = state.turn > 2 && target.type == EnergyType.GRASS && evolution.type == EnergyType.GRASS &&
+                    state.stadium?.let(::definition)?.trainerEffect == TrainerEffect.ForestOfVitality
                 when {
                     state.turn <= p.evolutionLockedUntilTurn -> reason("O adversário impediu evoluções neste turno.")
                     evolution.abilities.any { it.onlyPlayableWithPalafinZeroToHero } -> reason("Palafin ex só pode entrar em jogo pelo efeito de Zero to Hero de Palafin.")
                     state.turn <= 2 && !canEvolveImmediately -> reason("Não é permitido evoluir no primeiro turno de cada jogador.")
-                    target.enteredPlayTurn == state.turn && !canEvolveImmediately -> reason("Este Pokémon entrou em jogo neste turno.")
+                    target.enteredPlayTurn == state.turn && !canEvolveImmediately && !forestOfVitalityAllowsSameTurn -> reason("Este Pokémon entrou em jogo neste turno.")
                     target.lastEvolutionTurn == state.turn -> reason("Este Pokémon já evoluiu neste turno.")
                     !evolution.canEvolveFrom(definition(target.top)) -> reason("Evolução incompatível.")
                     else -> Legality.Legal

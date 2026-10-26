@@ -330,6 +330,13 @@ internal object CatalogRuleCompiler {
         val source = "TCGdex • https://api.tcgdex.net/v2/en/cards/$id • gramática executável v1"
         // Reuse only identical trainer/energy print semantics, including ACE SPEC rarity.
         if (raw.s("category") in listOf("Trainer", "Energy")) {
+            if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Stadium" &&
+                raw.s("effect") == "Each player's {G} Pokémon can evolve into {G} Pokémon during the turn they play those Pokémon, except during their first turn.") {
+                return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
+                    category = Category.TRAINER, verified = true, source = source,
+                    artAsset = "remote:$image/high.webp", text = raw.s("effect").orEmpty(),
+                    trainerType = TrainerType.STADIUM, trainerEffect = TrainerEffect.ForestOfVitality)
+            }
             val same = reviewed.entries.firstOrNull { (key, _) ->
                 val original = rows[key] ?: TrainerCatalog.sourceData(key)
                 signature(original) == signature(raw)
