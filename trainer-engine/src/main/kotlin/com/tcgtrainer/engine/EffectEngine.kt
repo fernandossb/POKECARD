@@ -236,7 +236,7 @@ class EffectEngine(private val catalog: CardCatalog) {
         is Effect.OpponentConditionDamage, is Effect.OpponentActiveDamagedDamage, is Effect.OpponentActiveDamageCounterDamage,
         is Effect.OwnDiscardEnergyDamage, is Effect.DiscardEnergyThresholdDamage, is Effect.OwnInPlayEnergyDamage, is Effect.OwnSpecialEnergyDamage,
         is Effect.OwnDiscardAbilityCountBonus,
-        is Effect.OpponentPrizeTakenDamage, is Effect.OpponentPrizeCountDamage, is Effect.OpponentNoRetreatDamage,
+        is Effect.OpponentPrizeTakenDamage, is Effect.OpponentPrizeTakenBenchDamage, is Effect.OpponentPrizeCountDamage, is Effect.OpponentNoRetreatDamage,
         is Effect.OpponentResistanceDamage, is Effect.OwnToolAttachedDamage,
         is Effect.OwnKnockoutLastTurnDamage, is Effect.MovedFromBenchDamageBonus, is Effect.NextTurnAttackDamageBonus,
         is Effect.RequiresExactHandSize,

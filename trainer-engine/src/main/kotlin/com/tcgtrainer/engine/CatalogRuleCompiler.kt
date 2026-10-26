@@ -411,6 +411,13 @@ internal object CatalogRuleCompiler {
             return compiled.copy(effects = compiled.effects + Effect.MultiTargetDamage(
                 discardThenMultiTarget.groupValues[2].toInt(), discardThenMultiTarget.groupValues[3].toInt(), discardBeforeDamage = true), text = text)
         }
+        val opponentPrizeBenchDamage = Regex("This attack also does (\\d+) damage to each of your opponent's Benched Pokémon for each Prize card your opponent has taken\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
+        if (opponentPrizeBenchDamage != null) {
+            val rewritten = JsonObject(raw.toMutableMap().apply { put("effect", JsonPrimitive("")) })
+            val compiled = compileAttack(id, index, rewritten) ?: return null
+            return compiled.copy(effects = compiled.effects + Effect.OpponentPrizeTakenBenchDamage(
+                opponentPrizeBenchDamage.groupValues[1].toInt()), text = text)
+        }
         val multiBenchDamageNoWeakness = Regex("This attack also does (\\d+) damage to (\\d+) of your opponent's Benched Pokémon\\. \\(Don't apply Weakness and Resistance for Benched Pokémon\\.\\)").matchEntire(text)
         if (multiBenchDamageNoWeakness != null) {
             val rewritten = JsonObject(raw.toMutableMap().apply { put("effect", JsonPrimitive("")) })

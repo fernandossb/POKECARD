@@ -1048,6 +1048,38 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     update(actor) { player -> player.copy(bench = player.bench.map { it.copy(damage = it.damage + effect.amount) }) }
                     if (targets.isNotEmpty()) emit("OwnBenchDamage", "Seus Pokémon do Banco receberam ${effect.amount} de dano cada.", effect.amount * targets.size)
                 }
+                attack.effects.filterIsInstance<Effect.OpponentPrizeTakenBenchDamage>().forEach { effect ->
+                    val attacker = next.players[actor].active ?: error("Atacante ausente durante o dano ao Banco.")
+                    val opponentState = next.players[opponent]
+                    val prizesTaken = (6 - opponentState.prizes.size).coerceAtLeast(0)
+                    val baseDamage = effect.perPrize * prizesTaken
+                    if (baseDamage > 0) opponentState.bench.forEach targetLoop@ { target ->
+                        val damage = effects.damage(attacker, target, listOf(Effect.Damage(baseDamage)),
+                            boost = next.players[actor].flags.damageBoosts[definition(attacker.top).type] ?: 0,
+                            ignoreWeaknessResistance = true,
+                            ownBenchCount = next.players[actor].bench.size,
+                            opponentBenchCount = opponentState.bench.size,
+                            ownInPlayCount = next.players[actor].pokemon().size,
+                            turn = next.turn,
+                            ownHandCount = next.players[actor].hand.size,
+                            opponentHandCount = opponentState.hand.size,
+                            friendlyPokemon = opponentState.pokemon(),
+                            friendlyBenchPokemon = opponentState.bench,
+                            opponentPrizeCardsRemaining = opponentState.prizes.size,
+                            sourceAbilityOverride = effectiveAbilities(next, actor, attacker),
+                            targetAbilityOverride = effectiveAbilities(next, opponent, target),
+                            attackerPokemon = next.players[actor].pokemon(),
+                            targetIsOpponentBench = true)
+                        if (damage <= 0) return@targetLoop
+                        val hp = effects.effectiveHp(target, next)
+                        if (target.damage < hp && target.damage + damage >= hp)
+                            next = next.copy(pendingAttackDamageKnockoutIds = next.pendingAttackDamageKnockoutIds + target.id)
+                        update(opponent) { player -> player.copy(bench = player.bench.map {
+                            if (it.id == target.id) it.copy(damage = it.damage + damage) else it
+                        }) }
+                        emit("BenchDamage", "O ataque causou $damage de dano a ${definition(target.top).name} no Banco.", damage)
+                    }
+                }
                 attack.effects.filterIsInstance<Effect.StatusCondition>().forEach { effect ->
                     val opponentTypeRequirement = attack.effects.filterIsInstance<Effect.OpponentActiveTypeCondition>().firstOrNull()?.type
                     if ((effect.onSelf || !defenderEffectsPrevented) && (!effect.onHeads || (if (coin != null) (heads ?: 0) >= effect.minimumHeads else statusHeads)) &&
