@@ -548,6 +548,7 @@ internal object CatalogRuleCompiler {
         val benchEnergyBonus = Regex("You may discard up to (\\d+) Energy from your Benched Pokémon\\. This attack does (\\d+) more damage for each card you discarded in this way\\.").matchEntire(text)
         val handEnergyBonus = Regex("You may discard up to (\\d+) Energy cards from your hand, and this attack does (\\d+) more damage for each card you discarded in this way\\.").matchEntire(text)
         val discardTypedAttackerEnergy = Regex("Discard up to (\\d+) \\{([GRFLWPMD])\\} Energy from this Pokémon\\. This attack does (\\d+) damage for each card you discarded in this way\\.").matchEntire(text)
+        val discardAnyAttackerEnergy = Regex("Discard up to (\\d+) Energy cards from this Pokémon, and this attack does (\\d+) damage for each card you discarded in this way\\.").matchEntire(text)
         val discardAnyBasicEnergyFromTeam = Regex("You may discard any amount of Basic Energy from your Pokémon\\. This attack does (\\d+) damage for each card you discarded in this way\\.").matchEntire(text)
         val discardAnyTypedEnergyFromTeam = Regex("Discard any amount of \\{([GRFLWPMD])\\} Energy from among your Pokémon, and this attack does (\\d+) damage for each card you discarded in this way\\.").matchEntire(text)
         val discardTypedEnergyFromTeam = Regex("Discard up to (\\d+) \\{([GRFLWPMD])\\} Energy cards from your Pokémon\\. This attack does (\\d+) damage for each card you discarded in this way\\.").matchEntire(text)
@@ -736,7 +737,7 @@ internal object CatalogRuleCompiler {
             }
             }
         } else {
-            val discardOwnEnergyDamage = discardTypedAttackerEnergy != null || discardAnyBasicEnergyFromTeam != null || discardAnyTypedEnergyFromTeam != null || discardTypedEnergyFromTeam != null
+            val discardOwnEnergyDamage = discardTypedAttackerEnergy != null || discardAnyAttackerEnergy != null || discardAnyBasicEnergyFromTeam != null || discardAnyTypedEnergyFromTeam != null || discardTypedEnergyFromTeam != null
             val damage = if (damageText.isEmpty() || opponentHandEnergyDamage != null || discardOwnEnergyDamage || opponentActiveDamageCountersTimes != null || opponentHandCountDamage != null) 0 else
                 (if (coinBonus != null || coinBonusMultiple != null || coinBonusAllHeads != null || coinBonusUntilTails != null || optionalWaterEnergyDamageBonus != null || stadiumDamageBonus != null || conditionalEnergy != null || conditionalInPlayEnergy != null || ownKnockoutBonus != null || movedFromBenchBonus != null || anyOwnBenchedDamagedBonus != null || opponentBenchDamageBonus != null || ownBenchNameBonus != null || ownBenchTypeBonus != null || sameTypePokemonBonus || sameHandSizeDamageBonus || allOwnBenchedDamagedBonus != null || ownDamagedBenchedPokemonBonus != null || ownUndamagedBonus != null || ownAnyDamageCounterBonus != null || opponentExBonus != null || opponentTypeBonus != null || opponentEvolutionBonus != null || ownEnergyBonus != null || opponentEnergyBonus != null || opponentRetreatCostBonus != null || ownBenchEnergyBonus != null || opponentConditionBonus != null || opponentActiveDamagedBonus != null || opponentActiveDamageCounters != null || ownDiscardEnergyDamage != null || discardEnergyThresholdDamage != null || ownDiscardAbilityBonus != null || opponentPrizeTakenDamage != null || opponentPrizeTakenDamageWithDiscard != null || opponentPrizeCountDamage != null || opponentNoRetreatDamage != null || opponentResistanceDamage != null || opponentHandAtMostDamage != null || ownToolAttachedDamage != null || bothActiveEnergyDamage != null || benchedDamage != null || benchEnergyBonus != null || handEnergyBonus != null || ownTeamEnergyTypeBonus != null) damageText.removeSuffix("+") else damageText).toIntOrNull() ?: return null
             if (damage < 0) return null
@@ -817,24 +818,29 @@ internal object CatalogRuleCompiler {
                     effects += Effect.DiscardHandEnergyDamageBonus(handEnergyBonus.groupValues[1].toInt(), handEnergyBonus.groupValues[2].toInt())
                 }
                 discardOwnEnergyDamage -> {
-                    val match = discardTypedAttackerEnergy ?: discardAnyBasicEnergyFromTeam ?: discardAnyTypedEnergyFromTeam ?: discardTypedEnergyFromTeam!!
+                    val match = discardTypedAttackerEnergy ?: discardAnyAttackerEnergy ?: discardAnyBasicEnergyFromTeam ?: discardAnyTypedEnergyFromTeam ?: discardTypedEnergyFromTeam!!
                     val max = when {
                         discardTypedAttackerEnergy != null -> discardTypedAttackerEnergy.groupValues[1].toInt()
+                        discardAnyAttackerEnergy != null -> discardAnyAttackerEnergy.groupValues[1].toInt()
                         discardAnyBasicEnergyFromTeam != null -> 99
                         discardAnyTypedEnergyFromTeam != null -> 99
                         else -> discardTypedEnergyFromTeam!!.groupValues[1].toInt()
                     }
                     val type = when {
                         discardTypedAttackerEnergy != null -> symbolType(discardTypedAttackerEnergy.groupValues[2]) ?: return null
+                        discardAnyAttackerEnergy != null -> null
                         discardAnyTypedEnergyFromTeam != null -> symbolType(discardAnyTypedEnergyFromTeam.groupValues[1]) ?: return null
                         discardTypedEnergyFromTeam != null -> symbolType(discardTypedEnergyFromTeam.groupValues[2]) ?: return null
                         else -> null
                     }
-                    val perEnergy = if (discardAnyTypedEnergyFromTeam != null) discardAnyTypedEnergyFromTeam.groupValues[2].toInt() else
-                        match.groupValues.last().toIntOrNull() ?: return null
+                    val perEnergy = when {
+                        discardAnyAttackerEnergy != null -> discardAnyAttackerEnergy.groupValues[2].toInt()
+                        discardAnyTypedEnergyFromTeam != null -> discardAnyTypedEnergyFromTeam.groupValues[2].toInt()
+                        else -> match.groupValues.last().toIntOrNull() ?: return null
+                    }
                     if (damageText != "${perEnergy}×" && damageText != "${perEnergy}x") return null
                     effects += Effect.DiscardOwnEnergyDamageBonus(max, perEnergy, type,
-                        basicOnly = discardAnyBasicEnergyFromTeam != null, attackerOnly = discardTypedAttackerEnergy != null)
+                        basicOnly = discardAnyBasicEnergyFromTeam != null, attackerOnly = discardTypedAttackerEnergy != null || discardAnyAttackerEnergy != null)
                 }
                 opponentExBonus != null -> {
                     if (damage <= 0 || !damageText.endsWith("+")) return null
