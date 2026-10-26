@@ -465,8 +465,35 @@ internal class ContentEngine(private val rules: RulesEngine) {
             is GameAction.ChooseCards -> {
                 val resolution = s.resolution!!; val choice = resolution.choices.first(); val ids = action.cardIds
                 var remainingChoices = resolution.choices.drop(1)
+                var shuffleAfterResolution = resolution.shuffleAfter
                 val p = s.players[actor]
                 when (choice.kind) {
+                    ChoiceKind.ON_BENCH_LAST_DITCH -> {
+                        if (ids.isNotEmpty()) {
+                            val sourceId = choice.sourcePokemonId ?: return illegal("Meowth não está mais no Banco.")
+                            val source = p.bench.firstOrNull { it.id == sourceId }
+                                ?: return illegal("Meowth não está mais no Banco.")
+                            val ability = def(source.top).abilities.firstOrNull { it.onBenchSearchSupporterFromDeck }
+                                ?: return illegal("Last-Ditch não está disponível.")
+                            if (ability.usageKey in p.flags.abilitiesUsed) return illegal("Last-Ditch já foi usado neste turno.")
+                            val supporters = p.deck.filter { def(it).category == Category.TRAINER && def(it).trainerType == TrainerType.SUPPORTER }
+                            update { it.copy(flags = it.flags.copy(abilitiesUsed = it.flags.abilitiesUsed + ability.usageKey)) }
+                            remainingChoices = listOf(ChoiceRequest(ChoiceKind.ABILITY_SEARCH_SUPPORTER_FROM_DECK,
+                                "Revele um Apoiador do deck e coloque-o na mão.", supporters.map { it.id }, 0,
+                                minOf(1, supporters.size), sourcePokemonId = sourceId, visibleCards = supporters.map { it.id })) + remainingChoices
+                            shuffleAfterResolution = true
+                            events += GameEvent("LastDitchUsed", "${def(source.top).name} usou Last-Ditch.")
+                        }
+                    }
+                    ChoiceKind.ABILITY_SEARCH_SUPPORTER_FROM_DECK -> {
+                        if (ids.isNotEmpty()) {
+                            val selected = p.deck.firstOrNull { card -> card.id == ids.single() && card.id in choice.candidates &&
+                                def(card).category == Category.TRAINER && def(card).trainerType == TrainerType.SUPPORTER }
+                                ?: return illegal("Escolha um Apoiador que ainda esteja no deck.")
+                            update { it.copy(deck = it.deck - selected, hand = it.hand + selected) }
+                            events += GameEvent("LastDitchSupporterFound", "Revelou ${def(selected).name} e colocou na mão.")
+                        } else events += GameEvent("LastDitchSupporterNotFound", "Não havia Apoiador elegível no deck.")
+                    }
                     ChoiceKind.ATTACK_KNOCKOUT_LOWEST_HP_TARGET -> {
                         val targetId = ids.single()
                         val targetOwner = s.players.indexOfFirst { player -> player.pokemon().any { it.id == targetId } }
@@ -1669,7 +1696,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     ChoiceKind.ATTACK_COPY_OPPONENT_ACTIVE -> error("A escolha do ataque adversário copiado deve ser consumida pelo RulesEngine antes do ContentEngine.")
                     ChoiceKind.ATTACK_REVEAL_HAND_POKEMON -> error("A escolha de revelar Pokémon da mão é consumida pelo RulesEngine antes do ContentEngine.")
                 }
-                s = s.copy(resolution = resolution.copy(choices = remainingChoices))
+                s = s.copy(resolution = resolution.copy(choices = remainingChoices, shuffleAfter = shuffleAfterResolution))
             }
             else -> error("Ação incorreta para ContentEngine")
         }

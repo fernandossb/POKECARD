@@ -29,6 +29,11 @@ internal object CatalogRuleCompiler {
     internal fun compileAbility(id: String, index: Int, raw: JsonObject): AbilityDefinition? {
         val name = raw.s("name") ?: return null
         val text = raw.s("effect")?.trim().orEmpty()
+        if (text.contains("you play this Pokémon from your hand onto your Bench") &&
+            text.contains("Search your deck for a Supporter card, reveal it, and put it into your hand") &&
+            text.contains("more than 1 Ability that has \"Last-Ditch\" in its name each turn"))
+            return AbilityDefinition("$id-ability$index", name, text, usageKey = "Last-Ditch",
+                onBenchSearchSupporterFromDeck = true)
         if (text == "Once during your turn, you may attach a Basic {R} Energy card, a Basic {F} Energy card, or 1 of each from your hand to your Pokémon in any way you like.")
             return AbilityDefinition("$id-ability$index", name, text, usageKey = name, usagePerPokemon = true,
                 attachHandEnergyTypes = listOf(EnergyType.FIRE, EnergyType.FIGHTING), attachHandEnergyTypesMax = 2)

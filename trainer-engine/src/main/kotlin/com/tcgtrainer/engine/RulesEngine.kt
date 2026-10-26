@@ -622,12 +622,18 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 emit("BasicPlayed", "${definition(card).name} entrou no Banco.")
                 val playedPokemon = next.players[actor].bench.first { it.cards.last().id == card.id }
                 val onBenchAbilities = effectiveAbilities(next, actor, playedPokemon)
+                val lastDitchAbility = onBenchAbilities.firstOrNull { it.onBenchSearchSupporterFromDeck }
                 val onBenchSwitch = onBenchAbilities.any { it.onBenchSwitchAndMoveEnergy }
                 val onBenchAbility = onBenchAbilities.firstOrNull { it.onBenchAttachBasicEnergyMax > 0 }
                 val eligibleEnergy = onBenchAbility?.let { ability -> next.players[actor].hand.filter {
                     definition(it).category == Category.ENERGY && definition(it).basicEnergy && definition(it).type == ability.onBenchAttachBasicEnergyType
                 } }.orEmpty()
-                if (state.phase == Phase.MAIN && onBenchSwitch) {
+                if (state.phase == Phase.MAIN && lastDitchAbility != null && lastDitchAbility.usageKey !in next.players[actor].flags.abilitiesUsed) {
+                    next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN,
+                        resolution = Resolution(listOf(ChoiceRequest(ChoiceKind.ON_BENCH_LAST_DITCH,
+                            "${lastDitchAbility.name}: você pode buscar um Apoiador no deck.", listOf("use"), 0, 1,
+                            sourcePokemonId = playedPokemon.id, optionLabels = mapOf("use" to "Usar Last-Ditch")))))
+                } else if (state.phase == Phase.MAIN && onBenchSwitch) {
                     next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN,
                         resolution = Resolution(listOf(ChoiceRequest(ChoiceKind.ON_BENCH_SWITCH_AND_MOVE_ENERGY,
                             "Você pode trocar o Pokémon que acabou de entrar no Banco com seu Ativo.", listOf(card.id), 0, 1))))
