@@ -71,6 +71,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         def(it.top).name == "Palafin" && def(it.top).abilities.any { ability -> ability.triggersWhenMovedFromActiveToBench }
                     } -> illegal("Palafin não está mais no Banco para resolver Zero to Hero.")
                     choice.kind == ChoiceKind.ATTACK_REORDER_OPPONENT_TOP && s.players[1-rules.actingPlayer(s)].deck.take(choice.candidates.size).map { it.id }.toSet() != choice.candidates.toSet() -> illegal("As cartas do topo do deck adversário mudaram durante a escolha.")
+                    choice.kind == ChoiceKind.ATTACK_LOOK_TOP_KEEP_CARDS && p.deck.take(choice.amount).map { it.id }.toSet() != choice.candidates.toSet() -> illegal("As cartas do topo do seu deck mudaram durante a escolha.")
                     choice.kind == ChoiceKind.SONIA && p.deck.filter { it.id in action.cardIds }.map { def(it).category }.distinct().size > 1 -> illegal("Sonia busca Pokémon Básicos OU Energias Básicas; não misture as categorias.")
                     else -> Legality.Legal
                 }
@@ -630,6 +631,14 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         if (targetOwner != actor && rules.attackTargetEffectsPrevented(s, targetOwner, target))
                             return illegal("O Pokémon escolhido está protegido contra efeitos de ataques.")
                         s = s.copy(pendingAttackEffectKnockoutIds = s.pendingAttackEffectKnockoutIds + targetId)
+                    }
+                    ChoiceKind.ATTACK_LOOK_TOP_KEEP_CARDS -> {
+                        val top = p.deck.take(choice.amount)
+                        if (ids.any { id -> top.none { it.id == id } }) return illegal("Escolha apenas cartas reveladas do topo do seu deck.")
+                        val kept = top.filter { it.id in ids }
+                        val discarded = top.filterNot { it.id in ids }
+                        update { it.copy(deck = it.deck.drop(top.size), hand = it.hand + kept, discard = it.discard + discarded) }
+                        events += GameEvent("TopCardsSelected", "Escolheu ${kept.size} carta(s) do topo para a mão e descartou ${discarded.size}.", kept.size)
                     }
                     ChoiceKind.ATTACK_REORDER_OPPONENT_TOP -> {
                         val opponent = s.players[1-actor]

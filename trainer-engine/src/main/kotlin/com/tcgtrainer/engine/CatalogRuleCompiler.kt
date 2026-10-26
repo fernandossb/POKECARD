@@ -824,6 +824,7 @@ internal object CatalogRuleCompiler {
         val discardOwnDeckTop = text == "Discard the top card of your deck."
         val discardOwnDeckTopCards = Regex("Discard the top (\\d+) cards of your deck\\.").matchEntire(text)
         val optionalDiscardOwnDeckTop = text == "Look at the top card of your deck. You may discard that card."
+        val lookTopChooseAndDiscardRest = Regex("Look at the top (\\d+) cards of your deck and put (\\d+) of them into your hand\\. Discard the other cards\\.").matchEntire(text)
         val searchEvolutionSelf = text == "Search your deck for a card that evolves from this Pokémon and put it onto this Pokémon to evolve it. Then, shuffle your deck."
         val searchEvolutionEachBenchedPokemon = text == "For each of your Benched Pokémon, search your deck for a card that evolves from that Pokémon and put it onto that Pokémon to evolve it. Then, shuffle your deck."
         val revealOpponentHand = text == "Your opponent reveals their hand."
@@ -1265,6 +1266,7 @@ internal object CatalogRuleCompiler {
                 discardOwnDeckTop -> effects += Effect.DiscardOwnDeckTop
                 discardOwnDeckTopCards != null -> effects += Effect.DiscardOwnDeckTopCards(discardOwnDeckTopCards.groupValues[1].toInt())
                 optionalDiscardOwnDeckTop -> effects += Effect.OptionalDiscardOwnDeckTop
+                lookTopChooseAndDiscardRest != null -> effects += Effect.LookTopChooseAndDiscardRest(lookTopChooseAndDiscardRest.groupValues[1].toInt(), lookTopChooseAndDiscardRest.groupValues[2].toInt())
                 revealOpponentHand -> effects += Effect.RevealOpponentHand
                 searchEvolutionSelf -> effects += Effect.SearchEvolutionForSelfToEvolve
                 searchEvolutionEachBenchedPokemon -> effects += Effect.SearchEvolutionForEachBenchedPokemon

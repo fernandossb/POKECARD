@@ -2001,6 +2001,13 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                             targets, 1, 1, sourcePokemonId = attackerId, amount = leastHp)
                     }
                 }
+                attack.effects.filterIsInstance<Effect.LookTopChooseAndDiscardRest>().forEach { effect ->
+                    val top = next.players[actor].deck.take(effect.look)
+                    val keep = minOf(effect.keep, top.size)
+                    if (keep > 0) choices += ChoiceRequest(ChoiceKind.ATTACK_LOOK_TOP_KEEP_CARDS,
+                        "Olhe as ${top.size} cartas do topo do seu deck e escolha $keep para a mão; descarte as outras.",
+                        top.map { it.id }, keep, keep, amount = top.size, visibleCards = top.map { it.id })
+                }
                 attack.effects.filterIsInstance<Effect.ReorderOpponentDeckTop>().forEach { effect ->
                     val top = next.players[opponent].deck.take(effect.count)
                     if (top.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.ATTACK_REORDER_OPPONENT_TOP,
