@@ -1,4 +1,6 @@
-# Regras executáveis — 5.99.34
+# Regras executáveis — auditoria 5.99.34
+
+Nota para 5.99.35: esta auditoria quantitativa antecede a cobertura incremental de regras adicionada depois da versão 5.99.34. Os totais abaixo não foram recalculados nesta atualização e não representam a cobertura atual do código.
 
 Cobertura verificada em 26/10/2026 após as habilidades de Pecharunt ex e Munkidori ex: 1.698 impressões executáveis, das quais 1.662 no Padrão. Restam 1.399 das 3.061 impressões elegíveis no Padrão; o catálogo contém 3.097 impressões no total. Cada impressão só é liberada se todas as suas habilidades e ataques forem executáveis.
 

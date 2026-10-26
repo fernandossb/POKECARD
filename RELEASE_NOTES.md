@@ -1,3 +1,10 @@
+# POKECARD Brasil 5.99.35 — Mais regras executáveis para o TCG Trainer
+
+- Expandido o motor com regras de ataques, habilidades, Apoiadores, Itens e Estádios, incluindo gatilhos de turno, condições de alvo, busca, cura, recuperação, movimento de Energia, bloqueios e Prêmios.
+- Entre os grupos cobertos estão Iron Thorns ex, Palafin ex, Rotom ex, Munkidori, Serperior ex, Whimsicott ex, Emboar e dezenas de Treinadores e Pokémon da rotação.
+- A versão local do aplicativo passa para `versionCode` 237 e `versionName` 5.99.35.
+- As contagens de cobertura publicadas abaixo são a auditoria 5.99.34; a cobertura total ainda precisa ser recalculada.
+
 # POKECARD Brasil 5.99.34 — Habilidades de Pecharunt e Munkidori ex
 
 - Subjugating Chains troca com um Pokémon Darkness elegível do Banco, aplica Veneno ao novo Ativo e limita o uso a uma vez por turno para todas as cópias.
