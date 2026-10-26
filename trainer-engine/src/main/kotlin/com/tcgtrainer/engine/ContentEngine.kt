@@ -102,6 +102,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         s.stadium?.let { def(it).name == d.name } == true -> illegal("Já existe um Estádio com esse nome em jogo.")
                         else -> Legality.Legal
                     }
+                    is TrainerEffect.DiscardOpponentItemsFromHand -> Legality.Legal
                     is TrainerEffect.HealPokemon -> if ((if (effect.activeOnly) listOfNotNull(p.active) else p.pokemon()).none { it.damage > 0 }) illegal("Não há dano para curar no alvo permitido.") else Legality.Legal
                     is TrainerEffect.RecoverEnergy -> if (p.discard.none { def(it).category == Category.ENERGY }) illegal("Não há Energia Básica no descarte.") else Legality.Legal
                 }
@@ -264,6 +265,16 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         if (heads) begin(Resolution(listOf(ChoiceRequest(ChoiceKind.SWITCH_OPPONENT, "Cara: escolha o novo Ativo adversário.", s.players[1-actor].bench.map { it.id }, 1, 1))))
                     }
                     TrainerEffect.ForestOfVitality -> Unit
+                    is TrainerEffect.DiscardOpponentItemsFromHand -> {
+                        val opponentHand = s.players[1-actor].hand
+                        val items = opponentHand.filter { def(it).trainerType == TrainerType.ITEM }
+                        events += GameEvent("OpponentHandRevealed", "O adversário revelou a mão para Eri.")
+                        if (items.isNotEmpty()) begin(Resolution(listOf(ChoiceRequest(
+                            ChoiceKind.ATTACK_CHOOSE_OPPONENT_HAND_DISCARD,
+                            "Eri: escolha até ${minOf(effect.max, items.size)} Item(ns) da mão revelada para descartar.",
+                            items.map { it.id }, 0, minOf(effect.max, items.size), visibleCards = opponentHand.map { it.id }
+                        ))))
+                    }
                     is TrainerEffect.HealPokemon -> begin(Resolution(listOf(ChoiceRequest(ChoiceKind.HEAL_TARGET, "Curar até ${effect.amount} de dano.",
                         (if (effect.activeOnly) listOfNotNull(p.active) else p.pokemon()).filter { it.damage > 0 }.map { it.id }, 1, 1, amount = effect.amount))))
                     is TrainerEffect.RecoverEnergy -> begin(Resolution(listOf(ChoiceRequest(if (effect.toDeck) ChoiceKind.RECYCLE_ENERGY else ChoiceKind.RECOVER,
@@ -951,7 +962,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         val cards = opponent.hand.filter { it.id in ids && it.id in choice.candidates }
                         update(1-actor) { it.copy(hand = it.hand - cards.toSet(), discard = it.discard + cards) }
                         if (cards.isNotEmpty()) events += GameEvent("OpponentCardChosenAndDiscarded",
-                            "Escolheu ${def(cards.single()).name} da mão revelada do adversário para descartar.")
+                            "Escolheu ${cards.joinToString { def(it).name }} da mão revelada do adversário para descartar.", cards.size)
                     }
                     ChoiceKind.RECOVER -> {
                         val cards = p.discard.filter { it.id in ids }

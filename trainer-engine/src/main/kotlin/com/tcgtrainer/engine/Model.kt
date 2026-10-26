@@ -236,6 +236,7 @@ import kotlinx.serialization.Serializable
     @Serializable data object Sonia : TrainerEffect
     @Serializable data object CoinSwitch : TrainerEffect
     @Serializable data object ForestOfVitality : TrainerEffect
+    @Serializable data class DiscardOpponentItemsFromHand(val max: Int) : TrainerEffect
     @Serializable data class RecoverEnergy(val max: Int, val toDeck: Boolean = false) : TrainerEffect
 }
 @Serializable data class AbilityDefinition(
