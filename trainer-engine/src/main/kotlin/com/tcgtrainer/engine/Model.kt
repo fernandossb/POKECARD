@@ -211,6 +211,7 @@ import kotlinx.serialization.Serializable
     @Serializable data class OpponentPrizeTakenDamage(val perPrize: Int) : Effect
     @Serializable data class OpponentPrizeTakenBenchDamage(val perPrize: Int) : Effect
     @Serializable data class OpponentPrizeCountDamage(val maxRemaining: Int, val bonus: Int) : Effect
+    @Serializable data class OwnPrizeLeadDamageBonus(val bonus: Int) : Effect
     @Serializable data class OpponentNoRetreatDamage(val bonus: Int) : Effect
     @Serializable data class OpponentResistanceDamage(val type: EnergyType, val bonus: Int) : Effect
     @Serializable data class OwnToolAttachedDamage(val bonus: Int) : Effect

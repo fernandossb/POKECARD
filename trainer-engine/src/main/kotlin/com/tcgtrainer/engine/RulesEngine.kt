@@ -487,6 +487,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             ownSpecialEnergyCount = state.players[state.currentPlayer].pokemon().flatMap { it.energies }
                 .count { definition(it).category == Category.ENERGY && !definition(it).basicEnergy },
             opponentPrizeCardsRemaining = opponent.prizes.size,
+            ownPrizeCardsRemaining = state.players[state.currentPlayer].prizes.size,
             allPokemonToolCount = state.players.flatMap { it.pokemon() }.sumOf { it.tools.size },
             attackerPokemon = state.players[state.currentPlayer].pokemon(),
             targetIsOpponentBench = state.players[1-state.currentPlayer].bench.any { it.id == defender.id },

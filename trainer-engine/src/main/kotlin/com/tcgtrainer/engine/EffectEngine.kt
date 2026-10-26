@@ -37,6 +37,7 @@ class EffectEngine(private val catalog: CardCatalog) {
         opponentDamageCounterCount: Int = 0, opponentHandEnergyCount: Int = 0, stadiumInPlay: Boolean = false,
         opponentActiveRetreatCost: Int = 0, ownBenchWithEnergyCounts: Map<EnergyType, Int> = emptyMap(),
         ownDiscardEnergyCount: Int = 0, ownSpecialEnergyCount: Int = 0, ownBasicDiscardEnergyCounts: Map<EnergyType, Int> = emptyMap(), opponentPrizeCardsRemaining: Int = 6,
+        ownPrizeCardsRemaining: Int = 6,
         opponentBasicDiscardEnergyCount: Int = 0,
         ownDiscardPokemonAbilityNames: List<String> = emptyList(),
         ownBenchPokemonDetails: List<Pair<String, Int>> = emptyList(),
@@ -193,6 +194,7 @@ class EffectEngine(private val catalog: CardCatalog) {
             effects.filterIsInstance<Effect.OwnSpecialEnergyDamage>().sumOf { it.perEnergy * ownSpecialEnergyCount } +
             effects.filterIsInstance<Effect.OpponentPrizeTakenDamage>().filter { targetIsOpponentActive }.sumOf { it.perPrize * (6-opponentPrizeCardsRemaining) } +
             effects.filterIsInstance<Effect.OpponentPrizeCountDamage>().filter { targetIsOpponentActive && opponentPrizeCardsRemaining <= it.maxRemaining }.sumOf { it.bonus } +
+            effects.filterIsInstance<Effect.OwnPrizeLeadDamageBonus>().filter { targetIsOpponentActive && ownPrizeCardsRemaining > opponentPrizeCardsRemaining }.sumOf { it.bonus } +
             effects.filterIsInstance<Effect.OpponentNoRetreatDamage>().filter { targetIsOpponentActive && opponentActiveRetreatCost == 0 }.sumOf { it.bonus } +
             effects.filterIsInstance<Effect.OpponentResistanceDamage>().filter { targetIsOpponentActive && target.resistance == it.type }.sumOf { it.bonus } +
             effects.filterIsInstance<Effect.OwnToolAttachedDamage>().filter { attacker.tools.isNotEmpty() }.sumOf { it.bonus } +
@@ -253,7 +255,7 @@ class EffectEngine(private val catalog: CardCatalog) {
         is Effect.OpponentConditionDamage, is Effect.OpponentActiveDamagedDamage, is Effect.OpponentActiveDamageCounterDamage,
         is Effect.OwnDiscardEnergyDamage, is Effect.DiscardEnergyThresholdDamage, is Effect.OwnInPlayEnergyDamage, is Effect.OwnSpecialEnergyDamage,
         is Effect.OwnDiscardAbilityCountBonus,
-        is Effect.OpponentPrizeTakenDamage, is Effect.OpponentPrizeTakenBenchDamage, is Effect.OpponentPrizeCountDamage, is Effect.OpponentNoRetreatDamage,
+        is Effect.OpponentPrizeTakenDamage, is Effect.OpponentPrizeTakenBenchDamage, is Effect.OpponentPrizeCountDamage, is Effect.OwnPrizeLeadDamageBonus, is Effect.OpponentNoRetreatDamage,
         is Effect.OpponentResistanceDamage, is Effect.OwnToolAttachedDamage,
         is Effect.OwnKnockoutLastTurnDamage, is Effect.MovedFromBenchDamageBonus, is Effect.NextTurnAttackDamageBonus, is Effect.NextTurnAllAttacksDamageBonus,
         is Effect.RequiresExactHandSize,
