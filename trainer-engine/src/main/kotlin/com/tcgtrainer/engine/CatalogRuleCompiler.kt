@@ -1065,6 +1065,7 @@ internal object CatalogRuleCompiler {
             val selfOnly = Regex("This Pokémon does (\\d+) damage to itself\\.").matchEntire(text)
             val heal = Regex("Heal (\\d+) damage from this Pokémon\\.").matchEntire(text)
             val healAnyPokemon = Regex("Heal (\\d+) damage from 1 of your Pokémon\\.").matchEntire(text)
+            val healEachBasicPokemon = Regex("Heal (\\d+) damage from each of your Basic Pokémon\\.").matchEntire(text)
             val healEachPokemon = Regex("Heal (\\d+) damage from each of your Pokémon\\.").matchEntire(text)
             val healEachPokemonBoth = Regex("Heal (\\d+) damage from each Pokémon \\(both yours and your opponent's\\)\\.").matchEntire(text)
             val energySearch = Regex("Search your deck for a Basic \\{([GFRLWPMD])\\} Energy card and attach it to this Pokémon\\. Then, shuffle your deck\\.").matchEntire(text)
@@ -1076,6 +1077,7 @@ internal object CatalogRuleCompiler {
                 allOpponentBenchDamage != null -> effects += Effect.AllOpponentBenchDamage(allOpponentBenchDamage.groupValues[1].toInt())
                 attachBasicGrassAndHealBenched -> effects += Effect.AttachBasicEnergyFromHandToBenchedThenHealAll(EnergyType.GRASS)
                 healEachPokemonBoth != null -> effects += Effect.HealEachPokemon(healEachPokemonBoth.groupValues[1].toInt())
+                healEachBasicPokemon != null -> effects += Effect.HealEachOwnPokemon(healEachBasicPokemon.groupValues[1].toInt(), basicOnly = true)
                 healEachPokemon != null -> effects += Effect.HealEachOwnPokemon(healEachPokemon.groupValues[1].toInt())
                 healAnyPokemon != null -> effects += Effect.HealOwnPokemon(healAnyPokemon.groupValues[1].toInt())
                 confusePoisonThenSwitch -> {

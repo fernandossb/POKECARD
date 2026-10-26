@@ -141,7 +141,7 @@ import kotlinx.serialization.Serializable
     @Serializable data class OpponentEvolutionActiveDamageBonus(val bonus: Int) : Effect
     @Serializable data class OpponentStageTwoActiveDamageBonus(val bonus: Int) : Effect
     @Serializable data class HealOwnPokemon(val amount: Int) : Effect
-    @Serializable data class HealEachOwnPokemon(val amount: Int) : Effect
+    @Serializable data class HealEachOwnPokemon(val amount: Int, val basicOnly: Boolean = false) : Effect
     @Serializable data class HealEachPokemon(val amount: Int) : Effect
     @Serializable data object CoinKnockOutBasic : Effect
     @Serializable data class StatusCondition(val condition: SpecialCondition, val onHeads: Boolean = false, val minimumHeads: Int = 1, val onSelf: Boolean = false, val poisonDamageCounters: Int = 1) : Effect

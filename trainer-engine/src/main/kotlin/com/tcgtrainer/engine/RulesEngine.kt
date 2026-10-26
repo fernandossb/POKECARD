@@ -1549,7 +1549,8 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     emit("PokemonHealed", "Curou $healed de dano do atacante.", healed)
                 }
                 attack.effects.filterIsInstance<Effect.HealEachOwnPokemon>().forEach { heal ->
-                    next.players[actor].pokemon().filter { it.damage > 0 }.forEach { pokemon ->
+                    next.players[actor].pokemon().filter { it.damage > 0 &&
+                        (!heal.basicOnly || definition(it.top).stage == Stage.BASIC) }.forEach { pokemon ->
                         val healed = minOf(heal.amount, pokemon.damage)
                         updatePokemon(pokemon.id) { it.copy(damage = it.damage - healed) }
                         emit("PokemonHealed", "Curou $healed de dano de ${definition(pokemon.top).name}.", healed)
