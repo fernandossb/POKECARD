@@ -454,6 +454,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             opponentActiveIsEx = state.players[1-state.currentPlayer].active?.let { definition(it.top).name.endsWith(" ex") } == true,
             targetIsOpponentActive = defender.id == state.players[1-state.currentPlayer].active?.id,
             opponentActiveEnergyCount = state.players[1-state.currentPlayer].active?.energies?.size ?: 0,
+            opponentInPlayEnergyCount = state.players[1-state.currentPlayer].pokemon().sumOf { it.energies.size },
             opponentHasSpecialCondition = state.players[1-state.currentPlayer].active?.conditions?.isNotEmpty() == true,
             opponentSpecialConditionCount = state.players[1-state.currentPlayer].active?.conditions?.size ?: 0,
             opponentActiveDamage = state.players[1-state.currentPlayer].active?.damage ?: 0,
