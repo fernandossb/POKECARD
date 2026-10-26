@@ -18,7 +18,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
         return when (filter) {
             CardFilter.POKEMON -> d.category == Category.POKEMON
             CardFilter.BASIC_FIGHTING_OR_ENERGY -> d.type == EnergyType.FIGHTING && (d.category == Category.ENERGY || d.category == Category.POKEMON && d.stage == Stage.BASIC)
-            CardFilter.POKEMON_OR_ENERGY -> d.category == Category.POKEMON || d.category == Category.ENERGY
+            CardFilter.POKEMON_OR_ENERGY -> d.category == Category.POKEMON || d.category == Category.ENERGY && d.basicEnergy
             CardFilter.ITEM -> d.trainerType == TrainerType.ITEM
             CardFilter.TOOL -> d.trainerType == TrainerType.TOOL
             CardFilter.SUPPORTER -> d.trainerType == TrainerType.SUPPORTER

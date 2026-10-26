@@ -377,6 +377,13 @@ internal object CatalogRuleCompiler {
                     trainerEffect = TrainerEffect.HealEachOwnPokemonOfType(60, EnergyType.LIGHTNING))
             }
             val trainerText = raw.s("effect").orEmpty()
+            if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Item" &&
+                trainerText == "Put a Pokémon or a Basic Energy card from your discard pile into your hand.") {
+                return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
+                    category = Category.TRAINER, verified = true, source = source,
+                    artAsset = "remote:$image/high.webp", text = trainerText,
+                    trainerType = TrainerType.ITEM, trainerEffect = TrainerEffect.Recover)
+            }
             if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Supporter" &&
                 trainerText == "Shuffle your hand into your deck. Then, draw 6 cards. If you have exactly 6 Prize cards remaining, draw 8 cards instead.") {
                 return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,

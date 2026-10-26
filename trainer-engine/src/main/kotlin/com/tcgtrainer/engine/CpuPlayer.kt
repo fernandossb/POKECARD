@@ -458,7 +458,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                     if (gain > 5) 115.0+gain else if (effect.drawTo > o.ownHand.size && o.ownDeckCount > 3 && own.size > 1) 35.0 else -5.0
                 }
                 is TrainerEffect.DamageBoost -> if (input.actions.any { it is GameAction.Attack } && d(checkNotNull(active).top).type == effect.type) 160.0 else -5.0
-                TrainerEffect.Recover -> if (o.ownDiscard.any { d(it).category == Category.ENERGY || d(it).category == Category.POKEMON }) 45.0 else -5.0
+                TrainerEffect.Recover -> if (o.ownDiscard.any { d(it).category == Category.POKEMON || d(it).category == Category.ENERGY && d(it).basicEnergy }) 45.0 else -5.0
                 is TrainerEffect.RetreatReduction -> 50.0
                 is TrainerEffect.HpModifier, null -> -5.0
                 is TrainerEffect.DrawCards -> if (o.ownDeckCount > effect.count+1 && o.ownHand.size < 9) 100.0 else -5.0
