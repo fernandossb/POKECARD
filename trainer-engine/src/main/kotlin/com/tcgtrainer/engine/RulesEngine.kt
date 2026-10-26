@@ -661,9 +661,14 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                                 listOf(enemyActive.id), 0, 1))))
                     }
                 }
-                if (next.phase != Phase.RESOLVE_CHOICE && definition(card).abilities.any { it.onEvolveSwitch } && next.players[1-actor].bench.isNotEmpty()) {
+                val onEvolveSwitch = definition(card).abilities.firstOrNull { it.onEvolveSwitch }
+                val switchCandidates = onEvolveSwitch?.let { ability -> next.players[1-actor].bench.filter { pokemon ->
+                    ability.onEvolveSwitchOpponentBenchMaxRemainingHp <= 0 ||
+                        effects.effectiveHp(pokemon, next) - pokemon.damage <= ability.onEvolveSwitchOpponentBenchMaxRemainingHp
+                } }.orEmpty()
+                if (next.phase != Phase.RESOLVE_CHOICE && onEvolveSwitch != null && switchCandidates.isNotEmpty()) {
                     next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN, resolution = Resolution(listOf(ChoiceRequest(
-                        ChoiceKind.EVOLUTION_SWITCH, "Usar habilidade da evolução? Escolha um Pokémon do Banco adversário ou pule.", next.players[1-actor].bench.map { it.id }, 0, 1))))
+                        ChoiceKind.EVOLUTION_SWITCH, "Usar ${onEvolveSwitch.name}? Escolha um Pokémon do Banco adversário ou pule.", switchCandidates.map { it.id }, 0, 1))))
                 }
                 if (next.phase != Phase.RESOLVE_CHOICE) {
                     val spreadAbility = evolvedAbilities.firstOrNull { it.onEvolveDamageCounters }

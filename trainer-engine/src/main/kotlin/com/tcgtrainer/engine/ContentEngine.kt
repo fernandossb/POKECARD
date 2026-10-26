@@ -938,9 +938,14 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                 rules.effectiveAbilities(s, 1-rules.actingPlayer(s), opponentActive).none { it.preventOpponentEffects }) remainingChoices = listOf(ChoiceRequest(
                                 ChoiceKind.EVOLUTION_CONFUSE_ACTIVE, "Usar a habilidade da evolução para Confundir o Pokémon Ativo adversário?",
                                 listOf(opponentActive.id), 0, 1)) + remainingChoices
-                            if (evolvedAbilities.any { it.onEvolveSwitch } && s.players[1 - actor].bench.isNotEmpty()) remainingChoices = listOf(ChoiceRequest(
-                                ChoiceKind.EVOLUTION_SWITCH, "A habilidade da evolução pode trocar o Pokémon Ativo adversário. Escolha um Pokémon do Banco ou pule.",
-                                s.players[1 - actor].bench.map { it.id }, 0, 1)) + remainingChoices
+                            val onEvolveSwitch = evolvedAbilities.firstOrNull { it.onEvolveSwitch }
+                            val switchCandidates = onEvolveSwitch?.let { ability -> s.players[1 - actor].bench.filter { pokemon ->
+                                ability.onEvolveSwitchOpponentBenchMaxRemainingHp <= 0 ||
+                                    rules.effects.effectiveHp(pokemon, s) - pokemon.damage <= ability.onEvolveSwitchOpponentBenchMaxRemainingHp
+                            } }.orEmpty()
+                            if (onEvolveSwitch != null && switchCandidates.isNotEmpty()) remainingChoices = listOf(ChoiceRequest(
+                                ChoiceKind.EVOLUTION_SWITCH, "${onEvolveSwitch.name}: escolha um Pokémon do Banco adversário ou pule.",
+                                switchCandidates.map { it.id }, 0, 1)) + remainingChoices
                             val spread = evolvedAbilities.firstOrNull { it.onEvolveDamageCounters }
                             val damageTargets = s.players[1 - actor].pokemon().filter { target ->
                                 rules.effectiveAbilities(s, 1-rules.actingPlayer(s), target).none { it.preventOpponentEffects }

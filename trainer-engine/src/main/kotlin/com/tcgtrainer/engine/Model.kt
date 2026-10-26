@@ -218,6 +218,7 @@ import kotlinx.serialization.Serializable
     val id: String, val name: String, val text: String, val draw: Int = 0,
     val discardEnergyType: EnergyType? = null, val discardAttachedBasicEnergyType: EnergyType? = null, val requiresInPlay: String? = null,
     val requiresPreviousKnockout: Boolean = false, val onEvolveSwitch: Boolean = false,
+    val onEvolveSwitchOpponentBenchMaxRemainingHp: Int = 0,
     val attackDiscountPerOpponentPrize: Boolean = false, val usageKey: String = id,
     val requiresActive: Boolean = false, val onEvolveDraw: Int = 0, val onEvolveDamageCounters: Boolean = false,
     val discardHandCount: Int = 0, val drawTo: Int = 0, val damageReduction: Int = 0,
