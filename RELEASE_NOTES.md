@@ -1,3 +1,11 @@
+# POKECARD Brasil 5.99.36 — Treino com decks salvos e tela de decks mais responsiva
+
+- Decks salvos podem ser treinados sem possuir as cartas e mesmo fora da legalidade do formato selecionado, desde que tenham 14–60 cartas, um Pokémon Básico e efeitos implementados.
+- A partida normal continua exigindo 60 cartas válidas e todas as cópias na coleção.
+- Busca do catálogo, resumo de impressões e validação de decks agora rodam em segundo plano para evitar travamentos durante edição e navegação.
+- O botão de deck salvo agora se chama **TREINAR** e fica disponível para listas treináveis, inclusive listas de treino que não são válidas para torneio.
+- A versão local do aplicativo passa para `versionCode` 238 e `versionName` 5.99.36.
+
 # POKECARD Brasil 5.99.35 — Mais regras executáveis para o TCG Trainer
 
 - Expandido o motor com regras de ataques, habilidades, Apoiadores, Itens e Estádios, incluindo gatilhos de turno, condições de alvo, busca, cura, recuperação, movimento de Energia, bloqueios e Prêmios.

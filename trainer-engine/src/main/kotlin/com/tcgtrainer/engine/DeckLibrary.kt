@@ -84,28 +84,42 @@ object CardLibrary {
     }
 }
 
-data class DeckValidation(val errors: List<String>, val unsupported: List<String>) {
+data class DeckValidation(val errors: List<String>, val unsupported: List<String>, val trainingErrors: List<String> = errors) {
     val playable get() = errors.isEmpty() && unsupported.isEmpty()
+    /** A saved, supported list can be practiced without owning its cards or meeting format legality. */
+    val trainingReady get() = trainingErrors.isEmpty() && unsupported.isEmpty()
 }
 object DeckValidator {
     fun validate(deck: SavedDeck): DeckValidation {
-        val errors = mutableListOf<String>(); val unsupported = mutableListOf<String>()
-        if (deck.name.isBlank()) errors += "Dê um nome ao deck."
+        val errors = mutableListOf<String>(); val trainingErrors = mutableListOf<String>(); val unsupported = mutableListOf<String>()
+        if (deck.name.isBlank()) { errors += "Dê um nome ao deck."; trainingErrors += "Dê um nome ao deck." }
         if (deck.format == DeckFormat.STANDARD && LocalDate.now().isAfter(CardLibrary.policyValidThrough)) errors += "A política do Padrão precisa de revisão para esta temporada. Use Treino livre enquanto isso."
-        if (deck.counts.values.any { it <= 0 }) errors += "Quantidades devem ser positivas."
-        if (deck.counts.values.sum() !in 14..60) errors += "Para treinar, use de 14 a 60 cartas (${deck.counts.values.sum()}/60)."
-        val known = deck.counts.mapNotNull { (id, n) -> CardLibrary.byId[id]?.let { it to n } ?: run { errors += "Carta desconhecida: $id"; null } }
-        if (known.none { it.first.category == Category.POKEMON && it.first.stage == Stage.BASIC }) errors += "Inclua pelo menos um Pokémon Básico."
-        known.filter { !it.first.basicEnergy }.groupBy { it.first.copyKey }.forEach { (_, copies) ->
-            if (copies.sumOf { it.second } > 4) errors += "Máximo de 4 cópias pelo nome: ${copies.first().first.name}."
+        if (deck.counts.values.any { it <= 0 }) { errors += "Quantidades devem ser positivas."; trainingErrors += "Quantidades devem ser positivas." }
+        if (deck.counts.values.sum() !in 14..60) {
+            val message = "Para treinar, use de 14 a 60 cartas (${deck.counts.values.sum()}/60)."
+            errors += message; trainingErrors += message
         }
-        if (known.sumOf { (card, n) -> if (card.aceSpec) n else 0 } > 1) errors += "Apenas 1 ACE SPEC por deck."
+        val known = deck.counts.mapNotNull { (id, n) -> CardLibrary.byId[id]?.let { it to n } ?: run {
+            val message = "Carta desconhecida: $id"; errors += message; trainingErrors += message; null
+        } }
+        if (known.none { it.first.category == Category.POKEMON && it.first.stage == Stage.BASIC }) {
+            val message = "Inclua pelo menos um Pokémon Básico."; errors += message; trainingErrors += message
+        }
+        known.filter { !it.first.basicEnergy }.groupBy { it.first.copyKey }.forEach { (_, copies) ->
+            if (copies.sumOf { it.second } > 4) {
+                val message = "Máximo de 4 cópias pelo nome: ${copies.first().first.name}."
+                errors += message; trainingErrors += message
+            }
+        }
+        if (known.sumOf { (card, n) -> if (card.aceSpec) n else 0 } > 1) {
+            val message = "Apenas 1 ACE SPEC por deck."; errors += message; trainingErrors += message
+        }
         known.forEach { (card, _) ->
             if (deck.format == DeckFormat.STANDARD && !card.standard) errors += "Fora do Padrão confirmado: ${card.name} (${card.id})."
             if (deck.format == DeckFormat.ACADEMY && Academy2022.decks.none { card.id in it.cards }) errors += "Não pertence à Academia 2022: ${card.name}. Use Treino livre para misturar."
             if (!card.implemented) unsupported += card.id
         }
-        return DeckValidation(errors.distinct(), unsupported.distinct())
+        return DeckValidation(errors.distinct(), unsupported.distinct(), trainingErrors.distinct())
     }
     fun validate(deck: TrainingDeck) = validate(SavedDeck(deck.id, deck.name, deck.format, deck.cards.groupingBy { it }.eachCount()))
 }

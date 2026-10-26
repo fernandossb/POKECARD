@@ -94,9 +94,12 @@ import kotlinx.coroutines.withContext
     var options by remember { mutableStateOf(false) }
     var cpuDeckId by remember { mutableStateOf("random") }
     val chosen = availableDecks.firstOrNull { it.id == selectedDeck } ?: availableDecks.first()
+    val chosenValidation by produceState<DeckValidation?>(initialValue = null, chosen) {
+        value = withContext(Dispatchers.Default) { DeckValidator.validate(chosen) }
+    }
     val cpuDeckOptions by produceState(initialValue = availableDecks.filter { it.cards.size == 60 }, availableDecks, chosen.format, training) {
         value = withContext(Dispatchers.Default) {
-            val fullDecks = availableDecks.filter { it.cards.size == 60 }
+            val fullDecks = availableDecks.filter { it.cards.size == 60 && DeckValidator.validate(it).playable }
             if (!training && chosen.format == DeckFormat.STANDARD) fullDecks.filter { cpu ->
                 DeckValidator.validate(SavedDeck(cpu.id, cpu.name, DeckFormat.STANDARD, cpu.cards.groupingBy { it }.eachCount())).playable
             } else fullDecks
@@ -153,9 +156,9 @@ import kotlinx.coroutines.withContext
         }
         TextButton(onClick = { options = !options }, contentPadding = PaddingValues(0.dp)) { Text("${if (options) "−" else "+"} OPÇÕES DA PARTIDA · SEED $seed", fontSize = 10.sp) }
         if (options) OutlinedTextField(seed, { seed = it }, label = { Text("Seed · abertura reproduzível") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        Button(onClick = { vm.start(seed.toLong(), if (training) Mode.TRAINING else Mode.MATCH, selectedDeck, cpuDeckId); seed = java.security.SecureRandom().nextLong().toString() }, enabled = !ui.busy && seed.toLongOrNull() != null && (training || (vm.owned.allows(chosen.cards) && chosen.cards.size == 60 )), modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(12.dp)) { Text(if (ui.busy) "PREPARANDO PARTIDA…" else "JOGAR CONTRA A MÁQUINA", fontWeight = FontWeight.Bold, letterSpacing = 1.sp) }
+        Button(onClick = { vm.start(seed.toLong(), if (training) Mode.TRAINING else Mode.MATCH, selectedDeck, cpuDeckId); seed = java.security.SecureRandom().nextLong().toString() }, enabled = !ui.busy && seed.toLongOrNull() != null && (training || (chosenValidation?.playable == true && vm.owned.allows(chosen.cards) && chosen.cards.size == 60)), modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(12.dp)) { Text(if (ui.busy) "PREPARANDO PARTIDA…" else "JOGAR CONTRA A MÁQUINA", fontWeight = FontWeight.Bold, letterSpacing = 1.sp) }
         OutlinedButton(onClick = vm::resume, enabled = ui.canContinue && !ui.busy, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(12.dp)) { Text("CONTINUAR PARTIDA") }
-        TextButton(onClick = { info("Jogo exclusivamente para você contra a máquina. Escolha seu baralho; a CPU sorteia um adversário a cada partida. Crie seus próprios decks em MEUS DECKS: escolha nome e formato, busque cartas e ajuste quantidades. Salve decks incompletos como rascunho. Só decks válidos, com efeitos implementados, aparecem para jogar.\n\nPadrão 2026 e Academia 2022 são categorias separadas. Treino livre permite misturar cartas implementadas. O catálogo inclui dados adicionais com textos EN, ainda sem implementação de todos os efeitos; artes extras precisam de internet no primeiro acesso. As cartas originais têm artes offline; as cartas adicionais carregam as artes pela internet.\n\nA CPU usa as mesmas regras e não vê sua mão, os Prêmios ocultos ou a ordem dos decks.") }, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("COMO JOGAR", fontSize = 11.sp) }
+        TextButton(onClick = { info("Jogo exclusivamente para você contra a máquina. Crie e salve decks em MEUS DECKS. Toque em TREINAR para usar qualquer lista compatível, mesmo sem possuir as cartas e mesmo que ela não esteja legal no formato selecionado. O treino aceita listas de 14 a 60 cartas; partidas normais exigem 60 cartas válidas e posse completa.\n\nCartas sem efeitos implementados continuam como rascunhos. Padrão 2026 e Academia 2022 são categorias separadas. Treino livre permite misturar cartas implementadas. A CPU escolhe um deck válido e não vê sua mão, Prêmios ocultos ou a ordem dos decks.") }, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("COMO JOGAR", fontSize = 11.sp) }
         Text("1 JOGADOR × MÁQUINA  ·  PARTIDAS OFFLINE", Modifier.fillMaxWidth(), color = Muted, fontSize = 9.sp)
         ui.message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     }

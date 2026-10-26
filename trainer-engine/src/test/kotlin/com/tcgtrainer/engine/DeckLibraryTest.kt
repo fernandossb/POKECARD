@@ -32,6 +32,19 @@ class DeckLibraryTest {
         assertTrue(DeckValidator.validate(ready).playable)
         assertEquals(60, ready.playableDeck().cards.size)
     }
+    @Test fun `saved format-ineligible list can still be trained without owned copies`() {
+        val practice = saved("swsh4-43" to 1, "swsh12.5-155" to 13).copy(format = DeckFormat.STANDARD)
+        val validation = DeckValidator.validate(practice)
+        assertFalse(validation.playable)
+        assertTrue(validation.trainingReady)
+        val owned = OwnedCollection(emptyMap(), available = true)
+        assertFalse(owned.allows(practice.cards()))
+
+        val opponent = TrainingDecks.all.first { it.cards.size == 60 }
+        val state = RulesEngine(TrainerCatalog).newGame(99, listOf(practice.cards(), opponent.cards), Mode.TRAINING)
+        assertEquals(14, state.players.first().hand.size + state.players.first().deck.size)
+        assertEquals(Mode.TRAINING, state.mode)
+    }
     @Test fun `copy limits combine equivalent printed names and exempt only basic Energy`() {
         val copies = saved("sv02-172" to 3, "swsh2-154" to 2, "me01-076" to 1, "sv01-258" to 54)
         assertTrue(DeckValidator.validate(copies).errors.any { it.contains("4 cópias") })
