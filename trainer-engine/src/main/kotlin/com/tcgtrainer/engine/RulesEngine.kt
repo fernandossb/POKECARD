@@ -1560,6 +1560,13 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                             listOf(attacker.id), 0, 1)
                     }
                 }
+                if (Effect.OptionalDiscardOwnDeckTop in attack.effects) {
+                    next.players[actor].deck.firstOrNull()?.let { topCard ->
+                        choices += ChoiceRequest(ChoiceKind.ATTACK_OPTIONAL_DISCARD_TOP_CARD,
+                            "Olhe a carta do topo do seu deck (${definition(topCard).name}). Você pode descartá-la.",
+                            listOf(topCard.id), 0, 1, visibleCards = listOf(topCard.id))
+                    }
+                }
                 attack.effects.filterIsInstance<Effect.SwitchOwn>().forEach { effect ->
                     val bench = next.players[actor].bench
                     if (bench.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.SWITCH_OWN,

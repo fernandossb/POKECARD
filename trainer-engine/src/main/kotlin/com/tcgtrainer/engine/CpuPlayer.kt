@@ -203,6 +203,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 ChoiceKind.OPPONENT_SHUFFLES_OWN_HAND -> -keepValue(checkNotNull(card(id)))
                 ChoiceKind.OPPONENT_DISCARDS_OWN_HAND -> 10.0 - keepValue(checkNotNull(card(id)))
                 ChoiceKind.ATTACK_CHOOSE_OPPONENT_HAND_DISCARD -> keepValue(checkNotNull(card(id)))
+                ChoiceKind.ATTACK_OPTIONAL_DISCARD_TOP_CARD -> 25.0 - keepValue(checkNotNull(card(id)))
                 ChoiceKind.SWITCH_OPPONENT, ChoiceKind.EVOLUTION_SWITCH -> active?.let { attackValue(it, pokemon(id)) } ?: 0.0
                 ChoiceKind.EVOLUTION_CONFUSE_ACTIVE -> 80.0
                 ChoiceKind.SWITCH_OWN -> attackValue(pokemon(id)) - (active?.let(::attackValue) ?: 0.0) + potential(pokemon(id))*.05
@@ -289,7 +290,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 return GameAction.ChooseCards(best.sortedByDescending(::value).take(choice.max))
             }
             val ranked = choice.candidates.sortedByDescending(::value)
-            val desired = if (choice.kind == ChoiceKind.SWITCH_OWN || choice.kind == ChoiceKind.EVOLUTION_SWITCH || choice.kind == ChoiceKind.ATTACK_OPTIONAL_RETURN_SELF)
+            val desired = if (choice.kind == ChoiceKind.SWITCH_OWN || choice.kind == ChoiceKind.EVOLUTION_SWITCH || choice.kind == ChoiceKind.ATTACK_OPTIONAL_RETURN_SELF || choice.kind == ChoiceKind.ATTACK_OPTIONAL_DISCARD_TOP_CARD)
                 ranked.filter { value(it) > 0 }.size else ranked.size
             return GameAction.ChooseCards(ranked.take(desired.coerceIn(choice.min, choice.max.coerceAtMost(ranked.size))))
         }
