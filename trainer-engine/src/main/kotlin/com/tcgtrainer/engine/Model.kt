@@ -234,7 +234,7 @@ import kotlinx.serialization.Serializable
 @Serializable enum class CardFilter { POKEMON, BASIC_FIGHTING_OR_ENERGY, POKEMON_OR_ENERGY, ITEM, TOOL, SUPPORTER, STADIUM, BASIC_POKEMON, BASIC_ENERGY, ENERGY, DARKNESS_POKEMON, METAL_POKEMON, LIGHTNING_POKEMON, POKEMON_WITHOUT_RULE_BOX, MEGA_EVOLUTION_EX, TRAINER, TEAM_ROCKET_BASIC_POKEMON, TEAM_ROCKET_SUPPORTER }
 @Serializable sealed interface TrainerEffect {
     @Serializable data class Search(val filters: List<CardFilter>, val discardCost: Int = 0, val maxPerFilter: Int = 1, val allowFirstTurnIfStarting: Boolean = false, val differentEnergyTypes: Boolean = false) : TrainerEffect
-    @Serializable data class DrawTo(val size: Int, val discardCost: Int = 0) : TrainerEffect
+    @Serializable data class DrawTo(val size: Int, val discardCost: Int = 0, val teamRocketSize: Int? = null) : TrainerEffect
     @Serializable data class ShuffleHandDraw(val count: Int, val sixPrizeCount: Int) : TrainerEffect
     @Serializable data class Switch(val opponent: Boolean, val drawTo: Int = 0) : TrainerEffect
     @Serializable data class SwitchAndHealMovedEx(val healAmount: Int) : TrainerEffect

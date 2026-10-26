@@ -151,8 +151,9 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                     own.any { it.top.definitionId == def.id } -> 15.0
                     else -> 45.0
                 }
-                Category.TRAINER -> when (def.trainerEffect) {
-                    is TrainerEffect.ShuffleHandDraw, is TrainerEffect.DrawTo -> if (o.ownHand.size < 5) 75.0 else 20.0
+                Category.TRAINER -> when (val effect = def.trainerEffect) {
+                    is TrainerEffect.ShuffleHandDraw -> if (o.ownHand.size < 5) 75.0 else 20.0
+                    is TrainerEffect.DrawTo -> if (o.ownHand.size - 1 < (effect.teamRocketSize ?: effect.size)) 75.0 else 20.0
                     is TrainerEffect.DamageBoost -> 25.0
                     is TrainerEffect.HpModifier -> 0.0
                     else -> 40.0
@@ -457,7 +458,11 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
             is GameAction.PlayTrainer -> when (val effect = d(checkNotNull(card(a.cardId))).trainerEffect) {
                 is TrainerEffect.Search -> if (o.ownDeckCount == 0 || o.ownHand.size > 11) -5.0 else 110.0-effect.discardCost*12
                 is TrainerEffect.ShuffleHandDraw -> if (o.ownDeckCount <= 3 || o.ownHand.size > (if (o.ownPrizeCount == 6) effect.sixPrizeCount else effect.count)) -5.0 else 65.0-o.ownHand.size
-                is TrainerEffect.DrawTo -> if (o.ownHand.size >= effect.size || o.ownDeckCount <= 2) -5.0 else 80.0-o.ownHand.size
+                is TrainerEffect.DrawTo -> {
+                    val allTeamRocket = own.all { d(it.top).name.startsWith("Team Rocket's ") }
+                    val targetSize = if (effect.teamRocketSize != null && allTeamRocket) effect.teamRocketSize else effect.size
+                    if (o.ownHand.size - 1 >= targetSize || o.ownDeckCount <= 2) -5.0 else 80.0 - (o.ownHand.size - 1)
+                }
                 is TrainerEffect.Switch -> if (effect.opponent) {
                     val best = o.opponentField.drop(1).maxOfOrNull { active?.let { p -> attackValue(p, it) } ?: 0.0 } ?: 0.0
                     if (best > (active?.let(::attackValue) ?: 0.0)+10) 120.0+best else -5.0

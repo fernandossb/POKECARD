@@ -3,6 +3,8 @@ package com.tcgtrainer.engine
 /** Reusable card effect transactions. All choices are persisted, validated and replayable. */
 internal class ContentEngine(private val rules: RulesEngine) {
     private fun def(card: CardInstance) = rules.definition(card)
+    private fun allOwnPokemonAreTeamRocket(player: PlayerState) =
+        player.pokemon().all { def(it.top).name.startsWith("Team Rocket's ") }
     private fun recoverPokemonOrBasicEnergy(card: CardInstance, effect: TrainerEffect.RecoverPokemonAndBasicEnergy): Boolean {
         val definition = def(card)
         return !definition.cannotBeRecoveredFromDiscard && when (definition.category) {
@@ -112,7 +114,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     }
                     is TrainerEffect.DrawTo -> when {
                         p.hand.size-1 < effect.discardCost -> illegal("É preciso descartar ${effect.discardCost} outra carta.")
-                        p.hand.size-1-effect.discardCost >= effect.size || p.deck.isEmpty() -> illegal("Este efeito não compraria cartas.")
+                        p.hand.size-1-effect.discardCost >= (if (effect.teamRocketSize != null && allOwnPokemonAreTeamRocket(p)) effect.teamRocketSize else effect.size) || p.deck.isEmpty() -> illegal("Este efeito não compraria cartas.")
                         else -> Legality.Legal
                     }
                     is TrainerEffect.Switch -> if ((if (effect.opponent) s.players[1-s.currentPlayer] else p).bench.isEmpty()) illegal("Não há Pokémon no Banco para trocar.") else Legality.Legal
@@ -296,7 +298,10 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         val candidates = p.deck.filter { matches(it, filter) }
                         ChoiceRequest(ChoiceKind.SEARCH, "Buscar ${filterLabel(filter)} no deck (pode falhar a busca).", candidates.map { it.id }, 0, minOf(effect.maxPerFilter, candidates.size), visibleCards = candidates.map { it.id }, differentEnergyTypes = effect.differentEnergyTypes)
                     }, shuffleAfter = true))
-                    is TrainerEffect.DrawTo -> begin(Resolution(cost(effect.discardCost), drawTo = effect.size))
+                    is TrainerEffect.DrawTo -> {
+                        val drawTo = if (effect.teamRocketSize != null && allOwnPokemonAreTeamRocket(s.players[actor])) effect.teamRocketSize else effect.size
+                        begin(Resolution(cost(effect.discardCost), drawTo = drawTo))
+                    }
                     is TrainerEffect.ShuffleHandDraw -> {
                         update { it.copy(deck = it.deck + it.hand, hand = emptyList()) }; shuffle()
                         draw(if (p.prizes.size == 6) effect.sixPrizeCount else effect.count)

@@ -378,6 +378,13 @@ internal object CatalogRuleCompiler {
             }
             val trainerText = raw.s("effect").orEmpty()
             if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Supporter" &&
+                trainerText == "Draw cards until you have 5 cards in your hand. If all of your Pokémon in play are Team Rocket's Pokémon, draw cards until you have 8 cards in your hand instead.") {
+                return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
+                    category = Category.TRAINER, verified = true, source = source,
+                    artAsset = "remote:$image/high.webp", text = trainerText,
+                    trainerType = TrainerType.SUPPORTER, trainerEffect = TrainerEffect.DrawTo(size = 5, teamRocketSize = 8))
+            }
+            if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Supporter" &&
                 trainerText == "Put up to 4 in any combination of {F} Pokémon and Basic {F} Energy cards from your discard pile into your hand.") {
                 return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
                     category = Category.TRAINER, verified = true, source = source,
