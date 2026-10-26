@@ -148,6 +148,11 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     is TrainerEffect.HealPokemon -> if ((if (effect.activeOnly) listOfNotNull(p.active) else p.pokemon()).none { it.damage > 0 && (effect.pokemonType == null || def(it.top).type == effect.pokemonType) }) illegal("Não há dano para curar no alvo permitido.") else Legality.Legal
                     is TrainerEffect.RecoverEnergy -> if (p.discard.none { def(it).category == Category.ENERGY && def(it).basicEnergy }) illegal("Não há Energia Básica no descarte.") else Legality.Legal
                     is TrainerEffect.RecoverPokemonToDeck -> if (p.discard.none { def(it).category == Category.POKEMON }) illegal("Não há Pokémon no descarte.") else Legality.Legal
+                    is TrainerEffect.AttachBasicEnergyFromDiscardToBenchedType -> when {
+                        p.discard.none { def(it).category == Category.ENERGY && def(it).basicEnergy && def(it).type == effect.type } -> illegal("Não há Energia Básica do tipo necessário no descarte.")
+                        p.bench.none { def(it.top).type == effect.type } -> illegal("Não há Pokémon do tipo necessário no Banco.")
+                        else -> Legality.Legal
+                    }
                 }
             }
             GameAction.UseStadiumAbility -> {
@@ -454,6 +459,10 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         "Escolha até ${effect.max} Pokémon do seu descarte para embaralhar no deck.",
                         p.discard.filter { def(it).category == Category.POKEMON }.map { it.id }, 0,
                         minOf(effect.max, p.discard.count { def(it).category == Category.POKEMON }))), shuffleAfter = true))
+                    is TrainerEffect.AttachBasicEnergyFromDiscardToBenchedType -> begin(Resolution(listOf(ChoiceRequest(
+                        ChoiceKind.ENERGY_FROM_DISCARD, "Escolha uma Energia Básica Psíquica do descarte.",
+                        p.discard.filter { def(it).category == Category.ENERGY && def(it).basicEnergy && def(it).type == effect.type }.map { it.id },
+                        1, 1, energyType = effect.type, targetPokemonType = effect.type))))
                 }
             }
             is GameAction.UseStadiumAbility -> {
@@ -1291,8 +1300,9 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         events += GameEvent("ToolAttached", "${def(tool).name} ligada a $id.")
                     }
                     ChoiceKind.ENERGY_FROM_DISCARD -> if (ids.isNotEmpty()) {
-                        remainingChoices = listOf(ChoiceRequest(ChoiceKind.ENERGY_TARGET, "Escolha um Pokémon do seu Banco para esta Energia.", p.bench.map { it.id }, 1, 1,
-                            remaining = choice.remaining, selectedEnergy = ids.single(), energyType = choice.energyType)) + remainingChoices
+                        val targets = p.bench.filter { choice.targetPokemonType == null || def(it.top).type == choice.targetPokemonType }.map { it.id }
+                        remainingChoices = listOf(ChoiceRequest(ChoiceKind.ENERGY_TARGET, "Escolha um Pokémon do seu Banco para esta Energia.", targets, 1, 1,
+                            remaining = choice.remaining, selectedEnergy = ids.single(), energyType = choice.energyType, targetPokemonType = choice.targetPokemonType)) + remainingChoices
                     }
                     ChoiceKind.ENERGY_TARGET -> {
                         val energy = p.discard.first { it.id == choice.selectedEnergy }; val target = ids.single()

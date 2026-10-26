@@ -378,6 +378,14 @@ internal object CatalogRuleCompiler {
             }
             val trainerText = raw.s("effect").orEmpty()
             if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Item" &&
+                trainerText == "Attach a Basic {P} Energy card from your discard pile to 1 of your Benched {P} Pokémon.") {
+                return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
+                    category = Category.TRAINER, verified = true, source = source,
+                    artAsset = "remote:$image/high.webp", text = trainerText,
+                    trainerType = TrainerType.ITEM,
+                    trainerEffect = TrainerEffect.AttachBasicEnergyFromDiscardToBenchedType(EnergyType.PSYCHIC))
+            }
+            if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Item" &&
                 trainerText == "Shuffle up to 5 Pokémon from your discard pile into your deck.") {
                 return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
                     category = Category.TRAINER, verified = true, source = source,

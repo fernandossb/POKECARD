@@ -486,6 +486,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                     .maxOfOrNull { minOf(it.damage, effect.amount).toDouble() } ?: -5.0
                 is TrainerEffect.RecoverEnergy -> if (o.ownDiscard.any { d(it).category == Category.ENERGY && d(it).basicEnergy }) 45.0 else -5.0
                 is TrainerEffect.RecoverPokemonToDeck -> if (o.ownDiscard.any { d(it).category == Category.POKEMON }) 35.0 else -5.0
+                is TrainerEffect.AttachBasicEnergyFromDiscardToBenchedType -> if (own.any { d(it.top).type == effect.type } && o.ownDiscard.any { d(it).category == Category.ENERGY && d(it).basicEnergy && d(it).type == effect.type }) 75.0 else -5.0
             }
             GameAction.FinishSetup, GameAction.FinishBonusSetup, GameAction.EndTurn -> 0.0
             is GameAction.TakePrize -> 0.0 // All facedown slots have equal value.
