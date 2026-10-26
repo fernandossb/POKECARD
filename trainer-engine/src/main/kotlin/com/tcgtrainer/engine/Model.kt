@@ -31,6 +31,7 @@ import kotlinx.serialization.Serializable
     @Serializable data object IgnoreWeaknessResistance : Effect
     @Serializable data object CopyBenchedNsAttack : Effect
     @Serializable data object CopyOpponentActiveAttack : Effect
+    @Serializable data object CopyOpponentActiveTeraAttack : Effect
     @Serializable data object IgnoreResistance : Effect
     @Serializable data object IgnoreOpponentActiveEffects : Effect
     @Serializable data class TargetedDamage(val damage: Int, val benchedOnly: Boolean = false) : Effect

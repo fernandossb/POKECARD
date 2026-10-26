@@ -75,12 +75,15 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             definition(pokemon.top).attacks.filter { Effect.CopyBenchedNsAttack !in it.effects && effects.supported(it) }
                 .map { attack -> Triple(copyAttackKey(pokemon.id, attack.id), pokemon, attack) }
         }
-    private fun copiedOpponentActiveAttackOptions(state: GameState, player: Int): List<Triple<String, PokemonInstance, AttackDefinition>> =
-        state.players[1-player].active?.let { pokemon ->
+    private fun copiedOpponentActiveAttackOptions(state: GameState, player: Int): List<Triple<String, PokemonInstance, AttackDefinition>> {
+        val teraOnly = state.players[player].active?.let { active -> definition(active.top).attacks.any { Effect.CopyOpponentActiveTeraAttack in it.effects } } == true
+        return state.players[1-player].active?.let { pokemon ->
+            if (teraOnly && !definition(pokemon.top).isTera) return@let emptyList()
             definition(pokemon.top).attacks.filter {
                 Effect.CopyBenchedNsAttack !in it.effects && Effect.CopyOpponentActiveAttack !in it.effects && effects.supported(it)
             }.map { attack -> Triple("${pokemon.id}::oppcopy::${attack.id}", pokemon, attack) }
         }.orEmpty()
+    }
     private fun attackFor(state: GameState, active: PokemonInstance, attackId: String): AttackDefinition? {
         val printed = definition(active.top).attacks.find { it.id == attackId } ?: return null
         if (active.nextTurnAttackDamageBonusTurn == state.turn && active.nextTurnAttackDamageBonus > 0 &&

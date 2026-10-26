@@ -573,6 +573,7 @@ internal object CatalogRuleCompiler {
         val itemSearchToHand = text == "Search your deck for an Item card, reveal it, and put it into your hand. Then, shuffle your deck."
         val chooseOpponentAttackToRestrict = text == "Choose 1 of your opponent's Active Pokémon's attacks. During your opponent's next turn, that Pokémon can't use that attack."
         val copyBenchedNAttack = text == "Choose 1 of your Benched N's Pokémon's attacks and use it as this attack."
+        val copyOpponentActiveTeraAttack = text == "Choose 1 of your opponent's Active Tera Pokémon's attacks and use it as this attack."
         val copyOpponentActiveAttack = text == "Choose 1 of your opponent's Active Pokémon's attacks and use it as this attack."
         val attachAnyBasicEnergy = text == "You may attach any number of Basic Energy cards from your hand to your Pokémon in any way you like."
         val attachOneBasicEnergy = text == "Attach a Basic Energy card from your hand to 1 of your Pokémon."
@@ -896,6 +897,7 @@ internal object CatalogRuleCompiler {
                 chooseOpponentAttackToRestrict -> effects += Effect.ChooseOpponentAttackToRestrict
                 copyBenchedNAttack -> effects += Effect.CopyBenchedNsAttack
                 copyOpponentActiveAttack -> effects += Effect.CopyOpponentActiveAttack
+                copyOpponentActiveTeraAttack -> effects += listOf(Effect.CopyOpponentActiveAttack, Effect.CopyOpponentActiveTeraAttack)
                 healSelfByDamageDealt -> effects += Effect.HealSelfByDamageDealt
                 attachAnyBasicEnergy -> effects += Effect.AttachAnyBasicEnergyFromHand
                 attachOneBasicEnergy -> effects += Effect.AttachOneBasicEnergyFromHand
