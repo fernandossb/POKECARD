@@ -135,7 +135,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     is TrainerEffect.HealEachOwnPokemonOfType -> Legality.Legal
                     is TrainerEffect.MoveBenchedEnergyToActive -> Legality.Legal
                     TrainerEffect.SearchEachEvolutionStage -> if (p.deck.any { def(it).category == Category.POKEMON }) Legality.Legal else illegal("Não há Pokémon no deck para buscar.")
-                    is TrainerEffect.HealPokemon -> if ((if (effect.activeOnly) listOfNotNull(p.active) else p.pokemon()).none { it.damage > 0 }) illegal("Não há dano para curar no alvo permitido.") else Legality.Legal
+                    is TrainerEffect.HealPokemon -> if ((if (effect.activeOnly) listOfNotNull(p.active) else p.pokemon()).none { it.damage > 0 && (effect.pokemonType == null || def(it.top).type == effect.pokemonType) }) illegal("Não há dano para curar no alvo permitido.") else Legality.Legal
                     is TrainerEffect.RecoverEnergy -> if (p.discard.none { def(it).category == Category.ENERGY }) illegal("Não há Energia Básica no descarte.") else Legality.Legal
                 }
             }
@@ -379,7 +379,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         )), shuffleAfter = true))
                     }
                     is TrainerEffect.HealPokemon -> begin(Resolution(listOf(ChoiceRequest(ChoiceKind.HEAL_TARGET, "Curar até ${effect.amount} de dano.",
-                        (if (effect.activeOnly) listOfNotNull(p.active) else p.pokemon()).filter { it.damage > 0 }.map { it.id }, 1, 1, amount = effect.amount))))
+                        (if (effect.activeOnly) listOfNotNull(p.active) else p.pokemon()).filter { it.damage > 0 && (effect.pokemonType == null || def(it.top).type == effect.pokemonType) }.map { it.id }, 1, 1, amount = effect.amount))))
                     is TrainerEffect.RecoverEnergy -> begin(Resolution(listOf(ChoiceRequest(if (effect.toDeck) ChoiceKind.RECYCLE_ENERGY else ChoiceKind.RECOVER,
                         "Escolha até ${effect.max} Energias Básicas do descarte.", p.discard.filter { def(it).category == Category.ENERGY }.map { it.id }, 0,
                         minOf(effect.max, p.discard.count { def(it).category == Category.ENERGY }))), shuffleAfter = effect.toDeck))
