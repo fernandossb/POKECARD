@@ -313,6 +313,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 } ?: 0.0
                 ChoiceKind.ATTACK_ENERGY, ChoiceKind.ATTACK_HAND_ENERGY, ChoiceKind.ATTACK_DECK_BASIC_ENERGY_ANY -> -keepValue(checkNotNull(card(id)))
                 ChoiceKind.TRAINER_MOVE_BENCH_ENERGY -> 1.0
+                ChoiceKind.TRAINER_SEARCH_EVOLUTION_LINE -> setupValue(checkNotNull(card(id)))
                 ChoiceKind.ATTACK_OPPONENT_ENERGY -> o.opponentField.firstOrNull { source -> source.energies.any { it.id == id } }?.let { source ->
                     (if (source.id == o.opponentActiveId) 120.0 else 20.0) + source.energies.size
                 } ?: 0.0
@@ -350,6 +351,11 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 val groups = choice.candidates.groupBy { d(checkNotNull(card(it))).category }.values
                 val best = groups.maxByOrNull { group -> group.sortedByDescending(::value).take(choice.max).sumOf(::value) }.orEmpty()
                 return GameAction.ChooseCards(best.sortedByDescending(::value).take(choice.max))
+            }
+            if (choice.kind == ChoiceKind.TRAINER_SEARCH_EVOLUTION_LINE) {
+                val bestByStage = choice.candidates.mapNotNull(::card).groupBy { d(it).stage }
+                    .values.mapNotNull { it.maxByOrNull(::setupValue) }
+                return GameAction.ChooseCards(bestByStage.map { it.id })
             }
             if (choice.kind == ChoiceKind.ATTACK_REORDER_OPPONENT_TOP)
                 return GameAction.ChooseCards(choice.candidates.sortedBy { opponentDrawValue(checkNotNull(card(it))) })

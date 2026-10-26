@@ -51,6 +51,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                             target.first != rules.actingPlayer(s) && rules.attackTargetEffectsPrevented(s, target.first, target.second)
                     } -> illegal("Escolha apenas um Pokémon elegível, não protegido e diferente do atacante.")
                     choice.kind == ChoiceKind.TRAINER_MOVE_BENCH_ENERGY && (p.active == null || action.cardIds.any { id -> p.bench.none { pokemon -> pokemon.energies.any { it.id == id } } }) -> illegal("Escolha Energias ligadas aos seus Pokémon do Banco com um Pokémon Ativo em jogo.")
+                    choice.kind == ChoiceKind.TRAINER_SEARCH_EVOLUTION_LINE && (action.cardIds.any { id -> p.deck.none { it.id == id && def(it).category == Category.POKEMON } } || action.cardIds.mapNotNull { id -> p.deck.find { it.id == id }?.let { def(it).stage } }.distinct().size != action.cardIds.size) -> illegal("Escolha no máximo um Pokémon de cada estágio que ainda esteja no deck.")
                     choice.kind == ChoiceKind.PALAFIN_ZERO_TO_HERO && action.cardIds.isNotEmpty() && action.cardIds.any { id ->
                         p.deck.none { it.id == id && def(it).name == "Palafin ex" }
                     } -> illegal("Escolha um Palafin ex que ainda esteja no deck.")
@@ -107,6 +108,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     TrainerEffect.Briar -> if (s.players[1-actor].prizes.size == 2) Legality.Legal else illegal("Briar só pode ser jogada quando o oponente tem exatamente 2 Prêmios restantes.")
                     is TrainerEffect.HealEachOwnPokemonOfType -> Legality.Legal
                     is TrainerEffect.MoveBenchedEnergyToActive -> Legality.Legal
+                    TrainerEffect.SearchEachEvolutionStage -> if (p.deck.any { def(it).category == Category.POKEMON }) Legality.Legal else illegal("Não há Pokémon no deck para buscar.")
                     is TrainerEffect.HealPokemon -> if ((if (effect.activeOnly) listOfNotNull(p.active) else p.pokemon()).none { it.damage > 0 }) illegal("Não há dano para curar no alvo permitido.") else Legality.Legal
                     is TrainerEffect.RecoverEnergy -> if (p.discard.none { def(it).category == Category.ENERGY }) illegal("Não há Energia Básica no descarte.") else Legality.Legal
                 }
@@ -299,6 +301,14 @@ internal class ContentEngine(private val rules: RulesEngine) {
                             "Escolha até $max Energia(s) do Banco para mover ao seu Pokémon Ativo.",
                             energies.map { it.id }, 0, max
                         ))))
+                    }
+                    TrainerEffect.SearchEachEvolutionStage -> {
+                        val pokemon = p.deck.filter { def(it).category == Category.POKEMON }
+                        if (pokemon.isNotEmpty()) begin(Resolution(listOf(ChoiceRequest(
+                            ChoiceKind.TRAINER_SEARCH_EVOLUTION_LINE,
+                            "Dawn: escolha até 1 Pokémon Básico, 1 Estágio 1 e 1 Estágio 2.",
+                            pokemon.map { it.id }, 0, 3, visibleCards = pokemon.map { it.id }
+                        )), shuffleAfter = true))
                     }
                     is TrainerEffect.HealPokemon -> begin(Resolution(listOf(ChoiceRequest(ChoiceKind.HEAL_TARGET, "Curar até ${effect.amount} de dano.",
                         (if (effect.activeOnly) listOfNotNull(p.active) else p.pokemon()).filter { it.damage > 0 }.map { it.id }, 1, 1, amount = effect.amount))))
@@ -1000,6 +1010,13 @@ internal class ContentEngine(private val rules: RulesEngine) {
                             ) }
                             events += GameEvent("TrainerEnergyMoved", "Moveu ${moving.size} Energia(s) do Banco para o Pokémon Ativo.", moving.size)
                         }
+                    }
+                    ChoiceKind.TRAINER_SEARCH_EVOLUTION_LINE -> {
+                        val selected = p.deck.filter { it.id in ids && it.id in choice.candidates }
+                        if (selected.any { def(it).category != Category.POKEMON } || selected.groupBy { def(it).stage }.any { it.value.size > 1 })
+                            return illegal("Escolha no máximo um Pokémon de cada estágio.")
+                        update(actor) { it.copy(deck = it.deck - selected.toSet(), hand = it.hand + selected) }
+                        if (selected.isNotEmpty()) events += GameEvent("EvolutionLineSearched", "Buscou ${selected.joinToString { def(it).name }} do deck.", selected.size)
                     }
                     ChoiceKind.RECOVER -> {
                         val cards = p.discard.filter { it.id in ids }

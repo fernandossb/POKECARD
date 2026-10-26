@@ -333,6 +333,13 @@ internal object CatalogRuleCompiler {
         // Reuse only identical trainer/energy print semantics, including ACE SPEC rarity.
         if (raw.s("category") in listOf("Trainer", "Energy")) {
             if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Supporter" &&
+                raw.s("effect") == "Search your deck for a Basic Pokémon, a Stage 1 Pokémon, and a Stage 2 Pokémon, reveal them, and put them into your hand. Then, shuffle your deck.") {
+                return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
+                    category = Category.TRAINER, verified = true, source = source,
+                    artAsset = "remote:$image/high.webp", text = raw.s("effect").orEmpty(),
+                    trainerType = TrainerType.SUPPORTER, trainerEffect = TrainerEffect.SearchEachEvolutionStage)
+            }
+            if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Supporter" &&
                 raw.s("effect") == "Move up to 2 Energy from your Benched Pokémon to your Active Pokémon.") {
                 return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
                     category = Category.TRAINER, verified = true, source = source,
