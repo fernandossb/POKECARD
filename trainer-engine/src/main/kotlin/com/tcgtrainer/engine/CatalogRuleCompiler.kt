@@ -276,6 +276,9 @@ internal object CatalogRuleCompiler {
         if (text == "Once during your turn, if this Pokémon has any {D} Energy attached, you may move up to 3 damage counters from 1 of your Pokémon to 1 of your opponent's Pokémon.")
             return AbilityDefinition("$id-ability$index", name, text, usageKey = name,
                 moveDamageCountersMax = 3, moveDamageCountersEnergyType = EnergyType.DARKNESS)
+        if (text == "Once during your turn, if this Pokémon is in the Active Spot, you may discard a Basic {W} Energy card from your hand in order to use this Ability. Place 6 damage counters on 1 of your opponent's Pokémon.")
+            return AbilityDefinition("$id-ability$index", name, text, usageKey = name, requiresActive = true,
+                discardEnergyType = EnergyType.WATER, damageCounters = 6, damageTargets = 1)
         val equalHandBonus = Regex("If you have the same number of cards in your hand as your opponent, attacks used by this Pokémon do (\\d+) more damage to your opponent's Active Pokémon \\(before applying Weakness and Resistance\\)\\.").matchEntire(text)
         if (equalHandBonus != null) return AbilityDefinition("$id-ability$index", name, text,
             damageBonusIfHandsEqual = equalHandBonus.groupValues[1].toInt())
