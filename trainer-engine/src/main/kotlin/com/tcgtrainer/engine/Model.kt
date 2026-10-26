@@ -128,6 +128,7 @@ import kotlinx.serialization.Serializable
     @Serializable data class SearchPokemonToHand(val max: Int = 1) : Effect
     @Serializable data class SearchPokemonTypeAndStadiumToHand(val max: Int, val type: EnergyType) : Effect
     @Serializable data object SearchAnyCardToHand : Effect
+    @Serializable data class SearchUpToAnyCardsToHand(val max: Int) : Effect
     @Serializable data object SearchSupporterToHand : Effect
     @Serializable data object SearchItemToHand : Effect
     @Serializable data object ChooseOpponentAttackToRestrict : Effect

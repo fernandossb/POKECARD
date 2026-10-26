@@ -586,6 +586,7 @@ internal object CatalogRuleCompiler {
         val pokemonSearchUpToToHand = Regex("Search your deck for up to (\\d+) Pokémon, reveal them, and put them into your hand\\. Then, shuffle your deck\\.").matchEntire(text)
         val typePokemonAndStadiumSearch = Regex("Search your deck for up to (\\d+) in any combination of \\{([GRFLWPMD])\\} Pokémon and Stadium cards, reveal them, and put them into your hand\\. Then, shuffle your deck\\.").matchEntire(text)
         val anyCardSearchToHand = text == "You may search your deck for a card and put it into your hand. Then, shuffle your deck."
+        val anyCardsSearchToHand = Regex("You may search your deck for up to (\\d+) cards and put them into your hand\\. Then, shuffle your deck\\.").matchEntire(text)
         val supporterSearchToHand = text == "Search your deck for a Supporter card, reveal it, and put it into your hand. Then, shuffle your deck."
         val itemSearchToHand = text == "Search your deck for an Item card, reveal it, and put it into your hand. Then, shuffle your deck."
         val chooseOpponentAttackToRestrict = text == "Choose 1 of your opponent's Active Pokémon's attacks. During your opponent's next turn, that Pokémon can't use that attack."
@@ -914,6 +915,7 @@ internal object CatalogRuleCompiler {
                 pokemonSearchToHand != null || pokemonSearchUpToToHand != null -> effects += Effect.SearchPokemonToHand(pokemonSearchUpToToHand?.groupValues?.get(1)?.toInt() ?: 1)
                 typePokemonAndStadiumSearch != null -> effects += Effect.SearchPokemonTypeAndStadiumToHand(typePokemonAndStadiumSearch.groupValues[1].toInt(), symbolType(typePokemonAndStadiumSearch.groupValues[2]) ?: return null)
                 anyCardSearchToHand -> effects += Effect.SearchAnyCardToHand
+                anyCardsSearchToHand != null -> effects += Effect.SearchUpToAnyCardsToHand(anyCardsSearchToHand.groupValues[1].toInt())
                 supporterSearchToHand -> effects += Effect.SearchSupporterToHand
                 itemSearchToHand -> effects += Effect.SearchItemToHand
                 chooseOpponentAttackToRestrict -> effects += Effect.ChooseOpponentAttackToRestrict
