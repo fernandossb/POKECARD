@@ -154,6 +154,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 Category.TRAINER -> when (val effect = def.trainerEffect) {
                     is TrainerEffect.ShuffleHandDraw -> if (o.ownHand.size < 5) 75.0 else 20.0
                     is TrainerEffect.DrawTo -> if (o.ownHand.size - 1 < (effect.teamRocketSize ?: effect.size)) 75.0 else 20.0
+                    is TrainerEffect.DrawPerOpponentBenchedPokemon -> if (o.ownHand.size > effect.discardCost && o.opponentField.size > 1) 75.0 else 20.0
                     is TrainerEffect.DamageBoost -> 25.0
                     is TrainerEffect.HpModifier -> 0.0
                     else -> 40.0
@@ -462,6 +463,10 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                     val allTeamRocket = own.all { d(it.top).name.startsWith("Team Rocket's ") }
                     val targetSize = if (effect.teamRocketSize != null && allTeamRocket) effect.teamRocketSize else effect.size
                     if (o.ownHand.size - 1 >= targetSize || o.ownDeckCount <= 2) -5.0 else 80.0 - (o.ownHand.size - 1)
+                }
+                is TrainerEffect.DrawPerOpponentBenchedPokemon -> {
+                    val draws = minOf(o.opponentField.size - 1, o.ownDeckCount)
+                    if (o.ownHand.size > effect.discardCost && draws > 0) 80.0 + draws * 8.0 - effect.discardCost * 12.0 else -5.0
                 }
                 is TrainerEffect.Switch -> if (effect.opponent) {
                     val best = o.opponentField.drop(1).maxOfOrNull { active?.let { p -> attackValue(p, it) } ?: 0.0 } ?: 0.0

@@ -117,6 +117,8 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         p.hand.size-1-effect.discardCost >= (if (effect.teamRocketSize != null && allOwnPokemonAreTeamRocket(p)) effect.teamRocketSize else effect.size) || p.deck.isEmpty() -> illegal("Este efeito não compraria cartas.")
                         else -> Legality.Legal
                     }
+                    is TrainerEffect.DrawPerOpponentBenchedPokemon -> if (p.hand.size - 1 < effect.discardCost)
+                        illegal("É preciso descartar ${effect.discardCost} outra carta da mão.") else Legality.Legal
                     is TrainerEffect.Switch -> if ((if (effect.opponent) s.players[1-s.currentPlayer] else p).bench.isEmpty()) illegal("Não há Pokémon no Banco para trocar.") else Legality.Legal
                     is TrainerEffect.SwitchAndHealMovedEx -> if (p.bench.isEmpty()) illegal("Não há Pokémon no Banco para trocar.") else Legality.Legal
                     TrainerEffect.Recover -> if (p.discard.none { matches(it, CardFilter.POKEMON_OR_ENERGY) }) illegal("Não há Pokémon ou Energia Básica no descarte.") else Legality.Legal
@@ -302,6 +304,8 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         val drawTo = if (effect.teamRocketSize != null && allOwnPokemonAreTeamRocket(s.players[actor])) effect.teamRocketSize else effect.size
                         begin(Resolution(cost(effect.discardCost), drawTo = drawTo))
                     }
+                    is TrainerEffect.DrawPerOpponentBenchedPokemon -> begin(Resolution(
+                        cost(effect.discardCost), drawCount = s.players[1-actor].bench.size))
                     is TrainerEffect.ShuffleHandDraw -> {
                         update { it.copy(deck = it.deck + it.hand, hand = emptyList()) }; shuffle()
                         draw(if (p.prizes.size == 6) effect.sixPrizeCount else effect.count)
