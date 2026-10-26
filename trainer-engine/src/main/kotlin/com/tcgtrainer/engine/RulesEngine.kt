@@ -21,6 +21,12 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             definition(pokemon.top).attacks.filter { Effect.CopyBenchedNsAttack !in it.effects && effects.supported(it) }
                 .map { attack -> Triple(copyAttackKey(pokemon.id, attack.id), pokemon, attack) }
         }
+    private fun copiedOpponentActiveAttackOptions(state: GameState, player: Int): List<Triple<String, PokemonInstance, AttackDefinition>> =
+        state.players[1-player].active?.let { pokemon ->
+            definition(pokemon.top).attacks.filter {
+                Effect.CopyBenchedNsAttack !in it.effects && Effect.CopyOpponentActiveAttack !in it.effects && effects.supported(it)
+            }.map { attack -> Triple("${pokemon.id}::oppcopy::${attack.id}", pokemon, attack) }
+        }.orEmpty()
     private fun attackFor(state: GameState, active: PokemonInstance, attackId: String): AttackDefinition? {
         val printed = definition(active.top).attacks.find { it.id == attackId } ?: return null
         val optionalEnergyBonus = printed.effects.filterIsInstance<Effect.OptionalReturnWaterEnergyDamageBonus>().firstOrNull()
@@ -128,6 +134,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     Effect.RestrictIfSecondPlayerFirstTurn in attack.effects && state.turn == 2 && state.currentPlayer != state.startingPlayer -> reason("Quem começa em segundo lugar não pode usar este ataque no seu primeiro turno.")
                     SpecialCondition.PARALYZED in active.conditions || SpecialCondition.ASLEEP in active.conditions -> reason("Este Pokémon não pode atacar enquanto está Paralisado ou Adormecido.")
                     Effect.CopyBenchedNsAttack in printedAttack.effects && copiedAttackOptions(state, state.currentPlayer).isEmpty() -> reason("Não há ataques suportados de Pokémon de N no seu Banco para copiar.")
+                    Effect.CopyOpponentActiveAttack in printedAttack.effects && copiedOpponentActiveAttackOptions(state, state.currentPlayer).isEmpty() -> reason("O Pokémon Ativo adversário não tem ataques compatíveis para copiar.")
                     rocketRequirement > rocketCount -> reason("Este Pokémon só pode atacar com pelo menos $rocketRequirement Pokémon da Equipe Rocket em jogo.")
                     !effects.supported(attack) -> reason("Efeito ainda não suportado; ataque bloqueado.")
                     active.restrictions.any { it.blockedTurn == state.turn && (it.attackId == null || it.attackId == action.attackId) } -> reason("Este Pokémon não pode usar este ataque neste turno devido ao seu ataque anterior.")
@@ -335,6 +342,18 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     afterResolution = ResolutionEnd.MAIN,
                     history = state.history + ActionRecord(actor, state.turn, action, listOf(event))), Legality.Legal, listOf(event))
             }
+            if (Effect.CopyOpponentActiveAttack in printed.effects && state.pendingCopiedAttackId != action.attackId) {
+                val options = copiedOpponentActiveAttackOptions(state, actor)
+                val labels = options.associate { (key, pokemon, attack) ->
+                    key to "${definition(pokemon.top).name} — ${attack.name} (${attack.cost.joinToString(" + ") { it.name }})"
+                }
+                val request = ChoiceRequest(ChoiceKind.ATTACK_COPY_OPPONENT_ACTIVE,
+                    "Escolha um ataque do Pokémon Ativo adversário.", options.map { it.first }, 1, 1, optionLabels = labels)
+                val event = GameEvent("OpponentAttackCopyChoiceOpened", "Escolha um ataque do Pokémon Ativo adversário antes de resolver o ataque copiado.")
+                return Transition(state.copy(phase = Phase.RESOLVE_CHOICE, resolution = Resolution(listOf(request)),
+                    afterResolution = ResolutionEnd.MAIN,
+                    history = state.history + ActionRecord(actor, state.turn, action, listOf(event))), Legality.Legal, listOf(event))
+            }
         }
         if (action is GameAction.ChooseCards && state.resolution?.choices?.firstOrNull()?.kind == ChoiceKind.OPTIONAL_ATTACK_ENERGY_BONUS) {
             val active = state.players[actor].active
@@ -369,6 +388,18 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             val attackId = state.players[actor].active?.let { active ->
                 definition(active.top).attacks.firstOrNull { Effect.CopyBenchedNsAttack in it.effects }?.id
             } ?: return Transition(state, Legality.Illegal("Night Joker não está mais disponível."))
+            val prepared = state.copy(phase = Phase.MAIN, resolution = null,
+                pendingCopiedAttackId = attackId, pendingCopiedAttack = option.third)
+            return apply(prepared, GameAction.Attack(attackId))
+        }
+        if (action is GameAction.ChooseCards && state.resolution?.choices?.firstOrNull()?.kind == ChoiceKind.ATTACK_COPY_OPPONENT_ACTIVE) {
+            val key = action.cardIds.singleOrNull()
+                ?: return Transition(state, Legality.Illegal("Escolha exatamente um ataque adversário."))
+            val option = copiedOpponentActiveAttackOptions(state, actor).firstOrNull { it.first == key }
+                ?: return Transition(state, Legality.Illegal("O ataque selecionado deixou de estar disponível."))
+            val attackId = state.players[actor].active?.let { active ->
+                definition(active.top).attacks.firstOrNull { Effect.CopyOpponentActiveAttack in it.effects }?.id
+            } ?: return Transition(state, Legality.Illegal("O ataque copiador não está mais disponível."))
             val prepared = state.copy(phase = Phase.MAIN, resolution = null,
                 pendingCopiedAttackId = attackId, pendingCopiedAttack = option.third)
             return apply(prepared, GameAction.Attack(attackId))

@@ -206,7 +206,7 @@ class EffectEngine(private val catalog: CardCatalog) {
         Effect.MoveOpponentDamageCounters, Effect.MoveOwnBenchDamageCountersToOpponent, Effect.MoveEnergyBetweenOpponentPokemon,
         is Effect.SearchPokemonMatchingAttachedBasicEnergy,
         Effect.AttachAnyBasicEnergyFromHand, Effect.AttachOneBasicEnergyFromHand, Effect.ShuffleOwnBenchedPokemonIntoDeck, Effect.DevolveOpponentActive, Effect.DiscardStadium, Effect.ReturnSelfAndAttachmentsToHand, is Effect.AttachBasicEnergyFromDeckAny, is Effect.AttachBasicEnergyFromDiscardAny, Effect.CoinKnockOutBasic,
-        Effect.PreventAttackDamageNextTurnOnHeads, Effect.CopyBenchedNsAttack, is Effect.OptionalReturnWaterEnergyDamageBonus,
+        Effect.PreventAttackDamageNextTurnOnHeads, Effect.CopyBenchedNsAttack, Effect.CopyOpponentActiveAttack, is Effect.OptionalReturnWaterEnergyDamageBonus,
         is Effect.MoveEnergyToBench, Effect.MoveAllEnergyToBench, Effect.ReturnAttachedEnergyToHand, is Effect.DiscardRandomOpponentHand, is Effect.ShuffleRandomOpponentHand, is Effect.DiscardOpponentDeck, Effect.DiscardOwnDeckTop, Effect.RevealOpponentHand, is Effect.DelayedDefendingDamageCounters -> true
         is Effect.DiscardBenchEnergyDamage -> true
         is Effect.Heal -> true
