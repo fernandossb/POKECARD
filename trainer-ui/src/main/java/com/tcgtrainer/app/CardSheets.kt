@@ -108,7 +108,14 @@ import com.tcgtrainer.engine.*
             if (choice.candidates.isEmpty()) Text("Não há cartas elegíveis. Confirme para continuar.", color = Muted)
             LazyVerticalGrid(columns = GridCells.Fixed(3), modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items((choice.visibleCards + choice.candidates).distinct(), key = { it }) { id ->
-                    candidate(id)?.let { card ->
+                    val optionLabel = choice.optionLabels[id]
+                    if (optionLabel != null) {
+                        Box(Modifier.fillMaxWidth().border(if (id in selected) 2.dp else 1.dp, if (id in selected) Aqua else Color(0xFF3A4D65), RoundedCornerShape(8.dp))
+                            .clickable(enabled = !busy && id in choice.candidates) { selected = if (id in selected) selected-id else listOf(id) }
+                            .padding(10.dp), contentAlignment = Alignment.CenterStart) {
+                            Text(optionLabel, color = if (id in selected) Aqua else Color.White, fontSize = 12.sp)
+                        }
+                    } else candidate(id)?.let { card ->
                         Column(Modifier.border(if (id in selected) 3.dp else 1.dp, if (id in selected) Aqua else Color(0xFF3A4D65), RoundedCornerShape(8.dp)).clickable(enabled = !busy && id in choice.candidates) {
                             selected = if (id in selected) selected-id else if (choice.max == 1) listOf(id) else if (selected.size < choice.max) selected+id else selected
                         }.padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {

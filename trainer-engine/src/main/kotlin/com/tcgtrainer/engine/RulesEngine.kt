@@ -15,6 +15,22 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             CatalogRuleCompiler.compileAbility(card.definitionId, index, item.jsonObject)?.name
         }
     }
+    private fun copyAttackKey(pokemonId: String, attackId: String) = "$pokemonId::copy::$attackId"
+    private fun copiedAttackOptions(state: GameState, player: Int): List<Triple<String, PokemonInstance, AttackDefinition>> =
+        state.players[player].bench.filter { definition(it.top).name.startsWith("N's ") }.flatMap { pokemon ->
+            definition(pokemon.top).attacks.filter { Effect.CopyBenchedNsAttack !in it.effects && effects.supported(it) }
+                .map { attack -> Triple(copyAttackKey(pokemon.id, attack.id), pokemon, attack) }
+        }
+    private fun attackFor(state: GameState, active: PokemonInstance, attackId: String): AttackDefinition? {
+        val printed = definition(active.top).attacks.find { it.id == attackId } ?: return null
+        if (state.pendingCopiedAttackId == attackId && state.pendingCopiedAttack != null)
+            return printed.copy(effects = state.pendingCopiedAttack.effects, text = state.pendingCopiedAttack.text)
+        if (Effect.CopyBenchedNsAttack in printed.effects) {
+            val copied = copiedAttackOptions(state, state.currentPlayer).firstOrNull()?.third ?: return printed
+            return printed.copy(effects = copied.effects, text = copied.text)
+        }
+        return printed
+    }
 
     fun newGame(seed: Long, decks: List<List<String>> = listOf(TestCatalog.deck(), TestCatalog.deck()), mode: Mode = Mode.TRAINING): GameState {
         require(decks.size == 2 && decks.all { if (mode == Mode.TRAINING) it.size in 14..60 else it.size == 60 }) { "São necessários dois decks de 60 cartas." }
@@ -96,13 +112,15 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             }
             is GameAction.Attack -> {
                 val active = p.active ?: return reason("Não há Pokémon Ativo.")
-                val attack = definition(active.top).attacks.find { it.id == action.attackId } ?: return reason("Ataque inexistente.")
+                val attack = attackFor(state, active, action.attackId) ?: return reason("Ataque inexistente.")
+                val printedAttack = definition(active.top).attacks.first { it.id == action.attackId }
                 val rocketRequirement = definition(active.top).abilities.maxOfOrNull { it.requiresTeamRocketPokemonCount } ?: 0
                 val rocketCount = p.pokemon().count { definition(it.top).name.startsWith("Team Rocket's ") }
                 when {
                     state.turn == 1 && !(state.currentPlayer == state.startingPlayer && Effect.MayAttackFirstTurnIfStarting in attack.effects) -> reason("Quem começa não pode atacar no primeiro turno.")
                     Effect.RestrictIfSecondPlayerFirstTurn in attack.effects && state.turn == 2 && state.currentPlayer != state.startingPlayer -> reason("Quem começa em segundo lugar não pode usar este ataque no seu primeiro turno.")
                     SpecialCondition.PARALYZED in active.conditions || SpecialCondition.ASLEEP in active.conditions -> reason("Este Pokémon não pode atacar enquanto está Paralisado ou Adormecido.")
+                    Effect.CopyBenchedNsAttack in printedAttack.effects && copiedAttackOptions(state, state.currentPlayer).isEmpty() -> reason("Não há ataques suportados de Pokémon de N no seu Banco para copiar.")
                     rocketRequirement > rocketCount -> reason("Este Pokémon só pode atacar com pelo menos $rocketRequirement Pokémon da Equipe Rocket em jogo.")
                     !effects.supported(attack) -> reason("Efeito ainda não suportado; ataque bloqueado.")
                     active.restrictions.any { it.blockedTurn == state.turn && (it.attackId == null || it.attackId == action.attackId) } -> reason("Este Pokémon não pode usar este ataque neste turno devido ao seu ataque anterior.")
@@ -173,7 +191,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             definition(pokemon.top).abilities.any { it.changeOpponentNsPokemonWeaknessToPsychic }
         } && definition(rawDefender.top).name.startsWith("N's ")
         val defender = if (opponentNWeaknessChanged) rawDefender.copy(weaknessOverride = EnergyType.PSYCHIC) else rawDefender
-        val attack = definition(attacker.top).attacks.find { it.id == attackId } ?: return null
+        val attack = attackFor(state, attacker, attackId) ?: return null
         if (Effect.PullSelectedBenchBeforeDamage in attack.effects && targetId != null) {
             val pulled = opponent.bench.find { it.id == targetId } ?: return null
             val oldActive = opponent.active ?: return null
@@ -281,6 +299,34 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         val legality = validate(state, action)
         if (legality is Legality.Illegal) return Transition(state, legality)
         val actor = actingPlayer(state)
+        if (action is GameAction.Attack) {
+            val active = state.players[actor].active!!
+            val printed = definition(active.top).attacks.first { it.id == action.attackId }
+            if (Effect.CopyBenchedNsAttack in printed.effects && state.pendingCopiedAttackId != action.attackId) {
+                val options = copiedAttackOptions(state, actor)
+                val candidates = options.map { it.first }
+                val labels = options.associate { (key, pokemon, attack) ->
+                    key to "${definition(pokemon.top).name} — ${attack.name} (${attack.cost.joinToString(" + ") { it.name }})"
+                }
+                val request = ChoiceRequest(ChoiceKind.ATTACK_COPY_BENCHED_N,
+                    "Night Joker: escolha um ataque de um Pokémon de N no seu Banco.", candidates, 1, 1, optionLabels = labels)
+                val event = GameEvent("AttackCopyChoiceOpened", "Escolha um ataque de N no Banco antes de resolver Night Joker.")
+                return Transition(state.copy(phase = Phase.RESOLVE_CHOICE, resolution = Resolution(listOf(request)),
+                    afterResolution = ResolutionEnd.MAIN,
+                    history = state.history + ActionRecord(actor, state.turn, action, listOf(event))), Legality.Legal, listOf(event))
+            }
+        }
+        if (action is GameAction.ChooseCards && state.resolution?.choices?.firstOrNull()?.kind == ChoiceKind.ATTACK_COPY_BENCHED_N) {
+            val key = action.cardIds.single()
+            val option = copiedAttackOptions(state, actor).firstOrNull { it.first == key }
+                ?: return Transition(state, Legality.Illegal("O ataque selecionado deixou de estar disponível."))
+            val attackId = state.players[actor].active?.let { active ->
+                definition(active.top).attacks.firstOrNull { Effect.CopyBenchedNsAttack in it.effects }?.id
+            } ?: return Transition(state, Legality.Illegal("Night Joker não está mais disponível."))
+            val prepared = state.copy(phase = Phase.MAIN, resolution = null,
+                pendingCopiedAttackId = attackId, pendingCopiedAttack = option.third)
+            return apply(prepared, GameAction.Attack(attackId))
+        }
         var next = state
         val events = mutableListOf<GameEvent>()
         fun emit(type: String, message: String, amount: Int? = null) { events += GameEvent(type, message, amount) }
@@ -451,7 +497,8 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 emit("Retreated", "Recuou descartando ${paid.size} Energia(s).")
             }
             is GameAction.Attack -> {
-                val attack = definition(p.active!!.top).attacks.first { it.id == action.attackId }
+                val attack = attackFor(state, p.active!!, action.attackId)!!
+                if (state.pendingCopiedAttackId == action.attackId) next = next.copy(pendingCopiedAttackId = null, pendingCopiedAttack = null)
                 if (Effect.CannotRepeatAttackUntilLeavingActive in attack.effects) {
                     updatePokemon(p.active.id) { it.copy(attackIdsUsedWhileActive = it.attackIdsUsedWhileActive + action.attackId) }
                 }

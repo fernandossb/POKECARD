@@ -978,6 +978,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         update { it.copy(discard = it.discard - cards.toSet(), deck = it.deck + cards) }
                         events += GameEvent("EnergyRecycled", "Devolveu ${cards.size} Energia(s) ao deck.")
                     }
+                    ChoiceKind.ATTACK_COPY_BENCHED_N -> error("A escolha do ataque copiado deve ser consumida pelo RulesEngine antes do ContentEngine.")
                 }
                 s = s.copy(resolution = resolution.copy(choices = remainingChoices))
             }

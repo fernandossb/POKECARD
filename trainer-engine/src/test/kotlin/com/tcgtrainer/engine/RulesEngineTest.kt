@@ -2547,8 +2547,8 @@ class RulesEngineTest {
         // v0.5 adds deck identity/list metadata; v0.6 adds retreat-block state; v0.7 adds status and damage-reduction state.
         // v0.8 adds protection from all Basic Pokémon attacks; v0.9 adds timed weakness suppression.
         // v1.1 enables additional card rules that can change deterministic attack outcomes.
-        // v1.2 serializes Festival Lead bonus attack availability; v1.3 serializes Pokémon weakness overrides.
-        assertEquals("fbefe1a1c8051fe9adcd9238c4a2315b9be2670ae6ab59282f0fe14c78294844", digest)
+        // v1.2 serializes Festival Lead bonus attack availability; v1.3 weakness overrides; v1.4 copied-attack state.
+        assertEquals("5bafc9c091b3eaf27f4a9030863c028d527cb455beb4248cf3331cb90b656a97", digest)
     }
 
     @Test fun `Gothitelle Distorted Future shuffles opponent hand then draws three once per turn`() {
@@ -3012,5 +3012,46 @@ class RulesEngineTest {
             if (index == 1) player.copy(active = player.bench.first { it.id == "regular-bench" }, bench = player.bench.filterNot { it.id == "regular-bench" }) else player
         })
         assertEquals(30, rules.preview(regularBenchActive, psychicHit.id)!!.damage)
+    }
+
+    @Test fun `Night Joker asks for an N bench attack and resolves the selected attack as Zoroark`() {
+        val nightJoker = CatalogRuleCompiler.compileAttack("night-joker-test", 0, buildJsonObject {
+            put("name", "Night Joker")
+            put("effect", "Choose 1 of your Benched N's Pokémon's attacks and use it as this attack.")
+            put("damage", "0")
+            put("cost", buildJsonArray { add("Darkness"); add("Darkness") })
+        })!!
+        val zoroark = CardDefinition("night-joker-zoroark", "N's Zoroark ex", "Test", "1", category = Category.POKEMON,
+            hp = 280, type = EnergyType.DARKNESS, attacks = listOf(nightJoker))
+        val copiedAttack = AttackDefinition("copied-40", "Shadow Slash", emptyList(), listOf(Effect.Damage(40)))
+        val otherAttack = AttackDefinition("copied-90", "Dark Impact", emptyList(), listOf(Effect.Damage(90)))
+        val nPokemon = CardDefinition("night-joker-bench", "N's Zekrom", "Test", "2", category = Category.POKEMON,
+            hp = 130, type = EnergyType.LIGHTNING, attacks = listOf(copiedAttack, otherAttack))
+        val defender = CardDefinition("night-joker-defender", "Defender", "Test", "3", category = Category.POKEMON, hp = 220)
+        val darkness = CardDefinition("night-joker-darkness", "Darkness Energy", "Test", "4", category = Category.ENERGY,
+            type = EnergyType.DARKNESS, basicEnergy = true)
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            zoroark.id -> zoroark; nPokemon.id -> nPokemon; defender.id -> defender; darkness.id -> darkness
+            else -> TestCatalog.definitions[id] ?: TrainerCatalog.get(id)
+        } }
+        val rules = RulesEngine(catalog)
+        val original = main()
+        val start = original.copy(players = original.players.mapIndexed { index, player -> when (index) {
+            0 -> player.copy(active = PokemonInstance(listOf(card("night-joker", zoroark.id)),
+                energies = listOf(card("dark-a", darkness.id), card("dark-b", darkness.id)), enteredPlayTurn = 0),
+                bench = listOf(field("n-zekrom", nPokemon.id)))
+            else -> player.copy(active = field("night-defender", defender.id), bench = emptyList())
+        } })
+        val opened = rules.apply(start, GameAction.Attack(nightJoker.id))
+        assertEquals(Legality.Legal, opened.legality)
+        val choice = opened.state.resolution!!.choices.single()
+        assertEquals(ChoiceKind.ATTACK_COPY_BENCHED_N, choice.kind)
+        assertEquals(2, choice.candidates.size)
+        assertTrue(choice.optionLabels.values.any { it.contains("Shadow Slash") })
+        val selected = rules.apply(opened.state, GameAction.ChooseCards(listOf("n-zekrom::copy::${copiedAttack.id}")))
+        assertEquals(Legality.Legal, selected.legality)
+        assertEquals(40, selected.state.players[1].active!!.damage)
+        assertTrue(selected.events.any { it.type == "AttackDeclared" && it.message.startsWith("Night Joker") })
+        assertNull(selected.state.pendingCopiedAttack)
     }
 }

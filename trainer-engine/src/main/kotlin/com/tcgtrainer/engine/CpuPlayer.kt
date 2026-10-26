@@ -170,6 +170,12 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 ChoiceKind.ABILITY_SEARCH_TOP_CARD -> keepValue(checkNotNull(card(id)))
                 ChoiceKind.ATTACK_RECOVER_POKEMON -> 100.0 - keepValue(checkNotNull(card(id)))
                 ChoiceKind.ON_BENCH_DISCARD_OPPONENT_DECK_TOP -> 15.0
+                ChoiceKind.ATTACK_COPY_BENCHED_N -> {
+                    val split = id.split("::copy::", limit = 2)
+                    val source = own.firstOrNull { it.id == split[0] }
+                    val copied = source?.let { pokemon -> d(pokemon.top).attacks.firstOrNull { it.id == split.getOrNull(1) } }
+                    if (active == null || enemy == null || copied == null) 0.0 else damage(active, copied, enemy).toDouble()
+                }
                 ChoiceKind.ON_BENCH_SWITCH_AND_MOVE_ENERGY -> attackValue(pokemon(id)) - (active?.let(::attackValue) ?: 0.0) + potential(pokemon(id))*.05
                 ChoiceKind.ON_BENCH_MOVE_ENERGY -> {
                     val target = own.find { it.id == choice.sourcePokemonId }
