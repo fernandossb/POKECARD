@@ -60,6 +60,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     choice.kind == ChoiceKind.TRAINER_SEARCH_EVOLUTION_LINE && (action.cardIds.any { id -> p.deck.none { it.id == id && def(it).category == Category.POKEMON } } || action.cardIds.mapNotNull { id -> p.deck.find { it.id == id }?.let { def(it).stage } }.distinct().size != action.cardIds.size) -> illegal("Escolha no máximo um Pokémon de cada estágio que ainda esteja no deck.")
                     choice.kind == ChoiceKind.TRAINER_BASIC_POKEMON_TO_BENCH && action.cardIds.size > (5-p.bench.size).coerceAtLeast(0) -> illegal("O Banco não tem espaço para tantos Pokémon Básicos.")
                     choice.kind == ChoiceKind.TRAINER_BASIC_POKEMON_TO_BENCH && action.cardIds.any { id -> p.deck.none { it.id == id && def(it).category == Category.POKEMON && def(it).stage == Stage.BASIC && def(it).hp <= 70 } } -> illegal("Escolha apenas Pokémon Básicos de até 70 HP que ainda estejam no deck.")
+                    choice.kind == ChoiceKind.TRAINER_GWYNN_DISCARD && action.cardIds.any { id -> p.hand.none { it.id == id && def(it).category == Category.POKEMON && !def(it).hasRuleBox } } -> illegal("Gwynn só pode descartar Pokémon da mão sem Rule Box.")
                     choice.kind == ChoiceKind.TRAINER_WALLY_COMPASSION_TARGET && action.cardIds.any { id -> p.pokemon().none { it.id == id && isMegaEvolutionEx(def(it.top)) } } -> illegal("Escolha um Mega Evolution Pokémon ex seu que ainda esteja em jogo.")
                     choice.kind == ChoiceKind.TRAINER_N_DISCARD_ENERGY && action.cardIds.any { id -> p.discard.none { it.id == id && def(it).category == Category.ENERGY && def(it).basicEnergy } } -> illegal("Escolha uma Energia Básica ainda no descarte.")
                     choice.kind == ChoiceKind.TRAINER_N_DISCARD_ENERGY_TARGET && action.cardIds.any { id -> p.bench.none { it.id == id && def(it.top).name.startsWith("N's ") } } -> illegal("Escolha um Pokémon N's do seu Banco.")
@@ -132,6 +133,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     else Legality.Legal
                     TrainerEffect.AttachBasicEnergyFromDiscardToNBench -> Legality.Legal
                     is TrainerEffect.DiscardOpponentItemsFromHand -> Legality.Legal
+                    is TrainerEffect.DiscardHandPokemonAndDraw -> Legality.Legal
                     TrainerEffect.Briar -> if (s.players[1-actor].prizes.size == 2) Legality.Legal else illegal("Briar só pode ser jogada quando o oponente tem exatamente 2 Prêmios restantes.")
                     is TrainerEffect.HealEachOwnPokemonOfType -> Legality.Legal
                     is TrainerEffect.MoveBenchedEnergyToActive -> Legality.Legal
@@ -378,6 +380,15 @@ internal class ContentEngine(private val rules: RulesEngine) {
                             "Dawn: escolha até 1 Pokémon Básico, 1 Estágio 1 e 1 Estágio 2.",
                             pokemon.map { it.id }, 0, 3, visibleCards = pokemon.map { it.id }
                         )), shuffleAfter = true))
+                    }
+                    is TrainerEffect.DiscardHandPokemonAndDraw -> {
+                        val candidates = p.hand.filter { def(it).category == Category.POKEMON && !def(it).hasRuleBox }
+                        if (candidates.isNotEmpty()) begin(Resolution(listOf(ChoiceRequest(
+                            ChoiceKind.TRAINER_GWYNN_DISCARD,
+                            "Gwynn: escolha até ${minOf(effect.max, candidates.size)} Pokémon sem Rule Box para descartar; compre ${effect.drawPerCard} carta(s) por Pokémon.",
+                            candidates.map { it.id }, 0, minOf(effect.max, candidates.size), amount = effect.drawPerCard,
+                            visibleCards = candidates.map { it.id }
+                        ))))
                     }
                     is TrainerEffect.HealPokemon -> begin(Resolution(listOf(ChoiceRequest(ChoiceKind.HEAL_TARGET, "Curar até ${effect.amount} de dano.",
                         (if (effect.activeOnly) listOfNotNull(p.active) else p.pokemon()).filter { it.damage > 0 && (effect.pokemonType == null || def(it.top).type == effect.pokemonType) }.map { it.id }, 1, 1, amount = effect.amount))))
@@ -992,6 +1003,16 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         update { player -> player.copy(deck = player.deck - cards.toSet(),
                             bench = player.bench + cards.map { PokemonInstance(listOf(it), enteredPlayTurn = s.turn) }) }
                         events += GameEvent("PokemonSearchedToBench", "Buscou ${cards.size} Pokémon Básico(s) de até 70 HP e colocou no Banco.", cards.size)
+                    }
+                    ChoiceKind.TRAINER_GWYNN_DISCARD -> {
+                        val discarded = p.hand.filter { it.id in ids && it.id in choice.candidates &&
+                            def(it).category == Category.POKEMON && !def(it).hasRuleBox }
+                        val drawCount = minOf(discarded.size * choice.amount, p.deck.size)
+                        val drawn = p.deck.take(drawCount)
+                        update { it.copy(hand = it.hand - discarded.toSet() + drawn,
+                            discard = it.discard + discarded, deck = it.deck.drop(drawCount)) }
+                        events += GameEvent("GwynnPokemonDiscarded", "Descartou ${discarded.size} Pokémon sem Rule Box com Gwynn.", discarded.size)
+                        if (drawn.isNotEmpty()) events += GameEvent("CardsDrawn", "Comprou ${drawn.size} carta(s) por Gwynn.", drawn.size)
                     }
                     ChoiceKind.TRAINER_WALLY_COMPASSION_TARGET -> {
                         val targetId = ids.single()
