@@ -24,7 +24,8 @@ internal class ContentEngine(private val rules: RulesEngine) {
             CardFilter.SUPPORTER -> d.trainerType == TrainerType.SUPPORTER
             CardFilter.STADIUM -> d.trainerType == TrainerType.STADIUM
             CardFilter.BASIC_POKEMON -> d.category == Category.POKEMON && d.stage == Stage.BASIC
-            CardFilter.BASIC_ENERGY, CardFilter.ENERGY -> d.category == Category.ENERGY
+            CardFilter.BASIC_ENERGY -> d.category == Category.ENERGY && d.basicEnergy
+            CardFilter.ENERGY -> d.category == Category.ENERGY
             CardFilter.DARKNESS_POKEMON -> d.category == Category.POKEMON && d.type == EnergyType.DARKNESS
             CardFilter.METAL_POKEMON -> d.category == Category.POKEMON && d.type == EnergyType.METAL
             CardFilter.LIGHTNING_POKEMON -> d.category == Category.POKEMON && d.type == EnergyType.LIGHTNING
@@ -48,6 +49,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     choice.kind == ChoiceKind.ATTACK_OPTIONAL_PARALYSIS_DISCARD && action.cardIds.isNotEmpty() && action.cardIds.size != choice.max -> illegal("Escolha zero ou exatamente ${choice.max} Energias {L} para pagar o efeito opcional.")
                     choice.kind == ChoiceKind.EVOLUTION_DAMAGE_TARGETS && action.cardIds.isNotEmpty() && action.cardIds.size != 2 -> illegal("Biting Spree exige escolher exatamente 2 Pokémon, ou nenhum para pular.")
                     !choice.candidates.containsAll(action.cardIds) -> illegal("Alvo inválido para este efeito.")
+                    choice.differentEnergyTypes && action.cardIds.map { id -> def(p.deck.first { it.id == id }).type }.distinct().size != action.cardIds.size -> illegal("Escolha no máximo uma Energia Básica de cada tipo.")
                     choice.kind == ChoiceKind.EVOLUTION_OPPONENT_HAND_BASIC_TO_BENCH && action.cardIds.size > (5-p.bench.size).coerceAtLeast(0) -> illegal("O Banco adversário não tem espaço para tantas cartas.")
                     choice.kind == ChoiceKind.EVOLUTION_OPPONENT_HAND_BASIC_TO_BENCH && action.cardIds.any { id ->
                         s.players[1-rules.actingPlayer(s)].hand.none { it.id == id && def(it).category == Category.POKEMON && def(it).stage == Stage.BASIC }
@@ -282,7 +284,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                 when (effect) {
                     is TrainerEffect.Search -> begin(Resolution(cost(effect.discardCost) + effect.filters.map { filter ->
                         val candidates = p.deck.filter { matches(it, filter) }
-                        ChoiceRequest(ChoiceKind.SEARCH, "Buscar ${filterLabel(filter)} no deck (pode falhar a busca).", candidates.map { it.id }, 0, minOf(effect.maxPerFilter, candidates.size), visibleCards = candidates.map { it.id })
+                        ChoiceRequest(ChoiceKind.SEARCH, "Buscar ${filterLabel(filter)} no deck (pode falhar a busca).", candidates.map { it.id }, 0, minOf(effect.maxPerFilter, candidates.size), visibleCards = candidates.map { it.id }, differentEnergyTypes = effect.differentEnergyTypes)
                     }, shuffleAfter = true))
                     is TrainerEffect.DrawTo -> begin(Resolution(cost(effect.discardCost), drawTo = effect.size))
                     is TrainerEffect.ShuffleHandDraw -> {

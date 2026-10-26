@@ -374,6 +374,14 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
             }
             if (choice.kind == ChoiceKind.ATTACK_REORDER_OPPONENT_TOP)
                 return GameAction.ChooseCards(choice.candidates.sortedBy { opponentDrawValue(checkNotNull(card(it))) })
+            if (choice.differentEnergyTypes) {
+                val selectedTypes = mutableSetOf<EnergyType>()
+                val selected = choice.candidates.sortedByDescending(::value).filter { id ->
+                    val type = d(checkNotNull(card(id))).type
+                    selectedTypes.add(type)
+                }.take(choice.max)
+                return GameAction.ChooseCards(selected)
+            }
             val ranked = choice.candidates.sortedByDescending(::value)
             val desired = if (choice.kind == ChoiceKind.SWITCH_OWN || choice.kind == ChoiceKind.EVOLUTION_SWITCH || choice.kind == ChoiceKind.ATTACK_OPTIONAL_RETURN_SELF || choice.kind == ChoiceKind.ATTACK_OPTIONAL_DISCARD_TOP_CARD || choice.kind == ChoiceKind.PALAFIN_ZERO_TO_HERO)
                 ranked.filter { value(it) > 0 }.size else ranked.size
