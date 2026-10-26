@@ -59,6 +59,7 @@ import kotlinx.serialization.Serializable
     @Serializable data class AnyOwnBenchedPokemonDamagedBonus(val bonus: Int) : Effect
     @Serializable data class SameTypePokemonInPlayDamageBonus(val bonus: Int) : Effect
     @Serializable data class SameHandSizeDamageBonus(val bonus: Int) : Effect
+    @Serializable data class OwnHandEmptyDamageBonus(val bonus: Int) : Effect
     @Serializable data class OpponentExCountDamage(val perPokemon: Int) : Effect
     @Serializable data class OwnNamedBenchDamageCounterDamage(val namePrefix: String, val perCounter: Int) : Effect
     @Serializable data class OwnBenchTypeDamageCounterDamage(val type: EnergyType, val perCounter: Int) : Effect
