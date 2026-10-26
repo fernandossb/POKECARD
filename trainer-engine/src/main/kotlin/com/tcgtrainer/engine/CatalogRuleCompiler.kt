@@ -377,6 +377,14 @@ internal object CatalogRuleCompiler {
                     trainerEffect = TrainerEffect.HealEachOwnPokemonOfType(60, EnergyType.LIGHTNING))
             }
             val trainerText = raw.s("effect").orEmpty()
+            if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Supporter" &&
+                trainerText == "Put up to 3 in any combination of Pokémon that don't have a Rule Box and Basic Energy cards from your discard pile into your hand. (Pokémon ex, Pokémon V, etc. have Rule Boxes.)") {
+                return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
+                    category = Category.TRAINER, verified = true, source = source,
+                    artAsset = "remote:$image/high.webp", text = trainerText,
+                    trainerType = TrainerType.SUPPORTER,
+                    trainerEffect = TrainerEffect.RecoverPokemonAndBasicEnergy(max = 3, pokemonWithoutRuleBoxOnly = true))
+            }
             if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Item" &&
                 trainerText == "Put up to 5 in any combination of Pokémon and Basic Energy cards from your discard pile into your hand.") {
                 return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,

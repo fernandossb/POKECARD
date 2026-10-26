@@ -120,7 +120,11 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     is TrainerEffect.DrawCardsIfOpponentPrizesAtMost -> Legality.Legal
                     TrainerEffect.MegatonBlower -> Legality.Legal
                     is TrainerEffect.RecoverSupporters -> Legality.Legal
-                    is TrainerEffect.RecoverPokemonAndBasicEnergy -> if (p.discard.none { matches(it, CardFilter.POKEMON_OR_ENERGY) && !def(it).cannotBeRecoveredFromDiscard }) illegal("Não há Pokémon ou Energia Básica no descarte.") else Legality.Legal
+                    is TrainerEffect.RecoverPokemonAndBasicEnergy -> if (p.discard.none {
+                            !def(it).cannotBeRecoveredFromDiscard &&
+                                (def(it).category == Category.POKEMON && (!effect.pokemonWithoutRuleBoxOnly || !def(it).hasRuleBox) ||
+                                    def(it).category == Category.ENERGY && def(it).basicEnergy)
+                        }) illegal("Não há Pokémon ou Energia Básica elegível no descarte.") else Legality.Legal
                     is TrainerEffect.DrawCards, TrainerEffect.GreatBall, TrainerEffect.Sonia -> if (p.deck.isEmpty()) illegal("Seu deck está vazio.") else Legality.Legal
                     TrainerEffect.CoinSwitch -> if (s.players[1-s.currentPlayer].bench.isEmpty()) illegal("Não há Pokémon adversário no Banco.") else Legality.Legal
                     TrainerEffect.ForestOfVitality -> when {
@@ -368,7 +372,11 @@ internal class ContentEngine(private val rules: RulesEngine) {
                             candidates.map { it.id }, 0, minOf(effect.max, candidates.size)))))
                     }
                     is TrainerEffect.RecoverPokemonAndBasicEnergy -> {
-                        val candidates = p.discard.filter { matches(it, CardFilter.POKEMON_OR_ENERGY) && !def(it).cannotBeRecoveredFromDiscard }
+                        val candidates = p.discard.filter {
+                            !def(it).cannotBeRecoveredFromDiscard &&
+                                (def(it).category == Category.POKEMON && (!effect.pokemonWithoutRuleBoxOnly || !def(it).hasRuleBox) ||
+                                    def(it).category == Category.ENERGY && def(it).basicEnergy)
+                        }
                         begin(Resolution(listOf(ChoiceRequest(ChoiceKind.RECOVER,
                             "Escolha até ${effect.max} Pokémon e/ou Energias Básicas do seu descarte para recuperar.",
                             candidates.map { it.id }, 0, minOf(effect.max, candidates.size)))))
