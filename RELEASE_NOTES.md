@@ -1,3 +1,10 @@
+# POKECARD Brasil 5.99.39 — Mais 100 cartas com regras executáveis
+
+- A cobertura executável da rotação Standard subiu de 2.453 para 2.553 cartas de 3.069 no catálogo medido.
+- Esta rodada acrescenta regras de habilidades, modificadores de dano, condições, movimentação de Energia, descarte seletivo e efeitos de moeda para os arquétipos cobertos.
+- Cartas permanecem disponíveis ao motor sem serem adicionadas à coleção pessoal.
+- Versão Android: `versionCode` 241 e `versionName` 5.99.39.
+
 # POKECARD Brasil 5.99.38 — Dez decks competitivos para treino contra CPU
 
 - Os dez decks competitivos cadastrados agora passam pela validação do seletor da CPU, sem adicionar cartas à coleção pessoal.

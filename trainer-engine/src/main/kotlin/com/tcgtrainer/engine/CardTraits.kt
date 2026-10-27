@@ -2,6 +2,10 @@ package com.tcgtrainer.engine
 
 /** Tera identifiers cross-checked against public card metadata and the checked-in H/I/J catalog. */
 internal object CardTraits {
+    val ancientPokemonNames = setOf(
+        "Great Tusk", "Scream Tail", "Brute Bonnet", "Flutter Mane", "Slither Wing", "Sandy Shocks",
+        "Roaring Moon", "Walking Wake", "Gouging Fire", "Raging Bolt", "Koraidon", "Iron Treads"
+    )
     val teraPokemonIds = setOf(
         "sv06-025", "sv06-029", "sv06-040", "sv06-064", "sv06-106", "sv06-112", "sv06-130",
         "sv06-190", "sv06-191", "sv06-192", "sv06-194", "sv06-198", "sv06-199", "sv06-200",

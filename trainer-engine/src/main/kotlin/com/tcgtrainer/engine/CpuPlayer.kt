@@ -52,7 +52,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
         val active = own.find { it.id == o.ownActiveId }
         val enemy = o.opponentField.find { it.id == o.opponentActiveId }
         input.previews.entries.firstOrNull { it.value.knockout && it.value.prizes >= o.ownPrizeCount && !it.value.uncertain }?.let { return it.key }
-        fun card(id: String) = (o.ownHand + input.selectableCards + o.ownDiscard + own.flatMap { it.energies }).firstOrNull { it.id == id }
+        fun card(id: String) = (o.ownHand + input.selectableCards + o.ownDiscard + own.flatMap { it.energies } + listOfNotNull(input.stadium)).firstOrNull { it.id == id }
         fun pokemon(id: String) = (own + o.opponentField).first { it.id == id }
         fun abilities(p: PokemonInstance) = input.effectiveAbilities[p.id] ?: d(p.top).abilities
         fun hp(p: PokemonInstance): Int {
@@ -121,6 +121,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 ignoreOpponentActiveEffects = Effect.IgnoreOpponentActiveEffects in a.effects,
                 ignoreResistance = Effect.IgnoreResistance in a.effects, turn = input.turn,
                 ownKnockedOutByAttackLastTurn = o.ownLastKnockedOutByAttackDamageTurn == input.turn-1,
+                ownDiscardCardNames = o.ownDiscard.map { d(it).name },
                 friendlyPokemon = o.opponentField,
                 attackerPokemon = o.ownField,
                 allPokemonToolCount = o.ownField.sumOf { it.tools.size } + o.opponentField.sumOf { it.tools.size },
@@ -249,6 +250,9 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                     val energy = energyId?.let { pendingId -> (o.ownField + o.opponentField).flatMap { it.energies }.firstOrNull { it.id == pendingId } }
                     if (energy == null) potential(target) else potential(target.copy(energies = target.energies + energy)) - potential(target)
                 }
+                ChoiceKind.ATTACK_REVEAL_PRIZE -> 60.0
+                ChoiceKind.ABILITY_DISCARD_OPPONENT_ENERGY -> 80.0
+                ChoiceKind.ATTACK_OPTIONAL_SELF_DAMAGE_BONUS -> if (id == "use") 65.0 else -10.0
                 ChoiceKind.EVOLUTION_DISCARD_OPPONENT_DECK, ChoiceKind.KNOCKOUT_DISCARD_OPPONENT_DECK -> 100.0
                 ChoiceKind.EVOLUTION_OPPONENT_HAND_BASIC_TO_BENCH -> 100.0 - setupValue(checkNotNull(card(id)))
                 ChoiceKind.DISCARD, ChoiceKind.ABILITY_ENERGY, ChoiceKind.DISCARD_ATTACK_ENERGY, ChoiceKind.ATTACK_OPTIONAL_SHUFFLE_ENERGY, ChoiceKind.ATTACK_HAND_ENERGY_DISCARD, ChoiceKind.ATTACK_REQUIRED_HAND_ENERGY_DISCARD, ChoiceKind.ATTACK_OWN_ENERGY_DISCARD, ChoiceKind.EVOLUTION_METAL_ENERGY, ChoiceKind.TRAINER_GWYNN_DISCARD -> 10.0 - keepValue(checkNotNull(card(id)))
@@ -318,6 +322,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                             (potential(source) - potential(source.copy(energies = source.energies.filterNot { it.id == id })))
                 }
                 ChoiceKind.ATTACK_RESTRICT_OPPONENT_ATTACK -> 80.0
+                ChoiceKind.ATTACK_SHUFFLE_OPPONENT_BENCH -> 40.0
                 ChoiceKind.ATTACK_SHUFFLE_OWN_BENCH -> -potential(pokemon(id))
                 ChoiceKind.ABILITY_MOVE_ENERGY_TO_SELF -> -keepValue(checkNotNull(card(id)))
                 ChoiceKind.ABILITY_MOVE_BASIC_ENERGY -> 1.0
@@ -331,6 +336,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 ChoiceKind.ATTACK_OPTIONAL_DISCARD_TOP_CARD -> 25.0 - keepValue(checkNotNull(card(id)))
                 ChoiceKind.ATTACK_REORDER_OPPONENT_TOP -> opponentDrawValue(checkNotNull(card(id)))
                 ChoiceKind.ATTACK_LOOK_TOP_KEEP_CARDS -> keepValue(checkNotNull(card(id))) + setupValue(checkNotNull(card(id))) * .25
+                ChoiceKind.ATTACK_LOOK_TOP_POKEMON_TO_BENCH -> setupValue(checkNotNull(card(id)))
                 ChoiceKind.SWITCH_OPPONENT, ChoiceKind.EVOLUTION_SWITCH -> active?.let { attackValue(it, pokemon(id)) } ?: 0.0
                 ChoiceKind.EVOLUTION_CONFUSE_ACTIVE -> 80.0
                 ChoiceKind.SWITCH_OWN -> attackValue(pokemon(id)) - (active?.let(::attackValue) ?: 0.0) + potential(pokemon(id))*.05
@@ -378,6 +384,8 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 ChoiceKind.ATTACK_OPTIONAL_RETURN_SELF -> own.find { it.id == id }?.let { target ->
                     if (own.any { it.id != target.id }) target.damage.toDouble() / hp(target).coerceAtLeast(1) * 100.0 - 65.0 else -1.0
                 } ?: -1.0
+                ChoiceKind.ATTACK_DISCARD_POKEMON_TOOLS -> if (o.opponentField.any { pokemon -> pokemon.tools.any { it.id == id } }) 90.0 else -1.0
+                ChoiceKind.ABILITY_SWAP_WITH_TOP_DECK -> -keepValue(checkNotNull(card(id)))
                 ChoiceKind.ABILITY_DEVOLVE_TARGET, ChoiceKind.ATTACK_DEVOLVE_OPPONENT_ACTIVE -> o.opponentField.find { it.id == id }?.let { target ->
                     val devolved = target.copy(cards = target.cards.dropLast(1))
                     if (target.damage >= hp(devolved)) 1300.0 + d(target.top).prizes * 100.0 else 100.0 + (target.damage.toDouble() / hp(devolved).coerceAtLeast(1))
@@ -433,7 +441,9 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                     if (energy == null) 0.0 else potential(target.copy(energies = target.energies + energy)) - potential(target)
                 }
                 ChoiceKind.ATTACK_ENERGY_TO_HAND -> 60.0
+                ChoiceKind.ATTACK_OPPONENT_ENERGY_TO_HAND -> if (card(id)?.let { d(it).basicEnergy } == true) 45.0 else 90.0
                 ChoiceKind.OPTIONAL_ATTACK_ENERGY_BONUS -> 20.0 - keepValue(checkNotNull(card(id)))
+                ChoiceKind.ATTACK_OPTIONAL_DISCARD_STADIUM -> 80.0
                 ChoiceKind.ATTACK_OPTIONAL_PARALYSIS_DISCARD -> 10.0 - keepValue(checkNotNull(card(id)))
                 ChoiceKind.ATTACK_MOVE_ALL_ENERGY_TARGET -> active?.energies?.let { energies ->
                     val target = pokemon(id)
@@ -480,7 +490,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 return GameAction.ChooseCards(selected)
             }
             val ranked = choice.candidates.sortedByDescending(::value)
-            val desired = if (choice.kind == ChoiceKind.SWITCH_OWN || choice.kind == ChoiceKind.EVOLUTION_SWITCH || choice.kind == ChoiceKind.ATTACK_OPTIONAL_RETURN_SELF || choice.kind == ChoiceKind.ATTACK_OPTIONAL_DISCARD_TOP_CARD || choice.kind == ChoiceKind.OPTIONAL_ATTACK_ENERGY_BONUS || choice.kind == ChoiceKind.PALAFIN_ZERO_TO_HERO || choice.kind == ChoiceKind.TRAINER_NAVEEN_DISCARD)
+            val desired = if (choice.kind == ChoiceKind.SWITCH_OWN || choice.kind == ChoiceKind.EVOLUTION_SWITCH || choice.kind == ChoiceKind.ATTACK_OPTIONAL_RETURN_SELF || choice.kind == ChoiceKind.ATTACK_OPTIONAL_DISCARD_TOP_CARD || choice.kind == ChoiceKind.OPTIONAL_ATTACK_ENERGY_BONUS || choice.kind == ChoiceKind.ATTACK_OPTIONAL_DISCARD_STADIUM || choice.kind == ChoiceKind.PALAFIN_ZERO_TO_HERO || choice.kind == ChoiceKind.TRAINER_NAVEEN_DISCARD)
                 ranked.filter { value(it) > 0 }.size else ranked.size
             return GameAction.ChooseCards(ranked.take(desired.coerceIn(choice.min, choice.max.coerceAtMost(ranked.size))))
         }
@@ -564,6 +574,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 TrainerEffect.BattleCage -> if (o.opponentField.any { it.damage > 0 }) 35.0 else 10.0
                 TrainerEffect.HandheldFan -> if (active != null && active.tools.isEmpty()) 48.0 else 15.0
                 TrainerEffect.CoinDiscardOpponentEnergy -> if (o.opponentField.sumOf { it.energies.size } > 0) 65.0 else 15.0
+                is TrainerEffect.CoinSearch -> if (o.ownDeckCount > 0) 78.0 else -5.0
                 TrainerEffect.Crispin -> if (o.ownDeckCount > 0 && own.isNotEmpty()) 72.0 else -5.0
                 TrainerEffect.MoveBasicEnergyBetweenOwnPokemon -> if (own.size > 1 && own.sumOf { it.energies.size } > 0) 55.0 else -5.0
                 TrainerEffect.RosaEncouragement -> if (o.ownPrizeCount > o.opponentPrizeCount && own.any { d(it.top).stage == Stage.STAGE_TWO } && o.ownDiscard.any { d(it).category == Category.ENERGY && d(it).basicEnergy }) 70.0 else -5.0
@@ -639,6 +650,8 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 is TrainerEffect.MoveBenchedEnergyToActive -> if (active != null && own.filter { it.id != active.id }.sumOf { it.energies.size } > 0) 70.0 else -5.0
                 is TrainerEffect.HealPokemon -> own.filter { (!effect.activeOnly || it.id == active?.id) && (effect.pokemonType == null || d(it.top).type == effect.pokemonType) }
                     .maxOfOrNull { minOf(it.damage, effect.amount).toDouble() } ?: -5.0
+                is TrainerEffect.HealEachOwnPokemon -> own.sumOf { minOf(effect.amount, it.damage).toDouble() }
+                    .let { if (it > 0.0) 65.0 + it else -5.0 }
                 is TrainerEffect.RecoverEnergy -> if (o.ownDiscard.any { d(it).category == Category.ENERGY && d(it).basicEnergy }) 45.0 else -5.0
                 is TrainerEffect.RecoverPokemonToDeck -> if (o.ownDiscard.any { d(it).category == Category.POKEMON }) 35.0 else -5.0
                 is TrainerEffect.AttachBasicEnergyFromDiscardToBenchedType -> if (own.any { d(it.top).type == effect.type } && o.ownDiscard.any { d(it).category == Category.ENERGY && d(it).basicEnergy && d(it).type == effect.type }) 75.0 else -5.0

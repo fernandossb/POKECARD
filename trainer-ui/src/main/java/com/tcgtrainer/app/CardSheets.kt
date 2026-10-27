@@ -103,6 +103,8 @@ import com.tcgtrainer.engine.*
     var selected by remember(choice) { mutableStateOf<List<String>>(emptyList()) }
     val player = state.players[state.currentPlayer]
     fun candidate(id: String): CardInstance? = (player.hand + player.deck + player.discard + player.pokemon().flatMap { it.energies }).find { it.id == id }
+        ?: state.stadium?.takeIf { it.id == id }
+        ?: state.players[1-state.currentPlayer].hand.find { it.id == id }
         ?: state.players[1-state.currentPlayer].deck.find { it.id == id }
         ?: state.players.flatMap { it.pokemon() }.find { it.id == id }?.top
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
@@ -189,7 +191,7 @@ import com.tcgtrainer.engine.*
     }
 }
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable internal fun PrizeSheet(state: GameState, busy: Boolean, onDismiss: () -> Unit, choose: (String) -> Unit) {
+@Composable internal fun PrizeSheet(state: GameState, engine: RulesEngine, busy: Boolean, onDismiss: () -> Unit, choose: (String) -> Unit) {
     val p = state.players[state.currentPlayer]
     val slots = p.prizePositions.ifEmpty { p.prizes.map { it.id } }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
@@ -200,7 +202,11 @@ import com.tcgtrainer.engine.*
                 repeat(3) { column ->
                     val slot = row*3+column; val card = p.prizes.find { it.id == slots.getOrNull(slot) }
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        if (card != null) CardBack(Modifier.fillMaxWidth().height(126.dp).clickable(enabled = !busy) { choose(card.id) }, "PRÊMIO ${slot+1}")
+                        if (card != null) {
+                            val modifier = Modifier.fillMaxWidth().height(126.dp).clickable(enabled = !busy) { choose(card.id) }
+                            if (card.id in p.faceUpPrizeIds) CardArt(engine.definition(card), modifier)
+                            else CardBack(modifier, "PRÊMIO ${slot+1}")
+                        }
                         else Box(Modifier.fillMaxWidth().height(126.dp).border(1.dp, Muted.copy(alpha = .2f), RoundedCornerShape(5.dp)), contentAlignment = Alignment.Center) { Text("Retirado", color = Muted, fontSize = 10.sp) }
                     }
                 }

@@ -92,8 +92,14 @@ internal val BoardBlue = Color(0xFF599BC6)
             } }
             // Six overlapping, fixed-position prizes like a physical tabletop stack.
             val positions = p.prizePositions.ifEmpty { p.prizes.map { it.id } }
-            repeat(6) { slot -> if (p.prizes.any { it.id == positions.getOrNull(slot) })
-                CardBack(Modifier.sceneRect(geometry.prize(owner, slot)).clickable(enabled = own && reveal && engine.actingPlayer(state) == 0 && state.phase == Phase.SELECT_PRIZES) { prizes() }, "")
+            repeat(6) { slot ->
+                val prize = p.prizes.firstOrNull { it.id == positions.getOrNull(slot) }
+                if (prize != null) {
+                    val prizeModifier = Modifier.sceneRect(geometry.prize(owner, slot)).clickable(
+                        enabled = own && reveal && engine.actingPlayer(state) == 0 && state.phase == Phase.SELECT_PRIZES) { prizes() }
+                    if (prize.id in p.faceUpPrizeIds) CardArt(engine.definition(prize), prizeModifier)
+                    else CardBack(prizeModifier, "")
+                }
             }
             Counter("${p.prizes.size}", Modifier.sceneRect(geometry.rect(.038f, if (own) .623f else .221f, .07f, .026f)), accent)
             CardBack(Modifier.sceneRect(geometry.deck(owner)), "TCG")
