@@ -131,6 +131,11 @@ class EffectEngine(private val catalog: CardCatalog) {
             effects.filterIsInstance<Effect.BenchedCountDamage>().sumOf { it.perPokemon * (ownBenchCount + opponentBenchCount) } +
             effects.filterIsInstance<Effect.OpponentBenchCountDamage>().sumOf { it.perPokemon * opponentBenchCount } +
             effects.filterIsInstance<Effect.OwnBenchCountDamage>().sumOf { it.perPokemon * ownBenchCount } +
+            effects.filterIsInstance<Effect.OwnBenchStageTwoCountDamage>().sumOf { effect ->
+                effect.perPokemon * attackerPokemon.count {
+                    it.id != attacker.id && catalog.get(it.top.definitionId).stage == Stage.STAGE_TWO
+                }
+            } +
             effects.filterIsInstance<Effect.OwnBenchWithEnergyDamage>().sumOf { it.perPokemon * (ownBenchWithEnergyCounts[it.type] ?: 0) } +
             effects.filterIsInstance<Effect.OwnDamagedPokemonCountDamage>().sumOf { it.perPokemon * ownDamagedPokemonCount } +
             effects.filterIsInstance<Effect.OwnDamagedBenchedPokemonCountDamage>().sumOf { it.perPokemon * ownDamagedBenchedPokemonCount } +
@@ -250,7 +255,7 @@ class EffectEngine(private val catalog: CardCatalog) {
         is Effect.ReduceEvolutionDamageNextTurn,
         is Effect.CoinDamage, is Effect.DiscardAttackEnergy, Effect.DiscardTeamRocketEnergyToDiscardOpponentActive, is Effect.EnergyFromDeck, is Effect.AttachEnergyFromTopDeck, is Effect.SupporterBonus, is Effect.Draw, is Effect.EachPlayerDraw,
         Effect.PreventRetreatNextTurn, Effect.DiscardDefendingTools, is Effect.ConditionalEnergyDamage, is Effect.ConditionalAttachedEnergyDamage, is Effect.ConditionalInPlayEnergyDamage, is Effect.SwitchOwn,
-        is Effect.BenchedCountDamage, is Effect.OpponentBenchCountDamage, is Effect.OwnBenchWithEnergyDamage, is Effect.OwnInPlayCountDamage, is Effect.OwnBasicPokemonCountDamage, is Effect.OwnSpeciesCountDamage, is Effect.OwnTeamRocketPokemonCountDamage, is Effect.OwnAttackNameCountDamage, is Effect.OwnHandPokemonRevealDamage, is Effect.BenchPokemonPresenceDamageBonus, is Effect.BenchTypePresenceDamageBonus, is Effect.AnyOwnBenchedPokemonDamagedBonus, is Effect.AllOwnBenchedPokemonDamagedBonus, is Effect.OwnDamagedBenchedPokemonCountDamage, is Effect.SameTypePokemonInPlayDamageBonus, is Effect.SameHandSizeDamageBonus, is Effect.OpponentExCountDamage, is Effect.OwnNamedBenchDamageCounterDamage, is Effect.OwnBenchTypeDamageCounterDamage, Effect.IgnoreWeakness, is Effect.OwnDamageCounterDamage, is Effect.ConditionalOwnDamageCounterBonus, is Effect.OwnUndamagedDamageBonus, is Effect.OwnAnyDamageCounterBonus,
+        is Effect.BenchedCountDamage, is Effect.OpponentBenchCountDamage, is Effect.OwnBenchStageTwoCountDamage, is Effect.OwnBenchWithEnergyDamage, is Effect.OwnInPlayCountDamage, is Effect.OwnBasicPokemonCountDamage, is Effect.OwnSpeciesCountDamage, is Effect.OwnTeamRocketPokemonCountDamage, is Effect.OwnAttackNameCountDamage, is Effect.OwnHandPokemonRevealDamage, is Effect.BenchPokemonPresenceDamageBonus, is Effect.BenchTypePresenceDamageBonus, is Effect.AnyOwnBenchedPokemonDamagedBonus, is Effect.AllOwnBenchedPokemonDamagedBonus, is Effect.OwnDamagedBenchedPokemonCountDamage, is Effect.SameTypePokemonInPlayDamageBonus, is Effect.SameHandSizeDamageBonus, is Effect.OpponentExCountDamage, is Effect.OwnNamedBenchDamageCounterDamage, is Effect.OwnBenchTypeDamageCounterDamage, Effect.IgnoreWeakness, is Effect.OwnDamageCounterDamage, is Effect.ConditionalOwnDamageCounterBonus, is Effect.OwnUndamagedDamageBonus, is Effect.OwnAnyDamageCounterBonus,
         Effect.SwitchOpponent, Effect.PullOpponentBench, Effect.PullSelectedBenchBeforeDamage, Effect.RecoverSupporterFromDiscard, is Effect.DiscardTopDeckEnergyDamage,
         is Effect.SearchBasicEnergyToHand, is Effect.OpponentFieldDamageCounterDamage, is Effect.OwnEnergyTypeCountDamage,
         is Effect.OpponentChoosesHandShuffle, Effect.RequiresUndamagedOpponentActive, Effect.RequiresOpponentBurned, Effect.RequiresStadium, is Effect.StadiumDamageBonus, Effect.MayAttackFirstTurnIfStarting, Effect.SearchEvolutionForSelfToEvolve, Effect.SearchEvolutionForEachBenchedPokemon,

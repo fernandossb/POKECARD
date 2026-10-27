@@ -4,6 +4,37 @@ import kotlinx.serialization.json.*
 import kotlin.test.*
 
 class CatalogRuleCompilerTest {
+    @Test fun `Mamoswine Rumbling March counts only own Stage 2 Bench Pokemon`() {
+        listOf("sv09-079", "sv09-174").forEach { id ->
+            val definition = TrainerCatalog.get(id)
+            val attack = definition.attacks.single()
+            assertTrue(CardLibrary.byId.getValue(id).implemented, id)
+            assertTrue(attack.effects.contains(Effect.OwnBenchStageTwoCountDamage(40)), id)
+            val attacker = PokemonInstance(listOf(CardInstance("attacker", id)), enteredPlayTurn = 0)
+            val stageTwoBench = PokemonInstance(listOf(CardInstance("stage-two", id)), enteredPlayTurn = 0)
+            val basicBench = PokemonInstance(listOf(CardInstance("basic", "me01-076")), enteredPlayTurn = 0)
+            val defender = PokemonInstance(listOf(CardInstance("defender", "me01-076")), enteredPlayTurn = 0)
+            val engine = EffectEngine(TrainerCatalog)
+            assertEquals(180, engine.damage(attacker, defender, attack.effects,
+                ignoreWeaknessResistance = true, attackerPokemon = listOf(attacker, basicBench)), id)
+            assertEquals(220, engine.damage(attacker, defender, attack.effects,
+                ignoreWeaknessResistance = true, attackerPokemon = listOf(attacker, stageTwoBench, basicBench)), id)
+        }
+    }
+    @Test fun `Erika team and generic Pokemon search abilities retain their deck filters`() {
+        listOf("me02.5-007", "me02.5-218").forEach { id ->
+            val ability = CatalogRuleCompiler.compileAbility(id, 0,
+                CatalogRuleCompiler.rows.getValue(id)["abilities"]!!.jsonArray.single().jsonObject)!!
+            assertEquals("Erika's", ability.searchPokemonNamePrefixToHand, id)
+            assertEquals(1, ability.searchPokemonMaxToHand, id)
+        }
+        listOf("sv09-079", "sv09-174").forEach { id ->
+            val ability = CatalogRuleCompiler.compileAbility(id, 0,
+                CatalogRuleCompiler.rows.getValue(id)["abilities"]!!.jsonArray.single().jsonObject)!!
+            assertNull(ability.searchPokemonNamePrefixToHand, id)
+            assertEquals(1, ability.searchPokemonMaxToHand, id)
+        }
+    }
     @Test fun `current Standard prints execute bench entry energy counterattack and discard paralysis`() {
         listOf("sv10-003", "sv10-206", "sv10-228").forEach { id ->
             val ability = TrainerCatalog.get(id).abilities.single()

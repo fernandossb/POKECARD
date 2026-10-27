@@ -247,8 +247,12 @@ internal object CatalogRuleCompiler {
             return AbilityDefinition("$id-ability$index", name, text, teamAttackDamageBonusType = EnergyType.FIGHTING, teamAttackDamageBonus = 30)
         if (text == "Attacks used by your Pokémon do 20 more damage to your opponent's Active Pokémon (before applying Weakness and Resistance).")
             return AbilityDefinition("$id-ability$index", name, text, teamAttackDamageBonusAnyType = 20)
-        if (text == "Once during your turn, you may search your deck for a Cynthia's Pokémon, reveal it, and put it into your hand. Then, shuffle your deck.")
-            return AbilityDefinition("$id-ability$index", name, text, usageKey = name, searchPokemonNamePrefixToHand = "Cynthia's", searchPokemonMaxToHand = 1)
+        val searchTeamPokemon = Regex("Once during your turn, you may (?:use this Ability\\. )?[Ss]earch your deck for an? (Cynthia's|Erika's) Pokémon, reveal it, and put it into your hand\\. Then, shuffle your deck\\.").matchEntire(text)
+        if (searchTeamPokemon != null)
+            return AbilityDefinition("$id-ability$index", name, text, usageKey = name,
+                searchPokemonNamePrefixToHand = searchTeamPokemon.groupValues[1], searchPokemonMaxToHand = 1)
+        if (text == "Once during your turn, you may search your deck for a Pokémon, reveal it, and put it into your hand. Then, shuffle your deck.")
+            return AbilityDefinition("$id-ability$index", name, text, usageKey = name, searchPokemonMaxToHand = 1)
         if (text == "Once during your turn, you may search your deck for up to 2 Evolution {M} Pokémon, reveal them, and put them into your hand. Then, shuffle your deck.")
             return AbilityDefinition("$id-ability$index", name, text, usageKey = name, searchPokemonEvolutionTypeToHand = EnergyType.METAL, searchPokemonMaxToHand = 2)
         val hpPerEnergy = Regex("This Pokémon gets \\+(\\d+) HP for each \\{([GRFLWPMD])\\} Energy attached to it\\.").matchEntire(text)
@@ -901,6 +905,14 @@ internal object CatalogRuleCompiler {
     fun compileAttack(id: String, index: Int, raw: JsonObject): AttackDefinition? {
         val cost = raw.a("cost").map { type(it.jsonPrimitive.content) ?: return null }
         val text = raw.s("effect").orEmpty().trim()
+        if (text == "This attack does 40 more damage for each Stage 2 Pokémon on your Bench.") {
+            val baseDamage = raw.s("damage")?.removeSuffix("+")?.toIntOrNull() ?: return null
+            val rewritten = JsonObject(raw.toMutableMap().apply {
+                put("effect", JsonPrimitive("")); put("damage", JsonPrimitive(baseDamage))
+            })
+            val compiled = compileAttack(id, index, rewritten) ?: return null
+            return compiled.copy(effects = compiled.effects + Effect.OwnBenchStageTwoCountDamage(40), text = text)
+        }
         val discardAllAndParalyze = text == "Discard all Energy from this Pokémon. Your opponent's Active Pokémon is now Paralyzed."
         if (discardAllAndParalyze) {
             val rewritten = JsonObject(raw.toMutableMap().apply { put("effect", JsonPrimitive("")) })
