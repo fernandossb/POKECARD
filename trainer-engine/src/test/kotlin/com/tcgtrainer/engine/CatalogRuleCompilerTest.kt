@@ -4,6 +4,51 @@ import kotlinx.serialization.json.*
 import kotlin.test.*
 
 class CatalogRuleCompilerTest {
+    @Test fun `Drapion Hazardous Tail executes recoil paralysis and poison`() {
+        listOf("me03-052", "me03-097").forEach { id ->
+            val card = TrainerCatalog.get(id)
+            assertTrue(CardLibrary.byId.getValue(id).implemented, id)
+            val effects = card.attacks.first { it.name == "Hazardous Tail" }.effects
+            assertTrue(Effect.SelfDamage(70) in effects, id)
+            assertTrue(Effect.StatusCondition(SpecialCondition.PARALYZED) in effects, id)
+            assertTrue(Effect.StatusCondition(SpecialCondition.POISONED) in effects, id)
+        }
+    }
+    @Test fun `all Counter Gain prints attach as a conditional cost discount tool`() {
+        listOf("me02.5-186", "me02.5-259", "sv08-169", "sv08-249").forEach { id ->
+            val card = TrainerCatalog.get(id)
+            assertEquals(TrainerType.TOOL, card.trainerType, id)
+            assertEquals(TrainerEffect.CounterGain, card.trainerEffect, id)
+            assertTrue(CardLibrary.byId.getValue(id).implemented, id)
+        }
+    }
+    @Test fun `Colress Tenacity searches Stadium and Energy independently`() {
+        listOf("sv06.5-057", "sv06.5-087").forEach { id ->
+            val card = TrainerCatalog.get(id)
+            assertEquals(TrainerEffect.Search(listOf(CardFilter.STADIUM, CardFilter.ENERGY)), card.trainerEffect, id)
+            assertTrue(CardLibrary.byId.getValue(id).implemented, id)
+        }
+    }
+    @Test fun `Energy Search maps to a one card Basic Energy deck search`() {
+        val card = TrainerCatalog.get("me03-072")
+        assertEquals(TrainerEffect.Search(listOf(CardFilter.BASIC_ENERGY)), card.trainerEffect)
+        assertTrue(CardLibrary.byId.getValue(card.id).implemented)
+    }
+    @Test fun `plain draw three Supporters use executable draw effect`() {
+        listOf("me02.5-214", "me02.5-258", "sv08.5-109", "sv08.5-137", "sv10.5w-081").forEach { id ->
+            val card = TrainerCatalog.get(id)
+            assertEquals(TrainerEffect.DrawCards(3), card.trainerEffect, id)
+            assertTrue(CardLibrary.byId.getValue(id).implemented, id)
+        }
+    }
+    @Test fun `Mega Dragalge venom applies sixteen counters during checkup`() {
+        listOf("me04-065", "me04-104", "me04-118").forEach { id ->
+            val card = TrainerCatalog.get(id)
+            assertTrue(CardLibrary.byId.getValue(id).implemented, id)
+            assertTrue(card.attacks.any { attack -> attack.effects.contains(
+                Effect.StatusCondition(SpecialCondition.POISONED, poisonDamageCounters = 16)) }, id)
+        }
+    }
     @Test fun `Mamoswine Rumbling March counts only own Stage 2 Bench Pokemon`() {
         listOf("sv09-079", "sv09-174").forEach { id ->
             val definition = TrainerCatalog.get(id)

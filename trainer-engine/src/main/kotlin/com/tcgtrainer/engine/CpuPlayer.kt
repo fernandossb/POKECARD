@@ -603,6 +603,8 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
                 TrainerEffect.PrismTower -> if (o.ownHand.size >= 4 && o.ownDeckCount > 0) 45.0 else -5.0
                 TrainerEffect.Recover -> if (o.ownDiscard.any { d(it).category == Category.POKEMON || d(it).category == Category.ENERGY && d(it).basicEnergy }) 45.0 else -5.0
                 is TrainerEffect.RetreatReduction -> 50.0
+                TrainerEffect.CounterGain -> if (o.ownPrizeCount > o.opponentPrizeCount &&
+                    active?.tools?.isEmpty() == true) 60.0 else 8.0
                 is TrainerEffect.HpModifier, null -> -5.0
                 is TrainerEffect.DrawCards -> if (o.ownDeckCount > effect.count+1 && o.ownHand.size < 9) 100.0 else -5.0
                 is TrainerEffect.DrawCardsIfOpponentPrizesAtMost -> if (o.ownDeckCount > 0 && o.ownHand.size < 9) {

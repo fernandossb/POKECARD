@@ -144,6 +144,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     is TrainerEffect.SwitchAndHealMovedEx -> if (p.bench.isEmpty()) illegal("Não há Pokémon no Banco para trocar.") else Legality.Legal
                     TrainerEffect.Recover -> if (p.discard.none { matches(it, CardFilter.POKEMON_OR_ENERGY) }) illegal("Não há Pokémon ou Energia Básica no descarte.") else Legality.Legal
                     is TrainerEffect.RetreatReduction -> if (p.pokemon().none { rules.canAttachTool(s, actor, it) }) illegal("Seus Pokémon já atingiram o limite de Ferramentas.") else Legality.Legal
+                    TrainerEffect.CounterGain -> if (p.pokemon().none { rules.canAttachTool(s, actor, it) }) illegal("Não há Pokémon apto para receber esta Ferramenta.") else Legality.Legal
                     is TrainerEffect.BindingMochi -> if (p.pokemon().none { rules.canAttachTool(s, actor, it) }) illegal("Não há Pokémon apto para receber esta Ferramenta.") else Legality.Legal
                     is TrainerEffect.ToolHpModifier -> if (p.pokemon().none { rules.canAttachTool(s, actor, it) }) illegal("Não há Pokémon apto para receber esta Ferramenta.") else Legality.Legal
                     TrainerEffect.LuckyHelmet -> if (p.pokemon().none { rules.canAttachTool(s, actor, it) }) illegal("Não há Pokémon apto para receber esta Ferramenta.") else Legality.Legal
@@ -527,6 +528,8 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                 ))))
                                 TrainerEffect.AcademyAtNight, TrainerEffect.PrismTower, TrainerEffect.BattleCage, TrainerEffect.AreaZeroUnderdepths -> replaceStadium(card)
                                 is TrainerEffect.RetreatReduction -> begin(Resolution(listOf(ChoiceRequest(ChoiceKind.TOOL_TARGET, "Ligar Ferramenta a qual Pokémon?", p.pokemon().filter { rules.canAttachTool(s, actor, it) }.map { it.id }, 1, 1)), toolCard = card))
+                                TrainerEffect.CounterGain -> begin(Resolution(listOf(ChoiceRequest(ChoiceKind.TOOL_TARGET,
+                                    "Ligue Counter Gain a um dos seus Pokémon.", p.pokemon().filter { rules.canAttachTool(s, actor, it) }.map { it.id }, 1, 1)), toolCard = card))
                                 is TrainerEffect.BindingMochi -> begin(Resolution(listOf(ChoiceRequest(ChoiceKind.TOOL_TARGET,
                                     "Ligue Binding Mochi a um dos seus Pokémon.", p.pokemon().filter { rules.canAttachTool(s, actor, it) }.map { it.id }, 1, 1)), toolCard = card))
                                 is TrainerEffect.ToolHpModifier -> begin(Resolution(listOf(ChoiceRequest(ChoiceKind.TOOL_TARGET,

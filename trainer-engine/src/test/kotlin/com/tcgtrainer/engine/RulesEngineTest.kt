@@ -11,6 +11,62 @@ import kotlinx.serialization.json.add
 import kotlin.test.*
 
 class RulesEngineTest {
+    @Test fun `Incineroar Hustle Play discounts Colorless cost for each opponent Benched Pokemon`() {
+        val active = PokemonInstance(listOf(CardInstance("incineroar", "sv05-034")), enteredPlayTurn = 0)
+        val opposingActive = PokemonInstance(listOf(CardInstance("opponent", "me01-076")), enteredPlayTurn = 0)
+        val opposingBench = List(2) { PokemonInstance(listOf(CardInstance("bench$it", "me01-076")), enteredPlayTurn = 0) }
+        val attack = AttackDefinition("cost-check", "Cost Check",
+            listOf(EnergyType.FIRE, EnergyType.COLORLESS, EnergyType.COLORLESS, EnergyType.COLORLESS), emptyList())
+        fun state(benchCount: Int) = GameState("hustle-play", 34, RngState(34), listOf(
+            PlayerState(deck = emptyList(), active = active),
+            PlayerState(deck = emptyList(), active = opposingActive, bench = opposingBench.take(benchCount))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val rules = RulesEngine(TrainerCatalog)
+        assertTrue(CardLibrary.byId.getValue("sv05-034").implemented)
+        assertTrue(CardLibrary.byId.getValue("sv05-187").implemented)
+        assertEquals(attack.cost, rules.attackCost(state(0), active, attack))
+        assertEquals(listOf(EnergyType.FIRE, EnergyType.COLORLESS), rules.attackCost(state(2), active, attack))
+    }
+    @Test fun `Counter Gain discounts only a Colorless cost while behind on Prizes`() {
+        val tool = TrainerCatalog.get("me02.5-186")
+        assertEquals(TrainerEffect.CounterGain, tool.trainerEffect)
+        val active = PokemonInstance(listOf(CardInstance("pokemon", "me01-076")),
+            tool = CardInstance("tool", tool.id), enteredPlayTurn = 0)
+        val opponent = PokemonInstance(listOf(CardInstance("opponent", "me01-076")), enteredPlayTurn = 0)
+        val attack = AttackDefinition("cost-check", "Cost Check",
+            listOf(EnergyType.FIGHTING, EnergyType.COLORLESS, EnergyType.COLORLESS), emptyList())
+        fun state(ownPrizes: Int, opponentPrizes: Int) = GameState("counter-gain", 33, RngState(33), listOf(
+            PlayerState(deck = emptyList(), prizes = List(ownPrizes) { CardInstance("p$it", "sv01-258") }, active = active),
+            PlayerState(deck = emptyList(), prizes = List(opponentPrizes) { CardInstance("op$it", "sv01-258") }, active = opponent)
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val rules = RulesEngine(TrainerCatalog)
+        assertEquals(listOf(EnergyType.FIGHTING, EnergyType.COLORLESS), rules.attackCost(state(6, 4), active, attack))
+        assertEquals(attack.cost, rules.attackCost(state(4, 4), active, attack))
+    }
+    @Test fun `Vikavolt attack can switch only to a Lightning Pokemon on its Bench`() {
+        val vikavolt = TrainerCatalog.get("sv07-053").copy(attacks = TrainerCatalog.get("sv07-053").attacks.map { it.copy(cost = emptyList()) })
+        val lightning = CardDefinition("lightning-target", "Lightning Target", "Test", "1", category = Category.POKEMON,
+            type = EnergyType.LIGHTNING, hp = 100)
+        val grass = CardDefinition("grass-target", "Grass Target", "Test", "2", category = Category.POKEMON,
+            type = EnergyType.GRASS, hp = 100)
+        val enemy = CardDefinition("enemy", "Enemy", "Test", "3", category = Category.POKEMON, hp = 300)
+        val rules = RulesEngine(object : CardCatalog { override fun get(id: String) = when (id) {
+            vikavolt.id -> vikavolt; lightning.id -> lightning; grass.id -> grass; enemy.id -> enemy
+            else -> TrainerCatalog.get(id)
+        } })
+        fun pokemon(instance: String, definition: String) = PokemonInstance(listOf(CardInstance(instance, definition)), enteredPlayTurn = 0)
+        val state = GameState("typed-switch", 31, RngState(31), listOf(
+            PlayerState(deck = List(10) { CardInstance("d$it", "sv01-258") }, prizes = List(6) { CardInstance("p$it", "sv01-258") },
+                active = pokemon("v", vikavolt.id), bench = listOf(pokemon("l", lightning.id), pokemon("g", grass.id))),
+            PlayerState(deck = List(10) { CardInstance("od$it", "sv01-258") }, prizes = List(6) { CardInstance("op$it", "sv01-258") },
+                active = pokemon("e", enemy.id))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val attack = vikavolt.attacks.first { it.effects.any { effect -> effect is Effect.SwitchOwn } }
+        assertTrue(attack.effects.contains(Effect.SwitchOwn(targetType = EnergyType.LIGHTNING)))
+        val result = rules.apply(state, GameAction.Attack(attack.id))
+        assertEquals(Legality.Legal, result.legality)
+        assertEquals(listOf("l"), result.state.resolution!!.choices.single { it.kind == ChoiceKind.SWITCH_OWN }.candidates)
+    }
     private val engine = RulesEngine()
     private fun card(id: String, def: String = "TEST-001") = CardInstance(id, def)
     private fun field(id: String, def: String = "TEST-001", energy: Int = 0) = PokemonInstance(

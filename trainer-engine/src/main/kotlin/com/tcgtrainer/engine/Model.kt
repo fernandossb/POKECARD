@@ -52,7 +52,7 @@ import kotlinx.serialization.Serializable
     @Serializable data class ConditionalEnergyDamage(val type: EnergyType, val minimum: Int, val bonus: Int) : Effect
     @Serializable data class ConditionalAttachedEnergyDamage(val minimum: Int, val bonus: Int) : Effect
     @Serializable data class ConditionalInPlayEnergyDamage(val type: EnergyType, val minimum: Int, val bonus: Int) : Effect
-    @Serializable data class SwitchOwn(val optional: Boolean = false) : Effect
+    @Serializable data class SwitchOwn(val optional: Boolean = false, val targetType: EnergyType? = null) : Effect
     @Serializable data class BenchedCountDamage(val perPokemon: Int) : Effect
     @Serializable data class OpponentBenchCountDamage(val perPokemon: Int) : Effect
     @Serializable data class OwnInPlayCountDamage(val perPokemon: Int) : Effect
@@ -249,6 +249,7 @@ import kotlinx.serialization.Serializable
     @Serializable data object Recover : TrainerEffect
     @Serializable data class DamageBoost(val type: EnergyType, val amount: Int) : TrainerEffect
     @Serializable data class RetreatReduction(val amount: Int) : TrainerEffect
+    @Serializable data object CounterGain : TrainerEffect
     @Serializable data class HpModifier(val stage: Stage, val amount: Int) : TrainerEffect
     @Serializable data class DrawCards(val count: Int, val coinBonus: Int = 0) : TrainerEffect
     @Serializable data class DrawCardsIfOpponentPrizesAtMost(val count: Int, val bonus: Int, val prizeThreshold: Int) : TrainerEffect
@@ -307,7 +308,8 @@ import kotlinx.serialization.Serializable
     val requiresPreviousKnockout: Boolean = false, val onEvolveSwitch: Boolean = false,
     val onEvolveSwitchOpponentBenchMaxRemainingHp: Int = 0,
     val onEvolveOpponentHandBasicToBench: Boolean = false,
-    val attackDiscountPerOpponentPrize: Boolean = false, val usageKey: String = id,
+    val attackDiscountPerOpponentPrize: Boolean = false,
+    val attackDiscountPerOpponentBenchedPokemon: Boolean = false, val usageKey: String = id,
     val requiresActive: Boolean = false, val onEvolveDraw: Int = 0, val onEvolveDamageCounters: Boolean = false,
     val discardHandCount: Int = 0, val drawTo: Int = 0, val damageReduction: Int = 0,
     val retaliateDamageCounters: Int = 0, val requiresTeamRocketPokemonCount: Int = 0,

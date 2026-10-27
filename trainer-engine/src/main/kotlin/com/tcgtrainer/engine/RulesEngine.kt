@@ -417,7 +417,10 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         else teraAlternative.alternativeAttackCost
         if (ignoreColorless) return attack.cost.filterNot { it == EnergyType.COLORLESS }
         val discount = (if (activeAbilities.any { it.attackDiscountPerOpponentPrize }) 6-state.players[1-owner].prizes.size else 0) +
-            if (activeAbilities.any { it.attackDiscountPerKofuDiscard }) state.players[owner].discard.count { definition(it).name == "Kofu" } else 0
+            (if (activeAbilities.any { it.attackDiscountPerKofuDiscard }) state.players[owner].discard.count { definition(it).name == "Kofu" } else 0) +
+            (if (activeAbilities.any { it.attackDiscountPerOpponentBenchedPokemon }) state.players[1-owner].bench.size else 0) +
+            (if (state.players[owner].prizes.size > state.players[1-owner].prizes.size)
+                pokemon.tools.count { definition(it).trainerEffect == TrainerEffect.CounterGain } else 0)
         var remaining = discount
         return attack.cost.filter { if (it == EnergyType.COLORLESS && remaining > 0) { remaining--; false } else true }
     }
@@ -2073,7 +2076,9 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     }
                 }
                 attack.effects.filterIsInstance<Effect.SwitchOwn>().forEach { effect ->
-                    val bench = next.players[actor].bench
+                    val bench = next.players[actor].bench.filter { pokemon ->
+                        effect.targetType == null || definition(pokemon.top).type == effect.targetType
+                    }
                     if (bench.isNotEmpty()) choices += ChoiceRequest(ChoiceKind.SWITCH_OWN,
                         if (effect.optional) "Você pode trocar seu Ativo por um Pokémon do Banco." else "Troque seu Ativo por um Pokémon do Banco.",
                         bench.map { it.id }, if (effect.optional) 0 else 1, 1)

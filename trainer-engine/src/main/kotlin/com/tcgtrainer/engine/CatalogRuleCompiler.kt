@@ -71,6 +71,8 @@ internal object CatalogRuleCompiler {
             return AbilityDefinition("$id-ability$index", name, text, usageKey = name, onEvolveDiscardOpponentDeckCount = 2)
         if (text == "If you go first, this Pokémon can use attacks during your first turn.")
             return AbilityDefinition("$id-ability$index", name, text, mayAttackFirstTurnIfStarting = true)
+        if (text == "Attacks used by this Pokémon cost {C} less for each of your opponent's Benched Pokémon.")
+            return AbilityDefinition("$id-ability$index", name, text, attackDiscountPerOpponentBenchedPokemon = true)
         if (text == "If your opponent has any cards in their discard pile that have \"Colress\" in the name, this Pokémon can use the Trifrost attack for {C}.")
             return AbilityDefinition("$id-ability$index", name, text, alternativeAttackName = "Trifrost",
                 alternativeAttackCost = listOf(EnergyType.COLORLESS), alternativeAttackRequiresOpponentDiscardName = "Colress")
@@ -855,6 +857,38 @@ internal object CatalogRuleCompiler {
                     artAsset = "remote:$image/high.webp", text = raw.s("effect").orEmpty(),
                     trainerType = TrainerType.STADIUM, trainerEffect = TrainerEffect.ForestOfVitality)
             }
+            val simpleSupporterDraw = if (raw.s("trainerType") == "Supporter")
+                Regex("Draw (\\d+) cards?\\.").matchEntire(trainerText) else null
+            if (simpleSupporterDraw != null) {
+                return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(),
+                    raw.s("localId") ?: return null, category = Category.TRAINER, verified = true,
+                    source = source, artAsset = "remote:$image/high.webp", text = trainerText,
+                    trainerType = TrainerType.SUPPORTER,
+                    trainerEffect = TrainerEffect.DrawCards(simpleSupporterDraw.groupValues[1].toInt()))
+            }
+            if (raw.s("trainerType") == "Item" &&
+                trainerText == "Search your deck for a Basic Energy card, reveal it, and put it into your hand. Then, shuffle your deck.") {
+                return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(),
+                    raw.s("localId") ?: return null, category = Category.TRAINER, verified = true,
+                    source = source, artAsset = "remote:$image/high.webp", text = trainerText,
+                    trainerType = TrainerType.ITEM,
+                    trainerEffect = TrainerEffect.Search(listOf(CardFilter.BASIC_ENERGY)))
+            }
+            if (raw.s("trainerType") == "Supporter" &&
+                trainerText == "Search your deck for a Stadium card and an Energy card, reveal them, and put them into your hand. Then, shuffle your deck.") {
+                return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(),
+                    raw.s("localId") ?: return null, category = Category.TRAINER, verified = true,
+                    source = source, artAsset = "remote:$image/high.webp", text = trainerText,
+                    trainerType = TrainerType.SUPPORTER,
+                    trainerEffect = TrainerEffect.Search(listOf(CardFilter.STADIUM, CardFilter.ENERGY)))
+            }
+            if (raw.s("trainerType") == "Tool" &&
+                trainerText == "If you have more Prize cards remaining than your opponent, attacks used by the Pokémon this card is attached to cost {C} less.") {
+                return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(),
+                    raw.s("localId") ?: return null, category = Category.TRAINER, verified = true,
+                    source = source, artAsset = "remote:$image/high.webp", text = trainerText,
+                    trainerType = TrainerType.TOOL, trainerEffect = TrainerEffect.CounterGain)
+            }
             val same = reviewed.entries.firstOrNull { (key, _) ->
                 val original = rows[key] ?: TrainerCatalog.sourceData(key)
                 signature(original) == signature(raw)
@@ -905,6 +939,22 @@ internal object CatalogRuleCompiler {
     fun compileAttack(id: String, index: Int, raw: JsonObject): AttackDefinition? {
         val cost = raw.a("cost").map { type(it.jsonPrimitive.content) ?: return null }
         val text = raw.s("effect").orEmpty().trim()
+        val recoilDoubleStatus = Regex("This Pokémon also does (\\d+) damage to itself\\. Your opponent's Active Pokémon is now (Poisoned|Burned|Asleep|Paralyzed|Confused) and (Poisoned|Burned|Asleep|Paralyzed|Confused)\\.").matchEntire(text)
+        if (recoilDoubleStatus != null) {
+            val rewritten = JsonObject(raw.toMutableMap().apply { put("effect", JsonPrimitive("")) })
+            val compiled = compileAttack(id, index, rewritten) ?: return null
+            val first = SpecialCondition.valueOf(recoilDoubleStatus.groupValues[2].uppercase())
+            val second = SpecialCondition.valueOf(recoilDoubleStatus.groupValues[3].uppercase())
+            return compiled.copy(effects = compiled.effects + Effect.SelfDamage(recoilDoubleStatus.groupValues[1].toInt()) +
+                Effect.StatusCondition(first) + Effect.StatusCondition(second), text = text)
+        }
+        val switchToTypedBench = Regex("Switch this Pokémon with 1 of your Benched \\{([GRFLWPMD])\\} Pokémon\\.").matchEntire(text)
+        if (switchToTypedBench != null) {
+            val rewritten = JsonObject(raw.toMutableMap().apply { put("effect", JsonPrimitive("")) })
+            val compiled = compileAttack(id, index, rewritten) ?: return null
+            return compiled.copy(effects = compiled.effects + Effect.SwitchOwn(
+                targetType = symbolType(switchToTypedBench.groupValues[1]) ?: return null), text = text)
+        }
         if (text == "This attack does 40 more damage for each Stage 2 Pokémon on your Bench.") {
             val baseDamage = raw.s("damage")?.removeSuffix("+")?.toIntOrNull() ?: return null
             val rewritten = JsonObject(raw.toMutableMap().apply {
@@ -1236,7 +1286,7 @@ internal object CatalogRuleCompiler {
         val opponentBasicKnockout = text == "If your opponent's Active Pokémon is a Basic Pokémon, it is Knocked Out."
         val coinStatus = Regex("Flip a coin\\. If heads, your opponent's Active Pokémon is now (Poisoned|Burned|Asleep|Paralyzed|Confused)\\.").matchEntire(text)
         val opponentTypeStatus = Regex("If your opponent's Active Pokémon is a \\{([GRFLWPMDN])\\} Pokémon, it is now (Poisoned|Burned|Asleep|Paralyzed|Confused)\\.").matchEntire(text)
-        val strongPoison = Regex("Your opponent's Active Pokémon is now Poisoned\\. During Pokémon Checkup, put (\\d+) damage counters on that Pokémon instead of 1\\.").matchEntire(text)
+        val strongPoison = Regex("Your opponent's Active Pokémon is now Poisoned\\. During Pokémon Checkup, (?:put|place) (\\d+) damage counters on that Pokémon instead of 1\\.").matchEntire(text)
         val status = Regex("Your opponent's Active Pokémon is now (Poisoned|Burned|Asleep|Paralyzed|Confused)\\.").matchEntire(text)
         val discardDefendingCoin = Regex("Flip a coin\\. If heads, discard (an|a|1|2) Energy from your opponent's Active Pokémon\\.").matchEntire(text)
         val discardDefendingPerHeads = Regex("Flip (\\d+) coins?\\. For each heads, discard (an|a|1|2) Energy from your opponent's Active Pokémon\\.").matchEntire(text)
