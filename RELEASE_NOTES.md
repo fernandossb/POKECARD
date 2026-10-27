@@ -1,3 +1,11 @@
+# POKECARD Brasil 5.99.38 — Dez decks competitivos para treino contra CPU
+
+- Os dez decks competitivos cadastrados agora passam pela validação do seletor da CPU, sem adicionar cartas à coleção pessoal.
+- Rare Candy, Handheld Fan, Battle Cage e Area Zero Underdepths têm regras executáveis no motor de batalha.
+- Handheld Fan permite escolher a Energia do atacante e o Pokémon do Banco que a recebe. Area Zero Underdepths aplica o limite de oito vagas com Pokémon Tera e reduz o Banco quando o efeito termina.
+- Corrigidos efeitos e decisões da CPU para outras cartas presentes nesses decks, incluindo Slowking, Spiritomb, Brock's Scouting e Energias Especiais.
+- Versão Android: `versionCode` 240 e `versionName` 5.99.38.
+
 # POKECARD Brasil 5.99.37 — Dragapult completo e regras de Treinadores
 
 - Risky Ruins agora aplica 2 contadores ao Pokémon Básico não {D} que entrar no Banco durante o turno, inclusive quando colocado por efeitos de cartas.

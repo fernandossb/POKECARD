@@ -83,6 +83,8 @@ internal object CatalogRuleCompiler {
         if (text == "If this Pokémon is Knocked Out by damage from an attack from your opponent's Pokémon, and if you have any Pecharunt ex in play, your opponent takes 1 fewer Prize card.")
             return AbilityDefinition("$id-ability$index", name, text, reducePrizeForDarknessKnockoutByEx = true,
                 requirePecharuntExForPrizeReduction = true)
+        if (text == "If your Active {D} Pokémon is damaged by an attack from your opponent's Pokémon (even if your Active {D} Pokémon is Knocked Out), place 1 damage counter on the Attacking Pokémon.")
+            return AbilityDefinition("$id-ability$index", name, text, retaliateDamageCounterWhenActiveDarknessDamaged = true)
         if (text == "If your opponent's Basic Pokémon is Knocked Out by damage from an attack used by this Pokémon, take 1 more Prize card.")
             return AbilityDefinition("$id-ability$index", name, text, extraPrizeForOpponentBasicKnockoutByAttack = 1)
         if (text == "Once during your turn, if this Pokémon is in the Active Spot, you may make your opponent's Active Pokémon Burned.")
@@ -114,6 +116,8 @@ internal object CatalogRuleCompiler {
             return AbilityDefinition("$id-ability$index", name, text, preventOpponentItemSupporterEffects = true)
         if (text == "As long as this Pokémon is in the Active Spot, your opponent can't play any Item cards or Pokémon Tool cards from their hand.")
             return AbilityDefinition("$id-ability$index", name, text, requiresActive = true, preventOpponentItemAndToolPlayFromHand = true)
+        if (text == "If this Pokémon has a Pokémon Tool attached, your opponent can't play any ACE SPEC cards from their hand.")
+            return AbilityDefinition("$id-ability$index", name, text, preventOpponentAceSpecFromHandWithTool = true)
         if (text == "Once during your turn, when this Pokémon moves from the Active Spot to the Bench, you may search your deck for a Palafin ex and switch it with this Pokémon. Any attached cards, damage counters, Special Conditions, turns in play, and any other effects remain on the new Pokémon. If you switched a Pokémon in this way, put this card into your deck. Then, shuffle your deck.")
             return AbilityDefinition("$id-ability$index", name, text, usageKey = "Zero to Hero", usagePerPokemon = true,
                 triggersWhenMovedFromActiveToBench = true)
@@ -384,6 +388,100 @@ internal object CatalogRuleCompiler {
                     trainerEffect = TrainerEffect.HealEachOwnPokemonOfType(60, EnergyType.LIGHTNING))
             }
             val trainerText = raw.s("effect").orEmpty()
+            if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Tool" && raw.s("name") == "Handheld Fan" &&
+                trainerText == "If the Pokémon this card is attached to is in the Active Spot and is damaged by an attack from your opponent's Pokémon (even if this Pokémon is Knocked Out), move an Energy from the Attacking Pokémon to 1 of your opponent's Benched Pokémon.")
+                return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
+                    category = Category.TRAINER, verified = true, source = source, artAsset = "remote:$image/high.webp", text = trainerText,
+                    trainerType = TrainerType.TOOL, trainerEffect = TrainerEffect.HandheldFan)
+            if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Stadium" && raw.s("name") == "Battle Cage" &&
+                trainerText == "Prevent all damage counters from being placed on Benched Pokémon (both yours and your opponent's) by effects of attacks and Abilities from the opponent's Pokémon. (Damage from attacks is still taken.)")
+                return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
+                    category = Category.TRAINER, verified = true, source = source, artAsset = "remote:$image/high.webp", text = trainerText,
+                    trainerType = TrainerType.STADIUM, trainerEffect = TrainerEffect.BattleCage)
+            if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Stadium" && raw.s("name") == "Area Zero Underdepths" &&
+                trainerText == "Each player who has any Tera Pokémon in play can have up to 8 Pokémon on their Bench.\n\nIf a player no longer has any Tera Pokémon in play, that player discards Pokémon from their Bench until they have 5. When this card leaves play, both players discard Pokémon from their Bench until they have 5, and the player who played this card discards first.")
+                return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
+                    category = Category.TRAINER, verified = true, source = source, artAsset = "remote:$image/high.webp", text = trainerText,
+                    trainerType = TrainerType.STADIUM, trainerEffect = TrainerEffect.AreaZeroUnderdepths)
+            if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Item" && raw.s("name") == "Rare Candy" &&
+                trainerText == "Choose 1 of your Basic Pokémon in play. If you have a Stage 2 card in your hand that evolves from that Pokémon, put that card onto the Basic Pokémon to evolve it, skipping the Stage 1. You can't use this card during your first turn or on a Basic Pokémon that was put into play this turn.")
+                return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
+                    category = Category.TRAINER, verified = true, source = source, artAsset = "remote:$image/high.webp", text = trainerText,
+                    trainerType = TrainerType.ITEM, trainerEffect = TrainerEffect.RareCandy)
+            if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Tool" && raw.s("name") == "Lillie's Pearl" &&
+                trainerText == "If the Lillie's Pokémon this card is attached to is Knocked Out by damage from an attack from your opponent's Pokémon, that player takes 1 fewer Prize card.")
+                return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
+                    category = Category.TRAINER, verified = true, source = source, artAsset = "remote:$image/high.webp", text = trainerText,
+                    trainerType = TrainerType.TOOL, prizeReductionOnAttackKnockoutForPokemonPrefix = "Lillie's ")
+            if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Supporter" &&
+                raw.s("name") == "Brock's Scouting" &&
+                trainerText == "Search your deck for up to 2 Basic Pokémon or 1 Evolution Pokémon, reveal them, and put them into your hand. Then, shuffle your deck.")
+                return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
+                    category = Category.TRAINER, verified = true, source = source, artAsset = "remote:$image/high.webp", text = trainerText,
+                    trainerType = TrainerType.SUPPORTER, trainerEffect = TrainerEffect.BrockScouting)
+            if (raw.s("category") == "Energy") {
+                val energyType = when (raw.s("name")) {
+                    "Telepathic Psychic Energy" -> EnergyType.PSYCHIC
+                    "Boomerang Energy", "Enriching Energy", "Legacy Energy" -> EnergyType.COLORLESS
+                    else -> null
+                }
+                if (energyType != null) {
+                    val telepathic = raw.s("name") == "Telepathic Psychic Energy"
+                    val enriching = raw.s("name") == "Enriching Energy"
+                    val legacy = raw.s("name") == "Legacy Energy"
+                    val boomerang = raw.s("name") == "Boomerang Energy"
+                    return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
+                        category = Category.ENERGY, type = energyType, verified = true, source = source,
+                        artAsset = "remote:$image/high.webp", text = trainerText,
+                        aceSpec = raw.s("rarity").orEmpty().contains("ACE SPEC", ignoreCase = true),
+                        providesEveryEnergyType = legacy,
+                        reducesPrizeOncePerGameOnAttackKnockout = legacy,
+                        returnsFromDiscardAfterAttachedPokemonAttackDiscard = boomerang,
+                        drawOnAttachFromHand = if (enriching) 4 else 0,
+                        searchBasicPokemonTypeOnAttachFromHand = if (telepathic) EnergyType.PSYCHIC else null,
+                        searchBasicPokemonMaxOnAttachFromHand = if (telepathic) 2 else 0)
+                }
+            }
+            if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Item" &&
+                trainerText == "You can use this card only if you have any Tera Pokémon in play.\n\nChoose up to 2 of your Benched {C} Pokémon and attach a Basic Energy card from your discard pile to each of them.")
+                return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
+                    category = Category.TRAINER, verified = true, source = source, artAsset = "remote:$image/high.webp", text = trainerText,
+                    trainerType = TrainerType.ITEM, trainerEffect = TrainerEffect.GlassTrumpet)
+            if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Supporter" &&
+                trainerText == "Draw cards until you have 5 cards in your hand. Before drawing cards, you may discard any number of cards from your hand. (If you can't draw any cards in this way, you can't use this card.)")
+                return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
+                    category = Category.TRAINER, verified = true, source = source, artAsset = "remote:$image/high.webp", text = trainerText,
+                    trainerType = TrainerType.SUPPORTER, trainerEffect = TrainerEffect.Naveen)
+            if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Supporter" &&
+                trainerText == "Search your deck for 2 cards, shuffle your deck, then put those cards on top of it in any order.")
+                return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
+                    category = Category.TRAINER, verified = true, source = source, artAsset = "remote:$image/high.webp", text = trainerText,
+                    trainerType = TrainerType.SUPPORTER, trainerEffect = TrainerEffect.Ciphermaniac)
+            if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Supporter" &&
+                trainerText == "During this turn, attacks used by your Pokémon do 40 more damage to your opponent's Active Pokémon ex (before applying Weakness and Resistance).")
+                return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
+                    category = Category.TRAINER, verified = true, source = source, artAsset = "remote:$image/high.webp", text = trainerText,
+                    trainerType = TrainerType.SUPPORTER, trainerEffect = TrainerEffect.OpponentExDamageBoost(40))
+            if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Supporter" &&
+                trainerText == "Choose 1:\n\n• Switch your Active Pokémon with 1 of your Benched Pokémon.\n\n• During this turn, attacks used by your Pokémon do 30 more damage to your opponent's Active Pokémon ex and Active Pokémon V (before applying Weakness and Resistance).")
+                return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
+                    category = Category.TRAINER, verified = true, source = source, artAsset = "remote:$image/high.webp", text = trainerText,
+                    trainerType = TrainerType.SUPPORTER, trainerEffect = TrainerEffect.Kieran)
+            if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Supporter" &&
+                trainerText == "Each player shuffles their hand into their deck. Then, flip a coin. If heads, you draw 5 cards, and your opponent draws 3 cards. If tails, you draw 3 cards, and your opponent draws 5 cards.")
+                return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
+                    category = Category.TRAINER, verified = true, source = source, artAsset = "remote:$image/high.webp", text = trainerText,
+                    trainerType = TrainerType.SUPPORTER, trainerEffect = TrainerEffect.ShuffleBothHandsDraw(5, 3, coinFlip = true))
+            if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Stadium" &&
+                trainerText == "Once during each player's turn, that player may put a card from their hand on top of their deck.")
+                return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
+                    category = Category.TRAINER, verified = true, source = source, artAsset = "remote:$image/high.webp", text = trainerText,
+                    trainerType = TrainerType.STADIUM, trainerEffect = TrainerEffect.AcademyAtNight)
+            if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Stadium" &&
+                trainerText == "Once during each player's turn, that player may discard 2 cards from their hand in order to draw a card.")
+                return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
+                    category = Category.TRAINER, verified = true, source = source, artAsset = "remote:$image/high.webp", text = trainerText,
+                    trainerType = TrainerType.STADIUM, trainerEffect = TrainerEffect.PrismTower)
             if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Stadium" &&
                 trainerText == "Whenever any player puts a Basic non-{D} Pokémon onto their Bench during their turn, place 2 damage counters on that Pokémon.") {
                 return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
@@ -787,13 +885,17 @@ internal object CatalogRuleCompiler {
             suffix in listOf("ex", "V", "VSTAR") -> 2
             else -> 1
         }
+        val rareCandyBase = if (stage == Stage.STAGE_TWO) rows.values.firstOrNull { intermediate ->
+            intermediate.s("category") == "Pokemon" && intermediate.s("stage") == "Stage1" &&
+                intermediate.s("name") == raw.s("evolveFrom")
+        }?.s("evolveFrom") else null
         return CardDefinition(id, raw.s("name")!!, raw.s("setCode").orEmpty(), raw.s("localId")!!,
             category = Category.POKEMON, stage = stage, evolvesFromName = raw.s("evolveFrom"),
             hp = hp, type = element, weakness = type(weakness?.s("type")),
             resistance = type(resistance?.s("type")), retreatCost = retreat, attacks = attacks,
             prizes = prizes, abilities = abilities, verified = true, source = source,
             artAsset = image.takeIf(String::isNotBlank)?.let { "remote:$it/high.webp" },
-            isTera = id in CardTraits.teraPokemonIds)
+            isTera = id in CardTraits.teraPokemonIds, rareCandyBasicEvolvesFromName = rareCandyBase)
     }
 
     fun compileAttack(id: String, index: Int, raw: JsonObject): AttackDefinition? {
@@ -807,9 +909,18 @@ internal object CatalogRuleCompiler {
                 symbolType(energyToBenchedType.groupValues[1]) ?: return null), text = text)
         }
         if (text == "If Beldum and Metang are on your Bench, this attack does 150 more damage.") {
-            val rewritten = JsonObject(raw.toMutableMap().apply { put("effect", JsonPrimitive("")) })
+            val baseDamage = raw.s("damage")?.removeSuffix("+")?.toIntOrNull() ?: return null
+            val rewritten = JsonObject(raw.toMutableMap().apply {
+                put("effect", JsonPrimitive(""))
+                put("damage", JsonPrimitive(baseDamage))
+            })
             val compiled = compileAttack(id, index, rewritten) ?: return null
             return compiled.copy(effects = compiled.effects + Effect.RequiresNamedBenchedPokemon(setOf("Beldum", "Metang")) + Effect.Damage(150), text = text)
+        }
+        if (text == "During your next turn, this Pokémon can't use attacks.") {
+            val rewritten = JsonObject(raw.toMutableMap().apply { put("effect", JsonPrimitive("")) })
+            val compiled = compileAttack(id, index, rewritten) ?: return null
+            return compiled.copy(effects = compiled.effects + Effect.RestrictNextTurn(), text = text)
         }
         val infernalSlash = Regex("Discard (\\d+) Basic \\{R\\} Energy cards from your hand\\. If you can't discard \\1 cards in this way, this attack does nothing\\.").matchEntire(text)
         if (text == "Discard all Energy from this Pokémon. This attack does 110 damage to 3 of your opponent's Pokémon. (Don't apply Weakness and Resistance for Benched Pokémon.)") {
@@ -1073,6 +1184,12 @@ internal object CatalogRuleCompiler {
         val copyOpponentActiveTeraAttack = text == "Choose 1 of your opponent's Active Tera Pokémon's attacks and use it as this attack."
         val copyOpponentActiveAttack = text == "Choose 1 of your opponent's Active Pokémon's attacks and use it as this attack."
         val copyAttackFromOpponentDeckTop = text == "Reveal the top 10 cards of your opponent's deck. You may choose an attack from a Pokémon you find there and use it as this attack. Shuffle the revealed cards into your opponent's deck."
+        val copyAttackFromOwnDeckTop = text == "Discard the top card of your deck, and if that card is a Pokémon that doesn't have a Rule Box, choose 1 of its attacks and use it as this attack. (Pokémon ex, Pokémon V, etc. have Rule Boxes.)"
+        if (copyAttackFromOwnDeckTop) {
+            val rewritten = JsonObject(raw.toMutableMap().apply { put("effect", JsonPrimitive("")) })
+            val compiled = compileAttack(id, index, rewritten) ?: return null
+            return compiled.copy(effects = compiled.effects + Effect.CopyAttackFromOwnDeckTop, text = text)
+        }
         if (copyAttackFromOpponentDeckTop) {
             val rewritten = JsonObject(raw.toMutableMap().apply { put("effect", JsonPrimitive("")) })
             val compiled = compileAttack(id, index, rewritten) ?: return null

@@ -24,6 +24,23 @@ class TrainerCardsTest {
         return all.map { it.id }.toSet()
     }
 
+    @Test fun `Brock's Scouting searches two Basics or one Evolution and shuffles`() {
+        val card = TrainerCatalog.get("sv09-146")
+        assertEquals(TrainerEffect.BrockScouting, card.trainerEffect)
+        val basics = TrainerCatalog.definitions.values.filter { it.category == Category.POKEMON && it.stage == Stage.BASIC }.take(2)
+        assertEquals(2, basics.size)
+        val deckBasics = basics.mapIndexed { index, definition -> c("basic-$index", definition.id) }
+        val deck = deckBasics + List(8) { energy("fill-$it") }
+        val start = withPlayer(state(listOf(c("brock", card.id)))) { it.copy(deck = deck) }
+        val before = conserved(start)
+        val started = play(start, GameAction.PlayTrainer("brock"))
+        assertEquals(ChoiceKind.TRAINER_BROCK_SCOUTING, started.resolution!!.choices.single().kind)
+        val result = choose(started, "basic-0", "basic-1")
+        assertTrue(deckBasics.all { found -> result.players[0].hand.any { it.id == found.id } })
+        assertEquals(8, result.players[0].deck.size)
+        assertEquals(before, conserved(result))
+    }
+
     @Test fun `catalog contains 60 real cards 21 prints and no unsupported attack`() {
         assertEquals(60, TrainerCatalog.deck().size); assertEquals(21, TrainerCatalog.deck().distinct().size)
         assertTrue(TrainerCatalog.definitions.size > 65)

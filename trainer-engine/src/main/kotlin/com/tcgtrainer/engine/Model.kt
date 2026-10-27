@@ -34,6 +34,7 @@ import kotlinx.serialization.Serializable
     @Serializable data object CopyBenchedNsAttack : Effect
     @Serializable data object CopyOpponentActiveAttack : Effect
     @Serializable data object CopyAttackFromOpponentDeckTop : Effect
+    @Serializable data object CopyAttackFromOwnDeckTop : Effect
     @Serializable data object CopyOpponentActiveTeraAttack : Effect
     @Serializable data object IgnoreResistance : Effect
     @Serializable data object IgnoreOpponentActiveEffects : Effect
@@ -272,7 +273,19 @@ import kotlinx.serialization.Serializable
     @Serializable data object SearchEachEvolutionStage : TrainerEffect
     @Serializable data class RecoverEnergy(val max: Int, val toDeck: Boolean = false) : TrainerEffect
     @Serializable data class DiscardHandPokemonAndDraw(val max: Int, val drawPerCard: Int) : TrainerEffect
-    @Serializable data class ShuffleBothHandsDraw(val count: Int, val opponentCount: Int = count, val requiresPreviousKnockout: Boolean = false) : TrainerEffect
+    @Serializable data class ShuffleBothHandsDraw(val count: Int, val opponentCount: Int = count, val requiresPreviousKnockout: Boolean = false, val coinFlip: Boolean = false) : TrainerEffect
+    @Serializable data object Ciphermaniac : TrainerEffect
+    @Serializable data object Naveen : TrainerEffect
+    @Serializable data object GlassTrumpet : TrainerEffect
+    @Serializable data object BrockScouting : TrainerEffect
+    @Serializable data object RareCandy : TrainerEffect
+    @Serializable data object BattleCage : TrainerEffect
+    @Serializable data object AreaZeroUnderdepths : TrainerEffect
+    @Serializable data object HandheldFan : TrainerEffect
+    @Serializable data class OpponentExDamageBoost(val amount: Int, val includeV: Boolean = false) : TrainerEffect
+    @Serializable data object Kieran : TrainerEffect
+    @Serializable data object AcademyAtNight : TrainerEffect
+    @Serializable data object PrismTower : TrainerEffect
     @Serializable data object CoinDiscardOpponentEnergy : TrainerEffect
     @Serializable data object Crispin : TrainerEffect
     @Serializable data object RosaEncouragement : TrainerEffect
@@ -392,6 +405,7 @@ import kotlinx.serialization.Serializable
     val searchPokemonMaxToHand: Int = 0, val festivalGroundsMayAttackAgain: Boolean = false,
     val preventOpponentItemSupporterEffects: Boolean = false,
     val preventOpponentItemAndToolPlayFromHand: Boolean = false,
+    val preventOpponentAceSpecFromHandWithTool: Boolean = false,
     val triggersWhenMovedFromActiveToBench: Boolean = false,
     val onlyPlayableWithPalafinZeroToHero: Boolean = false,
     val opponentShuffleHandAndDraw: Int = 0,
@@ -402,7 +416,8 @@ import kotlinx.serialization.Serializable
     val onEvolveDiscardOpponentDeckCount: Int = 0,
     val opponentActiveAbilityException: String? = null,
     val requiresMegaEvolutionFireExInPlay: Boolean = false,
-    val alternativeAttackRequiresOpponentDiscardName: String? = null
+    val alternativeAttackRequiresOpponentDiscardName: String? = null,
+    val retaliateDamageCounterWhenActiveDarknessDamaged: Boolean = false
 )
 @Serializable data class CardDefinition(
     val id: String, val name: String, val set: String, val number: String, val variant: String = "normal",
@@ -416,7 +431,15 @@ import kotlinx.serialization.Serializable
     val aceSpec: Boolean = false, val ruleBox: String = "", val implemented: Boolean = true,
     val canonicalName: String = name, val evolvesFromName: String? = null,
     val basicEnergy: Boolean = false, val isTera: Boolean = false,
-    val cannotBeRecoveredFromDiscard: Boolean = false
+    val providesEveryEnergyType: Boolean = false,
+    val drawOnAttachFromHand: Int = 0,
+    val searchBasicPokemonTypeOnAttachFromHand: EnergyType? = null,
+    val searchBasicPokemonMaxOnAttachFromHand: Int = 0,
+    val reducesPrizeOncePerGameOnAttackKnockout: Boolean = false,
+    val prizeReductionOnAttackKnockoutForPokemonPrefix: String? = null,
+    val returnsFromDiscardAfterAttachedPokemonAttackDiscard: Boolean = false,
+    val cannotBeRecoveredFromDiscard: Boolean = false,
+    val rareCandyBasicEvolvesFromName: String? = null
 ){
     val hasRuleBox: Boolean get() = ruleBox.isNotBlank() || prizes > 1 || canonicalName.startsWith("Radiant ")
     val isFuturePokemon: Boolean get() = canonicalName.startsWith("Iron ") || canonicalName.startsWith("Miraidon")
@@ -425,6 +448,9 @@ fun CardDefinition.canEvolveFrom(base: CardDefinition): Boolean = category == Ca
     base.category == Category.POKEMON && stage != Stage.BASIC &&
     ((stage.ordinal == base.stage.ordinal + 1 && (if (evolvesFromName != null) evolvesFromName == base.canonicalName else evolvesFrom == base.id)) ||
         (base.abilities.any { it.allowAnyEeveeExEvolution } && stage != Stage.BASIC && prizes == 2 && evolvesFromName == "Eevee"))
+fun CardDefinition.canRareCandyEvolveFrom(base: CardDefinition): Boolean = category == Category.POKEMON &&
+    stage == Stage.STAGE_TWO && base.category == Category.POKEMON && base.stage == Stage.BASIC &&
+    rareCandyBasicEvolvesFromName == base.canonicalName
 @Serializable data class CardInstance(val id: String, val definitionId: String)
 @Serializable data class PokemonInstance(
     val cards: List<CardInstance>, val damage: Int = 0, val energies: List<CardInstance> = emptyList(),
@@ -450,7 +476,8 @@ fun PokemonInstance.withAddedTool(card: CardInstance): PokemonInstance =
 @Serializable data class AttackRestriction(val attackId: String?, val blockedTurn: Int)
 @Serializable data class TurnFlags(val manualEnergy: Boolean = false, val supporter: Boolean = false, val retreat: Boolean = false,
     val stadium: Boolean = false, val abilitiesUsed: List<String> = emptyList(), val damageBoosts: Map<EnergyType, Int> = emptyMap(),
-    val teraActiveKnockoutExtraPrize: Boolean = false, val mysteryGardenUsed: Boolean = false)
+    val teraActiveKnockoutExtraPrize: Boolean = false, val mysteryGardenUsed: Boolean = false,
+    val opponentExDamageBoost: Int = 0, val opponentExAndVDamageBoost: Int = 0, val stadiumAbilityUsed: Boolean = false)
 @Serializable data class PlayerState(
     val deck: List<CardInstance>, val hand: List<CardInstance> = emptyList(),
     val discard: List<CardInstance> = emptyList(), val prizes: List<CardInstance> = emptyList(),
@@ -461,6 +488,7 @@ fun PokemonInstance.withAddedTool(card: CardInstance): PokemonInstance =
     val evolutionLockedUntilTurn: Int = -1
 ) { fun pokemon(): List<PokemonInstance> = listOfNotNull(active) + bench }
 @Serializable data class RngState(val value: Long, val position: Long = 0)
+@Serializable data class PendingEnergyReturn(val owner: Int, val pokemonId: String, val energyId: String)
 @Serializable data class GameEvent(val type: String, val message: String, val amount: Int? = null)
 @Serializable data class ActionRecord(val player: Int, val turn: Int, val action: GameAction, val events: List<GameEvent>)
 @Serializable data class GameState(
@@ -485,10 +513,15 @@ fun PokemonInstance.withAddedTool(card: CardInstance): PokemonInstance =
     val pendingCopiedAttackId: String? = null, val pendingCopiedAttack: AttackDefinition? = null,
     val pendingOptionalEnergyAttackId: String? = null, val pendingOptionalEnergyBonus: Int = 0,
     val pendingHandRevealAttackId: String? = null, val pendingHandRevealCount: Int = 0,
-    val pendingRequiredHandEnergyAttackId: String? = null, val pendingRequiredHandEnergyPaid: Boolean = false
+    val pendingRequiredHandEnergyAttackId: String? = null, val pendingRequiredHandEnergyPaid: Boolean = false,
+    val legacyEnergyPrizeReductionUsed: List<Boolean> = listOf(false, false),
+    val pendingRareCandyTargetId: String? = null,
+    val pendingHandheldFanEnergyId: String? = null,
+    val pendingAttackDamagedPokemonIds: Set<String> = emptySet(),
+    val pendingBoomerangEnergyReturns: List<PendingEnergyReturn> = emptyList()
 )
 @Serializable enum class ResolutionEnd { MAIN, ATTACK }
-@Serializable enum class ChoiceKind {DISCARD, SEARCH, RECOVER, SWITCH_OWN, SWITCH_OPPONENT, ENERGY_FROM_DISCARD, ENERGY_TARGET, TOOL_TARGET, EVOLUTION_SWITCH, EVOLUTION_CONFUSE_ACTIVE, EVOLUTION_METAL_ENERGY, EVOLUTION_METAL_ENERGY_TARGET, EVOLUTION_RECOVER_NAMED_TRAINER, EVOLUTION_SEARCH_TRAINER, EVOLUTION_DISCARD_OPPONENT_DECK, KNOCKOUT_DISCARD_OPPONENT_DECK, ABILITY_ENERGY, ABILITY_DAMAGE_TARGET, ABILITY_ATTACH_ENERGY, ABILITY_ATTACH_ENERGY_TARGET, ABILITY_SELECT_ENERGY_TARGET, ABILITY_BASIC_POKEMON_TO_BENCH, ABILITY_DEVOLVE_TARGET, ABILITY_SEARCH_BASIC_ENERGY_TO_HAND, ABILITY_SEARCH_COLORLESS_POKEMON_TO_HAND, ABILITY_SEARCH_POKEMON_TO_HAND, ABILITY_SEARCH_SUPPORTER_FROM_TOP, ABILITY_MOVE_ENERGY_TO_SELF, DISCARD_ATTACK_ENERGY, ATTACH_DECK_ENERGY, HEAL_TARGET, RECYCLE_ENERGY, RECYCLE_POKEMON, SONIA, ATTACK_BENCH_POKEMON, ATTACK_RECOVER_POKEMON, ATTACK_RECOVER_POKEMON_TO_HAND, ATTACK_ROTOM_SEARCH, ATTACK_DAMAGE_TARGET, ATTACK_ENERGY, ATTACK_ENERGY_TARGET, ATTACK_ENERGY_TO_HAND, ATTACK_MOVE_ALL_ENERGY_TARGET, ATTACK_EVOLVE_SELF, ATTACK_BENCH_ENERGY_DISCARD, ATTACK_HAND_ENERGY_DISCARD, ATTACK_REQUIRED_HAND_ENERGY_DISCARD, ATTACK_OWN_ENERGY_DISCARD, ATTACK_RESTRICT_OPPONENT_ATTACK, ATTACK_MOVE_DAMAGE_SOURCE, ATTACK_MOVE_DAMAGE_DESTINATION, ATTACK_MOVE_OWN_DAMAGE_SOURCE, ATTACK_MOVE_OWN_DAMAGE_TARGET, ATTACK_OPPONENT_ENERGY, ATTACK_OPPONENT_ENERGY_TARGET, ATTACK_MATCHING_ENERGY_SEARCH, ATTACK_HAND_ENERGY, ATTACK_HAND_ENERGY_TARGET, ATTACK_KNOCKOUT_BASIC_BENCH, ATTACK_DECK_BASIC_ENERGY_ANY, ATTACK_DECK_BASIC_ENERGY_TARGET, ATTACK_POKEMON_SEARCH, ATTACK_ANY_CARD_SEARCH, ATTACK_HEAL_TARGET, ATTACK_DAMAGE_COUNTER_TARGET, ATTACK_MULTI_DAMAGE_TARGETS, ATTACK_MULTI_DAMAGE_SINGLE_TARGET, ATTACK_DISCARD_THEN_BENCH_TARGET, ATTACK_SHUFFLE_OWN_BENCH, ATTACK_NAMED_POKEMON_TO_BENCH, ATTACK_DEVOLVE_OPPONENT_ACTIVE, OPPONENT_SHUFFLES_OWN_HAND, ABILITY_DISCARD_ENERGY_FROM_DISCARD, ABILITY_DISCARD_ENERGY_TARGET, ABILITY_MOVE_BASIC_ENERGY, ABILITY_MOVE_BASIC_ENERGY_TARGET, ABILITY_MOVE_DAMAGE_SOURCE, ABILITY_MOVE_DAMAGE_TARGET, ABILITY_MOVE_DAMAGE_AMOUNT, ABILITY_ATTACH_MULTIPLE_BASIC_ENERGY, ABILITY_TOP_DECK_KEEP_ONE, ABILITY_SEARCH_TOP_CARD, ON_BENCH_DISCARD_OPPONENT_DECK_TOP, ON_BENCH_SWITCH_AND_MOVE_ENERGY, ON_BENCH_MOVE_ENERGY, ATTACK_COPY_BENCHED_N, ATTACK_COPY_OPPONENT_ACTIVE, OPTIONAL_ATTACK_ENERGY_BONUS, ATTACK_OPTIONAL_SHUFFLE_ENERGY, OPPONENT_DISCARDS_OWN_HAND, EVOLUTION_DAMAGE_TARGETS, ATTACK_OPTIONAL_RETURN_SELF, ATTACK_CHOOSE_OPPONENT_HAND_DISCARD, ATTACK_EVOLVE_BENCHED, ATTACK_OPTIONAL_PARALYSIS_DISCARD, ATTACK_REVEAL_HAND_POKEMON, ATTACK_TOP_DECK_ENERGY, ATTACK_TOP_DECK_ENERGY_TARGET, ATTACK_OPTIONAL_DISCARD_TOP_CARD, EVOLUTION_OPPONENT_HAND_BASIC_TO_BENCH, ATTACK_REORDER_OPPONENT_TOP, ATTACK_LOOK_TOP_KEEP_CARDS, ABILITY_ATTACH_ANY_BASIC_ENERGY_FROM_HAND, ABILITY_ATTACH_ANY_BASIC_ENERGY_TARGET, ATTACK_KNOCKOUT_LOWEST_HP_TARGET, ATTACK_DISCARD_BASIC_ENERGY_TO_SELF, PALAFIN_ZERO_TO_HERO, ATTACK_TEAM_ROCKET_ENERGY_DISCARD, ATTACK_MOVE_ENERGY_TO_ONE_BENCH, ATTACK_MOVE_ENERGY_TO_ONE_BENCH_TARGET, ABILITY_ATTACH_BASIC_ENERGY_FROM_DECK, ABILITY_ATTACH_BASIC_ENERGY_DECK_TARGET, ON_BENCH_LAST_DITCH, ABILITY_SEARCH_SUPPORTER_FROM_DECK, ATTACK_COPY_OPPONENT_DECK_TOP, TRAINER_MOVE_BENCH_ENERGY, TRAINER_SEARCH_EVOLUTION_LINE, TRAINER_BASIC_POKEMON_TO_BENCH, TRAINER_WALLY_COMPASSION_TARGET, TRAINER_N_DISCARD_ENERGY, TRAINER_N_DISCARD_ENERGY_TARGET, TRAINER_DISCARD_OPPONENT_ENERGY, TRAINER_CRISPIN_SEARCH, TRAINER_CRISPIN_SELECT_ATTACH, TRAINER_CRISPIN_TARGET, TRAINER_ENERGY_SWITCH_SOURCE, TRAINER_ENERGY_SWITCH_TARGET, TRAINER_ROSA_TARGET, TRAINER_ROSA_ENERGIES, TRAINER_GWYNN_DISCARD, TRAINER_JANINE_TARGETS, ON_BENCH_TO_ACTIVE_ATTACH_ENERGY}
+@Serializable enum class ChoiceKind {DISCARD, SEARCH, RECOVER, SWITCH_OWN, SWITCH_OPPONENT, ENERGY_FROM_DISCARD, ENERGY_TARGET, TOOL_TARGET, EVOLUTION_SWITCH, EVOLUTION_CONFUSE_ACTIVE, EVOLUTION_METAL_ENERGY, EVOLUTION_METAL_ENERGY_TARGET, EVOLUTION_RECOVER_NAMED_TRAINER, EVOLUTION_SEARCH_TRAINER, EVOLUTION_DISCARD_OPPONENT_DECK, KNOCKOUT_DISCARD_OPPONENT_DECK, ABILITY_ENERGY, ABILITY_DAMAGE_TARGET, ABILITY_ATTACH_ENERGY, ABILITY_ATTACH_ENERGY_TARGET, ABILITY_SELECT_ENERGY_TARGET, ABILITY_BASIC_POKEMON_TO_BENCH, ABILITY_DEVOLVE_TARGET, ABILITY_SEARCH_BASIC_ENERGY_TO_HAND, ABILITY_SEARCH_COLORLESS_POKEMON_TO_HAND, ABILITY_SEARCH_POKEMON_TO_HAND, ABILITY_SEARCH_SUPPORTER_FROM_TOP, ABILITY_MOVE_ENERGY_TO_SELF, DISCARD_ATTACK_ENERGY, ATTACH_DECK_ENERGY, HEAL_TARGET, RECYCLE_ENERGY, RECYCLE_POKEMON, SONIA, ATTACK_BENCH_POKEMON, ATTACK_RECOVER_POKEMON, ATTACK_RECOVER_POKEMON_TO_HAND, ATTACK_ROTOM_SEARCH, ATTACK_DAMAGE_TARGET, ATTACK_ENERGY, ATTACK_ENERGY_TARGET, ATTACK_ENERGY_TO_HAND, ATTACK_MOVE_ALL_ENERGY_TARGET, ATTACK_EVOLVE_SELF, ATTACK_BENCH_ENERGY_DISCARD, ATTACK_HAND_ENERGY_DISCARD, ATTACK_REQUIRED_HAND_ENERGY_DISCARD, ATTACK_OWN_ENERGY_DISCARD, ATTACK_RESTRICT_OPPONENT_ATTACK, ATTACK_MOVE_DAMAGE_SOURCE, ATTACK_MOVE_DAMAGE_DESTINATION, ATTACK_MOVE_OWN_DAMAGE_SOURCE, ATTACK_MOVE_OWN_DAMAGE_TARGET, ATTACK_OPPONENT_ENERGY, ATTACK_OPPONENT_ENERGY_TARGET, ATTACK_MATCHING_ENERGY_SEARCH, ATTACK_HAND_ENERGY, ATTACK_HAND_ENERGY_TARGET, ATTACK_KNOCKOUT_BASIC_BENCH, ATTACK_DECK_BASIC_ENERGY_ANY, ATTACK_DECK_BASIC_ENERGY_TARGET, ATTACK_POKEMON_SEARCH, ATTACK_ANY_CARD_SEARCH, ATTACK_HEAL_TARGET, ATTACK_DAMAGE_COUNTER_TARGET, ATTACK_MULTI_DAMAGE_TARGETS, ATTACK_MULTI_DAMAGE_SINGLE_TARGET, ATTACK_DISCARD_THEN_BENCH_TARGET, ATTACK_SHUFFLE_OWN_BENCH, ATTACK_NAMED_POKEMON_TO_BENCH, ATTACK_DEVOLVE_OPPONENT_ACTIVE, OPPONENT_SHUFFLES_OWN_HAND, ABILITY_DISCARD_ENERGY_FROM_DISCARD, ABILITY_DISCARD_ENERGY_TARGET, ABILITY_MOVE_BASIC_ENERGY, ABILITY_MOVE_BASIC_ENERGY_TARGET, ABILITY_MOVE_DAMAGE_SOURCE, ABILITY_MOVE_DAMAGE_TARGET, ABILITY_MOVE_DAMAGE_AMOUNT, ABILITY_ATTACH_MULTIPLE_BASIC_ENERGY, ABILITY_TOP_DECK_KEEP_ONE, ABILITY_SEARCH_TOP_CARD, ON_BENCH_DISCARD_OPPONENT_DECK_TOP, ON_BENCH_SWITCH_AND_MOVE_ENERGY, ON_BENCH_MOVE_ENERGY, ATTACK_COPY_BENCHED_N, ATTACK_COPY_OPPONENT_ACTIVE, OPTIONAL_ATTACK_ENERGY_BONUS, ATTACK_OPTIONAL_SHUFFLE_ENERGY, OPPONENT_DISCARDS_OWN_HAND, EVOLUTION_DAMAGE_TARGETS, ATTACK_OPTIONAL_RETURN_SELF, ATTACK_CHOOSE_OPPONENT_HAND_DISCARD, ATTACK_EVOLVE_BENCHED, ATTACK_OPTIONAL_PARALYSIS_DISCARD, ATTACK_REVEAL_HAND_POKEMON, ATTACK_TOP_DECK_ENERGY, ATTACK_TOP_DECK_ENERGY_TARGET, ATTACK_OPTIONAL_DISCARD_TOP_CARD, EVOLUTION_OPPONENT_HAND_BASIC_TO_BENCH, ATTACK_REORDER_OPPONENT_TOP, ATTACK_LOOK_TOP_KEEP_CARDS, ABILITY_ATTACH_ANY_BASIC_ENERGY_FROM_HAND, ABILITY_ATTACH_ANY_BASIC_ENERGY_TARGET, ATTACK_KNOCKOUT_LOWEST_HP_TARGET, ATTACK_DISCARD_BASIC_ENERGY_TO_SELF, PALAFIN_ZERO_TO_HERO, ATTACK_TEAM_ROCKET_ENERGY_DISCARD, ATTACK_MOVE_ENERGY_TO_ONE_BENCH, ATTACK_MOVE_ENERGY_TO_ONE_BENCH_TARGET, ABILITY_ATTACH_BASIC_ENERGY_FROM_DECK, ABILITY_ATTACH_BASIC_ENERGY_DECK_TARGET, ON_BENCH_LAST_DITCH, ABILITY_SEARCH_SUPPORTER_FROM_DECK, ATTACK_COPY_OPPONENT_DECK_TOP, ATTACK_COPY_OWN_DECK_TOP, TRAINER_MOVE_BENCH_ENERGY, TRAINER_SEARCH_EVOLUTION_LINE, TRAINER_BASIC_POKEMON_TO_BENCH, TRAINER_WALLY_COMPASSION_TARGET, TRAINER_N_DISCARD_ENERGY, TRAINER_N_DISCARD_ENERGY_TARGET, TRAINER_DISCARD_OPPONENT_ENERGY, TRAINER_CRISPIN_SEARCH, TRAINER_CRISPIN_SELECT_ATTACH, TRAINER_CRISPIN_TARGET, TRAINER_ENERGY_SWITCH_SOURCE, TRAINER_ENERGY_SWITCH_TARGET, TRAINER_ROSA_TARGET, TRAINER_ROSA_ENERGIES, TRAINER_GWYNN_DISCARD, TRAINER_JANINE_TARGETS, ON_BENCH_TO_ACTIVE_ATTACH_ENERGY, TRAINER_KIERAN_OPTION, TRAINER_STADIUM_TOP_DECK, TRAINER_CIPHER_SEARCH, TRAINER_NAVEEN_DISCARD, TRAINER_GLASS_TARGETS, TRAINER_GLASS_ENERGY, ENERGY_TELEPATHIC_BENCH_SEARCH, TRAINER_BROCK_SCOUTING, TRAINER_RARE_CANDY_TARGET, TRAINER_RARE_CANDY_EVOLUTION, HANDHELD_FAN_ENERGY, HANDHELD_FAN_TARGET}
 @Serializable data class ChoiceRequest(val kind: ChoiceKind, val title: String, val candidates: List<String>, val min: Int, val max: Int, val remaining: Int = 0, val selectedEnergy: String? = null, val energyType: EnergyType? = null, val amount: Int = 0, val visibleCards: List<String> = emptyList(), val damageMultiplier: Int = 1, val selectedTargets: List<String> = emptyList(), val sourcePokemonId: String? = null, val benchedOnly: Boolean = false, val targetNamePrefix: String? = null, val eachBenchedPokemon: Boolean = false, val optionLabels: Map<String, String> = emptyMap(), val poisonSwitchedPokemon: Boolean = false, val healAmount: Int = 0, val healMovedPokemonEx: Boolean = false, val pendingCards: List<String> = emptyList(), val healAll: Boolean = false, val targetPokemonType: EnergyType? = null, val poisonSelfIfAttached: Boolean = false, val differentEnergyTypes: Boolean = false, val putOnBottomOfDeck: Boolean = false, val basicEnergyOnly: Boolean = true)
 @Serializable data class Resolution(val choices: List<ChoiceRequest>, val drawTo: Int = 0, val drawCount: Int = 0, val shuffleAfter: Boolean = false, val toolCard: CardInstance? = null)
 @Serializable sealed interface GameAction {

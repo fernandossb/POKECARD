@@ -50,6 +50,21 @@ class DeckLibraryTest {
         assertTrue(DeckValidator.validate(copies).errors.any { it.contains("4 cópias") })
         assertTrue(DeckValidator.validate(saved("me01-076" to 1, "sv01-258" to 59)).playable)
         assertTrue(DeckValidator.validate(saved("sv06-163" to 2, "me01-076" to 1, "sv01-258" to 57)).errors.any { it.contains("ACE SPEC") })
+        assertFalse(CardLibrary.byId["me04-082"]!!.aceSpec, "Special Red Card is not an ACE SPEC")
+    }
+    @Test fun `competitive deck rules are recognized as executable prints`() {
+        listOf("sv07-058", "sv06-167", "sv08-191", "me03-088", "sv09-146", "sv09-151").forEach { id ->
+            assertTrue(CardLibrary.byId[id]?.implemented == true, "$id should be executable")
+        }
+        assertTrue(CardLibrary.byId["sv08-191"]!!.aceSpec)
+        assertTrue(CardLibrary.byId["sv06-167"]!!.aceSpec)
+        listOf("me01-125", "me01-087", "sv07-131", "sv06-150", "me02-085").forEach { id ->
+            assertTrue(CardLibrary.byId[id]?.implemented == true, "$id should be executable")
+        }
+        TrainingDecks.all.filter { it.id.startsWith("competitive-") }.forEach { deck ->
+            val validation = DeckValidator.validate(SavedDeck(deck.id, deck.name, deck.format, deck.cards.groupingBy { it }.eachCount()))
+            assertTrue(validation.playable, "${deck.name} should appear in the CPU deck selector: $validation")
+        }
     }
     @Test fun `custom saved decks work for either seat and survive match snapshot`() {
         val own = saved("swsh8-29" to 4, "swsh8-30" to 4, "swsh12.5-153" to 52)

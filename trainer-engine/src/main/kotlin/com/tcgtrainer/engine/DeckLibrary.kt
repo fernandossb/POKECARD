@@ -72,7 +72,10 @@ object CardLibrary {
                 reviewed?.set ?: raw.s("setCode") ?: raw["set"]!!.jsonObject.s("id")!!.uppercase(), raw.s("localId")!!, category,
                 when (raw.s("stage")) { "Stage1" -> Stage.STAGE_ONE; "Stage2" -> Stage.STAGE_TWO; else -> Stage.BASIC },
                 basicEnergy, raw.s("regulationMark"), standard, reviewed?.implemented == true, raw.s("image"), text,
-                "https://api.tcgdex.net/v2/en/cards/$id", reviewed?.aceSpec == true || raw.s("rarity").orEmpty().contains("ACE SPEC", ignoreCase = true))
+                "https://api.tcgdex.net/v2/en/cards/$id",
+                // The catalogue's printed rarity is authoritative when present. A stale
+                // engine flag had incorrectly treated Special Red Card (ME04-082) as ACE SPEC.
+                raw.s("rarity")?.contains("ACE SPEC", ignoreCase = true) ?: (reviewed?.aceSpec == true))
         }.sortedWith(compareBy({ it.category.ordinal }, { it.name }, { it.id }))
     }
     val byId by lazy { entries.associateBy { it.id } }

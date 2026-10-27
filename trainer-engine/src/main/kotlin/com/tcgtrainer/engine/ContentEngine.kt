@@ -64,7 +64,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     choice.kind == ChoiceKind.EVOLUTION_DAMAGE_TARGETS && action.cardIds.isNotEmpty() && action.cardIds.size != 2 -> illegal("Biting Spree exige escolher exatamente 2 Pokémon, ou nenhum para pular.")
                     !choice.candidates.containsAll(action.cardIds) -> illegal("Alvo inválido para este efeito.")
                     choice.differentEnergyTypes && action.cardIds.map { id -> def(p.deck.first { it.id == id }).type }.distinct().size != action.cardIds.size -> illegal("Escolha no máximo uma Energia Básica de cada tipo.")
-                    choice.kind == ChoiceKind.EVOLUTION_OPPONENT_HAND_BASIC_TO_BENCH && action.cardIds.size > (5-p.bench.size).coerceAtLeast(0) -> illegal("O Banco adversário não tem espaço para tantas cartas.")
+                    choice.kind == ChoiceKind.EVOLUTION_OPPONENT_HAND_BASIC_TO_BENCH && action.cardIds.size > (rules.benchCapacity(s, actor)-p.bench.size).coerceAtLeast(0) -> illegal("O Banco adversário não tem espaço para tantas cartas.")
                     choice.kind == ChoiceKind.EVOLUTION_OPPONENT_HAND_BASIC_TO_BENCH && action.cardIds.any { id ->
                         s.players[1-rules.actingPlayer(s)].hand.none { it.id == id && def(it).category == Category.POKEMON && def(it).stage == Stage.BASIC }
                     } -> illegal("Escolha apenas Pokémon Básicos ainda na mão revelada do adversário.")
@@ -77,7 +77,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     } -> illegal("Escolha apenas um Pokémon elegível, não protegido e diferente do atacante.")
                     choice.kind == ChoiceKind.TRAINER_MOVE_BENCH_ENERGY && (p.active == null || action.cardIds.any { id -> p.bench.none { pokemon -> pokemon.energies.any { it.id == id } } }) -> illegal("Escolha Energias ligadas aos seus Pokémon do Banco com um Pokémon Ativo em jogo.")
                     choice.kind == ChoiceKind.TRAINER_SEARCH_EVOLUTION_LINE && (action.cardIds.any { id -> p.deck.none { it.id == id && def(it).category == Category.POKEMON } } || action.cardIds.mapNotNull { id -> p.deck.find { it.id == id }?.let { def(it).stage } }.distinct().size != action.cardIds.size) -> illegal("Escolha no máximo um Pokémon de cada estágio que ainda esteja no deck.")
-                    choice.kind == ChoiceKind.TRAINER_BASIC_POKEMON_TO_BENCH && action.cardIds.size > (5-p.bench.size).coerceAtLeast(0) -> illegal("O Banco não tem espaço para tantos Pokémon Básicos.")
+                    choice.kind == ChoiceKind.TRAINER_BASIC_POKEMON_TO_BENCH && action.cardIds.size > (rules.benchCapacity(s, actor)-p.bench.size).coerceAtLeast(0) -> illegal("O Banco não tem espaço para tantos Pokémon Básicos.")
                     choice.kind == ChoiceKind.TRAINER_BASIC_POKEMON_TO_BENCH && action.cardIds.any { id -> p.deck.none { it.id == id && def(it).category == Category.POKEMON && def(it).stage == Stage.BASIC && def(it).hp <= 70 } } -> illegal("Escolha apenas Pokémon Básicos de até 70 HP que ainda estejam no deck.")
                     choice.kind == ChoiceKind.TRAINER_GWYNN_DISCARD && action.cardIds.any { id -> p.hand.none { it.id == id && def(it).category == Category.POKEMON && !def(it).hasRuleBox } } -> illegal("Gwynn só pode descartar Pokémon da mão sem Rule Box.")
                     choice.kind == ChoiceKind.TRAINER_WALLY_COMPASSION_TARGET && action.cardIds.any { id -> p.pokemon().none { it.id == id && isMegaEvolutionEx(def(it.top)) } } -> illegal("Escolha um Mega Evolution Pokémon ex seu que ainda esteja em jogo.")
@@ -93,6 +93,19 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     choice.kind == ChoiceKind.ATTACK_REORDER_OPPONENT_TOP && s.players[1-rules.actingPlayer(s)].deck.take(choice.candidates.size).map { it.id }.toSet() != choice.candidates.toSet() -> illegal("As cartas do topo do deck adversário mudaram durante a escolha.")
                     choice.kind == ChoiceKind.ATTACK_LOOK_TOP_KEEP_CARDS && p.deck.take(choice.amount).map { it.id }.toSet() != choice.candidates.toSet() -> illegal("As cartas do topo do seu deck mudaram durante a escolha.")
                     choice.kind == ChoiceKind.SONIA && p.deck.filter { it.id in action.cardIds }.map { def(it).category }.distinct().size > 1 -> illegal("Sonia busca Pokémon Básicos OU Energias Básicas; não misture as categorias.")
+                    choice.kind == ChoiceKind.TRAINER_CIPHER_SEARCH && action.cardIds.any { id -> p.deck.none { it.id == id } } -> illegal("Escolha apenas cartas que ainda estejam no seu deck.")
+                    choice.kind == ChoiceKind.TRAINER_GLASS_TARGETS && (action.cardIds.distinct().size != action.cardIds.size || action.cardIds.any { id -> p.bench.none { it.id == id && def(it.top).type == EnergyType.COLORLESS } }) -> illegal("Glass Trumpet só pode escolher Pokémon Colorless do seu Banco, sem repetir alvos.")
+                    choice.kind == ChoiceKind.TRAINER_GLASS_ENERGY && (p.discard.none { it.id == action.cardIds.singleOrNull() && def(it).category == Category.ENERGY && def(it).basicEnergy } || p.bench.none { it.id == choice.sourcePokemonId && def(it.top).type == EnergyType.COLORLESS }) -> illegal("Escolha uma Energia Básica do descarte para um Pokémon Colorless do Banco.")
+                    choice.kind == ChoiceKind.ENERGY_TELEPATHIC_BENCH_SEARCH && (action.cardIds.any { id -> p.deck.none { it.id == id && def(it).category == Category.POKEMON && def(it).stage == Stage.BASIC && def(it).type == EnergyType.PSYCHIC } } || action.cardIds.size > (rules.benchCapacity(s, actor)-p.bench.size).coerceAtLeast(0)) -> illegal("Escolha apenas Pokémon Básicos Psíquicos do deck e respeite o espaço do Banco.")
+                    choice.kind == ChoiceKind.TRAINER_BROCK_SCOUTING && (action.cardIds.size > 2 || action.cardIds.mapNotNull { id -> p.deck.find { it.id == id }?.let { def(it).stage } }.let { stages -> stages.any { it != Stage.BASIC } && stages.size > 1 }) -> illegal("Brock's Scouting busca até 2 Pokémon Básicos ou 1 Pokémon de Evolução.")
+                    choice.kind == ChoiceKind.TRAINER_RARE_CANDY_TARGET && action.cardIds.any { id -> p.pokemon().none { it.id == id && def(it.top).stage == Stage.BASIC && it.enteredPlayTurn != s.turn && p.hand.any { card -> def(card).canRareCandyEvolveFrom(def(it.top)) } } } -> illegal("Rare Candy só pode escolher um Pokémon Básico elegível e com uma Evolução de Estágio 2 correspondente na mão.")
+                    choice.kind == ChoiceKind.TRAINER_RARE_CANDY_EVOLUTION && (p.pokemon().none { it.id == choice.sourcePokemonId && def(it.top).stage == Stage.BASIC && it.enteredPlayTurn != s.turn } || action.cardIds.any { id -> p.hand.none { it.id == id && def(it).canRareCandyEvolveFrom(def(p.pokemon().first { target -> target.id == choice.sourcePokemonId }.top)) } }) -> illegal("Escolha uma Evolução de Estágio 2 correspondente que ainda esteja na mão.")
+                    choice.kind == ChoiceKind.HANDHELD_FAN_ENERGY && action.cardIds.any { id -> s.players[1-actor].active?.energies?.none { it.id == id } != false } -> illegal("Escolha uma Energia ainda ligada ao Pokémon Atacante.")
+                    choice.kind == ChoiceKind.HANDHELD_FAN_TARGET && action.cardIds.any { id -> p.bench.none { it.id == id } } -> illegal("Handheld Fan só pode mover a Energia a um Pokémon do seu Banco.")
+                    choice.kind in setOf(ChoiceKind.ATTACK_DAMAGE_COUNTER_TARGET, ChoiceKind.ABILITY_DAMAGE_TARGET, ChoiceKind.ABILITY_MOVE_DAMAGE_TARGET) && action.cardIds.any { id ->
+                        val target = s.players[1-actor].pokemon().firstOrNull { it.id == id }
+                        target != null && rules.preventsBenchDamageCounters(s, actor, 1-actor, target)
+                    } -> illegal("Battle Cage impede contadores de dano de efeitos adversários nos Pokémon do Banco.")
                     else -> Legality.Legal
                 }
             }
@@ -100,11 +113,16 @@ internal class ContentEngine(private val rules: RulesEngine) {
                 val card = p.hand.find { it.id == action.cardId } ?: return illegal("Carta fora da mão.")
                 val d = def(card)
                 val effect = d.trainerEffect ?: return illegal("Efeito de Treinador não suportado.")
-                if (d.trainerType == TrainerType.ITEM && s.turn <= p.itemPlayLockedUntilTurn) return illegal("Você não pode jogar cartas de Item neste turno.")
+                // Pokémon Tools are Item cards under the TCG rules and are also played from hand.
+                if (d.trainerType in setOf(TrainerType.ITEM, TrainerType.TOOL) && s.turn <= p.itemPlayLockedUntilTurn)
+                    return illegal("Você não pode jogar cartas de Item neste turno.")
                 val opponentActive = s.players[1-actor].active
                 if (d.trainerType in setOf(TrainerType.ITEM, TrainerType.TOOL) && opponentActive != null &&
                     rules.effectiveAbilities(s, 1-actor, opponentActive).any { it.preventOpponentItemAndToolPlayFromHand })
                     return illegal("O Pokémon Ativo adversário impede jogar cartas de Item e Ferramenta da mão.")
+                if (d.aceSpec && s.players[1-actor].pokemon().any { pokemon ->
+                        pokemon.tools.isNotEmpty() && rules.effectiveAbilities(s, 1-actor, pokemon).any { it.preventOpponentAceSpecFromHandWithTool }
+                    }) return illegal("Genesect impede jogar cartas ACE SPEC enquanto tiver uma Ferramenta ligada.")
                 if (d.trainerType == TrainerType.SUPPORTER) {
                     if (s.turn == 1 && !(effect is TrainerEffect.Search && effect.allowFirstTurnIfStarting && actor == s.startingPlayer)) return illegal("Quem começa não pode usar Apoiador no primeiro turno.")
                     if (p.flags.supporter) return illegal("Você já usou um Apoiador neste turno.")
@@ -142,6 +160,24 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         else -> Legality.Legal
                     }
                     is TrainerEffect.DamageBoost -> Legality.Legal
+                    is TrainerEffect.OpponentExDamageBoost -> Legality.Legal
+                    TrainerEffect.Kieran -> if (p.bench.isEmpty()) illegal("Kieran precisa de um Pokémon no Banco para trocar.") else Legality.Legal
+                    TrainerEffect.AcademyAtNight, TrainerEffect.PrismTower -> when {
+                        p.flags.stadium -> illegal("Você já jogou um Estádio neste turno.")
+                        s.stadium?.let { def(it).name == d.name } == true -> illegal("Já existe um Estádio com esse nome em jogo.")
+                        else -> Legality.Legal
+                    }
+                    TrainerEffect.BattleCage, TrainerEffect.AreaZeroUnderdepths -> when {
+                        p.flags.stadium -> illegal("Você já jogou um Estádio neste turno.")
+                        s.stadium?.let { def(it).name == d.name } == true -> illegal("Já existe um Estádio com esse nome em jogo.")
+                        else -> Legality.Legal
+                    }
+                    TrainerEffect.HandheldFan -> if (p.pokemon().none { rules.canAttachTool(s, actor, it) }) illegal("Não há Pokémon apto para receber Handheld Fan.") else Legality.Legal
+                    TrainerEffect.Ciphermaniac -> if (p.deck.isEmpty()) illegal("Não há cartas no deck para buscar.") else Legality.Legal
+                    TrainerEffect.BrockScouting -> if (p.deck.isEmpty()) illegal("Seu deck está vazio.") else Legality.Legal
+                    TrainerEffect.RareCandy -> if (s.turn <= 2) illegal("Rare Candy não pode ser usado no primeiro turno de cada jogador.") else if (p.pokemon().none { target -> def(target.top).stage == Stage.BASIC && target.enteredPlayTurn != s.turn && p.hand.any { def(it).canRareCandyEvolveFrom(def(target.top)) } }) illegal("Não há um Pokémon Básico elegível com uma Evolução de Estágio 2 correspondente na mão.") else Legality.Legal
+                    TrainerEffect.Naveen -> if (p.deck.isEmpty()) illegal("Naveen não pode ser usado se você não puder comprar nenhuma carta.") else Legality.Legal
+                    TrainerEffect.GlassTrumpet -> if (p.pokemon().none { def(it.top).isTera }) illegal("Glass Trumpet só pode ser usado se você tiver um Pokémon Tera em jogo.") else Legality.Legal
                     is TrainerEffect.ShuffleHandDraw -> if (p.deck.isEmpty() && p.hand.size <= 1) illegal("Não há cartas para embaralhar ou comprar.") else Legality.Legal
                     is TrainerEffect.ShuffleBothHandsDraw -> if (effect.requiresPreviousKnockout && p.lastKnockedOutTurn != s.turn - 1)
                         illegal("Você só pode jogar este Item se um dos seus Pokémon foi Nocauteado no último turno adversário.") else Legality.Legal
@@ -175,7 +211,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         else -> Legality.Legal
                     }
                     TrainerEffect.BuddyBuddyPoffin -> when {
-                        p.bench.size >= 5 -> illegal("O Banco já tem 5 Pokémon.")
+                        p.bench.size >= rules.benchCapacity(s, actor) -> illegal("O Banco não tem espaço para outro Pokémon.")
                         p.deck.none { def(it).category == Category.POKEMON && def(it).stage == Stage.BASIC && def(it).hp <= 70 } -> illegal("Não há Pokémon Básicos de até 70 HP no deck.")
                         else -> Legality.Legal
                     }
@@ -232,8 +268,8 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     ability.onEvolveRecoverNamedTrainerFromDiscard != null -> illegal("Esta habilidade só pode ser usada ao evoluir da mão.")
                     ability.devolveOpponentPokemonMax > 0 && s.players[1-s.currentPlayer].pokemon().none { it.cards.size > 1 && rules.effectiveAbilities(s, 1-rules.actingPlayer(s), it).none { targetAbility -> targetAbility.preventOpponentEffects } } -> illegal("Não há Pokémon adversário evoluído e sem proteção para desvoluir.")
                     ability.attackDiscountPerOpponentPrize -> illegal("Esta habilidade é aplicada automaticamente ao custo do ataque.")
-                    ability.hpBonusPerOpponentPrizeTaken > 0 || ability.hpBonusPerAttachedEnergyType != null || ability.teamDamageReduction > 0 || ability.additionalPokemonTypes.isNotEmpty() || ability.attackDamageBonusAgainstEvolutionActive > 0 || ability.futurePokemonDamageBonus > 0 || ability.teamAttackDamageBonusType != null || ability.teamAttackDamageBonusAnyType > 0 || ability.freeRetreatWithNoEnergy || ability.attackDiscountPerKofuDiscard || ability.ignoreColorlessAttackCostWhenOpponentHandCountIs > 0 || ability.coinFlipPreventAttackDamage || ability.preventOpponentItemSupporterEffects || ability.preventOpponentItemAndToolPlayFromHand || ability.triggersWhenMovedFromActiveToBench || ability.triggersWhenMovedFromBenchToActive || ability.changeOpponentNsPokemonWeaknessToPsychic || ability.reducePrizeForDarknessKnockoutByEx || ability.mayAttackFirstTurnIfStarting || ability.suppressSelfKnockoutAbilities || ability.opponentActiveAbilityException != null || ability.rotomToolCapacityBonus || ability.preventDamageToOwnBenchedNonRuleBoxPokemon -> illegal("Esta habilidade passiva se aplica automaticamente.")
-                    ability.hpBonusPerOpponentPrizeTaken > 0 || ability.hpBonusPerAttachedEnergyType != null || ability.teamDamageReduction > 0 || ability.additionalPokemonTypes.isNotEmpty() || ability.attackDamageBonusAgainstEvolutionActive > 0 || ability.futurePokemonDamageBonus > 0 || ability.teamAttackDamageBonusType != null || ability.teamAttackDamageBonusAnyType > 0 || ability.freeRetreatWithNoEnergy || ability.attackDiscountPerKofuDiscard || ability.ignoreColorlessAttackCostWhenOpponentHandCountIs > 0 || ability.coinFlipPreventAttackDamage || ability.preventOpponentItemSupporterEffects || ability.preventOpponentItemAndToolPlayFromHand || ability.onlyPlayableWithPalafinZeroToHero || ability.changeOpponentNsPokemonWeaknessToPsychic || ability.reducePrizeForDarknessKnockoutByEx || ability.mayAttackFirstTurnIfStarting || ability.suppressSelfKnockoutAbilities || ability.suppressRuleBoxAbilitiesExceptFuture || ability.opponentActiveAbilityException != null || ability.rotomToolCapacityBonus || ability.preventDamageToOwnBenchedNonRuleBoxPokemon -> illegal("Esta habilidade passiva se aplica automaticamente.")
+                    ability.hpBonusPerOpponentPrizeTaken > 0 || ability.hpBonusPerAttachedEnergyType != null || ability.teamDamageReduction > 0 || ability.additionalPokemonTypes.isNotEmpty() || ability.attackDamageBonusAgainstEvolutionActive > 0 || ability.futurePokemonDamageBonus > 0 || ability.teamAttackDamageBonusType != null || ability.teamAttackDamageBonusAnyType > 0 || ability.freeRetreatWithNoEnergy || ability.attackDiscountPerKofuDiscard || ability.ignoreColorlessAttackCostWhenOpponentHandCountIs > 0 || ability.coinFlipPreventAttackDamage || ability.preventOpponentItemSupporterEffects || ability.preventOpponentItemAndToolPlayFromHand || ability.preventOpponentAceSpecFromHandWithTool || ability.triggersWhenMovedFromActiveToBench || ability.triggersWhenMovedFromBenchToActive || ability.changeOpponentNsPokemonWeaknessToPsychic || ability.reducePrizeForDarknessKnockoutByEx || ability.mayAttackFirstTurnIfStarting || ability.suppressSelfKnockoutAbilities || ability.opponentActiveAbilityException != null || ability.rotomToolCapacityBonus || ability.preventDamageToOwnBenchedNonRuleBoxPokemon -> illegal("Esta habilidade passiva se aplica automaticamente.")
+                    ability.hpBonusPerOpponentPrizeTaken > 0 || ability.hpBonusPerAttachedEnergyType != null || ability.teamDamageReduction > 0 || ability.additionalPokemonTypes.isNotEmpty() || ability.attackDamageBonusAgainstEvolutionActive > 0 || ability.futurePokemonDamageBonus > 0 || ability.teamAttackDamageBonusType != null || ability.teamAttackDamageBonusAnyType > 0 || ability.freeRetreatWithNoEnergy || ability.attackDiscountPerKofuDiscard || ability.ignoreColorlessAttackCostWhenOpponentHandCountIs > 0 || ability.coinFlipPreventAttackDamage || ability.preventOpponentItemSupporterEffects || ability.preventOpponentItemAndToolPlayFromHand || ability.preventOpponentAceSpecFromHandWithTool || ability.onlyPlayableWithPalafinZeroToHero || ability.changeOpponentNsPokemonWeaknessToPsychic || ability.reducePrizeForDarknessKnockoutByEx || ability.mayAttackFirstTurnIfStarting || ability.suppressSelfKnockoutAbilities || ability.suppressRuleBoxAbilitiesExceptFuture || ability.opponentActiveAbilityException != null || ability.rotomToolCapacityBonus || ability.preventDamageToOwnBenchedNonRuleBoxPokemon -> illegal("Esta habilidade passiva se aplica automaticamente.")
                     ability.selfKnockout && s.players.any { player -> player.pokemon().any { source ->
                         rules.effectiveAbilities(s, s.players.indexOf(player), source).any { it.suppressSelfKnockoutAbilities }
                     } } -> illegal("Habilidades que nocauteiam o próprio Pokémon estão desativadas enquanto Damp estiver em jogo.")
@@ -268,7 +304,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     ability.attachHandEnergyToPokemonType != null && (if (ability.attachHandEnergyBenchOnly) p.bench else p.pokemon()).none { def(it.top).type == ability.attachHandEnergyToPokemonType } -> illegal("Não há Pokémon do tipo necessário na área permitida para receber a Energia.")
                     ability.attachHandEnergyBenchOnly && p.bench.none { def(it.top).name.startsWith(ability.attachHandEnergyToPokemonNamePrefix.orEmpty()) } -> illegal("Não há Pokémon elegível no Banco para receber a Energia.")
                     ability.healDamage > 0 && (if (ability.healActiveOnly) listOfNotNull(p.active) else p.pokemon()).none { it.damage > 0 } -> illegal("Não há dano para curar no alvo permitido.")
-                    ability.recoverBasicPokemonToBenchMaxHp > 0 && p.bench.size >= 5 -> illegal("O Banco já tem 5 Pokémon.")
+                    ability.recoverBasicPokemonToBenchMaxHp > 0 && p.bench.size >= rules.benchCapacity(s, actor) -> illegal("O Banco não tem espaço para outro Pokémon.")
                     ability.recoverBasicPokemonToBenchMaxHp > 0 && p.discard.none { def(it).category == Category.POKEMON && def(it).stage == Stage.BASIC && def(it).hp <= ability.recoverBasicPokemonToBenchMaxHp } -> illegal("Não há Pokémon Básico válido no descarte.")
                     ability.attachBasicEnergyFromDiscard && p.discard.none { def(it).category == Category.ENERGY && def(it).basicEnergy &&
                         (ability.attachBasicEnergyFromDiscardType == null || def(it).type == ability.attachBasicEnergyFromDiscardType) } -> illegal("Não há Energia Básica válida no descarte para ligar.")
@@ -334,7 +370,60 @@ internal class ContentEngine(private val rules: RulesEngine) {
                             events += GameEvent("TrainerPlayed", "Jogou ${d.name} (${d.set} ${d.number}).")
                             val hand = s.players[actor].hand
                             fun cost(n: Int) = if (n == 0) emptyList() else listOf(ChoiceRequest(ChoiceKind.DISCARD, "Escolha $n carta(s) para pagar o custo.", hand.map { it.id }, n, n))
+                            fun discardBenchOverFive(playerIndex: Int) {
+                                val player = s.players[playerIndex]
+                                val removed = player.bench.drop(5)
+                                if (removed.isEmpty()) return
+                                val attached = removed.flatMap { it.cards + it.energies + it.tools }
+                                update(playerIndex) { it.copy(bench = it.bench.take(5), discard = it.discard + attached) }
+                                events += GameEvent("AreaZeroBenchReduced", "${removed.size} Pokémon foram descartados do Banco por Area Zero Underdepths.", removed.size)
+                            }
+                            fun replaceStadium(card: CardInstance) {
+                                val old = s.stadium
+                                val oldOwner = s.stadiumOwner
+                                if (old != null && oldOwner != null) {
+                                    if (def(old).trainerEffect == TrainerEffect.AreaZeroUnderdepths) {
+                                        listOf(oldOwner, 1 - oldOwner).forEach(::discardBenchOverFive)
+                                    }
+                                    update(oldOwner) { it.copy(discard = it.discard + old) }
+                                }
+                                s = s.copy(stadium = card, stadiumOwner = actor)
+                                update { it.copy(flags = it.flags.copy(stadium = true)) }
+                            }
                             when (effect) {
+                                TrainerEffect.Ciphermaniac -> {
+                                    val candidates = p.deck
+                                    val count = minOf(2, candidates.size)
+                                    begin(Resolution(listOf(ChoiceRequest(ChoiceKind.TRAINER_CIPHER_SEARCH,
+                                        "Ciphermaniac: escolha $count cartas para colocar no topo do deck após embaralhar.",
+                                        candidates.map { it.id }, count, count, visibleCards = candidates.map { it.id }))))
+                                }
+                                TrainerEffect.Naveen -> begin(Resolution(listOf(ChoiceRequest(
+                                    ChoiceKind.TRAINER_NAVEEN_DISCARD,
+                                    "Naveen: descarte qualquer quantidade de cartas da mão antes de comprar até ter 5.",
+                                    hand.map { it.id }, 0, hand.size
+                                )), drawTo = 5))
+                                TrainerEffect.BrockScouting -> {
+                                    val candidates = p.deck.filter { def(it).category == Category.POKEMON }
+                                    begin(Resolution(listOf(ChoiceRequest(ChoiceKind.TRAINER_BROCK_SCOUTING,
+                                        "Brock's Scouting: escolha até 2 Pokémon Básicos ou 1 Pokémon de Evolução.",
+                                        candidates.map { it.id }, 0, minOf(2, candidates.size), visibleCards = candidates.map { it.id })), shuffleAfter = true))
+                                }
+                                TrainerEffect.RareCandy -> {
+                                    val targets = p.pokemon().filter { target -> def(target.top).stage == Stage.BASIC && target.enteredPlayTurn != s.turn &&
+                                        hand.any { def(it).canRareCandyEvolveFrom(def(target.top)) } }
+                                    begin(Resolution(listOf(ChoiceRequest(ChoiceKind.TRAINER_RARE_CANDY_TARGET,
+                                        "Rare Candy: escolha um Pokémon Básico e a Evolução de Estágio 2 correspondente.",
+                                        targets.map { it.id }, 1, 1))))
+                                }
+                                TrainerEffect.GlassTrumpet -> {
+                                    val targets = p.bench.filter { def(it.top).type == EnergyType.COLORLESS }
+                                    val energies = p.discard.filter { def(it).category == Category.ENERGY && def(it).basicEnergy }
+                                    val max = minOf(2, targets.size, energies.size)
+                                    begin(Resolution(listOf(ChoiceRequest(ChoiceKind.TRAINER_GLASS_TARGETS,
+                                        "Glass Trumpet: escolha até $max Pokémon Colorless do Banco para receber Energia Básica.",
+                                        targets.map { it.id }, 0, max))))
+                                }
                                 is TrainerEffect.Search -> begin(Resolution(cost(effect.discardCost) + effect.filters.map { filter ->
                                     val visible = if (effect.lookAtTop > 0) p.deck.take(effect.lookAtTop) else p.deck
                                     val candidates = visible.filter { matches(it, filter) }
@@ -427,11 +516,23 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                 ))))
                                 TrainerEffect.Recover -> begin(Resolution(listOf(ChoiceRequest(ChoiceKind.RECOVER, "Recuperar Pokémon ou Energia Básica.", p.discard.filter { matches(it, CardFilter.POKEMON_OR_ENERGY) }.map { it.id }, 1, 1))))
                                 is TrainerEffect.DamageBoost -> update { it.copy(flags = it.flags.copy(damageBoosts = it.flags.damageBoosts + (effect.type to ((it.flags.damageBoosts[effect.type] ?: 0) + effect.amount)))) }
+                                is TrainerEffect.OpponentExDamageBoost -> update { it.copy(flags = it.flags.copy(
+                                    opponentExDamageBoost = effect.amount,
+                                    opponentExAndVDamageBoost = if (effect.includeV) effect.amount else 0
+                                )) }
+                                TrainerEffect.Kieran -> begin(Resolution(listOf(ChoiceRequest(
+                                    ChoiceKind.TRAINER_KIERAN_OPTION,
+                                    "Kieran: escolha trocar seu Pokémon Ativo ou aumentar o dano contra o Pokémon ex/V Ativo adversário.",
+                                    listOf("switch", "boost"), 1, 1
+                                ))))
+                                TrainerEffect.AcademyAtNight, TrainerEffect.PrismTower, TrainerEffect.BattleCage, TrainerEffect.AreaZeroUnderdepths -> replaceStadium(card)
                                 is TrainerEffect.RetreatReduction -> begin(Resolution(listOf(ChoiceRequest(ChoiceKind.TOOL_TARGET, "Ligar Ferramenta a qual Pokémon?", p.pokemon().filter { rules.canAttachTool(s, actor, it) }.map { it.id }, 1, 1)), toolCard = card))
                                 is TrainerEffect.BindingMochi -> begin(Resolution(listOf(ChoiceRequest(ChoiceKind.TOOL_TARGET,
                                     "Ligue Binding Mochi a um dos seus Pokémon.", p.pokemon().filter { rules.canAttachTool(s, actor, it) }.map { it.id }, 1, 1)), toolCard = card))
                                 is TrainerEffect.ToolHpModifier -> begin(Resolution(listOf(ChoiceRequest(ChoiceKind.TOOL_TARGET,
                                     "Ligue a Ferramenta a um dos seus Pokémon.", p.pokemon().filter { rules.canAttachTool(s, actor, it) }.map { it.id }, 1, 1)), toolCard = card))
+                                TrainerEffect.HandheldFan -> begin(Resolution(listOf(ChoiceRequest(ChoiceKind.TOOL_TARGET,
+                                    "Ligue Handheld Fan a um dos seus Pokémon.", p.pokemon().filter { rules.canAttachTool(s, actor, it) }.map { it.id }, 1, 1)), toolCard = card))
                                 TrainerEffect.LuckyHelmet -> begin(Resolution(listOf(ChoiceRequest(ChoiceKind.TOOL_TARGET,
                                     "Ligue Lucky Helmet a um dos seus Pokémon.", p.pokemon().filter { rules.canAttachTool(s, actor, it) }.map { it.id }, 1, 1)), toolCard = card))
                                 is TrainerEffect.LookTopKeepDiscard -> {
@@ -442,10 +543,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                         top.map { it.id }, keep, keep, amount = top.size, visibleCards = top.map { it.id }))))
                                 }
                                 is TrainerEffect.HpModifier -> {
-                                    val old = s.stadium; val owner = s.stadiumOwner
-                                    if (old != null && owner != null) update(owner) { it.copy(discard = it.discard + old) }
-                                    s = s.copy(stadium = card, stadiumOwner = actor)
-                                    update { it.copy(flags = it.flags.copy(stadium = true)) }
+                                    replaceStadium(card)
                                 }
                                 is TrainerEffect.DrawCards -> {
                                     draw(effect.count)
@@ -514,20 +612,14 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                 }
                                 TrainerEffect.ForestOfVitality -> Unit
                                 TrainerEffect.MysteryGarden -> {
-                                    val old = s.stadium; val owner = s.stadiumOwner
-                                    if (old != null && owner != null) update(owner) { it.copy(discard = it.discard + old) }
-                                    s = s.copy(stadium = card, stadiumOwner = actor)
-                                    update { it.copy(flags = it.flags.copy(stadium = true)) }
+                                    replaceStadium(card)
                                 }
                                 TrainerEffect.NsCastle, TrainerEffect.ColorlessAbilityLock, TrainerEffect.RiskyRuins -> {
-                                    val old = s.stadium; val owner = s.stadiumOwner
-                                    if (old != null && owner != null) update(owner) { it.copy(discard = it.discard + old) }
-                                    s = s.copy(stadium = card, stadiumOwner = actor)
-                                    update { it.copy(flags = it.flags.copy(stadium = true)) }
+                                    replaceStadium(card)
                                 }
                                 TrainerEffect.BuddyBuddyPoffin -> {
                                     val eligible = p.deck.filter { def(it).category == Category.POKEMON && def(it).stage == Stage.BASIC && def(it).hp <= 70 }
-                                    val max = minOf(2, (5-p.bench.size).coerceAtLeast(0), eligible.size)
+                                    val max = minOf(2, (rules.benchCapacity(s, actor)-p.bench.size).coerceAtLeast(0), eligible.size)
                                     begin(Resolution(listOf(ChoiceRequest(ChoiceKind.TRAINER_BASIC_POKEMON_TO_BENCH,
                                         "Buddy-Buddy Poffin: escolha até $max Pokémon Básicos de até 70 HP para colocar no Banco.",
                                         eligible.map { it.id }, 0, max, visibleCards = eligible.map { it.id })), shuffleAfter = true))
@@ -709,7 +801,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                             else if (ability.damageCounters > 0) {
                                 val targetChoice = ChoiceRequest(ChoiceKind.ABILITY_DAMAGE_TARGET,
                                     "Escolha ${ability.damageTargets} Pokémon adversário para receber ${ability.damageCounters} contadores de dano.",
-                                    s.players[1-actor].pokemon().filter { target -> rules.effectiveAbilities(s, 1-rules.actingPlayer(s), target).none { it.preventOpponentEffects } }.map { it.id }, ability.damageTargets, ability.damageTargets,
+                                    s.players[1-actor].pokemon().filter { target -> rules.effectiveAbilities(s, 1-rules.actingPlayer(s), target).none { it.preventOpponentEffects } && !rules.preventsBenchDamageCounters(s, actor, 1-actor, target) }.map { it.id }, ability.damageTargets, ability.damageTargets,
                                     amount = ability.damageCounters*10, sourcePokemonId = pokemon.id)
                                 val choices = if (ability.discardEnergyType != null) listOf(
                                     ChoiceRequest(ChoiceKind.ABILITY_ENERGY,
@@ -840,10 +932,10 @@ internal class ContentEngine(private val rules: RulesEngine) {
             shuffleAfterResolution = resolution.shuffleAfter
             val p = s.players[actor]
             val early = when (choice.kind) {
-            ChoiceKind.ON_BENCH_LAST_DITCH, ChoiceKind.ABILITY_SEARCH_SUPPORTER_FROM_DECK, ChoiceKind.ATTACK_KNOCKOUT_LOWEST_HP_TARGET, ChoiceKind.ATTACK_LOOK_TOP_KEEP_CARDS, ChoiceKind.ATTACK_REORDER_OPPONENT_TOP, ChoiceKind.EVOLUTION_DISCARD_OPPONENT_DECK, ChoiceKind.KNOCKOUT_DISCARD_OPPONENT_DECK, ChoiceKind.EVOLUTION_METAL_ENERGY, ChoiceKind.EVOLUTION_METAL_ENERGY_TARGET, ChoiceKind.EVOLUTION_RECOVER_NAMED_TRAINER, ChoiceKind.DISCARD, ChoiceKind.ABILITY_ENERGY, ChoiceKind.ABILITY_DAMAGE_TARGET, ChoiceKind.EVOLUTION_DAMAGE_TARGETS, ChoiceKind.ABILITY_DEVOLVE_TARGET, ChoiceKind.ATTACK_DEVOLVE_OPPONENT_ACTIVE, ChoiceKind.ABILITY_SEARCH_TOP_CARD, ChoiceKind.ABILITY_SEARCH_SUPPORTER_FROM_TOP, ChoiceKind.ABILITY_TOP_DECK_KEEP_ONE, ChoiceKind.ABILITY_SEARCH_BASIC_ENERGY_TO_HAND, ChoiceKind.ABILITY_ATTACH_BASIC_ENERGY_FROM_DECK, ChoiceKind.ABILITY_ATTACH_BASIC_ENERGY_DECK_TARGET, ChoiceKind.ABILITY_SEARCH_COLORLESS_POKEMON_TO_HAND, ChoiceKind.ABILITY_SEARCH_POKEMON_TO_HAND, ChoiceKind.EVOLUTION_SEARCH_TRAINER, ChoiceKind.EVOLUTION_OPPONENT_HAND_BASIC_TO_BENCH, ChoiceKind.ABILITY_SELECT_ENERGY_TARGET, ChoiceKind.ABILITY_ATTACH_ANY_BASIC_ENERGY_FROM_HAND, ChoiceKind.ABILITY_ATTACH_ANY_BASIC_ENERGY_TARGET, ChoiceKind.ABILITY_DISCARD_ENERGY_FROM_DISCARD, ChoiceKind.ABILITY_DISCARD_ENERGY_TARGET -> resolveChoiceGroup1(state, choice, ids, p)
-            ChoiceKind.ABILITY_ATTACH_ENERGY, ChoiceKind.ABILITY_ATTACH_MULTIPLE_BASIC_ENERGY, ChoiceKind.ABILITY_ATTACH_ENERGY_TARGET, ChoiceKind.ABILITY_BASIC_POKEMON_TO_BENCH, ChoiceKind.TRAINER_BASIC_POKEMON_TO_BENCH, ChoiceKind.TRAINER_GWYNN_DISCARD, ChoiceKind.TRAINER_WALLY_COMPASSION_TARGET, ChoiceKind.TRAINER_N_DISCARD_ENERGY, ChoiceKind.TRAINER_N_DISCARD_ENERGY_TARGET, ChoiceKind.TRAINER_DISCARD_OPPONENT_ENERGY, ChoiceKind.TRAINER_CRISPIN_SEARCH, ChoiceKind.TRAINER_CRISPIN_SELECT_ATTACH, ChoiceKind.TRAINER_CRISPIN_TARGET, ChoiceKind.TRAINER_ENERGY_SWITCH_SOURCE, ChoiceKind.TRAINER_ENERGY_SWITCH_TARGET, ChoiceKind.TRAINER_ROSA_TARGET, ChoiceKind.TRAINER_ROSA_ENERGIES, ChoiceKind.ABILITY_MOVE_BASIC_ENERGY, ChoiceKind.ABILITY_MOVE_BASIC_ENERGY_TARGET, ChoiceKind.ABILITY_MOVE_DAMAGE_SOURCE, ChoiceKind.ABILITY_MOVE_DAMAGE_TARGET, ChoiceKind.ABILITY_MOVE_DAMAGE_AMOUNT, ChoiceKind.ABILITY_MOVE_ENERGY_TO_SELF, ChoiceKind.SEARCH, ChoiceKind.SONIA, ChoiceKind.OPPONENT_SHUFFLES_OWN_HAND, ChoiceKind.OPPONENT_DISCARDS_OWN_HAND, ChoiceKind.ATTACK_OPTIONAL_DISCARD_TOP_CARD, ChoiceKind.ATTACK_CHOOSE_OPPONENT_HAND_DISCARD, ChoiceKind.TRAINER_MOVE_BENCH_ENERGY, ChoiceKind.TRAINER_SEARCH_EVOLUTION_LINE, ChoiceKind.RECOVER, ChoiceKind.EVOLUTION_CONFUSE_ACTIVE, ChoiceKind.PALAFIN_ZERO_TO_HERO, ChoiceKind.SWITCH_OWN, ChoiceKind.SWITCH_OPPONENT, ChoiceKind.EVOLUTION_SWITCH, ChoiceKind.TOOL_TARGET, ChoiceKind.ENERGY_FROM_DISCARD, ChoiceKind.ENERGY_TARGET, ChoiceKind.DISCARD_ATTACK_ENERGY, ChoiceKind.ATTACK_OPTIONAL_SHUFFLE_ENERGY, ChoiceKind.ATTACK_OPTIONAL_PARALYSIS_DISCARD, ChoiceKind.ATTACH_DECK_ENERGY -> resolveChoiceGroup2(state, choice, ids, p)
+            ChoiceKind.ON_BENCH_LAST_DITCH, ChoiceKind.ABILITY_SEARCH_SUPPORTER_FROM_DECK, ChoiceKind.ATTACK_KNOCKOUT_LOWEST_HP_TARGET, ChoiceKind.ATTACK_LOOK_TOP_KEEP_CARDS, ChoiceKind.ATTACK_REORDER_OPPONENT_TOP, ChoiceKind.TRAINER_CIPHER_SEARCH, ChoiceKind.TRAINER_NAVEEN_DISCARD, ChoiceKind.TRAINER_GLASS_TARGETS, ChoiceKind.ENERGY_TELEPATHIC_BENCH_SEARCH, ChoiceKind.TRAINER_BROCK_SCOUTING, ChoiceKind.EVOLUTION_DISCARD_OPPONENT_DECK, ChoiceKind.KNOCKOUT_DISCARD_OPPONENT_DECK, ChoiceKind.EVOLUTION_METAL_ENERGY, ChoiceKind.EVOLUTION_METAL_ENERGY_TARGET, ChoiceKind.EVOLUTION_RECOVER_NAMED_TRAINER, ChoiceKind.DISCARD, ChoiceKind.ABILITY_ENERGY, ChoiceKind.ABILITY_DAMAGE_TARGET, ChoiceKind.EVOLUTION_DAMAGE_TARGETS, ChoiceKind.ABILITY_DEVOLVE_TARGET, ChoiceKind.ATTACK_DEVOLVE_OPPONENT_ACTIVE, ChoiceKind.ABILITY_SEARCH_TOP_CARD, ChoiceKind.ABILITY_SEARCH_SUPPORTER_FROM_TOP, ChoiceKind.ABILITY_TOP_DECK_KEEP_ONE, ChoiceKind.ABILITY_SEARCH_BASIC_ENERGY_TO_HAND, ChoiceKind.ABILITY_ATTACH_BASIC_ENERGY_FROM_DECK, ChoiceKind.ABILITY_ATTACH_BASIC_ENERGY_DECK_TARGET, ChoiceKind.ABILITY_SEARCH_COLORLESS_POKEMON_TO_HAND, ChoiceKind.ABILITY_SEARCH_POKEMON_TO_HAND, ChoiceKind.EVOLUTION_SEARCH_TRAINER, ChoiceKind.EVOLUTION_OPPONENT_HAND_BASIC_TO_BENCH, ChoiceKind.ABILITY_SELECT_ENERGY_TARGET, ChoiceKind.ABILITY_ATTACH_ANY_BASIC_ENERGY_FROM_HAND, ChoiceKind.ABILITY_ATTACH_ANY_BASIC_ENERGY_TARGET, ChoiceKind.ABILITY_DISCARD_ENERGY_FROM_DISCARD, ChoiceKind.ABILITY_DISCARD_ENERGY_TARGET -> resolveChoiceGroup1(state, choice, ids, p)
+            ChoiceKind.ABILITY_ATTACH_ENERGY, ChoiceKind.ABILITY_ATTACH_MULTIPLE_BASIC_ENERGY, ChoiceKind.ABILITY_ATTACH_ENERGY_TARGET, ChoiceKind.ABILITY_BASIC_POKEMON_TO_BENCH, ChoiceKind.TRAINER_BASIC_POKEMON_TO_BENCH, ChoiceKind.TRAINER_GLASS_ENERGY, ChoiceKind.TRAINER_GWYNN_DISCARD, ChoiceKind.TRAINER_WALLY_COMPASSION_TARGET, ChoiceKind.TRAINER_N_DISCARD_ENERGY, ChoiceKind.TRAINER_N_DISCARD_ENERGY_TARGET, ChoiceKind.TRAINER_DISCARD_OPPONENT_ENERGY, ChoiceKind.TRAINER_CRISPIN_SEARCH, ChoiceKind.TRAINER_CRISPIN_SELECT_ATTACH, ChoiceKind.TRAINER_CRISPIN_TARGET, ChoiceKind.TRAINER_ENERGY_SWITCH_SOURCE, ChoiceKind.TRAINER_ENERGY_SWITCH_TARGET, ChoiceKind.TRAINER_ROSA_TARGET, ChoiceKind.TRAINER_ROSA_ENERGIES, ChoiceKind.ABILITY_MOVE_BASIC_ENERGY, ChoiceKind.ABILITY_MOVE_BASIC_ENERGY_TARGET, ChoiceKind.ABILITY_MOVE_DAMAGE_SOURCE, ChoiceKind.ABILITY_MOVE_DAMAGE_TARGET, ChoiceKind.ABILITY_MOVE_DAMAGE_AMOUNT, ChoiceKind.ABILITY_MOVE_ENERGY_TO_SELF, ChoiceKind.SEARCH, ChoiceKind.SONIA, ChoiceKind.OPPONENT_SHUFFLES_OWN_HAND, ChoiceKind.OPPONENT_DISCARDS_OWN_HAND, ChoiceKind.ATTACK_OPTIONAL_DISCARD_TOP_CARD, ChoiceKind.ATTACK_CHOOSE_OPPONENT_HAND_DISCARD, ChoiceKind.TRAINER_MOVE_BENCH_ENERGY, ChoiceKind.TRAINER_SEARCH_EVOLUTION_LINE, ChoiceKind.RECOVER, ChoiceKind.EVOLUTION_CONFUSE_ACTIVE, ChoiceKind.PALAFIN_ZERO_TO_HERO, ChoiceKind.SWITCH_OWN, ChoiceKind.SWITCH_OPPONENT, ChoiceKind.EVOLUTION_SWITCH, ChoiceKind.TOOL_TARGET, ChoiceKind.ENERGY_FROM_DISCARD, ChoiceKind.ENERGY_TARGET, ChoiceKind.DISCARD_ATTACK_ENERGY, ChoiceKind.ATTACK_OPTIONAL_SHUFFLE_ENERGY, ChoiceKind.ATTACK_OPTIONAL_PARALYSIS_DISCARD, ChoiceKind.ATTACH_DECK_ENERGY -> resolveChoiceGroup2(state, choice, ids, p)
             ChoiceKind.ATTACK_TOP_DECK_ENERGY, ChoiceKind.ATTACK_TOP_DECK_ENERGY_TARGET, ChoiceKind.ATTACK_DECK_BASIC_ENERGY_ANY, ChoiceKind.ATTACK_DECK_BASIC_ENERGY_TARGET, ChoiceKind.ATTACK_BENCH_POKEMON, ChoiceKind.ATTACK_NAMED_POKEMON_TO_BENCH, ChoiceKind.ON_BENCH_DISCARD_OPPONENT_DECK_TOP, ChoiceKind.ON_BENCH_SWITCH_AND_MOVE_ENERGY, ChoiceKind.ON_BENCH_MOVE_ENERGY, ChoiceKind.ON_BENCH_TO_ACTIVE_ATTACH_ENERGY, ChoiceKind.ATTACK_RECOVER_POKEMON, ChoiceKind.ATTACK_RECOVER_POKEMON_TO_HAND, ChoiceKind.ATTACK_ROTOM_SEARCH, ChoiceKind.ATTACK_MATCHING_ENERGY_SEARCH, ChoiceKind.ATTACK_POKEMON_SEARCH, ChoiceKind.ATTACK_ANY_CARD_SEARCH, ChoiceKind.ATTACK_EVOLVE_SELF, ChoiceKind.ATTACK_EVOLVE_BENCHED, ChoiceKind.ATTACK_HEAL_TARGET, ChoiceKind.ATTACK_HAND_ENERGY, ChoiceKind.ATTACK_HAND_ENERGY_TARGET, ChoiceKind.ATTACK_SHUFFLE_OWN_BENCH, ChoiceKind.ATTACK_KNOCKOUT_BASIC_BENCH, ChoiceKind.ATTACK_DAMAGE_TARGET, ChoiceKind.ATTACK_DISCARD_THEN_BENCH_TARGET, ChoiceKind.ATTACK_DAMAGE_COUNTER_TARGET -> resolveChoiceGroup3(state, choice, ids, p)
-            ChoiceKind.ATTACK_OPTIONAL_RETURN_SELF, ChoiceKind.ATTACK_MULTI_DAMAGE_TARGETS, ChoiceKind.ATTACK_MULTI_DAMAGE_SINGLE_TARGET, ChoiceKind.ATTACK_MOVE_DAMAGE_SOURCE, ChoiceKind.ATTACK_MOVE_DAMAGE_DESTINATION, ChoiceKind.ATTACK_MOVE_OWN_DAMAGE_SOURCE, ChoiceKind.ATTACK_MOVE_OWN_DAMAGE_TARGET, ChoiceKind.ATTACK_OPPONENT_ENERGY, ChoiceKind.ATTACK_OPPONENT_ENERGY_TARGET, ChoiceKind.ATTACK_ENERGY, ChoiceKind.ATTACK_MOVE_ENERGY_TO_ONE_BENCH, ChoiceKind.ATTACK_MOVE_ENERGY_TO_ONE_BENCH_TARGET, ChoiceKind.ATTACK_ENERGY_TARGET, ChoiceKind.ATTACK_ENERGY_TO_HAND, ChoiceKind.ATTACK_MOVE_ALL_ENERGY_TARGET, ChoiceKind.ATTACK_BENCH_ENERGY_DISCARD, ChoiceKind.ATTACK_HAND_ENERGY_DISCARD, ChoiceKind.ATTACK_OWN_ENERGY_DISCARD, ChoiceKind.ATTACK_DISCARD_BASIC_ENERGY_TO_SELF, ChoiceKind.ATTACK_TEAM_ROCKET_ENERGY_DISCARD, ChoiceKind.ATTACK_RESTRICT_OPPONENT_ATTACK, ChoiceKind.HEAL_TARGET, ChoiceKind.RECYCLE_ENERGY, ChoiceKind.RECYCLE_POKEMON, ChoiceKind.ATTACK_COPY_BENCHED_N, ChoiceKind.ATTACK_COPY_OPPONENT_ACTIVE, ChoiceKind.OPTIONAL_ATTACK_ENERGY_BONUS, ChoiceKind.ATTACK_COPY_OPPONENT_DECK_TOP, ChoiceKind.ATTACK_REVEAL_HAND_POKEMON, ChoiceKind.ATTACK_REQUIRED_HAND_ENERGY_DISCARD -> resolveChoiceGroup4(state, choice, ids, p)
+            ChoiceKind.ATTACK_OPTIONAL_RETURN_SELF, ChoiceKind.ATTACK_MULTI_DAMAGE_TARGETS, ChoiceKind.ATTACK_MULTI_DAMAGE_SINGLE_TARGET, ChoiceKind.ATTACK_MOVE_DAMAGE_SOURCE, ChoiceKind.ATTACK_MOVE_DAMAGE_DESTINATION, ChoiceKind.ATTACK_MOVE_OWN_DAMAGE_SOURCE, ChoiceKind.ATTACK_MOVE_OWN_DAMAGE_TARGET, ChoiceKind.ATTACK_OPPONENT_ENERGY, ChoiceKind.ATTACK_OPPONENT_ENERGY_TARGET, ChoiceKind.ATTACK_ENERGY, ChoiceKind.ATTACK_MOVE_ENERGY_TO_ONE_BENCH, ChoiceKind.ATTACK_MOVE_ENERGY_TO_ONE_BENCH_TARGET, ChoiceKind.ATTACK_ENERGY_TARGET, ChoiceKind.ATTACK_ENERGY_TO_HAND, ChoiceKind.ATTACK_MOVE_ALL_ENERGY_TARGET, ChoiceKind.ATTACK_BENCH_ENERGY_DISCARD, ChoiceKind.ATTACK_HAND_ENERGY_DISCARD, ChoiceKind.ATTACK_OWN_ENERGY_DISCARD, ChoiceKind.ATTACK_DISCARD_BASIC_ENERGY_TO_SELF, ChoiceKind.ATTACK_TEAM_ROCKET_ENERGY_DISCARD, ChoiceKind.ATTACK_RESTRICT_OPPONENT_ATTACK, ChoiceKind.HEAL_TARGET, ChoiceKind.RECYCLE_ENERGY, ChoiceKind.RECYCLE_POKEMON, ChoiceKind.ATTACK_COPY_BENCHED_N, ChoiceKind.ATTACK_COPY_OPPONENT_ACTIVE, ChoiceKind.OPTIONAL_ATTACK_ENERGY_BONUS, ChoiceKind.ATTACK_COPY_OPPONENT_DECK_TOP, ChoiceKind.ATTACK_COPY_OWN_DECK_TOP, ChoiceKind.ATTACK_REVEAL_HAND_POKEMON, ChoiceKind.ATTACK_REQUIRED_HAND_ENERGY_DISCARD -> resolveChoiceGroup4(state, choice, ids, p)
             else -> null
             }
             if (early != null) return early
@@ -905,6 +997,44 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                     update(1-actor) { it.copy(deck = reordered) }
                                     events += GameEvent("OpponentDeckTopReordered", "Reorganizou as $count cartas do topo do deck adversário; todas continuam no deck.", count)
                                 }
+                                ChoiceKind.TRAINER_GLASS_TARGETS -> {
+                                    if (ids.size > 2 || ids.distinct().size != ids.size || ids.any { target -> p.bench.none { it.id == target && def(it.top).type == EnergyType.COLORLESS } })
+                                        return invalidTransition(state, "Glass Trumpet só permite até 2 Pokémon Colorless do Banco.")
+                                    if (ids.isNotEmpty()) {
+                                        val energies = p.discard.filter { def(it).category == Category.ENERGY && def(it).basicEnergy }
+                                        val targetId = ids.first()
+                                        if (energies.isNotEmpty()) remainingChoices = listOf(ChoiceRequest(ChoiceKind.TRAINER_GLASS_ENERGY,
+                                            "Escolha uma Energia Básica do descarte para ${def(p.bench.first { it.id == targetId }.top).name}.",
+                                            energies.map { it.id }, 1, 1, sourcePokemonId = targetId, selectedTargets = ids.drop(1))) + remainingChoices
+                                    }
+                                }
+                                ChoiceKind.TRAINER_CIPHER_SEARCH -> {
+                                    val selected = ids.mapNotNull { id -> p.deck.firstOrNull { it.id == id } }
+                                    if (selected.size != ids.size) return invalidTransition(state, "As cartas escolhidas não estão mais no deck.")
+                                    val rng = SeededRng(s.rng)
+                                    val shuffled = rng.shuffle(p.deck.filterNot { it.id in ids })
+                                    update { it.copy(deck = selected + shuffled) }
+                                    s = s.copy(rng = rng.state)
+                                    shuffleAfterResolution = false
+                                    events += GameEvent("CiphermaniacResolved", "Colocou ${selected.size} carta(s) escolhida(s) no topo do deck após embaralhar.", selected.size)
+                                }
+                                ChoiceKind.ENERGY_TELEPATHIC_BENCH_SEARCH -> {
+                                    val selected = p.deck.filter { it.id in ids && it.id in choice.candidates && def(it).category == Category.POKEMON &&
+                                        def(it).stage == Stage.BASIC && def(it).type == EnergyType.PSYCHIC }
+                                    if (selected.size != ids.size || selected.size > (rules.benchCapacity(s, actor)-p.bench.size).coerceAtLeast(0))
+                                        return invalidTransition(state, "Telepathic Psychic Energy só pode buscar Pokémon Básicos Psíquicos e não pode exceder o Banco.")
+                                    update { player -> player.copy(deck = player.deck - selected.toSet(),
+                                        bench = player.bench + selected.map { PokemonInstance(listOf(it), enteredPlayTurn = s.turn) }) }
+                                    events += GameEvent("TelepathicEnergySearch", "Colocou ${selected.size} Pokémon Básico(s) Psíquico(s) no Banco.", selected.size)
+                                }
+                                ChoiceKind.TRAINER_BROCK_SCOUTING -> {
+                                    val selected = p.deck.filter { it.id in ids && it.id in choice.candidates && def(it).category == Category.POKEMON }
+                                    val stages = selected.map { def(it).stage }
+                                    if (selected.size != ids.size || selected.size > 2 || (stages.any { it != Stage.BASIC } && selected.size > 1))
+                                        return invalidTransition(state, "Brock's Scouting busca até 2 Pokémon Básicos ou 1 Pokémon de Evolução.")
+                                    update { player -> player.copy(deck = player.deck.filterNot { card -> selected.any { it.id == card.id } }, hand = player.hand + selected) }
+                                    events += GameEvent("BrockScouting", "Buscou ${selected.size} Pokémon com Brock's Scouting.", selected.size)
+                                }
                                 ChoiceKind.EVOLUTION_DISCARD_OPPONENT_DECK, ChoiceKind.KNOCKOUT_DISCARD_OPPONENT_DECK -> if (ids.isNotEmpty()) {
                                     val opponent = s.players[1-actor]
                                     val discarded = opponent.deck.take(choice.amount)
@@ -939,7 +1069,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                     update { it.copy(discard = it.discard - cards.toSet(), hand = it.hand + cards) }
                                     events += GameEvent("EvolutionCardsRecovered", "Recuperou ${cards.size} carta(s) de Treinador da evolução.", cards.size)
                                 }
-                                ChoiceKind.DISCARD, ChoiceKind.ABILITY_ENERGY -> {
+                                ChoiceKind.DISCARD, ChoiceKind.TRAINER_NAVEEN_DISCARD, ChoiceKind.ABILITY_ENERGY -> {
                                     if (choice.kind == ChoiceKind.ABILITY_ENERGY && choice.sourcePokemonId != null) {
                                         val source = p.pokemon().firstOrNull { it.id == choice.sourcePokemonId }
                                             ?: return invalidTransition(state, "O Pokémon da habilidade não está mais em jogo.")
@@ -1078,7 +1208,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                 ChoiceKind.EVOLUTION_OPPONENT_HAND_BASIC_TO_BENCH -> {
                                     val opponent = 1-actor
                                     val opponentState = s.players[opponent]
-                                    if (ids.size > (5-opponentState.bench.size).coerceAtLeast(0) || ids.any { id ->
+                                    if (ids.size > (rules.benchCapacity(s, opponent)-opponentState.bench.size).coerceAtLeast(0) || ids.any { id ->
                                             id !in choice.candidates || opponentState.hand.none { it.id == id && def(it).category == Category.POKEMON && def(it).stage == Stage.BASIC }
                                         }) return invalidTransition(state, "Escolha apenas Pokémon Básicos da mão adversária revelada, respeitando o espaço do Banco.")
                                     val selected = opponentState.hand.filter { it.id in ids }
@@ -1327,14 +1457,14 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                 ChoiceKind.ABILITY_MOVE_DAMAGE_SOURCE -> {
                                     val source = p.pokemon().firstOrNull { it.id == ids.single() && it.damage >= 10 }
                                         ?: return invalidTransition(state, "Escolha um Pokémon seu com contadores de dano.")
-                                    val targets = s.players[1-actor].pokemon().filter { rules.effectiveAbilities(s, 1-actor, it).none { a -> a.preventOpponentEffects } }
+                                    val targets = s.players[1-actor].pokemon().filter { rules.effectiveAbilities(s, 1-actor, it).none { a -> a.preventOpponentEffects } && !rules.preventsBenchDamageCounters(s, actor, 1-actor, it) }
                                     remainingChoices = listOf(ChoiceRequest(ChoiceKind.ABILITY_MOVE_DAMAGE_TARGET,
                                         "Escolha um Pokémon adversário para receber os contadores.", targets.map { it.id }, 1, 1,
                                         sourcePokemonId = source.id, amount = minOf(choice.amount, source.damage))) + remainingChoices
                                 }
                                 ChoiceKind.ABILITY_MOVE_DAMAGE_TARGET -> {
                                     val targetId = ids.single()
-                                    if (s.players[1-actor].pokemon().none { it.id == targetId && rules.effectiveAbilities(s, 1-actor, it).none { a -> a.preventOpponentEffects } }) return invalidTransition(state, "Escolha um Pokémon adversário válido.")
+                                    if (s.players[1-actor].pokemon().none { it.id == targetId && rules.effectiveAbilities(s, 1-actor, it).none { a -> a.preventOpponentEffects } && !rules.preventsBenchDamageCounters(s, actor, 1-actor, it) }) return invalidTransition(state, "Escolha um Pokémon adversário válido.")
                                     val source = p.pokemon().firstOrNull { it.id == choice.sourcePokemonId }
                                         ?: return invalidTransition(state, "O Pokémon que fornece os contadores não está mais em jogo.")
                                     val maxCounters = minOf(choice.amount / 10, source.damage / 10)
@@ -1487,6 +1617,23 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                     remainingChoices = listOf(ChoiceRequest(ChoiceKind.ENERGY_TARGET, "Escolha um Pokémon do seu Banco para esta Energia.", targets, 1, 1,
                                         remaining = choice.remaining, selectedEnergy = ids.single(), energyType = choice.energyType, targetPokemonType = choice.targetPokemonType)) + remainingChoices
                                 }
+                                ChoiceKind.TRAINER_GLASS_ENERGY -> {
+                                    val energy = p.discard.firstOrNull { it.id == ids.singleOrNull() && def(it).category == Category.ENERGY && def(it).basicEnergy }
+                                        ?: return invalidTransition(state, "Glass Trumpet exige uma Energia Básica do descarte.")
+                                    val targetId = checkNotNull(choice.sourcePokemonId)
+                                    if (p.bench.none { it.id == targetId && def(it.top).type == EnergyType.COLORLESS })
+                                        return invalidTransition(state, "O Pokémon Colorless escolhido não está mais no Banco.")
+                                    update { player -> player.copy(discard = player.discard - energy,
+                                        bench = player.bench.map { pokemon -> if (pokemon.id == targetId) pokemon.copy(energies = pokemon.energies + energy) else pokemon }) }
+                                    events += GameEvent("GlassTrumpetEnergyAttached", "Ligou ${def(energy).name} a ${def(p.bench.first { it.id == targetId }.top).name} pelo Glass Trumpet.")
+                                    val nextTarget = choice.selectedTargets.firstOrNull()
+                                    val available = s.players[actor].discard.filter { def(it).category == Category.ENERGY && def(it).basicEnergy }
+                                    if (nextTarget != null && available.isNotEmpty()) remainingChoices = listOf(ChoiceRequest(
+                                        ChoiceKind.TRAINER_GLASS_ENERGY,
+                                        "Escolha uma Energia Básica do descarte para ${def(s.players[actor].bench.first { it.id == nextTarget }.top).name}.",
+                                        available.map { it.id }, 1, 1, sourcePokemonId = nextTarget, selectedTargets = choice.selectedTargets.drop(1)
+                                    )) + remainingChoices
+                                }
                                 ChoiceKind.TRAINER_DISCARD_OPPONENT_ENERGY -> {
                                     val opponentIndex = 1-actor
                                     val opponent = s.players[opponentIndex]
@@ -1611,6 +1758,9 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                 ChoiceKind.DISCARD_ATTACK_ENERGY -> {
                                     val cards = p.active!!.energies.filter { it.id in ids }
                                     update { it.copy(active = it.active!!.copy(energies = it.active.energies - cards.toSet()), discard = it.discard + cards) }
+                                    val boomerangs = cards.filter { def(it).returnsFromDiscardAfterAttachedPokemonAttackDiscard }
+                                    if (boomerangs.isNotEmpty()) s = s.copy(pendingBoomerangEnergyReturns = s.pendingBoomerangEnergyReturns +
+                                        boomerangs.map { PendingEnergyReturn(actor, p.active!!.id, it.id) })
                                     events += GameEvent("AttackEnergyDiscarded", "Descartou ${cards.size} Energia(s) do atacante.")
                                     if (choice.amount > 0) {
                                         val attacker = s.players[actor].active ?: error("Atacante ausente durante dano ao Banco.")
@@ -1831,7 +1981,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                 ChoiceKind.ATTACK_RECOVER_POKEMON -> {
                                     val cards = p.discard.filter { card -> card.id in ids && def(card).category == Category.POKEMON &&
                                         if (choice.energyType != null) def(card).type == choice.energyType else def(card).stage == Stage.BASIC }
-                                    if (cards.size != ids.size || cards.size > choice.max || cards.size > 5-p.bench.size)
+                                    if (cards.size != ids.size || cards.size > choice.max || cards.size > rules.benchCapacity(s, actor)-p.bench.size)
                                         return invalidTransition(state, "Escolha apenas Pokémon elegíveis do descarte e dentro dos espaços disponíveis no Banco.")
                                     update { it.copy(discard = it.discard - cards.toSet(), bench = it.bench + cards.map { card -> PokemonInstance(listOf(card), enteredPlayTurn = s.turn) }) }
                                     events += GameEvent("PokemonRecoveredToBench", "Colocou ${cards.size} Pokémon do descarte no Banco.", cards.size)
@@ -2368,6 +2518,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                 ChoiceKind.ATTACK_COPY_OPPONENT_ACTIVE -> error("A escolha do ataque adversário copiado deve ser consumida pelo RulesEngine antes do ContentEngine.")
                                 ChoiceKind.OPTIONAL_ATTACK_ENERGY_BONUS -> error("A escolha de bônus opcional de Energia deve ser consumida pelo RulesEngine antes do ContentEngine.")
                                 ChoiceKind.ATTACK_COPY_OPPONENT_DECK_TOP -> error("A escolha do ataque do topo do deck adversário deve ser consumida pelo RulesEngine antes do ContentEngine.")
+                                ChoiceKind.ATTACK_COPY_OWN_DECK_TOP -> error("A escolha do ataque do topo do próprio deck deve ser consumida pelo RulesEngine antes do ContentEngine.")
                                 ChoiceKind.ATTACK_REVEAL_HAND_POKEMON -> error("A escolha de revelar Pokémon da mão é consumida pelo RulesEngine antes do ContentEngine.")
                                 ChoiceKind.ATTACK_REQUIRED_HAND_ENERGY_DISCARD -> error("A escolha de descarte obrigatório de Energia da mão é consumida pelo RulesEngine antes do ContentEngine.")
                 else -> return null
