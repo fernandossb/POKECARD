@@ -1,3 +1,10 @@
+# POKECARD Brasil 5.99.40 — Análise de jogadas no treino
+
+- O resumo pós-partida agora destaca o principal ponto forte e o principal erro/oportunidade usando o histórico real da partida.
+- A análise compara ataques legais e aponta oportunidades de alto impacto, incluindo nocautes ignorados e Energias que ainda poderiam liberar um ataque forte.
+- Compras, curas, evoluções e preparação de Energia são reconhecidas como pontos positivos quando geram benefício concreto.
+- Versão Android: `versionCode` 242 e `versionName` 5.99.40.
+
 # POKECARD Brasil 5.99.39 — Mais 100 cartas com regras executáveis
 
 - A cobertura executável da rotação Standard subiu de 2.453 para 2.553 cartas de 3.069 no catálogo medido.
