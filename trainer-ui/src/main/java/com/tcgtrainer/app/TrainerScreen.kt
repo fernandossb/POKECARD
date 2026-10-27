@@ -69,7 +69,7 @@ import kotlinx.coroutines.withContext
     if (state != null) {
         inspected?.let { card -> CardDetailSheet(card, state, vm.engine, ui.busy, onDismiss = { inspected = null }, dispatch = { vm.act(it); inspected = null }, attack = { confirmAttack = it }) }
         if (actor == 0 && state.phase == Phase.RESOLVE_CHOICE && resolveOpen && inspected == null && panelsReady) ChoiceSheet(state, vm.engine, ui.busy, onDismiss = { resolveOpen = false }, confirm = { vm.act(it) })
-        if (actor == 0 && state.phase == Phase.SELECT_PRIZES && prizesOpen && inspected == null && panelsReady) PrizeSheet(state, engine, ui.busy, { prizesOpen = false }, { vm.act(GameAction.TakePrize(it)) })
+        if (actor == 0 && state.phase == Phase.SELECT_PRIZES && prizesOpen && inspected == null && panelsReady) PrizeSheet(state, vm.engine, ui.busy, { prizesOpen = false }, { vm.act(GameAction.TakePrize(it)) })
         discardOwner?.let { owner -> DiscardSheet(state.players[owner].discard, vm.engine, { discardOwner = null }, { inspected = it; discardOwner = null }) }
     }
     if (deckOpen) {
