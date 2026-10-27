@@ -4,6 +4,25 @@ import kotlinx.serialization.json.*
 import kotlin.test.*
 
 class CatalogRuleCompilerTest {
+    @Test fun `current Standard prints execute bench entry energy counterattack and discard paralysis`() {
+        listOf("sv10-003", "sv10-206", "sv10-228").forEach { id ->
+            val ability = TrainerCatalog.get(id).abilities.single()
+            assertTrue(ability.triggersWhenMovedFromBenchToActive, id)
+            assertEquals(EnergyType.GRASS, ability.attachBasicEnergyFromDeckToSelfType, id)
+            assertEquals(3, ability.attachBasicEnergyFromDeckToSelfMax, id)
+            assertTrue(CardLibrary.byId.getValue(id).implemented, id)
+        }
+        listOf("me02.5-135", "me02.5-270", "me02.5-285").forEach { id ->
+            assertEquals(5, TrainerCatalog.get(id).abilities.single().retaliateDamageCounters, id)
+            assertTrue(CardLibrary.byId.getValue(id).implemented, id)
+        }
+        listOf("me02.5-045", "me02.5-228", "sv06.5-014").forEach { id ->
+            val attack = TrainerCatalog.get(id).attacks.first { it.text == "Discard all Energy from this Pokémon. Your opponent's Active Pokémon is now Paralyzed." }
+            assertTrue(attack.effects.contains(Effect.DiscardAttackEnergy(0, all = true)), id)
+            assertTrue(attack.effects.contains(Effect.StatusCondition(SpecialCondition.PARALYZED)), id)
+            assertTrue(CardLibrary.byId.getValue(id).implemented, id)
+        }
+    }
     @Test fun `all Mega Greninja prints compile the Active Spot Water Energy damage-counter ability`() {
         val ids = listOf("me04-022", "me04-100", "me04-116", "me04-122", "mep-081")
         ids.forEach { id ->

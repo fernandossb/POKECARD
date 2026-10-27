@@ -33,7 +33,7 @@ internal object CatalogRuleCompiler {
             return AbilityDefinition("$id-ability$index", name, text, draw = 3, shuffleSelfIntoDeck = true, usageKey = name)
         if (text == "If your opponent has exactly 4 cards in their hand, ignore all {C} Energy in the costs of attacks used by this Pokémon.")
             return AbilityDefinition("$id-ability$index", name, text, ignoreColorlessAttackCostWhenOpponentHandCountIs = 4)
-        val benchToActiveEnergySearch = Regex("Once during your turn, when this Pokémon moves from your Bench to the Active Spot, you may use this Ability\\. Search your deck for up to (\\d+) Basic \\{([GRFLWPMD])\\} Energy cards and attach them to this Pokémon\\. Then, shuffle your deck\\.").matchEntire(text)
+        val benchToActiveEnergySearch = Regex("Once during your turn, when this Pokémon moves from (?:your )?Bench to the Active Spot, you may (?:use this Ability\\. )?[Ss]earch your deck for up to (\\d+) Basic \\{([GRFLWPMD])\\} Energy cards and attach them to this Pokémon\\. Then, shuffle your deck\\.").matchEntire(text)
         if (benchToActiveEnergySearch != null) return AbilityDefinition("$id-ability$index", name, text,
             usageKey = name, usagePerPokemon = true, triggersWhenMovedFromBenchToActive = true,
             attachBasicEnergyFromDeckToSelfType = symbolType(benchToActiveEnergySearch.groupValues[2]) ?: return null,
@@ -308,7 +308,7 @@ internal object CatalogRuleCompiler {
         if (damageWhenDamaged != null) return AbilityDefinition("$id-ability$index", name, text,
             damageBonusAgainstActiveWhenDamageAtLeast = damageWhenDamaged.groupValues[1].toInt() * 10,
             damageBonusAmount = damageWhenDamaged.groupValues[2].toInt())
-        val counterattack = Regex("If this Pokémon is in the Active Spot and is damaged by an attack from your opponent's Pokémon \\(even if this Pokémon is Knocked Out\\), put (\\d+) damage counters on the Attacking Pokémon\\.").matchEntire(text)
+        val counterattack = Regex("If this Pokémon is in the Active Spot and is damaged by an attack from your opponent's Pokémon \\(even if this Pokémon is Knocked Out\\), (?:put|place) (\\d+) damage counters on the Attacking Pokémon\\.").matchEntire(text)
         if (counterattack != null) return AbilityDefinition("$id-ability$index", name, text,
             requiresActive = true, retaliateDamageCounters = counterattack.groupValues[1].toInt(), usageKey = name)
         val attachEnergyDraw = Regex("Once during your turn, you may attach a Basic \\{([GRFLWPMD])\\} Energy card from your hand to this Pokémon\\. If you attached Energy to a Pokémon in this way, draw a card\\.").matchEntire(text)
@@ -901,6 +901,13 @@ internal object CatalogRuleCompiler {
     fun compileAttack(id: String, index: Int, raw: JsonObject): AttackDefinition? {
         val cost = raw.a("cost").map { type(it.jsonPrimitive.content) ?: return null }
         val text = raw.s("effect").orEmpty().trim()
+        val discardAllAndParalyze = text == "Discard all Energy from this Pokémon. Your opponent's Active Pokémon is now Paralyzed."
+        if (discardAllAndParalyze) {
+            val rewritten = JsonObject(raw.toMutableMap().apply { put("effect", JsonPrimitive("")) })
+            val compiled = compileAttack(id, index, rewritten) ?: return null
+            return compiled.copy(effects = compiled.effects + Effect.DiscardAttackEnergy(0, all = true) +
+                Effect.StatusCondition(SpecialCondition.PARALYZED), text = text)
+        }
         val energyToBenchedType = Regex("Search your deck for an Energy card and attach it to 1 of your Benched \\{([GRFLWPMD])\\} Pokémon\\. Then, shuffle your deck\\.").matchEntire(text)
         if (energyToBenchedType != null) {
             val rewritten = JsonObject(raw.toMutableMap().apply { put("effect", JsonPrimitive("")) })
