@@ -139,7 +139,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 publish(busy = true)
                 while (session?.snapshot?.state?.let { it.phase != Phase.GAME_OVER && engine.actingPlayer(it) == 1 } == true) {
-                    delay(650)
+                    // Give the opening toss the same visible presentation whichever side won.
+                    delay(if (session?.snapshot?.state?.phase == Phase.CHOOSE_STARTER) 2200 else 950)
                     val current = checkNotNull(session)
                     val state = current.snapshot.state
                     val action = withContext(Dispatchers.Default) { cpu.choose(engine.cpuInput(state)) }

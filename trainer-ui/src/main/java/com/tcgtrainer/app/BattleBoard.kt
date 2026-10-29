@@ -18,6 +18,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tcgtrainer.engine.*
@@ -133,20 +134,36 @@ internal val BoardBlue = Color(0xFF599BC6)
 @Composable private fun BoardPokemon(p: PokemonInstance, state: GameState, engine: RulesEngine, modifier: Modifier, accent: Color, pace: AnimationPace, inspect: () -> Unit) {
     val maxHp = engine.effects.effectiveHp(p, state)
     val remaining = (maxHp-p.damage).coerceAtLeast(0)
+    val isActive = state.players.any { it.active?.id == p.id }
     val animatedHp by animateIntAsState(remaining, tween(pace.duration), label = "remaining hp")
+    val attachmentPulse = remember(p.id) { Animatable(0f) }
+    LaunchedEffect(p.energies.map { it.id }, p.tools.map { it.id }) {
+        if (pace != AnimationPace.OFF && (p.energies.isNotEmpty() || p.tools.isNotEmpty())) {
+            attachmentPulse.snapTo(1f)
+            attachmentPulse.animateTo(0f, tween(pace.duration + 500))
+        }
+    }
     Box(modifier.clickable(onClick = inspect)) {
         CardArt(engine.definition(p.top), Modifier.fillMaxSize())
+        if (attachmentPulse.value > 0f) Box(Modifier.fillMaxSize().border(3.dp, Aqua.copy(alpha = attachmentPulse.value), RoundedCornerShape(4.dp)))
         Surface(Modifier.align(Alignment.TopEnd).offset(x = 7.dp, y = (-4).dp), color = Color(0xFFF4F5EF), shape = RoundedCornerShape(4.dp), border = androidx.compose.foundation.BorderStroke(1.dp, accent)) {
             Text("$animatedHp/$maxHp", Modifier.padding(horizontal = 4.dp, vertical = 1.dp), color = if (remaining < maxHp/3) Color(0xFFA42D37) else Color(0xFF182A36), fontWeight = FontWeight.Black, fontSize = 10.sp, maxLines = 1)
         }
         if (p.damage > 0) Surface(Modifier.align(Alignment.BottomEnd).offset(x = 4.dp, y = 3.dp), color = Color(0xFFB33C43), shape = RoundedCornerShape(4.dp)) {
             Text("${p.damage}", Modifier.padding(horizontal = 4.dp), fontSize = 10.sp, fontWeight = FontWeight.Bold)
         }
-        if (p.energies.isNotEmpty()) Surface(Modifier.align(Alignment.BottomStart).offset(x = (-9).dp, y = 3.dp), color = Color(0xFF173A51), shape = RoundedCornerShape(4.dp)) {
-            val label = p.energies.groupingBy { engine.definition(it).type }.eachCount().entries.joinToString(" ") { "${energyLabel(it.key).take(1)} ${it.value}" }
+        if (p.energies.isNotEmpty()) Surface(Modifier.align(Alignment.BottomStart).offset(x = (-4).dp, y = if (p.tools.isEmpty()) 3.dp else if (isActive) (-39).dp else (-30).dp), color = Color(0xFF173A51), shape = RoundedCornerShape(4.dp)) {
+            val label = p.energies.groupingBy { engine.definition(it).type }.eachCount().entries.joinToString(" · ") { "${energyLabel(it.key)} ×${it.value}" }
             Text(label, Modifier.padding(horizontal = 4.dp), color = Color(0xFFFFD894), fontSize = 9.sp, fontWeight = FontWeight.Bold)
         }
-        if (p.tools.isNotEmpty()) Text(if (p.tools.size > 1) "F${p.tools.size}" else "F", Modifier.align(Alignment.CenterEnd).offset(x = 7.dp).background(Color(0xFF714A9A), RoundedCornerShape(3.dp)).padding(3.dp), fontSize = 8.sp, fontWeight = FontWeight.Bold)
+        if (p.tools.isNotEmpty()) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().offset(y = 4.dp)
+            .background(Color(0xFF281E3E), RoundedCornerShape(3.dp)).border(1.dp, Color(0xFFC3A2F0), RoundedCornerShape(3.dp))) {
+            p.tools.forEach { tool -> Row(Modifier.fillMaxWidth().padding(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                CardArt(engine.definition(tool), Modifier.size(if (isActive) 25.dp else 18.dp, if (isActive) 34.dp else 25.dp))
+                Text(engine.definition(tool).name, Modifier.weight(1f).padding(start = 3.dp), color = Color.White,
+                    fontSize = if (isActive) 10.sp else 8.sp, lineHeight = if (isActive) 11.sp else 9.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold)
+            } }
+        }
     }
 }
 @Composable private fun Counter(text: String, modifier: Modifier, accent: Color) {

@@ -52,7 +52,12 @@ import kotlinx.coroutines.withContext
         kotlinx.coroutines.delay(if (pace == AnimationPace.OFF) 0L else duration.toLong())
         panelsReady = true
     }
-    LaunchedEffect(state?.gameId, state?.phase) { if (state?.phase == Phase.GAME_OVER) textDialog = TrainingReview.describe(state) }
+    LaunchedEffect(state?.gameId, state?.phase) {
+        if (state?.phase == Phase.GAME_OVER) {
+            textDialog = "Analisando suas decisões e comparando alternativas legais…"
+            textDialog = withContext(Dispatchers.Default) { TrainingReview.describe(state) }
+        }
+    }
     Surface(Modifier.fillMaxSize(), color = Color(0xFF080F1C)) {
         if (state == null && managingDecks) DeckManager(vm, { managingDecks = false }, { selectedDeck = it; managingDecks = false })
         else if (state == null) HomeScreen(ui, vm, selectedDeck, { selectedDeck = it }, availableDecks, { managingDecks = true }, { deckOpen = true }, { textDialog = it })
@@ -181,7 +186,7 @@ import kotlinx.coroutines.withContext
     }
 }
 internal fun phaseLabel(phase: Phase) = when (phase) {
-    Phase.CHOOSE_STARTER -> "Você venceu a moeda. Quem começa?"
+    Phase.CHOOSE_STARTER -> "Sorteio da moeda · escolha de quem começa"
     Phase.SELECT_ACTIVE -> "Escolha seu Ativo na mão"
     Phase.SELECT_BENCH -> "Adicione Básicos ao Banco"
     Phase.MULLIGAN_BONUS -> "Compras extras por mulligan"

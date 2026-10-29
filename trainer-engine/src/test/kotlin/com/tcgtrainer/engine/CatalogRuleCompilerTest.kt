@@ -4,6 +4,177 @@ import kotlinx.serialization.json.*
 import kotlin.test.*
 
 class CatalogRuleCompilerTest {
+    @Test fun `simple attack status recoil and self heal effects compile`() {
+        assertTrue(Effect.Recoil(30) in CatalogRuleCompiler.compileAttack("test", 0,
+            attack("This Pokémon also does 30 damage to itself.", "90"))!!.effects)
+        assertTrue(Effect.StatusCondition(SpecialCondition.CONFUSED) in CatalogRuleCompiler.compileAttack("test", 0,
+            attack("Your opponent's Active Pokémon is now Confused.", "30"))!!.effects)
+        assertTrue(Effect.Heal(20) in CatalogRuleCompiler.compileAttack("test", 0,
+            attack("Heal 20 damage from this Pokémon.", ""))!!.effects)
+    }
+    @Test fun `Pawmot Voltaic Fist offers optional recoil for paralysis`() {
+        val card = TrainerCatalog.get("me02-034")
+        assertTrue(CardLibrary.byId.getValue("me02-034").implemented)
+        val attack = card.attacks.first { it.name == "Voltaic Fist" }
+        assertTrue(Effect.OptionalSelfDamageBonus(0, 60) in attack.effects)
+        assertTrue(Effect.OptionalSelfDamageStatus(SpecialCondition.PARALYZED) in attack.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(attack))
+    }
+    @Test fun `Snorlax But First Food accepts any Energy and heals 60`() {
+        val card = TrainerCatalog.get("sv06-136")
+        assertTrue(CardLibrary.byId.getValue("sv06-136").implemented)
+        val attack = card.attacks.first { it.name == "But First, Food" }
+        assertTrue(Effect.AttachEnergyFromHandToSelfAndHeal(60) in attack.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(attack))
+    }
+    @Test fun `Delcatty Energy Blender compiles unrestricted own Energy redistribution`() {
+        val attack = TrainerCatalog.get("sv05-131").attacks.first { it.name == "Energy Blender" }
+        assertTrue(Effect.MoveEnergyBetweenOwnPokemon() in attack.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(attack))
+    }
+    @Test fun `Forretress Steel Spinner compiles Metal Energy redistribution`() {
+        val attack = TrainerCatalog.get("sv10-140").attacks.first { it.name == "Iron Shake-Up" }
+        assertTrue(Effect.MoveEnergyBetweenOwnPokemon(EnergyType.METAL) in attack.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(attack))
+    }
+    @Test fun `Drilbur Dig Dig Dig searches Fighting Energy on bench play`() {
+        val ability = TrainerCatalog.get("sv05-085").abilities.single()
+        assertEquals(EnergyType.FIGHTING, ability.onBenchDiscardBasicEnergyType)
+        assertEquals(3, ability.onBenchDiscardBasicEnergyMax)
+    }
+    @Test fun `Gengar returns to hand when opponent attack damage knocks it out`() {
+        assertTrue(TrainerCatalog.get("me03-050").abilities.single().returnToHandWhenKnockedOutByOpponentAttackDamage)
+    }
+    @Test fun `Landorus Fist of Focus attaches any discarded Energy to itself`() {
+        val attack = TrainerCatalog.get("sv08-110").attacks.first { it.name == "Fist of Focus" }
+        assertTrue(Effect.AttachAnyEnergyFromDiscardToSelf in attack.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(attack))
+    }
+    @Test fun `Thievul copies an opponent attack only with an empty hand`() {
+        listOf("me05-054", "me05-092").forEach { id ->
+            val card = TrainerCatalog.get(id)
+            val attack = card.attacks.first { it.effects.any { effect -> effect is Effect.CopyOpponentActiveAttack } }
+            assertTrue(Effect.RequiresEmptyHandToCopyOpponentAttack in attack.effects, id)
+            assertTrue(EffectEngine(TrainerCatalog).supported(attack), id)
+        }
+    }
+    @Test fun `Steven's Metagross searches Psychic and Metal Energy separately`() {
+        listOf("me02.5-289", "sv10-145").forEach { id ->
+            val ability = TrainerCatalog.get(id).abilities.single()
+            assertTrue(ability.attachPsychicMetalBasicEnergyFromDeck, id)
+            assertEquals(2, ability.onEvolveAttachBasicEnergyFromDeckMax, id)
+        }
+    }
+    @Test fun `Dialga Chrono Burst can shuffle all Energy for bonus damage`() {
+        val attack = TrainerCatalog.get("me01-095").attacks.first { it.name == "Chrono Burst" }
+        assertTrue(Effect.OptionalShuffleAllEnergyDamageBonus(80) in attack.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(attack))
+    }
+    @Test fun `Dialga Time Manipulation searches two cards to the ordered top`() {
+        val attack = TrainerCatalog.get("sv08-135").attacks.first { it.name == "Time Manipulation" }
+        assertTrue(Effect.SearchOwnCardsToTop(2) in attack.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(attack))
+    }
+    @Test fun `Iron Valiant places the top four cards back in any order`() {
+        val attack = TrainerCatalog.get("sv05-080").attacks.first { it.name == "Laser Blade" || it.effects.any { effect -> effect is Effect.ReorderOwnDeckTop } }
+        assertTrue(Effect.ReorderOwnDeckTop(4) in attack.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(attack))
+    }
+    @Test fun `Hippowdon spreads damage only to already damaged Benched Pokemon on both sides`() {
+        val attack = TrainerCatalog.get("sv10-106").attacks.first { attack -> attack.effects.any { it is Effect.OwnBenchDamage && it.requiresDamageCounters } }
+        assertTrue(attack.effects.any { it == Effect.OwnBenchDamage(40, requiresDamageCounters = true) })
+        assertTrue(attack.effects.any { it == Effect.AllOpponentBenchDamage(40, requiresDamageCounters = true) })
+        assertTrue(EffectEngine(TrainerCatalog).supported(attack))
+    }
+    @Test fun `Hippowdon mills the opponent only if Tarragon was played this turn`() {
+        val attack = TrainerCatalog.get("me03-040").attacks.first { attack -> attack.effects.any { it is Effect.DiscardOpponentDeckIfSupporterPlayed } }
+        assertTrue(Effect.DiscardOpponentDeckIfSupporterPlayed("Tarragon", 3) in attack.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(attack))
+    }
+    @Test fun `Inkay reveals the opponent top card and may shuffle their deck`() {
+        val attack = TrainerCatalog.get("sv06.5-033").attacks.first { Effect.OptionalShuffleOpponentDeckAfterTopPeek in it.effects }
+        assertTrue(EffectEngine(TrainerCatalog).supported(attack))
+    }
+    @Test fun `Gorebyss attaches any number of Water Energy from hand to itself before damage`() {
+        val attack = TrainerCatalog.get("sv10-056").attacks.first { it.effects.any { effect -> effect is Effect.AttachUpToTwoBasicEnergyFromHand && effect.toSelf } }
+        assertTrue(Effect.AttachUpToTwoBasicEnergyFromHand(EnergyType.WATER, max = 99, toSelf = true) in attack.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(attack))
+    }
+    @Test fun `Okidogi scales damage using opponent prizes taken last turn`() {
+        val attack = TrainerCatalog.get("me02.5-122").attacks.first { it.effects.any { effect -> effect is Effect.OpponentPrizesTakenLastTurnDamage } }
+        assertTrue(Effect.OpponentPrizesTakenLastTurnDamage(60) in attack.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(attack))
+    }
+    @Test fun `Photon Cord moves basic Lightning Energy when active Miraidon is knocked out`() {
+        listOf("me05-028", "mep-082").forEach { id ->
+            val card = TrainerCatalog.get(id)
+            assertTrue(CardLibrary.byId.getValue(id).implemented, id)
+            assertEquals(2, card.abilities.single().moveBasicLightningEnergyToBenchOnKnockout, id)
+            assertTrue(Effect.Recoil(30) in card.attacks.single().effects, id)
+        }
+    }
+    @Test fun `Geobuster and Fluorite compile energy discard and Tera healing`() {
+        val geobusterRow = CatalogRuleCompiler.rows.getValue("me03-070")
+        val geobuster = CatalogRuleCompiler.compileAttack("me03-070", 0, geobusterRow["attacks"]!!.jsonArray[0].jsonObject)!!
+        assertTrue(Effect.DiscardAttackEnergy(0, all = true) in geobuster.effects)
+        val fluoriteRow = CatalogRuleCompiler.rows.getValue("sv08-188")
+        val fluorite = CatalogRuleCompiler.compileAttack("sv08-188", 0, fluoriteRow["attacks"]!!.jsonArray[0].jsonObject)!!
+        assertTrue(Effect.DiscardAttackEnergy(0, all = true) in fluorite.effects)
+        assertTrue(Effect.HealEachOwnPokemon(999, teraOnly = true) in fluorite.effects)
+    }
+    @Test fun `Hyper Whirlpool discards one opposing Energy for each heads`() {
+        val row = CatalogRuleCompiler.rows.getValue("sv08.5-082")
+        val attack = CatalogRuleCompiler.compileAttack("sv08.5-082", 0, row["attacks"]!!.jsonArray[0].jsonObject)!!
+        assertTrue(Effect.CoinDamage(0, 0, untilTails = true) in attack.effects)
+        assertTrue(Effect.DiscardDefendingEnergy(1, perHeads = true) in attack.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(attack))
+    }
+    @Test fun `Mimikyu ex Mischievous Hands places counters on two chosen Pokemon`() {
+        val card = TrainerCatalog.get("sv09-069")
+        assertTrue(CardLibrary.byId.getValue("sv09-069").implemented)
+        val attack = card.attacks.first { it.name == "Mischievous Hands" }
+        assertTrue(Effect.MultiTargetDamageCounters(3, 2) in attack.effects)
+        assertTrue(EffectEngine(TrainerCatalog).supported(attack))
+    }
+    @Test fun `Darkest Impulse places damage counters on the opponents evolved Pokemon`() {
+        val card = TrainerCatalog.get("sv10-074")
+        assertTrue(CardLibrary.byId.getValue("sv10-074").implemented)
+        assertEquals(4, card.abilities.single().damageCountersOnOpponentEvolution)
+    }
+    @Test fun `Bellyful of Milk heals a chosen Pokemon only after two heads`() {
+        val card = TrainerCatalog.get("me01-106")
+        assertTrue(CardLibrary.byId.getValue("me01-106").implemented)
+        val attack = card.attacks.first { it.name == "Bellyful of Milk" }
+        assertTrue(Effect.CoinDamage(2, 0) in attack.effects)
+        assertTrue(Effect.HealOwnPokemon(Int.MAX_VALUE, minimumHeads = 2) in attack.effects)
+    }
+    @Test fun `Slurp Slurp confuses only after both coins are tails`() {
+        val card = TrainerCatalog.get("sv06-090")
+        assertTrue(CardLibrary.byId.getValue("sv06-090").implemented)
+        val attack = card.attacks.first { it.name == "Slurp Slurp" }
+        assertTrue(Effect.CoinDamage(2, 90) in attack.effects)
+        assertTrue(Effect.StatusConditionOnTails(SpecialCondition.CONFUSED) in attack.effects)
+    }
+    @Test fun `Gormandizer attaches one Basic Energy per coin head`() {
+        val card = TrainerCatalog.get("me03-063")
+        assertTrue(CardLibrary.byId.getValue("me03-063").implemented)
+        val attack = card.attacks.first { it.name == "Gormandizer" }
+        assertTrue(Effect.CoinDamage(0, 0, untilTails = true) in attack.effects)
+        assertTrue(Effect.EnergyFromDeck(Int.MAX_VALUE, null, maxPerCoinHead = 1) in attack.effects)
+    }
+    @Test fun `Licking Flames discards one attached Energy for each tails`() {
+        val card = TrainerCatalog.get("sv05-031")
+        assertTrue(CardLibrary.byId.getValue("sv05-031").implemented)
+        val attack = card.attacks.first { it.name == "Licking Flames" }
+        assertTrue(Effect.CoinDamage(3, 0) in attack.effects)
+        assertTrue(Effect.DiscardAttackEnergy(1, perCoinTail = true) in attack.effects)
+    }
+    @Test fun `Crushing Pulse removes opponent hand Items and Tools while Energy Short counts Active Energy`() {
+        val card = TrainerCatalog.get("sv08-061")
+        assertTrue(CardLibrary.byId.getValue("sv08-061").implemented)
+        assertTrue(Effect.DiscardOpponentHandItemsAndTools in card.attacks.first { it.name == "Crushing Pulse" }.effects)
+        assertTrue(Effect.OpponentActiveEnergyCountDamage(20) in card.attacks.first { it.name == "Energy Short" }.effects)
+    }
     @Test fun `Drapion Hazardous Tail executes recoil paralysis and poison`() {
         listOf("me03-052", "me03-097").forEach { id ->
             val card = TrainerCatalog.get(id)
@@ -852,7 +1023,7 @@ class CatalogRuleCompilerTest {
     }
     @Test fun `Bramblin Sneaky Placement compiles a single damage counter effect`() {
         val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me02-046"), emptyMap())!!
-        assertTrue(Effect.PlaceDamageCounter in card.attacks.single { it.name == "Sneaky Placement" }.effects)
+        assertTrue(Effect.PlaceDamageCounter() in card.attacks.single { it.name == "Sneaky Placement" }.effects)
     }
     @Test fun `Bronzong Tool Drop counts Tools attached across both fields`() {
         val card = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me02-072"), emptyMap())!!
@@ -2017,6 +2188,11 @@ class CatalogRuleCompilerTest {
         assertFalse(CardLibrary.byId.getValue("me02.5-216").basicEnergy)
         assertTrue(CardLibrary.byId.getValue("sv01-258").basicEnergy)
     }
+    @Test fun `retreat cost damage reductions compile with base damage intact`() {
+        val raw = CatalogRuleCompiler.rows.getValue("sv08-055")
+        val attack = raw["attacks"]!!.jsonArray.first().jsonObject
+        assertNotNull(CatalogRuleCompiler.compileAttack("sv08-055", 0, attack))
+    }
     @Test fun `coverage reports executable prints independently of browsing metadata`() {
         val supported = CardLibrary.entries.filter { it.implemented }
         assertTrue(supported.size > 100)
@@ -2052,6 +2228,10 @@ class CatalogRuleCompilerTest {
         val patternCards = linkedMapOf<String, MutableSet<String>>()
         unsupported.forEach { card ->
             val raw = CatalogRuleCompiler.rows[card.id] ?: TrainerCatalog.sourceData(card.id)
+            if (card.category != Category.POKEMON) {
+                val text = raw["effect"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                if (text.isNotBlank()) patternCards.getOrPut("Treinador/Energia — $text") { linkedSetOf() } += "${card.id} ${card.name}"
+            }
             raw["attacks"]?.jsonArray.orEmpty().forEachIndexed { index, item ->
                 val attack = item.jsonObject
                 if (CatalogRuleCompiler.compileAttack(card.id, index, attack) == null) {

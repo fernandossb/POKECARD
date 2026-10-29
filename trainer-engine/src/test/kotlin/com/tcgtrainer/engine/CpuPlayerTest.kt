@@ -3,6 +3,59 @@ package com.tcgtrainer.engine
 import kotlin.test.*
 
 class CpuPlayerTest {
+    private fun threatenedPosition(benchEnergy: Int, handEnergy: Boolean): Triple<RulesEngine, CpuPlayer, GameState> {
+        val weak = CardDefinition("weak", "Weak", "Test", "1", category = Category.POKEMON, hp = 200,
+            attacks = listOf(AttackDefinition("weak-hit", "Hit", listOf(EnergyType.COLORLESS), listOf(Effect.Damage(30))),
+                AttackDefinition("expensive", "Heavy", List(2) { EnergyType.COLORLESS }, listOf(Effect.Damage(160)))))
+        val strong = CardDefinition("strong", "Strong", "Test", "2", category = Category.POKEMON, hp = 300,
+            attacks = listOf(AttackDefinition("strong-hit", "Hit", listOf(EnergyType.COLORLESS), listOf(Effect.Damage(180)))))
+        val enemy = CardDefinition("threat", "Threat", "Test", "3", category = Category.POKEMON, hp = 400,
+            attacks = listOf(AttackDefinition("threat-hit", "Hit", emptyList(), listOf(Effect.Damage(100)))))
+        val catalog = object : CardCatalog { override fun get(id: String) = when(id) {
+            weak.id -> weak; strong.id -> strong; enemy.id -> enemy; else -> TrainerCatalog.get(id)
+        } }
+        val state = main().copy(players = listOf(
+            main().players[0].copy(active = p("human", enemy.id, 0), bench = emptyList()),
+            main().players[1].copy(active = p("cpu", weak.id, 1).copy(damage = 180),
+                bench = listOf(p("reserve", strong.id, benchEnergy)), hand = if (handEnergy) listOf(c("energy")) else emptyList())))
+        return Triple(RulesEngine(catalog), CpuPlayer(catalog), state)
+    }
+    @Test fun `CPU develops reserve instead of attaching energy to a doomed active`() {
+        val (engine, player, game) = threatenedPosition(0, true)
+        assertEquals(GameAction.AttachEnergy("energy", "reserve"), player.choose(engine.cpuInput(game)))
+    }
+    @Test fun `CPU retreats a damaged active to a ready surviving attacker`() {
+        val (engine, player, game) = threatenedPosition(1, false)
+        val action = player.choose(engine.cpuInput(game))
+        assertIs<GameAction.Retreat>(action)
+        assertEquals("reserve", action.pokemonId)
+        assertEquals(Legality.Legal, engine.validate(game, action))
+    }
+    @Test fun `CPU values item lock above a small damage increase`() {
+        val control = AttackDefinition("lock", "Lock", emptyList(), listOf(Effect.Damage(10), Effect.LockOpponentItemsNextTurn))
+        val hit = AttackDefinition("hit", "Hit", emptyList(), listOf(Effect.Damage(30)))
+        val source = CardDefinition("control", "Control", "Test", "1", category = Category.POKEMON, hp = 200, attacks = listOf(hit, control))
+        val target = CardDefinition("target", "Target", "Test", "2", category = Category.POKEMON, hp = 300)
+        val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
+            source.id -> source; target.id -> target; else -> TrainerCatalog.get(id)
+        } }
+        val game = main().copy(players = listOf(
+            main().players[0].copy(active = p("human", target.id, 0), bench = emptyList()),
+            main().players[1].copy(active = p("cpu", source.id, 0), bench = emptyList(), hand = emptyList())))
+        val engine = RulesEngine(catalog)
+        assertEquals(GameAction.Attack("lock"), CpuPlayer(catalog).choose(engine.cpuInput(game)))
+    }
+    @Test fun `opening coin is balanced reproducible and both winners choose first player`() {
+        val engine = RulesEngine()
+        val games = (-512L until 512L).map { engine.newGame(it) }
+        val humanWins = games.count { it.startingPlayer == 0 }
+        assertTrue(humanWins in 430..594, "$humanWins wins in 1024 tosses")
+        games.forEach { game ->
+            assertEquals(game.startingPlayer, engine.actingPlayer(game))
+            assertEquals(game.startingPlayer, engine.newGame(game.seed).startingPlayer)
+            assertEquals(Legality.Legal, engine.validate(game, GameAction.ChooseStartingPlayer(1-game.startingPlayer)))
+        }
+    }
     private val rules = RulesEngine(TrainerCatalog)
     private val cpu = CpuPlayer()
     private fun c(id: String, definition: String = "sv01-258") = CardInstance(id, definition)

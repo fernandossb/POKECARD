@@ -6,6 +6,8 @@ class EffectEngine(private val catalog: CardCatalog) {
         val def = catalog.get(pokemon.top.definitionId)
         val stadiumEffect = state?.stadium?.let { catalog.get(it.definitionId).trainerEffect } as? TrainerEffect.HpModifier
         val owner = state?.players?.indexOfFirst { player -> player.pokemon().any { it.id == pokemon.id } } ?: -1
+        val teamHpBonus = if (owner >= 0) state!!.players[owner].pokemon().flatMap { catalog.get(it.top.definitionId).abilities }
+            .maxOfOrNull { it.teamHpBonus } ?: 0 else 0
         val prizesRemaining = if (owner >= 0) state!!.players[1-owner].prizes.size else opponentPrizeCardsRemaining
         val suppressor = if (owner >= 0 && state!!.players[owner].active?.id == pokemon.id) {
             state.players[1-owner].active?.let { catalog.get(it.top.definitionId).abilities.firstOrNull { ability -> ability.opponentActiveAbilityException != null } }
@@ -20,19 +22,21 @@ class EffectEngine(private val catalog: CardCatalog) {
             if (requiredType != null && pokemon.energies.any { catalog.get(it.definitionId).type == requiredType })
                 ability.hpAndAttackBonusWithAttachedEnergy else 0
         }
-        val attachedToolBonus = pokemon.tools.sumOf { (catalog.get(it.definitionId).trainerEffect as? TrainerEffect.ToolHpModifier)?.amount ?: 0 }
+        val toolsDisabled = state?.stadium?.let { catalog.get(it.definitionId).trainerEffect == TrainerEffect.JammingTower } == true
+        val attachedToolBonus = if (toolsDisabled) 0 else pokemon.tools.sumOf { (catalog.get(it.definitionId).trainerEffect as? TrainerEffect.ToolHpModifier)?.amount ?: 0 }
         val specialEnergyBonus = if (pokemon.energies.any { catalog.get(it.definitionId).category == Category.ENERGY && !catalog.get(it.definitionId).basicEnergy })
             abilities.maxOfOrNull { it.hpBonusWithSpecialEnergy } ?: 0 else 0
-        return (def.hp + pokemon.hpModifier + prizeBonus + energyBonus + conditionalEnergyBonus + specialEnergyBonus + attachedToolBonus + if (stadiumEffect?.stage == def.stage) stadiumEffect.amount else 0).coerceAtLeast(0)
+        return (def.hp + pokemon.hpModifier + prizeBonus + energyBonus + conditionalEnergyBonus + teamHpBonus + specialEnergyBonus + attachedToolBonus + if (stadiumEffect?.stage == def.stage) stadiumEffect.amount else 0).coerceAtLeast(0)
     }
     fun damage(attacker: PokemonInstance, defender: PokemonInstance, effects: List<Effect>, boost: Int = 0,
         ignoreWeaknessResistance: Boolean = false, ownBenchCount: Int = 0, opponentBenchCount: Int = 0,
-        ownInPlayCount: Int = ownBenchCount + 1, ignoreOpponentActiveEffects: Boolean = false,
+        ownInPlayCount: Int = ownBenchCount + 1, ownInPlayEnergyCount: Int = 0, ignoreOpponentActiveEffects: Boolean = false,
         ignoreResistance: Boolean = false, ignoreWeakness: Boolean = false, turn: Int = -1, ownHandCount: Int = 0,
-        opponentActiveIsEx: Boolean = false, targetIsOpponentActive: Boolean = true, opponentActiveEnergyCount: Int = 0, opponentInPlayEnergyCount: Int = 0, opponentEnergyCounts: Map<EnergyType, Int> = emptyMap(), ownBenchHasTera: Boolean = false, attackerHealedThisTurn: Boolean = false, opponentHandTrainerCount: Int = 0,
+        opponentActiveIsEx: Boolean = false, opponentActiveIsTera: Boolean = false, targetIsOpponentActive: Boolean = true, opponentActiveEnergyCount: Int = 0, opponentInPlayEnergyCount: Int = 0, opponentEnergyCounts: Map<EnergyType, Int> = emptyMap(), ownBenchHasTera: Boolean = false, attackerHealedThisTurn: Boolean = false, opponentHandTrainerCount: Int = 0, opponentSpecialEnergyCount: Int = 0,
         opponentHasSpecialCondition: Boolean = false, opponentSpecialConditionCount: Int = 0, opponentActiveDamage: Int = 0, opponentHandCount: Int = 0, ownToolCount: Int = 0, ownDamagedPokemonCount: Int = 0,
         ownDamagedBenchedPokemonCount: Int = 0,
         ownEnergyCounts: Map<EnergyType, Int> = emptyMap(), ownKnockedOutByAttackLastTurn: Boolean = false,
+        ownKnockedOutPokemonNamesLastTurn: List<String> = emptyList(),
         ownPokemonNames: List<String> = emptyList(),
         ownPokemonTypes: List<EnergyType> = emptyList(),
         opponentPokemonNames: List<String> = emptyList(),
@@ -45,24 +49,27 @@ class EffectEngine(private val catalog: CardCatalog) {
         ownDiscardEnergyCount: Int = 0, ownSpecialEnergyCount: Int = 0, ownBasicDiscardEnergyCounts: Map<EnergyType, Int> = emptyMap(), opponentPrizeCardsRemaining: Int = 6,
         ownPrizeCardsRemaining: Int = 6,
         opponentBasicDiscardEnergyCount: Int = 0, opponentItemDiscardCount: Int = 0, attackerDamageTakenLastTurn: Int = if (attacker.damageTakenFromAttackTurn == turn - 1) attacker.damageTakenFromAttack else 0,
-        ownDiscardPokemonAbilityNames: List<String> = emptyList(), ownDiscardCardNames: List<String> = emptyList(),
+        ownDiscardPokemonAbilityNames: List<String> = emptyList(), ownDiscardCardNames: List<String> = emptyList(), ownDiscardPokemonAttackNames: List<String> = emptyList(),
+        ownDamagedPokemonDetails: List<Pair<String, Int>> = emptyList(),
         ownBenchPokemonDetails: List<Pair<String, Int>> = emptyList(),
         ownBenchPokemonTypeDetails: List<Pair<EnergyType, Int>> = emptyList(),
         sourceAbilityOverride: List<AbilityDefinition>? = null, targetAbilityOverride: List<AbilityDefinition>? = null,
         allPokemonToolCount: Int = 0, attackerPokemon: List<PokemonInstance> = listOf(attacker),
         targetIsOpponentBench: Boolean = false,
-        abilityOverrides: Map<String, List<AbilityDefinition>> = emptyMap()): Int {
+        abilityOverrides: Map<String, List<AbilityDefinition>> = emptyMap(), toolsDisabled: Boolean = false, ownDeckCount: Int = Int.MAX_VALUE): Int {
         if (defender.attackImmunityTurn >= 0 && turn == defender.attackImmunityTurn) return 0
         val source = catalog.get(attacker.top.definitionId)
         val target = catalog.get(defender.top.definitionId)
         val sourceAbilities = sourceAbilityOverride ?: source.abilities
         val targetAbilities = targetAbilityOverride ?: target.abilities
         if (turn == defender.preventEvolutionPokemonDamageTurn && source.stage != Stage.BASIC) return 0
+        if (turn == defender.preventAncientPokemonDamageTurn && source.canonicalName in CardTraits.ancientPokemonNames) return 0
         if (turn == defender.preventAbilityPokemonDamageTurn && sourceAbilities.isNotEmpty()) return 0
         if (turn == defender.preventBurnedPokemonDamageTurn && SpecialCondition.BURNED in attacker.conditions) return 0
-        val bindingMochiBonus = if (targetIsOpponentActive && opponentActiveIsEx && SpecialCondition.POISONED in attacker.conditions)
+        val bindingMochiBonus = if (!toolsDisabled && targetIsOpponentActive && opponentActiveIsEx && SpecialCondition.POISONED in attacker.conditions)
             attacker.tools.sumOf { (catalog.get(it.definitionId).trainerEffect as? TrainerEffect.BindingMochi)?.amount ?: 0 } else 0
         if (targetIsOpponentBench && targetAbilities.any { it.preventOpponentAttackDamageEffectsWhileOnBench }) return 0
+        if (targetIsOpponentBench && targetAbilities.any { it.preventOpponentAttackDamageWhileOnBench }) return 0
         fun abilitiesOf(pokemon: PokemonInstance): List<AbilityDefinition> = when (pokemon.id) {
             attacker.id -> sourceAbilities
             defender.id -> targetAbilities
@@ -70,6 +77,9 @@ class EffectEngine(private val catalog: CardCatalog) {
         }
         if (targetIsOpponentBench && !target.hasRuleBox && friendlyBenchPokemon.any { benchPokemon ->
                 abilitiesOf(benchPokemon).any { it.preventDamageToOwnBenchedNonRuleBoxPokemon }
+            }) return 0
+        if (targetIsOpponentBench && friendlyBenchPokemon.any { benchPokemon ->
+                abilitiesOf(benchPokemon).any { it.preventOpponentAttackDamageEffectsToOwnBenched }
             }) return 0
         if (Effect.RequiresOpponentBurned in effects && (!targetIsOpponentActive || SpecialCondition.BURNED !in defender.conditions)) return 0
         if (targetAbilities.any { it.preventDamageFromPokemonWithAbilities } && sourceAbilities.isNotEmpty()) return 0
@@ -110,10 +120,14 @@ class EffectEngine(private val catalog: CardCatalog) {
                 abilitiesOf(pokemon).sumOf { ability ->
                     val nameMatches = ability.teamAttackDamageBonusPokemonNamePrefix?.let { prefix -> source.canonicalName.startsWith(prefix) } ?: true
                     if (!nameMatches) 0 else
-                        (if (ability.teamAttackDamageBonusType in attackerTypes) ability.teamAttackDamageBonus else 0) + ability.teamAttackDamageBonusAnyType
+                        (if (ability.teamAttackDamageBonusType in attackerTypes || ability.teamAttackDamageBonusTypes.any { it in attackerTypes }) ability.teamAttackDamageBonus else 0) +
+                            (if (ability.teamEvolutionAttackDamageBonusType == source.type && source.stage != Stage.BASIC) ability.teamEvolutionAttackDamageBonus else 0) +
+                            ability.teamAttackDamageBonusAnyType
                 }
             }
         else 0
+        val abilityTargetBonus = if (targetIsOpponentActive && targetAbilities.isNotEmpty())
+            sourceAbilities.sumOf { it.damageBonusAgainstPokemonWithAbility } else 0
         val ownInPlayTypes = attackerPokemon.flatMap { pokemon ->
             val def = catalog.get(pokemon.top.definitionId)
             listOf(def.type) + abilitiesOf(pokemon).flatMap { it.additionalPokemonTypes }
@@ -127,7 +141,9 @@ class EffectEngine(private val catalog: CardCatalog) {
         val sameHandSizeBonus = if (ownHandCount == opponentHandCount)
             effects.filterIsInstance<Effect.SameHandSizeDamageBonus>().sumOf { it.bonus } else 0
         val opponentExCountDamage = effects.filterIsInstance<Effect.OpponentExCountDamage>().sumOf { effect ->
-            effect.perPokemon * friendlyPokemon.count { catalog.get(it.top.definitionId).name.endsWith(" ex") }
+            effect.perPokemon * opponentPokemonNames.count { it.endsWith(" ex") }
+        } + effects.filterIsInstance<Effect.OpponentExOrVCountDamage>().sumOf { effect ->
+            effect.perPokemon * opponentPokemonNames.count { it.endsWith(" ex") || Regex("\\sV(?:STAR|MAX)?$").containsMatchIn(it) }
         }
         val conditionalTeamReduction = friendlyPokemon.sumOf { pokemon ->
             abilitiesOf(pokemon).sumOf { ability ->
@@ -146,6 +162,18 @@ class EffectEngine(private val catalog: CardCatalog) {
         val ownNamedEnergyBonus = effects.filterIsInstance<Effect.OwnHasNamedEnergyDamageBonus>().filter { effect ->
             attacker.energies.any { energy -> catalog.get(energy.definitionId).category == Category.ENERGY && catalog.get(energy.definitionId).name.startsWith(effect.namePrefix) }
         }.sumOf { it.bonus }
+        val previousAttackDamageBonus = effects.filterIsInstance<Effect.PreviousAttackDamageBonus>()
+            .filter { attacker.lastAttackTurn == turn - 2 && attacker.lastAttackName == it.attackName }
+            .sumOf { it.bonus }
+        val otherAncientAttackDamageBonus = effects.filterIsInstance<Effect.OwnOtherAncientAttackLastTurnDamageBonus>().sumOf { effect ->
+            if (attackerPokemon.any { pokemon -> pokemon.id != attacker.id && pokemon.lastAttackTurn == turn - 2 &&
+                    catalog.get(pokemon.top.definitionId).canonicalName in CardTraits.ancientPokemonNames }) effect.bonus else 0
+        }
+        val namedTrainerEnergyDamage = effects.filterIsInstance<Effect.OwnTrainerEnergyTypeCountDamage>().sumOf { effect ->
+            effect.perEnergy * friendlyPokemon.filter { pokemon ->
+                catalog.get(pokemon.top.definitionId).name.startsWith(effect.trainerPrefix)
+            }.sumOf { pokemon -> pokemon.energies.count { energy -> catalog.get(energy.definitionId).type == effect.type } }
+        }
         val ownBenchNamedEnergyBonus = effects.filterIsInstance<Effect.OwnBenchHasNamedEnergyDamageBonus>().filter { effect ->
             friendlyBenchPokemon.any { pokemon -> pokemon.energies.any { energy ->
                 catalog.get(energy.definitionId).category == Category.ENERGY && catalog.get(energy.definitionId).name.startsWith(effect.namePrefix)
@@ -154,12 +182,12 @@ class EffectEngine(private val catalog: CardCatalog) {
         val storedNextTurnBonus = if (targetIsOpponentActive && attacker.nextTurnAllAttacksDamageBonusTurn == turn)
             attacker.nextTurnAllAttacksDamageBonus else 0
         val base = effects.filterIsInstance<Effect.Damage>().sumOf { it.amount } + bindingMochiBonus +
-            ownNamedEnergyBonus + ownBenchNamedEnergyBonus + effects.filterIsInstance<Effect.OpponentRuleBoxDamage>().filter { target.hasRuleBox }.sumOf { it.amount } +
+            ownNamedEnergyBonus + ownBenchNamedEnergyBonus + previousAttackDamageBonus + otherAncientAttackDamageBonus + namedTrainerEnergyDamage + effects.filterIsInstance<Effect.OpponentRuleBoxDamage>().filter { target.hasRuleBox }.sumOf { it.amount } +
             effects.filterIsInstance<Effect.AllOpponentRuleBoxDamage>().filter { target.hasRuleBox }.sumOf { it.amount } +
             effects.filterIsInstance<Effect.StadiumDamageBonus>().filter { stadiumInPlay }.sumOf { it.bonus } + abilityHandBonus + abilityDamageBonus + conditionalEnergyAttackBonus +
-            futureDamageBonus + teamAttackDamageBonus + sameTypeBonus + sameHandSizeBonus + opponentExCountDamage + opponentActiveAbilityDamageBonus + opponentActiveToolDamageBonus + ownSpecialEnergyPresenceBonus + storedNextTurnBonus +
+            futureDamageBonus + teamAttackDamageBonus + (if (targetIsOpponentActive) sourceAbilities.sumOf { it.damageBonusPerOpponentPrizeTaken } * (6-opponentPrizeCardsRemaining).coerceAtLeast(0) else 0) + abilityTargetBonus + sameTypeBonus + sameHandSizeBonus + opponentExCountDamage + opponentActiveAbilityDamageBonus + opponentActiveToolDamageBonus + ownSpecialEnergyPresenceBonus + storedNextTurnBonus +
             (if (targetIsOpponentActive && target.stage != Stage.BASIC) attackerPokemon.flatMap(::abilitiesOf).sumOf { it.attackDamageBonusAgainstEvolutionActive } else 0) +
-            effects.filterIsInstance<Effect.TargetedDamage>().sumOf { it.damage + it.perOwnEnergy * attacker.energies.size } +
+            effects.filterIsInstance<Effect.TargetedDamage>().sumOf { targeted -> targeted.damage + targeted.perOwnEnergy * attacker.energies.size + (targeted.perOwnEnergyType?.let { type -> attacker.energies.count { catalog.get(it.definitionId).type == type } * targeted.perOwnEnergyTypeAmount } ?: 0) } +
             effects.filterIsInstance<Effect.BenchedCountDamage>().sumOf { it.perPokemon * (ownBenchCount + opponentBenchCount) } +
             effects.filterIsInstance<Effect.OpponentBenchCountDamage>().sumOf { it.perPokemon * opponentBenchCount } +
             effects.filterIsInstance<Effect.OpponentBenchCountAtLeastDamageBonus>().filter { opponentBenchCount >= it.count }.sumOf { it.bonus } +
@@ -173,7 +201,12 @@ class EffectEngine(private val catalog: CardCatalog) {
                 }
             } +
             effects.filterIsInstance<Effect.OwnBenchWithEnergyDamage>().sumOf { it.perPokemon * (ownBenchWithEnergyCounts[it.type] ?: 0) } +
-            effects.filterIsInstance<Effect.OwnDamagedPokemonCountDamage>().sumOf { it.perPokemon * ownDamagedPokemonCount } +
+            effects.filterIsInstance<Effect.OwnDamagedPokemonCountDamage>().sumOf { effect ->
+                val count = if (effect.namePrefix == null) ownDamagedPokemonCount else ownDamagedPokemonDetails.count {
+                    it.second > 0 && it.first.contains(effect.namePrefix, ignoreCase = true)
+                }
+                effect.perPokemon * count
+            } +
             effects.filterIsInstance<Effect.OwnDamagedBenchedPokemonCountDamage>().sumOf { it.perPokemon * ownDamagedBenchedPokemonCount } +
             effects.filterIsInstance<Effect.OwnInPlayCountDamage>().sumOf { it.perPokemon * ownInPlayCount } +
             effects.filterIsInstance<Effect.OwnBasicPokemonCountDamage>().sumOf { effect -> effect.perPokemon * attackerPokemon.count { catalog.get(it.top.definitionId).stage == Stage.BASIC } } +
@@ -182,8 +215,16 @@ class EffectEngine(private val catalog: CardCatalog) {
                 effect.perPokemon * ownPokemonNames.count { it == effect.speciesName || it == "${effect.speciesName} ex" }
             } +
             effects.filterIsInstance<Effect.OwnNamedPokemonCountDamage>().sumOf { effect ->
-                effect.perPokemon * ownPokemonNames.count { it.startsWith(effect.namePrefix) }
+                val names = if (effect.benchOnly) ownPokemonNames.filterIndexed { index, _ -> index > 0 } else ownPokemonNames
+                effect.perPokemon * names.count { if (effect.contains) it.contains(effect.namePrefix, ignoreCase = true) else it.startsWith(effect.namePrefix) }
             } +
+            effects.filterIsInstance<Effect.OwnBenchStageTwoTypeDamageBonus>().filter { effect ->
+                attackerPokemon.any { pokemon -> pokemon.id != attacker.id && catalog.get(pokemon.top.definitionId).stage == Stage.STAGE_TWO && catalog.get(pokemon.top.definitionId).type == effect.type }
+            }.sumOf { it.bonus } +
+            effects.filterIsInstance<Effect.AttackerRemainingHpDamageBonus>().filter { effect ->
+                effectiveHp(attacker) - attacker.damage <= effect.maxRemainingHp
+            }.sumOf { it.bonus } +
+            effects.filterIsInstance<Effect.OwnDeckAtMostDamageBonus>().filter { ownDeckCount <= it.maxCards }.sumOf { it.bonus } +
             effects.filterIsInstance<Effect.OwnAncientPokemonCountDamage>().sumOf { effect ->
                 effect.perPokemon * attackerPokemon.count { catalog.get(it.top.definitionId).canonicalName in CardTraits.ancientPokemonNames }
             } +
@@ -208,8 +249,8 @@ class EffectEngine(private val catalog: CardCatalog) {
             effects.filterIsInstance<Effect.AllOwnBenchedPokemonDamagedBonus>().filter {
                 ownBenchPokemonDetails.all { (_, damage) -> damage > 0 }
             }.sumOf { it.bonus } +
-            effects.filterIsInstance<Effect.AnyOwnBenchedPokemonDamagedBonus>().filter {
-                ownBenchPokemonDetails.any { (_, damage) -> damage > 0 }
+            effects.filterIsInstance<Effect.AnyOwnBenchedPokemonDamagedBonus>().filter { effect ->
+                ownBenchPokemonDetails.any { (name, damage) -> damage > 0 && (effect.namePrefix == null || name.startsWith(effect.namePrefix)) }
             }.sumOf { it.bonus } +
             effects.filterIsInstance<Effect.OwnNamedBenchDamageCounterDamage>().sumOf { effect ->
                 effect.perCounter * ownBenchPokemonDetails.filter { (name, _) -> name.startsWith(effect.namePrefix) }.sumOf { (_, damage) -> damage / 10 }
@@ -232,14 +273,19 @@ class EffectEngine(private val catalog: CardCatalog) {
             effects.filterIsInstance<Effect.OpponentTypePresentDamageBonus>().filter { effect -> opponentPokemonTypes.contains(effect.type) }.sumOf { it.bonus } +
             effects.filterIsInstance<Effect.OpponentActiveConditionDamageBonus>().filter { targetIsOpponentActive && it.condition in defender.conditions }.sumOf { it.bonus } +
             effects.filterIsInstance<Effect.OpponentEvolutionActiveDamageBonus>().filter { targetIsOpponentActive && target.stage != Stage.BASIC }.sumOf { it.bonus } +
+            effects.filterIsInstance<Effect.OpponentActiveTeraDamageBonus>().filter { targetIsOpponentActive && opponentActiveIsTera }.sumOf { it.bonus } +
+            effects.filterIsInstance<Effect.OpponentFuturePokemonDamageBonus>().filter {
+                opponentPokemonNames.any { name -> name.startsWith("Iron ") || name.startsWith("Miraidon") }
+            }.sumOf { it.bonus } +
             effects.filterIsInstance<Effect.OpponentStageTwoActiveDamageBonus>().filter { targetIsOpponentActive && target.stage == Stage.STAGE_TWO }.sumOf { it.bonus } +
-            effects.filterIsInstance<Effect.OwnEnergyCountDamage>().sumOf { it.perEnergy * attacker.energies.size } +
+            effects.filterIsInstance<Effect.OpponentStageOneActiveDamageBonus>().filter { targetIsOpponentActive && target.stage == Stage.STAGE_ONE }.sumOf { it.bonus } +
+            effects.filterIsInstance<Effect.OwnEnergyCountDamage>().sumOf { effect -> effect.perEnergy * if (effect.basicOnly) attacker.energies.count { catalog.get(it.definitionId).category == Category.ENERGY && catalog.get(it.definitionId).basicEnergy } else attacker.energies.size } +
             effects.filterIsInstance<Effect.AttackerConditionDamageBonus>().filter { it.condition in attacker.conditions }.sumOf { it.bonus } +
             effects.filterIsInstance<Effect.AttackerAnyConditionDamageBonus>().filter { effect -> attacker.conditions.any { it in effect.conditions } }.sumOf { it.bonus } +
             effects.filterIsInstance<Effect.OpponentEnergyCountDamage>().filter { targetIsOpponentActive }.sumOf { it.perEnergy * opponentActiveEnergyCount } +
             effects.filterIsInstance<Effect.OpponentActiveEnergyCountDamage>().filter { targetIsOpponentActive }.sumOf { it.perEnergy * opponentActiveEnergyCount } +
             effects.filterIsInstance<Effect.SameActiveEnergyCountDamageBonus>().filter { targetIsOpponentActive && attacker.energies.size == opponentActiveEnergyCount }.sumOf { it.bonus } +
-            effects.filterIsInstance<Effect.OpponentFieldEnergyCountDamage>().sumOf { it.perEnergy * opponentInPlayEnergyCount } +
+            effects.filterIsInstance<Effect.OpponentFieldEnergyCountDamage>().sumOf { it.perEnergy * if (it.specialOnly) opponentSpecialEnergyCount else opponentInPlayEnergyCount } +
             effects.filterIsInstance<Effect.OpponentEnergyTypeDamage>().sumOf { it.perEnergy * (opponentEnergyCounts[it.type] ?: 0) } +
             effects.filterIsInstance<Effect.OwnDiscardBasicEnergyDamageAndShuffle>().sumOf { it.damagePerEnergy * (ownBasicDiscardEnergyCounts[it.type] ?: 0) } +
             effects.filterIsInstance<Effect.OpponentHandEnergyCountDamage>().sumOf { it.perEnergy * opponentHandEnergyCount } +
@@ -261,6 +307,9 @@ class EffectEngine(private val catalog: CardCatalog) {
             }.sumOf { it.bonus } +
             effects.filterIsInstance<Effect.OwnDiscardNamedCardDamage>().sumOf { effect ->
                 effect.perCard * ownDiscardCardNames.count { it == effect.cardName }
+            } +
+            effects.filterIsInstance<Effect.OwnDiscardPokemonWithAttackDamage>().sumOf { effect ->
+                effect.perPokemon * ownDiscardPokemonAttackNames.count { it == effect.attackName }
             } +
             effects.filterIsInstance<Effect.OwnDiscardNamedPrefixDamage>().sumOf { effect ->
                 effect.perCard * ownDiscardCardNames.count { it.startsWith(effect.namePrefix) }
@@ -286,9 +335,15 @@ class EffectEngine(private val catalog: CardCatalog) {
             effects.filterIsInstance<Effect.ConditionalInPlayEnergyDamage>().filter { conditional ->
                 (ownEnergyCounts[conditional.type] ?: 0) >= conditional.minimum
             }.sumOf { it.bonus } +
+            effects.filterIsInstance<Effect.ConditionalOwnInPlayEnergyDamage>().filter { ownInPlayEnergyCount >= it.minimum }.sumOf { it.bonus } +
             effects.filterIsInstance<Effect.OwnKnockoutLastTurnDamage>().filter { ownKnockedOutByAttackLastTurn }.sumOf { it.bonus } +
+            effects.filterIsInstance<Effect.OwnNamedPokemonKnockoutLastTurnDamage>().filter { effect -> ownKnockedOutPokemonNamesLastTurn.any { it.startsWith(effect.namePrefix) } }.sumOf { it.bonus } +
             (if (Effect.DamageEqualToAttackDamageTakenLastTurn in effects) attackerDamageTakenLastTurn else 0) +
             effects.filterIsInstance<Effect.MovedFromBenchDamageBonus>().filter { attacker.enteredActiveTurn == turn }.sumOf { it.bonus }
+                + effects.filterIsInstance<Effect.EvolvedThisTurnDamageBonus>().filter { effect ->
+                    attacker.lastEvolutionTurn == turn && (effect.evolvedFromName == null ||
+                        catalog.get(attacker.cards.first().definitionId).canonicalName == effect.evolvedFromName)
+                }.sumOf { it.bonus }
         val replacedBase = effects.filterIsInstance<Effect.ReplaceDamageIfOpponentActiveDamaged>().firstOrNull()
             ?.takeIf { targetIsOpponentActive && opponentActiveDamage > 0 }?.amount ?: base
         val attackBase = (replacedBase - if (turn == attacker.outgoingDamageReductionTurn) attacker.outgoingDamageReduction else 0).coerceAtLeast(0)
@@ -304,7 +359,11 @@ class EffectEngine(private val catalog: CardCatalog) {
                     catalog.get(it.top.definitionId).name == "Bouffalant"
                 } >= 2) friendlyPokemon.flatMap(::abilitiesOf)
                     .maxOfOrNull { it.protectBasicColorlessWithSecondBouffalant } ?: 0 else 0
-            value -= targetAbilities.sumOf { if (it.damageReductionTypes.isEmpty() || source.type in it.damageReductionTypes) it.damageReduction else 0 } + curlyWall
+            value -= targetAbilities.sumOf { ability ->
+                val typeMatches = ability.damageReductionTypes.isEmpty() || source.type in ability.damageReductionTypes
+                val energyMatches = !ability.damageReductionRequiresAnyEnergyAttached || defender.energies.isNotEmpty()
+                if (typeMatches && energyMatches) ability.damageReduction else 0
+            } + curlyWall
         }
         val tundraWallReduction = if (defender.energies.any { catalog.get(it.definitionId).type == EnergyType.WATER })
             friendlyPokemon.flatMap(::abilitiesOf)
@@ -315,46 +374,51 @@ class EffectEngine(private val catalog: CardCatalog) {
                 if (targetIsOpponentActive && pokemon.id == defender.id) ability.teamDamageReduction else 0
             } else ability.teamDamageReduction
         } } + conditionalTeamReduction
+        if (attacker.tools.isNotEmpty() && targetIsOpponentActive && !ignoresOpponentActiveEffects)
+            value -= friendlyPokemon.flatMap(::abilitiesOf).maxOfOrNull { it.opponentActiveToolAttackDamageReduction } ?: 0
         if (!ignoresOpponentActiveEffects && turn == defender.damageReductionTurn && (!defender.incomingDamageReductionEvolutionOnly || source.stage != Stage.BASIC)) value -= defender.incomingDamageReduction
         if (turn == defender.preventAttackDamageAtMostTurn && value.coerceAtLeast(0) <= defender.preventAttackDamageAtMost) return 0
-        return value.coerceAtLeast(0) + (if (targetIsOpponentActive && turn == defender.incomingDamageBonusTurn) defender.incomingDamageBonus else 0) + counterDamage
+        val finalAttackDamage = value.coerceAtLeast(0) + (if (targetIsOpponentActive && turn == defender.incomingDamageBonusTurn) defender.incomingDamageBonus else 0)
+        if (targetAbilities.any { it.preventAttackDamageAtLeast > 0 && finalAttackDamage >= it.preventAttackDamageAtLeast }) return counterDamage
+        return finalAttackDamage + counterDamage
     }
     fun supported(attack: AttackDefinition): Boolean = attack.effects.all { effect -> when (effect) {
-        is Effect.Damage, is Effect.DrawToHand, is Effect.DiscardHandDraw, is Effect.DiscardOneHandDraw, is Effect.DiscardHandEnergyDamageBonus, is Effect.RequiredHandBasicEnergyDiscard, is Effect.DiscardOwnEnergyDamageBonus, is Effect.ShuffleHandDraw, is Effect.AccelerateEnergy, is Effect.RestrictNextTurn, is Effect.Recoil, is Effect.RetaliateDamageCountersNextTurn, Effect.RetaliateEqualDamageTakenNextTurn,
+        is Effect.Damage, is Effect.SelfDamagePerOwnDamageCounter, Effect.PreventDefendingEnergyAttachmentNextTurn, Effect.PreventOwnRetreatNextTurn, is Effect.DrawFromBottom, Effect.SearchUpToCoinsHeadsFromDeckToHand, is Effect.DrawToHand, is Effect.RequiresPreviousAttackName, is Effect.PreviousAttackDamageBonus, is Effect.OwnOtherAncientAttackLastTurnDamageBonus, is Effect.DiscardHandDraw, is Effect.DiscardOneHandDraw, is Effect.DiscardHandEnergyDamageBonus, is Effect.RequiredHandBasicEnergyDiscard, is Effect.DiscardOwnEnergyDamageBonus, is Effect.ShuffleHandDraw, Effect.ShuffleHandDrawOpponentHandSize, is Effect.AccelerateEnergy, is Effect.RestrictNextTurn, is Effect.Recoil, is Effect.RetaliateDamageCountersNextTurn, Effect.RetaliateEqualDamageTakenNextTurn,
         is Effect.AttachBasicEnergyToEachBenchedPokemon, Effect.AttachBasicFightingEnergyFromDiscardToEachBenchedPokemon,
         is Effect.RequiresBenched, is Effect.RequiresNamedBenchedPokemon, is Effect.TargetedDamage, is Effect.SearchPokemonToHand, is Effect.SearchFirePokemonAndEnergyToHand, is Effect.SearchPokemonTypeToHand, Effect.SearchAnyCardToHand, is Effect.SearchUpToAnyCardsToHand, Effect.SearchSupporterToHand, Effect.SearchStadiumToHand, Effect.SearchItemToHand, is Effect.SearchToolToHand, is Effect.SearchNamedTrainerToHand, is Effect.SearchPokemonNamePrefixToHand, Effect.ChooseOpponentAttackToRestrict, Effect.HealSelfByDamageDealt, is Effect.HealOwnPokemon, Effect.IgnoreWeaknessResistance, Effect.IgnoreResistance, Effect.IgnoreOpponentActiveEffects,
         is Effect.RestrictNamedAttackNextTurn, Effect.CannotRepeatAttackUntilLeavingActive, Effect.LockOpponentItemsNextTurn, Effect.LockOpponentEvolutionNextTurn, Effect.RequiresSecondPlayerFirstTurn, Effect.LockOpponentSupportersNextTurn,
-        is Effect.ReduceEvolutionDamageNextTurn,
-        is Effect.CoinDamage, is Effect.DiscardAttackEnergy, Effect.DiscardTeamRocketEnergyToDiscardOpponentActive, is Effect.EnergyFromDeck, is Effect.AttachEnergyFromTopDeck, is Effect.SupporterBonus, is Effect.Draw, is Effect.EachPlayerDraw,
-        Effect.PreventRetreatNextTurn, Effect.DiscardDefendingTools, is Effect.ConditionalEnergyDamage, is Effect.ConditionalAttachedEnergyDamage, is Effect.ConditionalInPlayEnergyDamage, is Effect.SwitchOwn,
-        is Effect.BenchedCountDamage, is Effect.OpponentBenchCountDamage, is Effect.OpponentBenchCountAtLeastDamageBonus, is Effect.BothPlayersNamedPokemonCountDamage, is Effect.OwnTypePokemonCountDamage, is Effect.ShuffleOpponentBenchedPokemonIntoDeck, is Effect.OwnBenchStageTwoCountDamage, is Effect.OwnBenchWithEnergyDamage, is Effect.OwnInPlayCountDamage, is Effect.OwnBasicPokemonCountDamage, is Effect.OwnStageOnePokemonCountDamage, is Effect.OwnSpeciesCountDamage, is Effect.OwnNamedPokemonCountDamage, is Effect.OwnAncientPokemonCountDamage, is Effect.OwnBenchTeraDamageBonus, is Effect.OwnEvolutionPokemonCountDamage, is Effect.DamageCountersUntilActiveHasRemainingHp, is Effect.DamageCountersUntilBenchedHasRemainingHp, Effect.RequiresOpponentActiveEx, is Effect.OwnNamedPokemonDamage, is Effect.OwnTeamRocketPokemonCountDamage, is Effect.OwnAttackNameCountDamage, is Effect.OwnHandPokemonRevealDamage, is Effect.BenchPokemonPresenceDamageBonus, is Effect.BenchTypePresenceDamageBonus, is Effect.AnyOwnBenchedPokemonDamagedBonus, is Effect.AllOwnBenchedPokemonDamagedBonus, is Effect.OwnDamagedBenchedPokemonCountDamage, is Effect.SameTypePokemonInPlayDamageBonus, is Effect.SameHandSizeDamageBonus, is Effect.OpponentExCountDamage, is Effect.OwnNamedBenchDamageCounterDamage, is Effect.OwnBenchTypeDamageCounterDamage, Effect.IgnoreWeakness, is Effect.OwnDamageCounterDamage, is Effect.ConditionalOwnDamageCounterBonus, is Effect.OwnUndamagedDamageBonus, is Effect.OwnHealedThisTurnDamageBonus, is Effect.OwnAnyDamageCounterBonus,
+        is Effect.ReduceEvolutionDamageNextTurn, Effect.PreventAncientPokemonDamageNextTurn,
+        is Effect.CoinDamage, is Effect.DiscardAttackEnergy, Effect.DiscardTeamRocketEnergyToDiscardOpponentActive, is Effect.EnergyFromDeck, is Effect.AttachEnergyFromTopDeck, is Effect.SupporterBonus, is Effect.NamedSupporterBonus, is Effect.Draw, is Effect.EachPlayerDraw, Effect.RestrictNextTurnOnTails, is Effect.DiscardTopDeckFutureDamage,
+        Effect.PreventRetreatNextTurn, Effect.DiscardDefendingTools, is Effect.ConditionalEnergyDamage, is Effect.ConditionalAttachedEnergyDamage, is Effect.ConditionalInPlayEnergyDamage, is Effect.ConditionalOwnInPlayEnergyDamage, is Effect.OpponentActiveTeraDamageBonus, is Effect.SwitchOwn,
+        is Effect.BenchedCountDamage, is Effect.OpponentBenchCountDamage, is Effect.OpponentBenchCountAtLeastDamageBonus, is Effect.BothPlayersNamedPokemonCountDamage, is Effect.OwnTypePokemonCountDamage, is Effect.ShuffleOpponentBenchedPokemonIntoDeck, is Effect.OwnBenchStageTwoCountDamage, is Effect.OwnBenchWithEnergyDamage, is Effect.OwnInPlayCountDamage, is Effect.OwnBasicPokemonCountDamage, is Effect.OwnStageOnePokemonCountDamage, is Effect.OwnSpeciesCountDamage, is Effect.OwnNamedPokemonCountDamage, is Effect.OwnAncientPokemonCountDamage, is Effect.OwnBenchTeraDamageBonus, is Effect.OwnEvolutionPokemonCountDamage, is Effect.DamageCountersUntilActiveHasRemainingHp, is Effect.DamageCountersUntilBenchedHasRemainingHp, Effect.RequiresOpponentActiveEx, Effect.RequiresOpponentAnySpecialCondition, is Effect.OwnNamedPokemonDamage, is Effect.OwnTeamRocketPokemonCountDamage, is Effect.OwnAttackNameCountDamage, is Effect.OwnHandPokemonRevealDamage, is Effect.BenchPokemonPresenceDamageBonus, is Effect.BenchTypePresenceDamageBonus, is Effect.AnyOwnBenchedPokemonDamagedBonus, is Effect.AllOwnBenchedPokemonDamagedBonus, is Effect.OwnDamagedBenchedPokemonCountDamage, is Effect.SameTypePokemonInPlayDamageBonus, is Effect.SameHandSizeDamageBonus, is Effect.OpponentExCountDamage, is Effect.OwnNamedBenchDamageCounterDamage, is Effect.OwnBenchTypeDamageCounterDamage, Effect.IgnoreWeakness, is Effect.OwnDamageCounterDamage, is Effect.ConditionalOwnDamageCounterBonus, is Effect.OwnUndamagedDamageBonus, is Effect.OwnHealedThisTurnDamageBonus, is Effect.OwnAnyDamageCounterBonus,
         Effect.SwitchOpponent, Effect.CoinSwitchOpponent, Effect.OptionalSwitchOpponent, Effect.PullOpponentBench, Effect.PullSelectedBenchBeforeDamage, Effect.RecoverSupporterFromDiscard, Effect.RecoverTrainerFromDiscard, is Effect.DiscardTopDeckEnergyDamage, is Effect.DiscardBothDeckTopEnergyDamage, Effect.KnockOutOpponentActiveIfPaidDiscard,
-        is Effect.SearchBasicEnergyToHand, is Effect.OwnDiscardBasicEnergyDamageAndShuffle, is Effect.OpponentFieldDamageCounterDamage, is Effect.OwnEnergyTypeCountDamage,
+        is Effect.SearchBasicEnergyToHand, is Effect.SearchEnergyToHand, is Effect.OwnDiscardBasicEnergyDamageAndShuffle, is Effect.OpponentFieldDamageCounterDamage, is Effect.OwnEnergyTypeCountDamage,
         is Effect.OpponentChoosesHandShuffle, Effect.RequiresUndamagedOpponentActive, Effect.RequiresOpponentBurned, is Effect.RequiresOpponentCondition, Effect.RequiresStadium, is Effect.RequiresOpponentRemainingPrizes, is Effect.RequiresOwnRemainingPrizes, Effect.RequiresEqualHandSize, is Effect.StadiumDamageBonus, Effect.MayAttackFirstTurnIfStarting, Effect.SearchEvolutionForSelfToEvolve, Effect.SearchEvolutionForActiveToEvolve, Effect.SearchEvolutionForEachBenchedPokemon,
         is Effect.BasicPokemonToBench, is Effect.NamedPokemonToBench, is Effect.RecoverNamedPokemonToBench, is Effect.RecoverPokemonTypeToBench, is Effect.RecoverPokemonToHand, Effect.RecoverUpToCoinHeads, is Effect.SearchPokemonTypeAndStadiumToHand, Effect.SearchRotomToBench,
         Effect.RestrictIfSecondPlayerFirstTurn, Effect.PreventBasicNonColorlessDamageNextTurn, Effect.PreventBasicPokemonDamageNextTurn, Effect.PreventEvolutionPokemonDamageNextTurn, Effect.PreventAbilityPokemonDamageNextTurn, Effect.PreventBurnedPokemonDamageNextTurn, is Effect.PreventAttackDamageAtMostNextTurn, is Effect.RequiresOwnBenchCountAtLeast, is Effect.DamageOnlyWithOwnBenchCountAtLeast, is Effect.OwnBenchCountDamage,
-        is Effect.OwnDamagedPokemonCountDamage, is Effect.OpponentHandTrainerCountDamage,
-        is Effect.StatusCondition, is Effect.StatusConditionOnTails, is Effect.OpponentActiveTypeCondition, is Effect.DiscardDefendingEnergy, Effect.DiscardAllOpponentSpecialEnergy, Effect.DiscardOpponentToolsAndSpecialEnergy, is Effect.BenchDamage, is Effect.AllOpponentBenchDamage, is Effect.OpponentRuleBoxDamage, is Effect.AllOpponentRuleBoxDamage, is Effect.OwnBenchDamage, is Effect.DiscardEnergyThenBenchDamage, is Effect.OptionalShuffleEnergyThenBenchDamage, is Effect.BenchDamageCounters, is Effect.DamageCountersOnDamagedOpponentPokemon, is Effect.MassDamageCounters, Effect.GrassDiscardEnergyTargetCounters, Effect.PlaceDamageCounter, is Effect.MultiTargetDamage, is Effect.OptionalDiscardLightningForParalysis, is Effect.CoinDamageEachOpponentPokemon, Effect.KnockOutBothActive, Effect.KnockOutOpponentActiveIfSpecialCondition, Effect.KnockOutOpponentActiveIfSpecialEnergy, is Effect.KnockOutOpponentPokemonRemainingHpAtMost, Effect.KnockOutOpponentActiveAtExactlySixDamageCounters, Effect.KnockOutOpponentActiveIfBasic, Effect.ProtectAttackerNextTurnIfKnocksOutByDamage, Effect.RecoverSelfFromSpecialConditions, Effect.NoWeaknessNextTurn, Effect.CoinMiss, is Effect.HealEachOwnPokemon, is Effect.HealEachPokemon,
-        is Effect.ReduceDamageNextTurn, is Effect.SelfDamage, is Effect.SelfDamageIfAllCoinsTails, Effect.PreventDefendingAttackNextTurn, Effect.DefendingAttackFailsOnTailsNextTurn,
-        is Effect.OwnHandCounterDamage, is Effect.OpponentHandCountDamage, is Effect.OpponentHandAtMostDamageBonus, is Effect.OwnHandEmptyDamageBonus, is Effect.OpponentExDamage, is Effect.OpponentActiveHasAbilityDamageBonus, is Effect.OpponentActiveHasToolDamageBonus, is Effect.OwnHasSpecialEnergyDamageBonus, is Effect.OwnHasNamedEnergyDamageBonus, is Effect.OwnBenchHasNamedEnergyDamageBonus, is Effect.OpponentTypeDamage, is Effect.OpponentTypePresentDamageBonus, is Effect.OpponentActiveConditionDamageBonus, is Effect.OpponentEvolutionActiveDamageBonus, is Effect.OpponentStageTwoActiveDamageBonus, is Effect.OwnEnergyCountDamage, is Effect.AttackerConditionDamageBonus, is Effect.AttackerAnyConditionDamageBonus,
+        is Effect.OwnDamagedPokemonCountDamage, is Effect.OpponentHandTrainerCountDamage, is Effect.OpponentExOrVCountDamage, is Effect.OwnTrainerEnergyTypeCountDamage,
+        is Effect.StatusCondition, is Effect.StatusConditionOnTails, is Effect.OpponentActiveTypeCondition, is Effect.DiscardDefendingEnergy, Effect.DiscardAllOpponentSpecialEnergy, Effect.DiscardOpponentToolsAndSpecialEnergy, is Effect.BenchDamage, is Effect.AllOpponentBenchDamage, is Effect.OpponentRuleBoxDamage, is Effect.AllOpponentRuleBoxDamage, is Effect.OwnBenchDamage, is Effect.DiscardEnergyThenBenchDamage, is Effect.OptionalShuffleEnergyThenBenchDamage, is Effect.BenchDamageCounters, is Effect.MultiTargetDamageCounters, is Effect.DamageCountersOnDamagedOpponentPokemon, is Effect.MassDamageCounters, Effect.GrassDiscardEnergyTargetCounters, is Effect.PlaceDamageCounter, is Effect.MultiTargetDamage, is Effect.OptionalDiscardLightningForParalysis, is Effect.CoinDamageEachOpponentPokemon, Effect.KnockOutBothActive, Effect.KnockOutOpponentActiveIfSpecialCondition, Effect.KnockOutOpponentActiveIfSpecialEnergy, is Effect.KnockOutOpponentPokemonRemainingHpAtMost, Effect.KnockOutOpponentActiveAtExactlySixDamageCounters, Effect.KnockOutOpponentActiveIfBasic, Effect.ProtectAttackerNextTurnIfKnocksOutByDamage, Effect.RecoverSelfFromSpecialConditions, Effect.NoWeaknessNextTurn, Effect.CoinMiss, is Effect.HealEachOwnPokemon, is Effect.HealEachPokemon,
+        is Effect.ReduceDamageNextTurn, is Effect.IncreaseDamageTakenNextTurn, is Effect.SelfDamage, is Effect.SelfDamageIfAllCoinsTails, Effect.PreventDefendingAttackNextTurn, Effect.PreventDefendingAttackNextTurnOnHeads, Effect.PreventDefendingBasicAttackNextTurn, Effect.DefendingAttackFailsOnTailsNextTurn, Effect.ChooseStatusConditionOnHeads,
+        is Effect.OwnHandCounterDamage, is Effect.OpponentHandCountDamage, is Effect.OpponentHandAtMostDamageBonus, is Effect.OwnHandEmptyDamageBonus, is Effect.OpponentExDamage, is Effect.OpponentActiveHasAbilityDamageBonus, is Effect.OpponentActiveHasToolDamageBonus, is Effect.OptionalShuffleAllEnergyDamageBonus, is Effect.OwnHasSpecialEnergyDamageBonus, is Effect.OwnHasNamedEnergyDamageBonus, is Effect.OwnBenchHasNamedEnergyDamageBonus, is Effect.OpponentTypeDamage, is Effect.OpponentTypePresentDamageBonus, is Effect.OpponentActiveConditionDamageBonus, is Effect.OpponentEvolutionActiveDamageBonus, is Effect.OpponentStageTwoActiveDamageBonus, is Effect.OpponentStageOneActiveDamageBonus, is Effect.OwnEnergyCountDamage, is Effect.AttackerConditionDamageBonus, is Effect.AttackerAnyConditionDamageBonus,
         is Effect.OpponentEnergyCountDamage, is Effect.OpponentActiveEnergyCountDamage, is Effect.SameActiveEnergyCountDamageBonus, is Effect.OpponentFieldEnergyCountDamage, is Effect.OpponentEnergyTypeDamage, is Effect.OpponentBasicDiscardEnergyDamage, is Effect.OpponentItemDiscardDamage, is Effect.OpponentHandEnergyCountDamage, is Effect.OpponentActiveRetreatCostDamage, is Effect.OpponentRetreatCostAtLeastDamageBonus, is Effect.OwnEnergyGreaterThanOpponentActiveDamageBonus, is Effect.ReduceDefendingAttackDamageNextTurn, is Effect.NextTurnDefendingDamageBonus,
         is Effect.OpponentConditionDamage, is Effect.OpponentSpecialConditionCountDamage, is Effect.OpponentActiveDamagedDamage, is Effect.OpponentActiveDamageCounterDamage,
         is Effect.OwnDiscardEnergyDamage, is Effect.DiscardEnergyThresholdDamage, is Effect.OwnInPlayEnergyDamage, is Effect.OwnSpecialEnergyDamage,
-        is Effect.OwnDiscardAbilityCountBonus, is Effect.OwnDiscardNamedCardDamage, is Effect.OwnDiscardNamedPrefixDamage,
-        is Effect.OpponentPrizeTakenDamage, is Effect.OwnPrizeTakenDamage, is Effect.ReplaceDamageIfOpponentActiveDamaged, is Effect.OpponentPrizeTakenBenchDamage, is Effect.OpponentPrizeCountDamage, is Effect.OwnPrizeLeadDamageBonus, is Effect.OpponentNoRetreatDamage,
+        is Effect.OwnDiscardAbilityCountBonus, is Effect.OwnDiscardNamedCardDamage, is Effect.OwnDiscardNamedPrefixDamage, is Effect.OwnDiscardPokemonWithAttackDamage,
+        is Effect.OpponentPrizeTakenDamage, is Effect.OpponentPrizesTakenLastTurnDamage, is Effect.OwnPrizeTakenDamage, is Effect.ReplaceDamageIfOpponentActiveDamaged, is Effect.OpponentPrizeTakenBenchDamage, is Effect.OpponentPrizeCountDamage, is Effect.OwnPrizeLeadDamageBonus, is Effect.OpponentNoRetreatDamage,
         is Effect.OpponentResistanceDamage, is Effect.OwnToolAttachedDamage,
-        is Effect.OwnKnockoutLastTurnDamage, Effect.DamageEqualToAttackDamageTakenLastTurn, is Effect.MovedFromBenchDamageBonus, is Effect.NextTurnAttackDamageBonus, is Effect.NextTurnAllAttacksDamageBonus,
+        is Effect.OwnKnockoutLastTurnDamage, is Effect.OwnNamedPokemonKnockoutLastTurnDamage, Effect.DamageEqualToAttackDamageTakenLastTurn, is Effect.MovedFromBenchDamageBonus, is Effect.EvolvedThisTurnDamageBonus, is Effect.NextTurnAttackDamageBonus, is Effect.NextTurnAllAttacksDamageBonus,
         is Effect.RequiresExactHandSize,
         is Effect.OwnToolCountDamage, is Effect.OwnDamageCounterPenalty,
         is Effect.AllPokemonToolCountDamage,
         is Effect.BothActiveEnergyCountDamage,
-        Effect.MoveOpponentDamageCounters, Effect.MoveOwnBenchDamageCountersToOpponent, Effect.MoveTeamRocketBenchDamageCountersToOpponentActive, is Effect.DiscardOpponentPokemonTools, Effect.MoveEnergyBetweenOpponentPokemon, Effect.MoveEnergyFromOpponentActiveToBench,
+        Effect.MoveOpponentDamageCounters, Effect.MoveOwnBenchDamageCountersToOpponent, Effect.MoveAncientBenchDamageCountersToOpponentActive, Effect.MoveTeamRocketBenchDamageCountersToOpponentActive, is Effect.DiscardOpponentPokemonTools, Effect.MoveEnergyBetweenOpponentPokemon, Effect.MoveEnergyFromOpponentActiveToBench,
         is Effect.SearchPokemonMatchingAttachedBasicEnergy,
-        Effect.AttachAnyBasicEnergyFromHand, Effect.AttachOneBasicEnergyFromHand, Effect.AttachBasicEnergyFromHandToSelf, is Effect.AttachUpToTwoBasicEnergyFromHand, is Effect.AttachBasicEnergyFromHandToBenchedThenHealAll, Effect.ShuffleOwnBenchedPokemonIntoDeck, is Effect.ShuffleOpponentBenchedPokemonIntoDeck, is Effect.CoinShuffleOpponentBenchedPokemonIntoDeck, Effect.RequiresAngeliteUsedLastTurn, Effect.KnockOutOpponentPokemonWithExactlySixDamageCounters, Effect.DevolveOpponentActive, Effect.DevolveOpponentPokemonIntoDeck, Effect.DiscardStadium, Effect.ReturnSelfAndAttachmentsToHand, Effect.ShuffleSelfAndAttachmentsIntoDeck, is Effect.RevealOpponentHandBasicToBench, Effect.OptionalReturnSelfAndAttachmentsToHand, is Effect.AttachBasicEnergyFromDeckAny, is Effect.AttachEnergyFromDeckToPokemonType, is Effect.AttachBasicEnergyFromDiscardAny, Effect.AttachLightningEnergyFromDiscardUpToOpponentEnergyCount, is Effect.AttachBasicFightingEnergyFromDiscardToSelf, Effect.AttachBasicFightingEnergyFromDiscardToEachBenchedPokemon, Effect.CoinKnockOutBasic,
-        Effect.PreventAttackDamageNextTurnOnHeads, Effect.CopyBenchedNsAttack, Effect.CopyOpponentActiveAttack, Effect.CopyOpponentActiveTeraAttack, Effect.CopyAttackFromOpponentDeckTop, Effect.CopyAttackFromOwnDeckTop, Effect.KnockOutPokemonWithLeastHpRemainingExceptAttacker, Effect.TakePrizeCard, Effect.DiscardOpponentDeckPerCoinHead, is Effect.DiscardOpponentDeckForFixedCoinHeads, is Effect.OptionalReturnWaterEnergyDamageBonus, is Effect.OptionalStadiumDiscardDamageBonus, is Effect.OptionalRevealPrizeDamageBonus, is Effect.OptionalSelfDamageBonus,
-        is Effect.MoveEnergyToBench, is Effect.MoveEnergyToOneBench, Effect.MoveAllEnergyToBench, Effect.ReturnAttachedEnergyToHand, is Effect.ReturnOpponentActiveEnergyToHand, is Effect.DiscardRandomOpponentHand, is Effect.OpponentChoosesHandDiscard, is Effect.SalazzleHandDiscard, is Effect.ShuffleRandomOpponentHand, Effect.ShuffleRandomOpponentHandPerCoinHead, is Effect.DiscardOpponentDeck, is Effect.DiscardOpponentDeckBonusIfAncientSupporter, is Effect.ReorderOpponentDeckTop, Effect.DiscardOwnDeckTop, is Effect.DiscardOwnDeckTopCards, Effect.OptionalDiscardOwnDeckTop, is Effect.LookTopChooseAndDiscardRest, is Effect.LookTopPokemonToBench, Effect.RevealOpponentHand, Effect.RevealAndChooseOpponentHandDiscard, Effect.RevealAndChooseOpponentHandBottomDeck, is Effect.DelayedDefendingDamageCounters -> true
+        Effect.AttachAnyBasicEnergyFromHand, Effect.AttachOneBasicEnergyFromHand, Effect.AttachBasicEnergyFromHandToSelf, Effect.AttachAnyEnergyFromDiscardToSelf, is Effect.AttachEnergyFromHandToSelfAndHeal, is Effect.AttachUpToTwoBasicEnergyFromHand, is Effect.AttachBasicEnergyFromHandToBenchedThenHealAll, Effect.ShuffleOwnBenchedPokemonIntoDeck, is Effect.ShuffleOpponentBenchedPokemonIntoDeck, is Effect.CoinShuffleOpponentBenchedPokemonIntoDeck, Effect.RequiresAngeliteUsedLastTurn, Effect.KnockOutOpponentPokemonWithExactlySixDamageCounters, Effect.DevolveOpponentActive, Effect.DevolveOpponentPokemonIntoDeck, Effect.DiscardStadium, Effect.LockOpponentStadiumNextTurn, Effect.ReturnSelfAndAttachmentsToHand, Effect.ReturnOwnBenchedPokemonAndAttachmentsToHand, Effect.ShuffleSelfAndAttachmentsIntoDeck, Effect.OptionalShuffleSelfAndAttachmentsIntoDeck, Effect.DiscardSelfAndAttachments, is Effect.RevealOpponentHandBasicToBench, Effect.OptionalReturnSelfAndAttachmentsToHand, is Effect.AttachBasicEnergyFromDeckAny, is Effect.AttachEnergyFromDeckToPokemonType, is Effect.AttachBasicEnergyFromDiscardAny, Effect.AttachLightningEnergyFromDiscardUpToOpponentEnergyCount, is Effect.AttachBasicFightingEnergyFromDiscardToSelf, is Effect.AttachBasicEnergyFromDiscardToSelf, Effect.AttachBasicFightingEnergyFromDiscardToEachBenchedPokemon, Effect.CoinKnockOutBasic,
+        Effect.PreventAttackDamageNextTurnOnHeads, Effect.CopyBenchedNsAttack, Effect.CopyOpponentActiveAttack, Effect.RequiresEmptyHandToCopyOpponentAttack, Effect.CopyOpponentActiveTeraAttack, Effect.CopyAttackFromOpponentDeckTop, Effect.CopyAttackFromOwnDeckTop, Effect.KnockOutPokemonWithLeastHpRemainingExceptAttacker, Effect.TakePrizeCard, Effect.WinIfOnePrizeRemaining, Effect.DiscardOpponentDeckPerCoinHead, is Effect.DiscardOpponentDeckForFixedCoinHeads, is Effect.OptionalReturnWaterEnergyDamageBonus, is Effect.OptionalShuffleAllEnergyDamageBonus, is Effect.OptionalStadiumDiscardDamageBonus, is Effect.OptionalRevealPrizeDamageBonus, is Effect.OptionalSelfDamageBonus, is Effect.OptionalSelfDamageStatus,
+        is Effect.OptionalShuffleAllEnergyDamageBonus, is Effect.MoveEnergyToBench, is Effect.MoveEnergyToOneBench, is Effect.MoveEnergyBetweenOwnPokemon, Effect.MoveAllEnergyToBench, Effect.ReturnAttachedEnergyToHand, is Effect.ReturnOpponentActiveEnergyToHand, is Effect.OwnDiscardPokemonWithAttackDamage, is Effect.DiscardRandomOpponentHand, is Effect.OpponentChoosesHandDiscard, is Effect.SalazzleHandDiscard, is Effect.ShuffleRandomOpponentHand, Effect.ShuffleRandomOpponentHandPerCoinHead, is Effect.ChooseOpponentHandShufflePerCoinHead, is Effect.DiscardOpponentDeck, is Effect.DiscardOpponentDeckBonusIfAncientSupporter, is Effect.DiscardOpponentDeckIfSupporterPlayed, is Effect.ReorderOpponentDeckTop, Effect.OptionalShuffleOpponentDeckAfterTopPeek, is Effect.ReorderOwnDeckTop, is Effect.SearchOwnCardsToTop, Effect.DiscardOwnDeckTop, is Effect.DiscardOwnDeckTopCards, Effect.OptionalDiscardOwnDeckTop, is Effect.LookTopChooseAndDiscardRest, is Effect.LookTopPokemonToBench, Effect.RevealOpponentHand, Effect.DiscardOpponentHandItemsAndTools, Effect.RevealAndChooseOpponentHandDiscard, Effect.RevealAndChooseOpponentHandBottomDeck, is Effect.DelayedDefendingDamageCounters, Effect.DelayedDefendingDiscard, Effect.DelayedDefendingKnockOut -> true
         is Effect.DiscardBenchEnergyDamage -> true
-        is Effect.Heal -> true
+        is Effect.Heal, is Effect.HealSelfOnCoinHeads -> true
+        is Effect.OpponentFuturePokemonDamageBonus, is Effect.OwnBenchStageTwoTypeDamageBonus, is Effect.AttackerRemainingHpDamageBonus, is Effect.OwnDeckAtMostDamageBonus -> true
         is Effect.Unsupported -> false
     } }
 }

@@ -13,16 +13,18 @@ object TrainingReview {
         val value: Int
     )
 
-    fun describe(state: GameState): String {
+    fun describe(state: GameState): String = describe(state, RulesEngine(TrainerCatalog))
+
+    internal fun describe(state: GameState, engine: RulesEngine, initial: GameState? = null): String {
         val ownRecords = state.history.filter { it.player == 0 && it.turn > 0 }
         val attacks = ownRecords.count { it.action is GameAction.Attack }
         val strengths = mutableListOf<Finding>()
         val errors = mutableListOf<Finding>()
         var replayed = false
+        var reviewedDecisions = 0
 
-        if (state.deckLists.size == 2) runCatching {
-            val engine = RulesEngine(TrainerCatalog)
-            var replay = engine.newGame(state.seed, state.deckLists, state.mode)
+        if (state.deckLists.size == 2 || initial != null) runCatching {
+            var replay = initial ?: engine.newGame(state.seed, state.deckLists, state.mode)
             for (record in state.history) {
                 val before = replay
                 val transition = engine.apply(before, record.action)
@@ -30,21 +32,37 @@ object TrainingReview {
                 val after = transition.state
 
                 if (record.player == 0 && record.turn > 0) {
+                    reviewedDecisions++
+                    if (before.phase in listOf(Phase.MAIN, Phase.RESOLVE_CHOICE) && (record.action is GameAction.Attack || record.action == GameAction.EndTurn ||
+                            record.action is GameAction.AttachEnergy || record.action is GameAction.Retreat || record.action is GameAction.Evolve ||
+                            record.action is GameAction.PlayTrainer || record.action is GameAction.UseAbility || record.action is GameAction.ChooseCards)) {
+                        compareDecision(engine, before, after, record)?.let { errors += Finding(it.first, it.second) }
+                    }
                     when (val action = record.action) {
                         is GameAction.Attack -> reviewAttack(engine, before, after, record, action, strengths, errors)
-                        GameAction.EndTurn -> reviewEndTurn(engine, before, record, errors)
+                        GameAction.EndTurn -> Unit
                         is GameAction.AttachEnergy -> reviewEnergyAttachment(engine, before, after, record, action, strengths)
                         is GameAction.PlayTrainer -> reviewTrainer(engine, before, record, action, strengths)
                         is GameAction.Evolve -> reviewEvolution(engine, before, after, record, action, strengths)
                         else -> Unit
                     }
+                    if (record.action !is GameAction.Attack && record.action != GameAction.EndTurn &&
+                        after.phase == Phase.MAIN && after.currentPlayer == 0 && after.turn == before.turn) {
+                        val reviewer = DecisionReview(engine)
+                        val unlocked = engine.legalActions(after).filterIsInstance<GameAction.Attack>()
+                            .mapNotNull { reviewer.attack(after, it) }.filter { it.wins || it.certainKnockout }.maxByOrNull { it.value }
+                        val alreadyAvailable = if (before.phase == Phase.MAIN) engine.legalActions(before).filterIsInstance<GameAction.Attack>()
+                            .mapNotNull { reviewer.attack(before, it) }.maxOfOrNull { it.value } ?: 0 else 0
+                        if (unlocked != null && unlocked.value >= alreadyAvailable + 200) {
+                            strengths += Finding(2_000 + unlocked.value,
+                                "T${record.turn}: ${reviewer.label(before, record.action)} abriu uma oportunidade concreta: ${unlocked.steps.last()} permitia ${unlocked.outcome()}. O mérito foi preparar essa linha antes de atacar.")
+                        }
+                    }
                 }
                 replay = after
             }
+            check(replay.phase == state.phase && replay.winner == state.winner)
             replayed = true
-        }.onFailure {
-            strengths.clear()
-            errors.clear()
         }
 
         val principalPositive = strengths.maxByOrNull { it.score }
@@ -52,15 +70,46 @@ object TrainingReview {
         return buildString {
             appendLine("RESUMO DO TREINO")
             appendLine(state.winReason ?: "Partida encerrada.")
+            if (state.winner == 0) appendLine("Você venceu. Mesmo assim, revisei oportunidades de fechar a partida antes e decisões que reduziram sua vantagem.")
             appendLine("Você realizou $attacks ataque(s).")
             appendLine("\nPONTO POSITIVO PRINCIPAL")
             appendLine(principalPositive?.text ?: "Não encontrei no histórico uma jogada decisiva que dê para confirmar como ponto forte.")
             appendLine("\nPRINCIPAL ERRO OU OPORTUNIDADE PERDIDA")
-            appendLine(principalError?.text ?: "Não encontrei uma oportunidade tática clara que possa ser apontada como erro.")
-            if (!replayed) appendLine("\nNão foi possível reconstruir todas as decisões da partida; por isso, a análise foi limitada.")
+            appendLine(principalError?.text ?: "Nas sequências avaliadas, não encontrei uma alternativa com vantagem suficiente para apontar uma jogada como erro. Isso não significa que todas as decisões foram perfeitas.")
+            val others = errors.sortedByDescending { it.score }.distinctBy { it.text.substringBefore(':') }.filter { it != principalError }.take(2)
+            if (others.isNotEmpty()) {
+                appendLine("\nOUTRAS DECISÕES PARA REVER")
+                others.forEach { appendLine(it.text) }
+            }
+            if (!replayed) appendLine("\nReconstrução parcial: $reviewedDecisions decisão(ões) sua(s) analisada(s). As conclusões acima usam somente os trechos reconstruídos; não avaliei o restante como se estivesse confirmado.")
+            appendLine("\nA busca compara sequências curtas de jogadas legais. Uma alternativa melhor neste turno não prova o resultado de toda a partida. Compras futuras e moedas favoráveis não são tratadas como garantidas.")
             appendLine("\nA análise considera o estado visível do jogo e as jogadas legais daquele turno; não presume informações ocultas da mão adversária.")
             if (state.deckLists.firstOrNull()?.size != 60) appendLine("Deck incompleto: as chances de compra diferem das de uma lista final de 60 cartas.")
         }
+    }
+
+    internal fun compareDecision(engine: RulesEngine, before: GameState, after: GameState, record: ActionRecord): Pair<Int, String>? {
+        val reviewer = DecisionReview(engine)
+        if (record.action !is GameAction.Attack && record.action != GameAction.EndTurn &&
+            !reviewer.knownContinuation(before, after, record.action)) return null
+        val best = reviewer.best(before) ?: return null
+        val chosen = when (val action = record.action) {
+            is GameAction.Attack -> reviewer.attack(before, action)
+            GameAction.EndTurn -> null
+            else -> reviewer.best(after)
+        }
+        val gap = best.value - (chosen?.value ?: 0)
+        if (chosen?.wins == true) return null
+        if (gap < 100 || best.value < 150) return null
+        // Do not criticize a different order of preparation if the same tactical result remains reachable.
+        val selected = reviewer.label(before, record.action)
+        val consequence = when {
+            best.wins && chosen?.wins != true -> "Você abriu mão de uma linha que podia encerrar a partida naquele turno, atrasando a oportunidade de vitória."
+            best.certainKnockout && chosen?.certainKnockout != true -> "A decisão deixou ${best.target} em jogo, quando havia uma linha de nocaute disponível."
+            best.prizes > (chosen?.prizes ?: 0) -> "A alternativa oferecia ${best.prizes} Prêmio(s), contra ${chosen?.prizes ?: 0} da linha escolhida."
+            else -> "A alternativa aumentava a pressão imediata: ${best.damage} de dano previsto, contra ${chosen?.damage ?: 0} da linha escolhida."
+        }
+        return gap to "T${record.turn}: ao $selected, você reduziu o impacto possível do turno. No seu lugar, eu faria: ${best.steps.joinToString(" → ")}. Isso permitia ${best.outcome()}. $consequence"
     }
 
     private fun reviewAttack(
@@ -103,13 +152,7 @@ object TrainingReview {
             strengths += Finding(180 + actualValue, "T${record.turn}: $attackName aplicou uma condição especial útil em $targetName. $condition")
         }
 
-        val stronger = best?.takeIf { it.action != action && it.value >= actualValue + 90 }
-        if (stronger != null && !knockedOut) {
-            val reason = if (stronger.knockout) "podia nocautear ${stronger.targetName} e render ${stronger.prizes} Prêmio(s)"
-                else "podia causar ${stronger.damage} de dano a ${stronger.targetName}"
-            errors += Finding((stronger.value - actualValue) + if (stronger.knockout) 400 else 0,
-                "T${record.turn}: escolheu $attackName em $targetName, mas ${stronger.attackName} era a linha de maior impacto: $reason. A jogada escolhida aplicou $damageToTarget de dano.")
-        }
+        // Alternatives are compared before the actual result, so losing a coin flip is not labelled a mistake.
     }
 
     private fun reviewEndTurn(engine: RulesEngine, state: GameState, record: ActionRecord, errors: MutableList<Finding>) {

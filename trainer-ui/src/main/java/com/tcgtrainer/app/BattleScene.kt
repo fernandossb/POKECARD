@@ -62,6 +62,8 @@ internal data class DraggedCard(val card: CardInstance, val origin: Rect, val po
     val handPositions = remember(state.gameId, viewer) { mutableMapOf<String, Rect>() }
     var serial by remember { mutableLongStateOf(0) }
     var toast by remember { mutableStateOf<String?>(null) }
+    var playedEffect by remember(state.gameId) { mutableStateOf<CardInstance?>(null) }
+    LaunchedEffect(playedEffect?.id) { if (playedEffect != null) { delay(1900); playedEffect = null } }
     var settings by remember { mutableStateOf(false) }
     var handFilter by remember { mutableStateOf<Category?>(null) }
     var resultReady by remember { mutableStateOf(false) }
@@ -105,6 +107,11 @@ internal data class DraggedCard(val card: CardInstance, val origin: Rect, val po
             previous = state
             if (old.history.size >= state.history.size || old.gameId != state.gameId) return@LaunchedEffect
             val recent = state.history.drop(old.history.size)
+            recent.lastOrNull { it.player != viewer && it.action is GameAction.PlayTrainer }?.let { record ->
+                val cardId = (record.action as GameAction.PlayTrainer).cardId
+                playedEffect = old.players[1-viewer].hand.firstOrNull { it.id == cardId }
+                    ?: state.players[1-viewer].discard.firstOrNull { it.id == cardId }
+            }
             val lastAttack = recent.mapNotNull { it.action as? GameAction.Attack }.lastOrNull()
             if (lastAttack != null) {
                 val attackerOwner = old.currentPlayer
@@ -131,9 +138,24 @@ internal data class DraggedCard(val card: CardInstance, val origin: Rect, val po
                     }
                     val newEnergies = p.energies.filter { e -> prior?.energies?.none { it.id == e.id } != false }
                     newEnergies.forEach { energy ->
-                        if (energy.id != dragActionCard && reveal)
-                            flight(energy, if (before.hand.any { it.id == energy.id }) { if (owner == viewer) handPositions[energy.id] ?: geometry.hand else geometry.deck(owner) } else geometry.discard(owner), destination)
+                        val sourcePokemon = before.pokemon().firstOrNull { source -> source.energies.any { it.id == energy.id } }
+                        val origin = when {
+                            sourcePokemon != null -> geometry.pokemon(old, owner, sourcePokemon.id)
+                            before.hand.any { it.id == energy.id } -> if (owner == viewer) handPositions[energy.id] ?: geometry.hand else geometry.rect(.33f, 0f, .22f, .13f)
+                            before.deck.any { it.id == energy.id } -> geometry.deck(owner)
+                            else -> geometry.discard(owner)
+                        }
+                        if (energy.id != dragActionCard && reveal) flight(energy, origin, destination)
                         impact(destination.center, color = Color(0xFFFFD181))
+                    }
+                    p.tools.filter { tool -> prior?.tools?.none { it.id == tool.id } != false }.forEachIndexed { index, tool ->
+                        if (reveal && tool.id != dragActionCard) {
+                            val origin = if (owner == viewer) handPositions[tool.id] ?: geometry.hand
+                                else geometry.rect(.33f, 0f, .22f, .13f)
+                            flight(tool, origin, destination, index * 120)
+                            impact(destination.center, color = Color(0xFFC3A2F0), lag = pace.duration / 2)
+                        }
+                        if (owner != viewer) playedEffect = tool
                     }
                 }
                 for (p in before.pokemon().filter { beforeP -> after.pokemon().none { it.id == beforeP.id } }) {
@@ -199,6 +221,16 @@ internal data class DraggedCard(val card: CardInstance, val origin: Rect, val po
                 dragged = null
             })
 
+        playedEffect?.let { card ->
+            Surface(Modifier.align(Alignment.CenterStart).padding(start = 6.dp).width(100.dp),
+                color = Color(0xF0182435), shape = RoundedCornerShape(8.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Aqua)) {
+                Column(Modifier.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("A MÁQUINA JOGOU", color = Aqua, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                    CardArt(engine.definition(card), Modifier.fillMaxWidth().aspectRatio(.727f))
+                    Text(engine.definition(card).name, color = Color.White, fontSize = 10.sp, maxLines = 2)
+                }
+            }
+        }
         // Small floating controls keep the entire central table available for play.
         IconButton(onClick = { settings = true }, modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 6.dp).size(34.dp).background(Color.Black.copy(alpha = .62f), RoundedCornerShape(7.dp))) {
             Icon(Icons.Default.Settings, "Configurações da mesa", modifier = Modifier.size(19.dp), tint = Color.White)
@@ -259,15 +291,17 @@ internal data class DraggedCard(val card: CardInstance, val origin: Rect, val po
         AnimatedVisibility(toast != null || error != null, Modifier.align(Alignment.TopCenter).padding(top = 62.dp, start = 24.dp, end = 24.dp), enter = slideInVertically { -it }+fadeIn(), exit = fadeOut()) {
             Surface(color = Color(0xFF542C35), shape = RoundedCornerShape(8.dp)) { Text(toast ?: error.orEmpty(), Modifier.padding(12.dp), color = Color.White, fontSize = 12.sp) }
         }
-        if (reveal && actor == 0 && state.phase == Phase.CHOOSE_STARTER) {
+        if (reveal && state.phase == Phase.CHOOSE_STARTER) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .4f))) {
                 Box(Modifier.align(Alignment.Center).offset(y = (-38).dp)) { CoinPresentation(state.startingPlayer, pace) }
                 Surface(Modifier.align(Alignment.BottomCenter).fillMaxWidth(), shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp), color = Color(0xFFF5F4EF)) {
                     Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("VOCÊ VENCEU A MOEDA", color = Color(0xFF263442), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        Text("VOCÊ QUER JOGAR PRIMEIRO?", color = Color(0xFF182735), fontWeight = FontWeight.Black, fontSize = 17.sp)
+                        Text(if (actor == 0) "VOCÊ VENCEU A MOEDA" else "A MÁQUINA VENCEU A MOEDA", color = Color(0xFF263442), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text(if (actor == 0) "VOCÊ QUER JOGAR PRIMEIRO?" else "A MÁQUINA ESTÁ ESCOLHENDO QUEM COMEÇA", color = Color(0xFF182735), fontWeight = FontWeight.Black, fontSize = 17.sp)
+                        if (actor == 0) {
                         TextButton(onClick = { dispatch(listOf(GameAction.ChooseStartingPlayer(actor))) }, enabled = !busy) { Text("SIM", color = Color(0xFF193C54), fontWeight = FontWeight.Black) }
                         TextButton(onClick = { dispatch(listOf(GameAction.ChooseStartingPlayer(1-actor))) }, enabled = !busy) { Text("NÃO", color = Color(0xFF193C54), fontWeight = FontWeight.Black) }
+                        }
                     }
                 }
             }
@@ -278,7 +312,7 @@ internal data class DraggedCard(val card: CardInstance, val origin: Rect, val po
                 Row(Modifier.horizontalScroll(rememberScrollState())) { (0..minOf(state.players[actor].bonusDraws, state.players[actor].deck.size)).forEach { count -> TextButton(onClick = { dispatch(listOf(GameAction.MulliganDraw(count))) }, enabled = !busy) { Text("COMPRAR $count", color = Color(0xFF193C54)) } } }
             }
         }
-        if (state.phase != Phase.GAME_OVER && !(actor == 0 && state.phase == Phase.CHOOSE_STARTER)) {
+        if (state.phase != Phase.GAME_OVER && state.phase != Phase.CHOOSE_STARTER) {
             Surface(Modifier.align(Alignment.TopCenter).padding(top = 35.dp), color = Color(0xFF102A3B).copy(alpha = .94f), shape = RoundedCornerShape(8.dp)) {
                 Row(Modifier.padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                     if (actor == 1 && busy) CircularProgressIndicator(Modifier.size(12.dp), color = Coral, strokeWidth = 2.dp)

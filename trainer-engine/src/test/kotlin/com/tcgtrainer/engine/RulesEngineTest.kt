@@ -11,6 +11,49 @@ import kotlinx.serialization.json.add
 import kotlin.test.*
 
 class RulesEngineTest {
+    @Test fun `Porygon Z pays two hand cards before drawing and cannot reuse ability`() {
+        val card = TrainerCatalog.get("sv10-155")
+        val rules = RulesEngine(TrainerCatalog)
+        fun c(id: String) = CardInstance(id, "sv01-258")
+        val active = PokemonInstance(listOf(CardInstance("porygon", card.id)), enteredPlayTurn = 0)
+        val state = GameState("porygon-cost", 1, RngState(1), listOf(
+            PlayerState(deck = listOf(c("draw"), c("next")), hand = listOf(c("cost1"), c("cost2")),
+                prizes = List(6) { c("p$it") }, active = active),
+            PlayerState(deck = listOf(c("odraw")), prizes = List(6) { c("op$it") },
+                active = PokemonInstance(listOf(CardInstance("opponent", "me01-076")), enteredPlayTurn = 0))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val use = GameAction.UseAbility(active.id, card.abilities.single().id)
+        assertIs<Legality.Illegal>(rules.apply(state.copy(players = listOf(state.players[0].copy(hand = listOf(c("cost1"))), state.players[1])), use).legality)
+        val offered = rules.apply(state, use)
+        assertEquals(Legality.Legal, offered.legality)
+        assertEquals(2, offered.state.resolution!!.choices.first().min)
+        val paid = rules.apply(offered.state, GameAction.ChooseCards(listOf("cost1", "cost2")))
+        assertEquals(Legality.Legal, paid.legality)
+        assertEquals(listOf("draw"), paid.state.players[0].hand.map { it.id })
+        assertEquals(setOf("cost1", "cost2"), paid.state.players[0].discard.map { it.id }.toSet())
+        assertIs<Legality.Illegal>(rules.apply(paid.state, use).legality)
+    }
+    @Test fun `Sigilyph wins only after successful attack with one prize`() {
+        val printed = TrainerCatalog.get("sv09-064")
+        val sigilyph = printed.copy(attacks = printed.attacks.map { it.copy(cost = emptyList()) })
+        val rules = RulesEngine(object : CardCatalog {
+            override fun get(id: String) = if (id == sigilyph.id) sigilyph else TrainerCatalog.get(id)
+        })
+        val attack = sigilyph.attacks.first { Effect.WinIfOnePrizeRemaining in it.effects }
+        fun state(prizes: Int) = GameState("sigilyph-win", 42, RngState(42), listOf(
+            PlayerState(deck = List(8) { CardInstance("deck$it", "sv01-258") },
+                prizes = List(prizes) { CardInstance("prize$it", "sv01-258") },
+                active = PokemonInstance(listOf(CardInstance("sigilyph", sigilyph.id)), enteredPlayTurn = 0)),
+            PlayerState(deck = List(8) { CardInstance("enemydeck$it", "sv01-258") },
+                prizes = List(6) { CardInstance("enemyprize$it", "sv01-258") },
+                active = PokemonInstance(listOf(CardInstance("enemy", "me01-076")), enteredPlayTurn = 0))
+        ), 0, 0, turn = 3, phase = Phase.MAIN)
+        val victory = rules.apply(state(1), GameAction.Attack(attack.id))
+        assertEquals(Legality.Legal, victory.legality)
+        assertEquals(Phase.GAME_OVER, victory.state.phase)
+        assertEquals(0, victory.state.winner)
+        assertNull(rules.apply(state(2), GameAction.Attack(attack.id)).state.winner)
+    }
     @Test fun `Incineroar Hustle Play discounts Colorless cost for each opponent Benched Pokemon`() {
         val active = PokemonInstance(listOf(CardInstance("incineroar", "sv05-034")), enteredPlayTurn = 0)
         val opposingActive = PokemonInstance(listOf(CardInstance("opponent", "me01-076")), enteredPlayTurn = 0)
@@ -147,7 +190,7 @@ class RulesEngineTest {
     @Test fun `Battle Cage excludes opposing damage counter effects from Benched targets`() {
         val cage = CatalogRuleCompiler.compile(CatalogRuleCompiler.rows.getValue("me02-085"), emptyMap())!!
         val attacker = CardDefinition("cage-attacker", "Cage Test Attacker", "Test", "A", category = Category.POKEMON,
-            hp = 180, attacks = listOf(AttackDefinition("cage-hit", "Mark", emptyList(), listOf(Effect.PlaceDamageCounter))))
+            hp = 180, attacks = listOf(AttackDefinition("cage-hit", "Mark", emptyList(), listOf(Effect.PlaceDamageCounter()))))
         val target = CardDefinition("cage-target", "Cage Target", "Test", "T", category = Category.POKEMON, hp = 180)
         val catalog = object : CardCatalog { override fun get(id: String) = when (id) {
             cage.id -> cage; attacker.id -> attacker; target.id -> target; else -> TrainerCatalog.get(id)

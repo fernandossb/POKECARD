@@ -1,3 +1,14 @@
+# POKECARD Brasil 5.99.41 — CPU, mesa e análise das decisões
+
+- O resumo avalia oportunidades perdidas mesmo nas vitórias, comparando sequências legais de Energia, evolução, habilidades, Ferramentas, trocas e ataques.
+- A análise aponta o turno, as cartas, os alvos e o que faria diferente, incluindo oportunidades de vencer naquele turno. Resultados dependentes de moedas e compras futuras não são apresentados como garantidos.
+- O principal ponto positivo valoriza a preparação que abriu uma linha de nocaute ou vitória. A análise roda em segundo plano e preserva conclusões confirmadas quando o histórico só pode ser reconstruído parcialmente.
+- A CPU passa a considerar melhor a preparação do Banco, o risco de nocaute do Ativo, o recuo defensivo e os ataques de controle.
+- O sorteio inicial agora mostra também quando a máquina vence a moeda, com tempo para acompanhar a animação.
+- Ferramentas ligadas aparecem na mesa com miniatura e nome. Ligações ganham animação e destaque visual; cartas de Treinador jogadas pela CPU têm uma prévia.
+- Consolida a ampliação das regras executáveis de cartas realizada nesta rodada de desenvolvimento.
+- Versão Android: `versionCode` 243 e `versionName` 5.99.41. Atualização assinada pelo fluxo oficial existente.
+
 # POKECARD Brasil 5.99.40 — Análise de jogadas no treino
 
 - O resumo pós-partida agora destaca o principal ponto forte e o principal erro/oportunidade usando o histórico real da partida.
