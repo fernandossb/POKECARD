@@ -76,7 +76,7 @@ internal object CatalogRuleCompiler {
         val activeKnockoutRetaliation = Regex("If this Pokémon is in the Active Spot and is Knocked Out by damage from an attack from your opponent's Pokémon, put (\\d+) damage counters on the Attacking Pokémon\\.").matchEntire(text)
         if (activeKnockoutRetaliation != null) return AbilityDefinition("$id-ability$index", name, text,
             retaliateDamageCountersOnKnockout = activeKnockoutRetaliation.groupValues[1].toInt())
-        val activeKnockoutLightningMove = Regex("If this Pokémon is in the Active Spot and is Knocked Out by damage from an attack from your opponent's Pokémon, move up to (\\d+) Basic \\{L} Energy cards from this Pokémon to 1 of your Benched Pokémon\\.").matchEntire(text)
+        val activeKnockoutLightningMove = Regex("If this Pokémon is in the Active Spot and is Knocked Out by damage from an attack from your opponent's Pokémon, move up to (\\d+) Basic \\{L\\} Energy cards from this Pokémon to 1 of your Benched Pokémon\\.").matchEntire(text)
         if (activeKnockoutLightningMove != null) return AbilityDefinition("$id-ability$index", name, text,
             requiresActive = true, moveBasicLightningEnergyToBenchOnKnockout = activeKnockoutLightningMove.groupValues[1].toInt())
         val attachedEnergyRetaliation = Regex("If this Pokémon (is in the Active Spot and )?is damaged by an attack from your opponent's Pokémon \\(even if this Pokémon is Knocked Out\\), (?:place|put) (\\d+) damage counters on the Attacking Pokémon for each \\{([GRFLWPMD])\\} Energy attached to this Pokémon\\.").matchEntire(text)

@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.99.42 — Correção da abertura do TCG Trainer
+
+- Corrigido um padrão de texto de habilidade que o Android rejeitava ao carregar o catálogo, causando fechamento ao abrir o TCG Trainer.
+- O delimitador literal de Energia de Raio agora é escapado de forma compatível com o mecanismo de expressões regulares do Android.
+- Versão Android: `versionCode` 244 e `versionName` 5.99.42, com a assinatura oficial existente.
+
 # POKECARD Brasil 5.99.41 — CPU, mesa e análise das decisões
 
 - O resumo avalia oportunidades perdidas mesmo nas vitórias, comparando sequências legais de Energia, evolução, habilidades, Ferramentas, trocas e ataques.
