@@ -1,3 +1,13 @@
+# POKECARD Brasil 5.99.43 — Planejamento tático da CPU
+
+- A CPU explora sequências de habilidades, Energias, Ferramentas, trocas e ataques, com orçamento limitado de busca.
+- Os candidatos consideram respostas públicas do adversário e estimativas de caminhos para conquistar Prêmios, incluindo a derrota ao perder o último Pokémon.
+- Previsões ocultam a mão adversária, o topo dos baralhos, os Prêmios fechados e o estado do gerador aleatório. Efeitos incertos não são tratados como resultados garantidos.
+- Corrigida a avaliação de ataques de evoluções anteriores concedidos por habilidades. A análise do resumo evita buscas completas aninhadas.
+- O adversário aleatório prioriza listas competitivas elegíveis e mantém o conjunto próprio da Academia 2022.
+- Validação: 33 testes direcionados, compilação Android e 2.784 partidas automáticas sem erros. A amostra final ficou em 50,8% de vitórias contra cada referência; a avaliação ainda não estabelece nível de mestre.
+- Versão Android: `versionCode` 245 e `versionName` 5.99.43. A coleção pessoal é preservada.
+
 # POKECARD Brasil 5.99.42 — Correção da abertura do TCG Trainer
 
 - Corrigido um padrão de texto de habilidade que o Android rejeitava ao carregar o catálogo, causando fechamento ao abrir o TCG Trainer.

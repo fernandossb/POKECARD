@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "parentCommit": "27cf62275dc2653d7f255f737aa6ff5bcb8fc550",
+  "workingTreeChanges": true,
+  "methodology": "Paired deck/seed games with swapped master seat; identical protected input for all profiles; no human games or neural-network training",
+  "development": {
+    "note": "Before the final last-Pokemon loss detection and previous-Evolution attack compatibility fixes",
+    "games": 2000,
+    "errors": 0,
+    "seedBase": 9000001,
+    "byBaseline": [
+      {
+        "baseline": "TACTICAL",
+        "games": 1000,
+        "masterWins": 508,
+        "baselineWins": 492,
+        "draws": 0,
+        "errors": 0
+      },
+      {
+        "baseline": "HEURISTIC",
+        "games": 1000,
+        "masterWins": 527,
+        "baselineWins": 472,
+        "draws": 1,
+        "errors": 0
+      }
+    ]
+  },
+  "validation": {
+    "command": "gradle :trainer-engine:cpuArena -PcpuArenaGames=784 -PcpuArenaThreads=8 -PcpuArenaSeedBase=17000003 -PcpuArenaBaseline=MIXED",
+    "games": 784,
+    "errors": 0,
+    "seedBase": 17000003,
+    "decks": [
+      "lucario",
+      "hariyama",
+      "solrock",
+      "ursaluna",
+      "competitive-dragapult",
+      "competitive-basic-box",
+      "competitive-n-zoroark",
+      "competitive-slowking",
+      "competitive-dhelmise",
+      "competitive-alakazam-dudunsparce",
+      "competitive-dragapult-dusknoir",
+      "competitive-mega-excadrill",
+      "competitive-sharpedo-toxtricity",
+      "competitive-mega-lucario-hariyama"
+    ],
+    "byBaseline": [
+      {
+        "baseline": "TACTICAL",
+        "games": 392,
+        "masterWins": 199,
+        "baselineWins": 193,
+        "draws": 0,
+        "errors": 0
+      },
+      {
+        "baseline": "HEURISTIC",
+        "games": 392,
+        "masterWins": 199,
+        "baselineWins": 193,
+        "draws": 0,
+        "errors": 0
+      }
+    ],
+    "medianChooseMs": 33.9073,
+    "p95ChooseMs": 283.6781,
+    "maxChooseMs": 1322.1441,
+    "elapsedSeconds": 584.2690473,
+    "timingScope": "CpuPlayer.choose only, 8 concurrent games on development computer; not measured on Android"
+  },
+  "targetedTests": {
+    "tests": 33,
+    "failures": 0,
+    "errors": 0,
+    "suites": [
+      "CpuCounterplayTest (7)",
+      "CpuForecastTest (4)",
+      "MasterCpuTest (9)",
+      "CpuPlayerTest selected regressions (4)",
+      "TrainingReviewTest (9)"
+    ],
+    "completeEngineSuite": false
+  },
+  "androidCompile": ":trainer-ui:compileDebugKotlin passed",
+  "conclusion": "Targeted tactical improvements pass. Final arena remains close to parity with both references; expert-level playing strength is not established.",
+  "finalSourceSha256": {
+    "trainer-engine/src/main/kotlin/com/tcgtrainer/engine/CpuPlayer.kt": "f11a561ca0e13180620c5d88ebcc0ce2d0e453f260a7e30888ff1abdf64fe17f",
+    "trainer-engine/src/main/kotlin/com/tcgtrainer/engine/CpuTurnSearch.kt": "28b3b82fbcfff9a4dd643ae638bbcf3c2b4808a9a0588f078c3924de386b757b",
+    "trainer-engine/src/main/kotlin/com/tcgtrainer/engine/CpuCounterplay.kt": "9e95a2cd8d405d40ce64dba2777087a62b4b965ac2fd4ca5006d0e9d0ae36d11",
+    "trainer-engine/src/main/kotlin/com/tcgtrainer/engine/CpuPrizeRace.kt": "2c3a6bd89f897926ffbd89b785381e426588aceb0cf5fd1faf8d5854dc6b51ce",
+    "trainer-engine/src/main/kotlin/com/tcgtrainer/engine/CpuForecast.kt": "f89590a32fd00679896b4c9d616b76a0e25b9e091a8afe08e3fbc6176fecd5fb",
+    "trainer-engine/src/main/kotlin/com/tcgtrainer/engine/CpuLegalActions.kt": "7b839999fa58e6c1d1b2523e61406f8ec8b7721f0dca5af76e170e4827e2b380",
+    "trainer-engine/src/main/kotlin/com/tcgtrainer/engine/RulesEngine.kt": "db1ab7b9d6c425343715f7fc6144e7b8a85807eb21275628027682f0e291a9a4",
+    "trainer-engine/src/main/kotlin/com/tcgtrainer/engine/EffectEngine.kt": "8319488d38d63317be9d99739fd368b5f16e67821be4a12b327f3522ab74248a",
+    "trainer-engine/src/main/kotlin/com/tcgtrainer/engine/Model.kt": "171b1bc48cc54becb91d0e0e8b2e7a44425c8a4e783c94ea88720b8c5b47097b",
+    "trainer-engine/src/main/kotlin/com/tcgtrainer/engine/TrainingDecks.kt": "127e6dd0cba70f43df1a265f109270e4e116da2e5a2d251229361ec9af79e78f",
+    "trainer-engine/src/test/kotlin/com/tcgtrainer/engine/CpuArenaTest.kt": "01180506152fe74b95b9a8e1e9b1ebbb142bfac62293e1852d5f09d0ce3f7ea3",
+    "trainer-engine/src/main/resources/library/catalog.json": "b73e47ce8fbc6bcb4b72fcbf25b3f59ced761d6f84d96d428ee526fe72495cba"
+  }
+}

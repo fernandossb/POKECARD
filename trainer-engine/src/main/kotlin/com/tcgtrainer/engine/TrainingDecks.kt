@@ -18,6 +18,12 @@ object Academy2022 {
 
 /** Curated practice decks used by the existing player and CPU selectors. */
 object TrainingDecks {
+    fun masterOpponents(eligible: List<TrainingDeck>, format: DeckFormat): List<TrainingDeck> {
+        if (format == DeckFormat.ACADEMY) return eligible.filter { it.format == DeckFormat.ACADEMY }.ifEmpty { eligible }
+        return eligible.filter { it.id.startsWith("competitive-") }.ifEmpty {
+            eligible.filter { it.format != DeckFormat.ACADEMY }.ifEmpty { eligible }
+        }
+    }
     private fun list(vararg counts: Pair<String, Int>) = counts.flatMap { (id, n) -> List(n) { id } }.also { require(it.size == 60) }
     private val curated = listOf(
         TrainingDeck("lucario", "Mega Lucario ex", "Evolução e aceleração de Energia para o Banco.", "me01-077", TrainerCatalog.deck()),

@@ -135,6 +135,7 @@ jobs:
           retention-days: 30
 
       - name: Criar ou atualizar Release oficial
+        if: github.ref == 'refs/heads/main'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}

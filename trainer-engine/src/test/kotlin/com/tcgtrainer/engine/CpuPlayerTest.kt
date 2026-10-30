@@ -22,7 +22,17 @@ class CpuPlayerTest {
     }
     @Test fun `CPU develops reserve instead of attaching energy to a doomed active`() {
         val (engine, player, game) = threatenedPosition(0, true)
-        assertEquals(GameAction.AttachEnergy("energy", "reserve"), player.choose(engine.cpuInput(game)))
+        var position = game
+        val attachments = mutableListOf<GameAction.AttachEnergy>()
+        repeat(8) {
+            if (position.currentPlayer != game.currentPlayer || position.phase == Phase.GAME_OVER) return@repeat
+            val action = player.choose(engine.cpuInput(position))
+            if (action is GameAction.AttachEnergy) attachments += action
+            val result = engine.apply(position, action)
+            assertEquals(Legality.Legal, result.legality)
+            position = result.state
+        }
+        assertEquals(listOf(GameAction.AttachEnergy("energy", "reserve")), attachments)
     }
     @Test fun `CPU retreats a damaged active to a ready surviving attacker`() {
         val (engine, player, game) = threatenedPosition(1, false)

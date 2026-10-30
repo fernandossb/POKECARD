@@ -1,12 +1,17 @@
 package com.tcgtrainer.engine
 
-/** No GameState, RNG, hidden prizes, opponent hand or unrevealed deck order crosses this boundary. */
+/** Only observations and a position with hidden zones replaced by anonymous cards cross this boundary. */
 data class CpuInput(
     val observation: PlayerObservation, val phase: Phase, val turn: Int, val flags: TurnFlags,
     val choice: ChoiceRequest?, val selectableCards: List<CardInstance>,
     val actions: List<GameAction>, val previews: Map<GameAction.Attack, AttackPreview>,
-    val stadium: CardInstance?, val effectiveAbilities: Map<String, List<AbilityDefinition>> = emptyMap()
+    val stadium: CardInstance?, val effectiveAbilities: Map<String, List<AbilityDefinition>> = emptyMap(),
+    val position: CpuPublicPosition? = null
 )
+
+data class CpuPublicPosition(val state: GameState)
+
+enum class CpuStrategy { HEURISTIC, TACTICAL, MASTER }
 
 /** Controller adapter: reveals search results only while the rules permit that search. */
 fun RulesEngine.cpuInput(state: GameState): CpuInput {
@@ -37,18 +42,35 @@ fun RulesEngine.cpuInput(state: GameState): CpuInput {
     val preserveOrder = choice?.kind in listOf(ChoiceKind.ATTACK_REORDER_OPPONENT_TOP, ChoiceKind.ATTACK_REORDER_OWN_TOP)
     val safeChoice = choice?.copy(candidates = if (preserveOrder) choice.candidates else choice.candidates.sorted(),
         visibleCards = if (preserveOrder) choice.visibleCards else choice.visibleCards.sorted())
-    val actions = if (safeChoice != null && state.phase == Phase.RESOLVE_CHOICE) emptyList() else legalActions(state)
+    val actions = if (safeChoice != null && state.phase == Phase.RESOLVE_CHOICE) emptyList() else cpuLegalActions(state)
+    val position = if (state.phase in listOf(Phase.MAIN, Phase.RESOLVE_CHOICE)) CpuTurnSearch.publicPosition(state, actor) else null
+    val previewPosition = position ?: if (actions.any { it is GameAction.Attack }) CpuTurnSearch.publicPosition(state.copy(resolution = null), actor) else null
+    val forecast = CpuForecast(catalog)
     return CpuInput(PlayerObservation.from(state, actor), state.phase, state.turn, own.flags, safeChoice,
-        selectable, actions, actions.filterIsInstance<GameAction.Attack>().associateWith { checkNotNull(preview(state, it.attackId, it.targetId)) }, state.stadium,
-        state.players.flatMap { it.pokemon() }.associate { pokemon -> pokemon.id to effectiveAbilities(state, state.players.indexOfFirst { player -> player.pokemon().any { it.id == pokemon.id } }, pokemon) })
+        selectable, actions, actions.filterIsInstance<GameAction.Attack>().associateWith { action ->
+            val public = checkNotNull(previewPosition).state
+            forecast.preview(public, action) ?: run {
+                val target = public.players[1-actor].pokemon().firstOrNull { it.id == action.targetId } ?: public.players[1-actor].active!!
+                val hp = effectiveHp(public, target)
+                AttackPreview(0, hp, target.damage, (hp-target.damage).coerceAtLeast(0), false, 0, true)
+            }
+        }, state.stadium,
+        state.players.flatMap { it.pokemon() }.associate { pokemon -> pokemon.id to effectiveAbilities(state, state.players.indexOfFirst { player -> player.pokemon().any { it.id == pokemon.id } }, pokemon) },
+        position)
 }
 
 /** Deterministic, public-information heuristic CPU. No fabricated hidden draws or random tie breaks. */
-class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
+class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog, private val strategy: CpuStrategy = CpuStrategy.MASTER) {
     private val effects = EffectEngine(catalog)
     private fun d(card: CardInstance) = catalog.get(card.definitionId)
 
     fun choose(input: CpuInput): GameAction {
+        val fallback = chooseHeuristic(input)
+        return if (strategy != CpuStrategy.HEURISTIC && input.phase in listOf(Phase.MAIN, Phase.RESOLVE_CHOICE) && input.position != null)
+            CpuTurnSearch(catalog, strategy).choose(input, fallback) else fallback
+    }
+
+    internal fun chooseHeuristic(input: CpuInput): GameAction {
         val o = input.observation
         val own = o.ownField
         val active = own.find { it.id == o.ownActiveId }
@@ -574,7 +596,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog) {
             }
             is GameAction.Attack -> {
                 val p = checkNotNull(input.previews[a])
-                val attack = d(checkNotNull(active).top).attacks.first { it.id == a.attackId }
+                val attack = checkNotNull(active).cards.asReversed().flatMap { d(it).attacks }.first { it.id == a.attackId }
                 val draw = attack.effects.filterIsInstance<Effect.Draw>().sumOf { it.count }
                 val charge = attack.effects.filterIsInstance<Effect.EnergyFromDeck>().sumOf { it.count }
                 val chargeValue = if (o.ownDeckCount > 0 && active.energies.size < (d(active.top).attacks.maxOfOrNull { it.cost.size } ?: 0)) charge*35.0 else 0.0

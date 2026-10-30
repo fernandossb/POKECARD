@@ -89,7 +89,8 @@ internal class DecisionReview(private val engine: RulesEngine) {
         val forbidden = state.players[1].hand.map { it.id }.toSet() + state.players[1].deck.map { it.id }
         if (choice.candidates.any { it in forbidden }) return emptyList()
         val actions = mutableListOf<GameAction>()
-        runCatching { CpuPlayer(engine.catalogForReview()).choose(engine.cpuInput(state)) }.getOrNull()?.let(actions::add)
+        // Review already searches continuations; avoid nesting the complete master search at every choice node.
+        runCatching { CpuPlayer(engine.catalogForReview(), CpuStrategy.HEURISTIC).choose(engine.cpuInput(state)) }.getOrNull()?.let(actions::add)
         if (choice.min == 0) actions += GameAction.ChooseCards(emptyList())
         if (choice.min <= 1 && choice.max >= 1) choice.candidates.take(20).forEach { actions += GameAction.ChooseCards(listOf(it)) }
         return actions.distinct().filter { engine.validate(state, it) == Legality.Legal }

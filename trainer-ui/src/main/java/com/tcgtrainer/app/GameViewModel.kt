@@ -81,7 +81,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 val other = if (cpuDeck == "random") {
                     check(candidates.isNotEmpty()) { "Ainda não há adversários implementados elegíveis para este formato." }
-                    candidates[java.security.SecureRandom().nextInt(candidates.size)]
+                    val masterPool = TrainingDecks.masterOpponents(candidates, own.format)
+                    masterPool[java.security.SecureRandom().nextInt(masterPool.size)]
                 } else checkNotNull(candidates.firstOrNull { it.id == cpuDeck }) {
                     "Este deck da máquina não é válido para o formato selecionado. Escolha outro baralho."
                 }

@@ -110,7 +110,7 @@ import kotlinx.coroutines.withContext
             } else fullDecks
         }
     }
-    val randomCpuDeck = TrainingDeck("random", "Aleatório", "A máquina escolhe um deck elegível a cada partida.", cpuDeckOptions.firstOrNull()?.cover ?: chosen.cover, emptyList())
+    val randomCpuDeck = TrainingDeck("random", "Aleatório · Mestre", "Prioriza listas competitivas elegíveis; na Academia 2022, sorteia entre os decks dessa categoria.", cpuDeckOptions.firstOrNull()?.cover ?: chosen.cover, emptyList())
     val cpuDeckMenu = listOf(randomCpuDeck) + cpuDeckOptions
     val opponent = cpuDeckOptions.firstOrNull { it.id == cpuDeckId } ?: cpuDeckOptions.firstOrNull() ?: randomCpuDeck
     LaunchedEffect(availableDecks) {
