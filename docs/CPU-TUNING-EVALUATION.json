@@ -1,0 +1,92 @@
+{
+  "method": "Two fixed candidates on shared tuning seeds; winner alone evaluated on disjoint validation seeds with swapped seats",
+  "reference": "Local MASTER default CpuTuning(.35,.15,80), including local items 1-3",
+  "trainingGames": 32,
+  "validationGames": 200,
+  "errors": 0,
+  "selection": {
+    "selected": ".2,.1,100",
+    "approved": false,
+    "validationScore": 0.515,
+    "pairedLower95": 0.46785658673641234,
+    "validationPairs": 100,
+    "minimumPairs": 100,
+    "trainingSeed": 400000003,
+    "validationSeed": 1200000011,
+    "training": [
+      {
+        "parameters": ".5,.25,60",
+        "points": 0.5
+      },
+      {
+        "parameters": ".2,.1,100",
+        "points": 0.5625
+      }
+    ],
+    "sourceHashes": {
+      "CardTraits.kt": "D902A4BA98378A26B391774B1CCA23C4F2A6EE72FA8156C3B6546E88716A04A9",
+      "Catalog.kt": "0E08E053AEDBE3121A3271249C7758B0E054CBF7AFDB7AFD3188982B6483F9E3",
+      "CatalogRuleCompiler.kt": "871056695734D4B6AD5CCCFCDA7F6C41E7B77DF85239AEDB43DFC664F7226C66",
+      "ContentEngine.kt": "EB27F80C9A41CDA3A7AA903D5FB419C838B4C8B4ABFD0BC1F35F7DEB6186CF17",
+      "CpuCounterplay.kt": "5D54C2F6B18EDEC6382BA6C5B637BC80BE0EC8CCEA12560466A8ECABCA6077A8",
+      "CpuDrawOdds.kt": "F4F989C050F9A590247B39C03D6848D11500741AE840C8685AF3A1BE6A749288",
+      "CpuForecast.kt": "4AD30CE38445A6454303434526B67B0A119EBE62C12820B2A6DFCFB5987CEE07",
+      "CpuLegalActions.kt": "7B839999FA58E6C1D1B2523E61406F8EC8B7721F0DCA5AF76E170E4827E2B380",
+      "CpuPlayer.kt": "17027FFDFE44A12D567F01C71940010FB85434A10C02993C247B148836664252",
+      "CpuPositionEvaluator.kt": "B8BF7E17581829B94130ADAC2086DD357CE4708F93D7547717A31DB73D12D847",
+      "CpuPrizeRace.kt": "2C3A6BD89F897926FFBD89B785381E426588ACEB0CF5FD1FAF8D5854DC6B51CE",
+      "CpuTuning.kt": "341890D6A133008665506C5D9E28F8C3ABE21503DCD6C1C773ADC0E72EC1684E",
+      "CpuTurnSearch.kt": "1061AC4AC4A1498AEC363A8935C18F7C7F2AFDFA01F94E1202B7E7DC4D996B89",
+      "DecisionReview.kt": "4841F54CD4496EF9F2F0651AEC595F97576ABDC4ED3CF9B113250D24F12E2693",
+      "DeckLibrary.kt": "6EE184BE48C20D2760C93D0AB3DC18860F069412BA752AE48F7F5D3D5B75AE7D",
+      "DropInteraction.kt": "DA8D4C0FA6F200DCCB8FAF3DB94C901E7ABDF2F42EEAFBA596A33825B9254946",
+      "EffectEngine.kt": "8319488D38D63317BE9D99739FD368B5F16E67821BE4A12B327F3522AB74248A",
+      "GameSession.kt": "A0E28B4244FC1A9D9BF93FB3D636B7CB97F2402CCD689A64A098EC3FDCE61031",
+      "Model.kt": "171B1BC48CC54BECB91D0E0E8B2E7A44425C8A4E783C94EA88720B8C5B47097B",
+      "OwnedCollection.kt": "8AAFDD76ABA28FC93B62298EDBE174F45993CCD37DA6A52B575C244F27A20425",
+      "RulesEngine.kt": "DB1AB7B9D6C425343715F7FC6144E7B8A85807EB21275628027682F0E291A9A4",
+      "TrainerCatalog.kt": "BD8F1ADBC1D725A984A4BB3326BD2D7A1C71B60F51C77C486B499D08F2853CA0",
+      "TrainingDecks.kt": "127E6DD0CBA70F43DF1A265F109270E4E116DA2E5A2D251229361EC9AF79E78F",
+      "TrainingReview.kt": "80B0415E40881D339159AB3BE53A5ADA01B872627C59A522790AF76633C2866A"
+    },
+    "note": "Avaliação pareada aproximada; aprovação gera uma recomendação, não altera silenciosamente a CPU instalada. Amostra de smoke não autoriza promoção."
+  },
+  "validation": {
+    "wins": 103,
+    "losses": 97,
+    "draws": 0,
+    "pairedSeeds": true,
+    "medianMs": 68.5739,
+    "p95Ms": 2954.4048,
+    "timingNote": "Development computer, eight concurrent games; unit/build checks also ran during part of validation. Not a mobile latency measurement."
+  },
+  "targetedTests": [
+    {
+      "suite": "com.tcgtrainer.engine.CpuCounterplayTest",
+      "tests": 11,
+      "failures": 0,
+      "errors": 0
+    },
+    {
+      "suite": "com.tcgtrainer.engine.CpuForecastTest",
+      "tests": 8,
+      "failures": 0,
+      "errors": 0
+    },
+    {
+      "suite": "com.tcgtrainer.engine.CpuTuningTest",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0
+    },
+    {
+      "suite": "com.tcgtrainer.engine.MasterCpuTest",
+      "tests": 9,
+      "failures": 0,
+      "errors": 0
+    }
+  ],
+  "androidCompile": ":trainer-ui:compileDebugKotlin passed",
+  "defaultsChanged": false,
+  "conclusion": "No candidate was approved; validation did not establish superiority. This is parameter selection, not neural-network training."
+}

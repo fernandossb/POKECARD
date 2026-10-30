@@ -1,3 +1,13 @@
+# POKECARD Brasil 5.99.44 — CPU com planejamento ampliado
+
+- A CPU considera a resposta pública do adversário e a preparação do próprio turno seguinte, usando os recursos conhecidos.
+- A avaliação passa a considerar probabilidades de compra do próprio baralho, atacantes de reserva, habilidades de apoio, recuperação, bloqueios e exposição de Pokémon que entregam vários Prêmios.
+- O tempo de análise se adapta à posição: alvos de 200 ms em situações simples, 800 ms nas normais e 2 s nas críticas. O limite é cooperativo; ao esgotá-lo, a CPU preserva uma decisão legal já avaliada.
+- A análise respeita informações ocultas: não consulta a mão adversária, a ordem dos baralhos nem os Prêmios fechados.
+- Adicionada uma rotina de avaliação de parâmetros com partidas de validação separadas. Os pesos anteriores foram mantidos, pois a amostra não comprovou vantagem suficiente para substituí-los.
+- Validação: 36 testes direcionados sem falhas, compilação Android e medições do motor no POCO X7. As seis decisões medidas levaram de 16 a 160 ms; três testes de prazo forçado também retornaram ações legais. A amostra não estabelece um limite de pior caso nem nível competitivo de mestre.
+- Versão Android: `versionCode` 246 e `versionName` 5.99.44. Atualização com a assinatura oficial, preservando a coleção e os decks salvos.
+
 # POKECARD Brasil 5.99.43 — Planejamento tático da CPU
 
 - A CPU explora sequências de habilidades, Energias, Ferramentas, trocas e ataques, com orçamento limitado de busca.

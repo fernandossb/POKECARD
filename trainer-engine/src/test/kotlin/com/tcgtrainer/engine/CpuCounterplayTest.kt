@@ -3,6 +3,48 @@ package com.tcgtrainer.engine
 import kotlin.test.*
 
 class CpuCounterplayTest {
+    @Test fun `position recovery counts useful healing only when it is playable`() {
+        val heal = CardDefinition("heal", "Heal", "Test", "9", category = Category.TRAINER, trainerType = TrainerType.ITEM,
+            trainerEffect = TrainerEffect.HealPokemon(60))
+        val catalog = catalog(heal)
+        val evaluator = CpuPositionEvaluator(RulesEngine(catalog), catalog)
+        val game = state().let { it.copy(players = listOf(it.players[0].copy(hand = listOf(c("healing", "heal"))), it.players[1])) }
+        assertTrue(evaluator.features(game, 0).recovery > 0)
+        val blocked = game.copy(players = listOf(game.players[0].copy(itemPlayLockedUntilTurn = game.turn), game.players[1]))
+        assertEquals(0.0, evaluator.features(blocked, 0).recovery)
+        assertTrue(evaluator.value(game, 0) > evaluator.value(blocked, 0))
+        val healthy = game.copy(players = listOf(game.players[0].copy(active = game.players[0].active!!.copy(damage = 0)), game.players[1]))
+        assertEquals(0.0, evaluator.features(healthy, 0).recovery)
+    }
+
+    @Test fun `position rewards a ready reserve rather than a restricted reserve`() {
+        val catalog = catalog()
+        val evaluator = CpuPositionEvaluator(RulesEngine(catalog), catalog)
+        val reserve = PokemonInstance(listOf(c("reserve", "hero")), enteredPlayTurn = 0)
+        val game = state().let { it.copy(players = listOf(it.players[0].copy(bench = listOf(reserve)), it.players[1])) }
+        val restricted = reserve.copy(restrictions = listOf(AttackRestriction("hit", game.turn)))
+        val worse = game.copy(players = listOf(game.players[0].copy(bench = listOf(restricted)), game.players[1]))
+        assertTrue(evaluator.features(game, 0).attackers > evaluator.features(worse, 0).attackers)
+    }
+
+    @Test fun `position penalizes an injured multi prize reserve`() {
+        val catalog = catalog()
+        val evaluator = CpuPositionEvaluator(RulesEngine(catalog), catalog)
+        val reserve = PokemonInstance(listOf(c("reserve", "hero")), enteredPlayTurn = 0)
+        val game = state().let { it.copy(players = listOf(it.players[0].copy(bench = listOf(reserve)), it.players[1])) }
+        val exposed = game.copy(players = listOf(game.players[0].copy(bench = listOf(reserve.copy(damage = 170))), game.players[1]))
+        assertTrue(evaluator.features(exposed, 0).exposure > evaluator.features(game, 0).exposure)
+    }
+    @Test fun `following turn planning uses a known Energy to prepare an attack`() {
+        val attacker = hero.copy(attacks = listOf(AttackDefinition("prepare", "Prepared hit", listOf(EnergyType.COLORLESS), listOf(Effect.Damage(200)))))
+        val catalog = catalog(attacker)
+        val engine = RulesEngine(catalog)
+        val plain = state()
+        val prepared = plain.copy(players = listOf(plain.players[0].copy(hand = listOf(c("known-energy"))), plain.players[1]))
+        val search = CpuCounterplay(engine, catalog)
+        assertTrue(search.nextTurnValue(CpuTurnSearch.publicPosition(prepared, 0)!!.state, 0) >
+            search.nextTurnValue(CpuTurnSearch.publicPosition(plain, 0)!!.state, 0))
+    }
     private val hero = CardDefinition("hero", "Hero ex", "Test", "1", category = Category.POKEMON, hp = 200, prizes = 2,
         attacks = listOf(AttackDefinition("hit", "Hit", emptyList(), listOf(Effect.Damage(20)))))
     private val enemy = CardDefinition("enemy", "Enemy", "Test", "2", category = Category.POKEMON, hp = 300,

@@ -3,6 +3,56 @@ package com.tcgtrainer.engine
 import kotlin.test.*
 
 class MasterCpuTest {
+    @Test fun `a reused expired search never returns a decision from an earlier position`() {
+        val catalog = catalog()
+        val engine = RulesEngine(catalog)
+        var clock = 0L
+        val search = CpuTurnSearch(catalog, budget = CpuSearchBudget(800) { clock })
+        val original = state()
+        val input = engine.cpuInput(original)
+        val heuristic = CpuPlayer(catalog, CpuStrategy.HEURISTIC)
+        val first = search.choose(input, heuristic.choose(input))
+        clock = 1_000_000_000
+        val changed = original.copy(players = listOf(original.players[0], original.players[1].copy(hand = emptyList())))
+        val nextInput = engine.cpuInput(changed)
+        val fallback = heuristic.choose(nextInput)
+        assertNotEquals(first, fallback)
+        val action = search.choose(nextInput, fallback)
+        assertEquals(fallback, action)
+        assertEquals(Legality.Legal, engine.validate(changed, action))
+    }
+    @Test fun `adaptive policy reserves more time for critical positions`() {
+        val input = RulesEngine(catalog()).cpuInput(state())
+        assertEquals(2000L, CpuSearchBudget.limitMillis(input))
+        val normal = input.copy(observation = input.observation.copy(ownPrizeCount = 6, opponentPrizeCount = 6))
+        assertEquals(800L, CpuSearchBudget.limitMillis(normal.copy(actions = List(3) { GameAction.EndTurn })))
+        assertEquals(200L, CpuSearchBudget.limitMillis(normal.copy(actions = listOf(GameAction.EndTurn))))
+    }
+    @Test fun `expired and interrupted searches return a legal fallback without leaking cancellation`() {
+        val catalog = catalog()
+        val engine = RulesEngine(catalog)
+        val game = state()
+        val input = engine.cpuInput(game)
+        val fallback = CpuPlayer(catalog, CpuStrategy.HEURISTIC).choose(input)
+        val expired = CpuTurnSearch(catalog, budget = CpuSearchBudget(0) { 0 }).choose(input, fallback)
+        assertEquals(fallback, expired)
+        assertEquals(Legality.Legal, engine.validate(game, expired))
+        Thread.currentThread().interrupt()
+        try {
+            assertEquals(fallback, CpuTurnSearch(catalog).choose(input, fallback))
+        } finally { Thread.interrupted() }
+    }
+    @Test fun `deadline during exploration retains a legal completed decision`() {
+        val catalog = catalog()
+        val engine = RulesEngine(catalog)
+        val input = engine.cpuInput(state())
+        val fallback = CpuPlayer(catalog, CpuStrategy.HEURISTIC).choose(input)
+        var clock = 0L
+        val budget = CpuSearchBudget(800) { clock.also { clock += 25_000_000 } }
+        val action = CpuTurnSearch(catalog, budget = budget).choose(input, fallback)
+        assertEquals(Legality.Legal, engine.validate(state(), action))
+        assertTrue(clock < 5_000_000_000)
+    }
     @Test fun `all CPU profiles can evaluate legal attacks from previous Evolutions`() {
         val basic = hero.copy(attacks = listOf(AttackDefinition("old", "Previous attack", emptyList(), listOf(Effect.Damage(100)))))
         val evolved = hero.copy(id = "evolved", name = "Evolved hero", stage = Stage.STAGE_ONE,

@@ -1,27 +1,45 @@
 package com.tcgtrainer.engine
 
 /** Counterplay uses public abilities, paid retreats and attacks. Unknown hand cards remain anonymous. */
-internal class CpuCounterplay(private val engine: RulesEngine, private val catalog: CardCatalog) {
+internal class CpuCounterplay(private val engine: RulesEngine, private val catalog: CardCatalog, private val budget: CpuSearchBudget = CpuSearchBudget(null)) {
     data class Evaluation(val risk: Double, val prizeRace: Double, val wins: Boolean = false)
     private val heuristic = CpuPlayer(catalog, CpuStrategy.TACTICAL)
     private val race = CpuPrizeRace(engine, catalog)
+    private val board = CpuPositionEvaluator(engine, catalog)
     private val forecast = CpuForecast(catalog)
 
     fun evaluate(before: GameState, actor: Int, attack: GameAction.Attack?): Evaluation {
+        budget.check()
         val post = postAction(before, actor, attack)
         if (post.phase == Phase.GAME_OVER) return Evaluation(if (post.winner == actor) -100_000.0 else if (post.winner == 1-actor) 100_000.0 else 0.0, 0.0, post.winner == actor)
         val opponent = 1-actor
         var frontier = listOf(post)
         var worst = 0.0
+        var continuation: Double? = null
+        var continuations = 0
         var explored = 0
         val visited = hashSetOf(post.copy(history = emptyList()))
         repeat(4) {
+            budget.check()
             val children = mutableListOf<Pair<GameState, Double>>()
             for (state in frontier) {
+                budget.check()
                 if (explored >= 28 || engine.actingPlayer(state) != opponent) continue
                 val actions = publicActions(state)
-                for (action in actions.filterIsInstance<GameAction.Attack>()) worst = maxOf(worst, threat(state, actor, action))
+                for (action in actions.filterIsInstance<GameAction.Attack>()) {
+                    budget.check()
+                    worst = maxOf(worst, threat(state, actor, action))
+                    val preview = forecast.preview(state, action) ?: continue
+                    if (preview.uncertain || continuations >= 4) continue
+                    continuations++
+                    val reply = postAction(state, opponent, action)
+                    if (reply.phase == Phase.MAIN && reply.currentPlayer == actor && reply.rng == state.rng) {
+                        val value = nextTurnValue(reply, actor)
+                        continuation = continuation?.let { minOf(it, value) } ?: value
+                    }
+                }
                 for (action in actions.filter { it !is GameAction.Attack && it != GameAction.EndTurn }.take(8)) {
+                    budget.check()
                     if (++explored > 28) break
                     val result = engine.apply(state, action)
                     val after = result.state
@@ -39,7 +57,48 @@ internal class CpuCounterplay(private val engine: RulesEngine, private val catal
             }
             frontier = children.sortedByDescending { it.second }.take(4).map { it.first }
         }
-        return Evaluation(worst, race.value(post, actor))
+        return Evaluation(worst, continuation?.let { race.value(post, actor)*.5 + it*.5 } ?: race.value(post, actor))
+    }
+
+    /** Reaches our following turn through a real public reply, then prepares using known cards only. */
+    internal fun nextTurnValue(initial: GameState, actor: Int): Double {
+        val values = java.util.IdentityHashMap<GameState, Double>()
+        fun position(state: GameState): Double {
+            budget.check()
+            return values.getOrPut(state) { race.value(state, actor) + board.value(state, actor)*.3 }
+        }
+        var frontier = listOf(initial)
+        var best = position(initial)
+        var expanded = 0
+        val seen = hashSetOf(initial.copy(history = emptyList()))
+        repeat(3) {
+            budget.check()
+            val children = mutableListOf<Pair<GameState, Double>>()
+            for (state in frontier) {
+                budget.check()
+                if (state.phase != Phase.MAIN || state.currentPlayer != actor) continue
+                for (action in engine.cpuLegalActions(state)) {
+                    budget.check()
+                    if (action is GameAction.Attack) {
+                        val preview = forecast.preview(state, action) ?: continue
+                        val certainKo = preview.knockout && !preview.uncertain
+                        val win = certainKo && (preview.prizes >= state.players[actor].prizes.size || state.players[1-actor].pokemon().size == 1)
+                        best = maxOf(best, position(state) + minOf(preview.damage, preview.effectiveHp-preview.currentDamage).coerceAtLeast(0)*.5 +
+                            (if (certainKo) preview.prizes*300.0 else 0.0) + if (win) 2000.0 else 0.0)
+                    } else if (action is GameAction.AttachEnergy || action is GameAction.Evolve || action is GameAction.PlayBasic || action is GameAction.Retreat) {
+                        if (expanded >= 24) continue
+                        expanded++
+                        val result = engine.apply(state, action)
+                        val after = result.state
+                        if (result.legality != Legality.Legal || after.rng != state.rng || after.phase != Phase.MAIN || after.turn != initial.turn) continue
+                        if (after.players[actor].hand.any { card -> card.definitionId == "cpu-hidden-card" && state.players[actor].hand.none { it.id == card.id } }) continue
+                        if (seen.add(after.copy(history = emptyList()))) children += after to position(after)
+                    }
+                }
+            }
+            frontier = children.sortedByDescending { it.second }.take(2).map { it.first }
+        }
+        return best
     }
 
     private fun publicActions(state: GameState): List<GameAction> {
@@ -79,6 +138,7 @@ internal class CpuCounterplay(private val engine: RulesEngine, private val catal
         if (first.legality != Legality.Legal || first.state.rng != before.rng) return approximate(before, actor, attack)
         var state = first.state
         repeat(12) {
+            budget.check()
             if (state.phase == Phase.GAME_OVER || state.phase == Phase.MAIN) return state
             val owner = engine.actingPlayer(state)
             val action = when {

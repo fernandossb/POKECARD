@@ -30,7 +30,21 @@ internal class CpuForecast(private val catalog: CardCatalog) {
         } }
         // A conservative upper bound, not knowledge of the actual top cards.
         val maximum = scenarios.maxOf { it.maxDamage } + deckBonus*2
-        val estimate = if (handDependent || hiddenDeck || Effect.CoinMiss in attack.effects) (minimum+maximum)/2 else base.damage
+        val pool = CpuDrawOdds.pool(state, state.currentPlayer)
+        val energyEffect = attack.effects.filterIsInstance<Effect.DiscardTopDeckEnergyDamage>().singleOrNull()
+        val energyFraction = if (pool != null && pool.values.sum() > 0 && energyEffect != null) {
+            pool.entries.sumOf { (id, count) -> val card = catalog.get(id)
+                if (card.category == Category.ENERGY && card.basicEnergy && card.type == energyEffect.type) count else 0
+            }.toDouble()/pool.values.sum()
+        } else null
+        val opponentOdds = if (handDependent && !hiddenDeck && Effect.CoinMiss !in attack.effects && attack.effects.none { it is Effect.CoinDamage })
+            CpuDrawOdds.opponentCategories(state, catalog) else null
+        val estimate = if (opponentOdds != null && scenarios.size == 3)
+            (scenarios[0].damage*opponentOdds.getValue(Category.ENERGY) + scenarios[1].damage*opponentOdds.getValue(Category.TRAINER) +
+                scenarios[2].damage*opponentOdds.getValue(Category.POKEMON)).toInt()
+        else if (energyFraction != null && !handDependent && Effect.CoinMiss !in attack.effects && attack.effects.none { it is Effect.CoinDamage })
+            (minimum+(maximum-minimum)*energyFraction).toInt()
+        else if (handDependent || hiddenDeck || Effect.CoinMiss in attack.effects) (minimum+maximum)/2 else base.damage
         val remaining = (base.effectiveHp-base.currentDamage-estimate).coerceAtLeast(0)
         return base.copy(damage = estimate, remainingHp = remaining, knockout = minimum >= base.effectiveHp-base.currentDamage && scenarios.all { it.knockout },
             uncertain = true, minDamage = minimum, maxDamage = maximum)

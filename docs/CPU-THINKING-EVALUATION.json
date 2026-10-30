@@ -1,0 +1,165 @@
+{
+  "mode": "ADAPTIVE, standalone ART process on connected POCO X7; synthetic Lucario match seed 42; two samples from each of three positions",
+  "limitsMs": {
+    "critical": 2000,
+    "normal": 800,
+    "simple": 200
+  },
+  "preparationBudgetFraction": 0.6,
+  "deadline": "Cooperative monotonic checkpoints; individual operations and system pauses can exceed the target",
+  "samples": [
+    {
+      "position": 0,
+      "sample": 0,
+      "turn": 1,
+      "ownPrizes": 6,
+      "opponentPrizes": 6,
+      "limitMs": 800,
+      "inputMs": 0.343692,
+      "chooseMs": 85.687384,
+      "legal": true,
+      "action": "AttachEnergy"
+    },
+    {
+      "position": 0,
+      "sample": 1,
+      "turn": 1,
+      "ownPrizes": 6,
+      "opponentPrizes": 6,
+      "limitMs": 800,
+      "inputMs": 0.337846,
+      "chooseMs": 67.252,
+      "legal": true,
+      "action": "AttachEnergy"
+    },
+    {
+      "position": 1,
+      "sample": 0,
+      "turn": 7,
+      "ownPrizes": 5,
+      "opponentPrizes": 4,
+      "limitMs": 800,
+      "inputMs": 0.546846,
+      "chooseMs": 159.838077,
+      "legal": true,
+      "action": "AttachEnergy"
+    },
+    {
+      "position": 1,
+      "sample": 1,
+      "turn": 7,
+      "ownPrizes": 5,
+      "opponentPrizes": 4,
+      "limitMs": 800,
+      "inputMs": 0.444308,
+      "chooseMs": 142.218154,
+      "legal": true,
+      "action": "AttachEnergy"
+    },
+    {
+      "position": 2,
+      "sample": 0,
+      "turn": 12,
+      "ownPrizes": 1,
+      "opponentPrizes": 4,
+      "limitMs": 2000,
+      "inputMs": 0.781615,
+      "chooseMs": 15.915692,
+      "legal": true,
+      "action": "AttachEnergy"
+    },
+    {
+      "position": 2,
+      "sample": 1,
+      "turn": 12,
+      "ownPrizes": 1,
+      "opponentPrizes": 4,
+      "limitMs": 2000,
+      "inputMs": 0.615693,
+      "chooseMs": 16.068923,
+      "legal": true,
+      "action": "AttachEnergy"
+    }
+  ],
+  "forcedDeadlines": [
+    {
+      "limitMs": 0,
+      "chooseMs": 0.049616,
+      "legal": true
+    },
+    {
+      "limitMs": 1,
+      "chooseMs": 1.038462,
+      "legal": true
+    },
+    {
+      "limitMs": 10,
+      "chooseMs": 16.637846,
+      "legal": true
+    }
+  ],
+  "targetedTests": [
+    {
+      "suite": "com.tcgtrainer.engine.CpuCounterplayTest",
+      "tests": 11,
+      "failures": 0,
+      "errors": 0
+    },
+    {
+      "suite": "com.tcgtrainer.engine.CpuForecastTest",
+      "tests": 8,
+      "failures": 0,
+      "errors": 0
+    },
+    {
+      "suite": "com.tcgtrainer.engine.CpuSearchBudgetTest",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0
+    },
+    {
+      "suite": "com.tcgtrainer.engine.CpuTuningTest",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0
+    },
+    {
+      "suite": "com.tcgtrainer.engine.MasterCpuTest",
+      "tests": 13,
+      "failures": 0,
+      "errors": 0
+    }
+  ],
+  "androidCompile": ":trainer-ui:compileDebugKotlin passed",
+  "engineJarSha256": "A9BE8E7588185E6439FEBA596D24C70BFEA1E6D72DED6A736E7E74A86F68168B",
+  "sourceHashes": {
+    "CardTraits.kt": "D902A4BA98378A26B391774B1CCA23C4F2A6EE72FA8156C3B6546E88716A04A9",
+    "Catalog.kt": "0E08E053AEDBE3121A3271249C7758B0E054CBF7AFDB7AFD3188982B6483F9E3",
+    "CatalogRuleCompiler.kt": "871056695734D4B6AD5CCCFCDA7F6C41E7B77DF85239AEDB43DFC664F7226C66",
+    "ContentEngine.kt": "EB27F80C9A41CDA3A7AA903D5FB419C838B4C8B4ABFD0BC1F35F7DEB6186CF17",
+    "CpuCounterplay.kt": "444B3E32845569C51BE3CA8C9064A8E740263F0AB4E093DF80D87CC83CF5EC13",
+    "CpuDrawOdds.kt": "F4F989C050F9A590247B39C03D6848D11500741AE840C8685AF3A1BE6A749288",
+    "CpuForecast.kt": "4AD30CE38445A6454303434526B67B0A119EBE62C12820B2A6DFCFB5987CEE07",
+    "CpuLegalActions.kt": "7B839999FA58E6C1D1B2523E61406F8EC8B7721F0DCA5AF76E170E4827E2B380",
+    "CpuPlayer.kt": "1FD0956B95EA39EA04145AE01D819623FE68B3461F737B8CFF03CD7CF051CD6E",
+    "CpuPositionEvaluator.kt": "B8BF7E17581829B94130ADAC2086DD357CE4708F93D7547717A31DB73D12D847",
+    "CpuPrizeRace.kt": "2C3A6BD89F897926FFBD89B785381E426588ACEB0CF5FD1FAF8D5854DC6B51CE",
+    "CpuSearchBudget.kt": "A2A304BF4C69519CCB22E3E63D5932B417BE0302CCB96E4ED37DAE23947B1BFF",
+    "CpuTuning.kt": "341890D6A133008665506C5D9E28F8C3ABE21503DCD6C1C773ADC0E72EC1684E",
+    "CpuTurnSearch.kt": "5725DA99D3F2342728ADF312DF52905D553F592939A01AF6DD8FFCDEEAA95136",
+    "DecisionReview.kt": "4841F54CD4496EF9F2F0651AEC595F97576ABDC4ED3CF9B113250D24F12E2693",
+    "DeckLibrary.kt": "6EE184BE48C20D2760C93D0AB3DC18860F069412BA752AE48F7F5D3D5B75AE7D",
+    "DropInteraction.kt": "DA8D4C0FA6F200DCCB8FAF3DB94C901E7ABDF2F42EEAFBA596A33825B9254946",
+    "EffectEngine.kt": "8319488D38D63317BE9D99739FD368B5F16E67821BE4A12B327F3522AB74248A",
+    "GameSession.kt": "A0E28B4244FC1A9D9BF93FB3D636B7CB97F2402CCD689A64A098EC3FDCE61031",
+    "Model.kt": "171B1BC48CC54BECB91D0E0E8B2E7A44425C8A4E783C94EA88720B8C5B47097B",
+    "OwnedCollection.kt": "8AAFDD76ABA28FC93B62298EDBE174F45993CCD37DA6A52B575C244F27A20425",
+    "RulesEngine.kt": "DB1AB7B9D6C425343715F7FC6144E7B8A85807EB21275628027682F0E291A9A4",
+    "TrainerCatalog.kt": "BD8F1ADBC1D725A984A4BB3326BD2D7A1C71B60F51C77C486B499D08F2853CA0",
+    "TrainingDecks.kt": "127E6DD0CBA70F43DF1A265F109270E4E116DA2E5A2D251229361EC9AF79E78F",
+    "TrainingReview.kt": "80B0415E40881D339159AB3BE53A5ADA01B872627C59A522790AF76633C2866A"
+  },
+  "dataIsolation": "Harness excludes trainer-ui and accesses no personal collection, app database or saved match",
+  "scope": "Timing sample and deadline correctness, not a worst-case bound or competitive win-rate evaluation",
+  "installedAppVersion": "5.99.43 remains installed; this benchmark does not install the new code"
+}

@@ -64,7 +64,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
     fun deleteDeck(id: String) { viewModelScope.launch { try { db.decks().delete(id) } catch (e: Exception) { mutableDecks.value = mutableDecks.value.copy(message = e.message) } } }
-    private val cpu = CpuPlayer()
+    private val cpu = CpuPlayer(thinking = CpuThinking.ADAPTIVE)
     fun start(seed: Long, mode: Mode, humanDeck: String = "lucario", cpuDeck: String = "random") {
         if (mutable.value.busy) return
         mutate {

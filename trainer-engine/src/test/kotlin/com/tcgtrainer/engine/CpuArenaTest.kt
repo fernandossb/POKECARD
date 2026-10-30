@@ -69,6 +69,7 @@ class CpuArenaTest {
         val report = buildJsonObject {
             put("master", "MASTER: turn search + public counterplay + prize race")
             put("baseline", baselineMode)
+            put("candidateTuning", System.getProperty("cpu.arena.tuning", ".35,.15,80"))
             put("gamesRequested", games); put("gamesCompleted", valid.size); put("errors", games-valid.size)
             put("masterWins", wins); put("baselineWins", losses); put("draws", draws)
             put("masterWinRate", wins.toDouble()/games)
@@ -102,9 +103,11 @@ class CpuArenaTest {
 
     private fun play(index: Int, seed: Long, masterSeat: Int, decks: List<TrainingDeck>, baselineStrategy: CpuStrategy): Outcome {
         val engine = RulesEngine(TrainerCatalog)
-        val master = CpuPlayer(TrainerCatalog, CpuStrategy.MASTER)
+        val tuningParts = System.getProperty("cpu.arena.tuning", ".35,.15,80").split(',').map { it.toDouble() }
+        require(tuningParts.size == 3)
+        val master = CpuPlayer(TrainerCatalog, CpuStrategy.MASTER, CpuTuning(tuningParts[0], tuningParts[1], tuningParts[2]))
         val baseline = CpuPlayer(TrainerCatalog, baselineStrategy)
-        var state = engine.newGame(seed, decks.map { it.cards }, Mode.MATCH)
+        var state = engine.newGame(seed, decks.map { it.cards }, Mode.MATCH).copy(deckLists = decks.map { it.cards })
         var actions = 0
         val times = mutableListOf<Long>()
         val trace = ArrayDeque<String>()

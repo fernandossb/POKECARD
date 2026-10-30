@@ -60,14 +60,18 @@ fun RulesEngine.cpuInput(state: GameState): CpuInput {
 }
 
 /** Deterministic, public-information heuristic CPU. No fabricated hidden draws or random tie breaks. */
-class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog, private val strategy: CpuStrategy = CpuStrategy.MASTER) {
+class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog, private val strategy: CpuStrategy = CpuStrategy.MASTER, private val tuning: CpuTuning = CpuTuning(), private val thinking: CpuThinking = CpuThinking.DETERMINISTIC) {
     private val effects = EffectEngine(catalog)
     private fun d(card: CardInstance) = catalog.get(card.definitionId)
 
+    fun thinkingLimitMillis(input: CpuInput): Long? = if (thinking == CpuThinking.ADAPTIVE) CpuSearchBudget.limitMillis(input) else null
+
     fun choose(input: CpuInput): GameAction {
+        val budget = CpuSearchBudget.create(input, thinking)
         val fallback = chooseHeuristic(input)
+        input.previews[fallback]?.let { if (it.knockout && !it.uncertain && it.prizes >= input.observation.ownPrizeCount) return fallback }
         return if (strategy != CpuStrategy.HEURISTIC && input.phase in listOf(Phase.MAIN, Phase.RESOLVE_CHOICE) && input.position != null)
-            CpuTurnSearch(catalog, strategy).choose(input, fallback) else fallback
+            CpuTurnSearch(catalog, strategy, tuning, budget).choose(input, fallback) else fallback
     }
 
     internal fun chooseHeuristic(input: CpuInput): GameAction {
@@ -600,7 +604,16 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog, private val s
                 val draw = attack.effects.filterIsInstance<Effect.Draw>().sumOf { it.count }
                 val charge = attack.effects.filterIsInstance<Effect.EnergyFromDeck>().sumOf { it.count }
                 val chargeValue = if (o.ownDeckCount > 0 && active.energies.size < (d(active.top).attacks.maxOfOrNull { it.cost.size } ?: 0)) charge*35.0 else 0.0
-                val drawValue = if (o.ownDeckCount > draw+1) minOf(draw, (6-o.ownHand.size).coerceAtLeast(0))*10.0 else 0.0
+                val pool = input.position?.state?.let { CpuDrawOdds.pool(it, o.viewer) }
+                val usefulEnergy = pool?.entries?.sumOf { (id, count) ->
+                    val definition = catalog.get(id)
+                    if (definition.category == Category.ENERGY && d(active.top).attacks.any { candidate ->
+                        missing(active.copy(energies = active.energies + CardInstance("draw-odds", id)), candidate) < missing(active, candidate)
+                    }) count else 0
+                } ?: 0
+                val drawFactor = if (pool != null && usefulEnergy > 0) .5 + CpuDrawOdds.atLeastOne(pool.values.sum(), usefulEnergy,
+                    minOf(draw, o.ownDeckCount, pool.values.sum())) else 1.0
+                val drawValue = if (o.ownDeckCount > draw+1) minOf(draw, (6-o.ownHand.size).coerceAtLeast(0))*10.0*drawFactor else 0.0
                 val benchSpreadValue = attack.effects.filterIsInstance<Effect.AllOpponentBenchDamage>().sumOf { effect ->
                     o.opponentField.filter { it.id != o.opponentActiveId }.sumOf { target ->
                         minOf(effect.amount, (hp(target)-target.damage).coerceAtLeast(0))

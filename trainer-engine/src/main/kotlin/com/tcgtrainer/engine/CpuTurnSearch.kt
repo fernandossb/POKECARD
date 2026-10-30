@@ -1,7 +1,7 @@
 package com.tcgtrainer.engine
 
 /** Searches complete tactical lines on a public position, then replans after each real action. */
-internal class CpuTurnSearch(private val catalog: CardCatalog, private val strategy: CpuStrategy = CpuStrategy.MASTER) {
+internal class CpuTurnSearch(private val catalog: CardCatalog, private val strategy: CpuStrategy = CpuStrategy.MASTER, private val tuning: CpuTuning = CpuTuning(), private val budget: CpuSearchBudget = CpuSearchBudget(null)) {
     companion object {
         private const val UNKNOWN = "cpu-hidden-card"
         internal fun publicPosition(original: GameState, actor: Int): CpuPublicPosition? {
@@ -19,7 +19,7 @@ internal class CpuTurnSearch(private val catalog: CardCatalog, private val strat
                     deck = hidden("$owner-deck", player.deck.size), prizes = hidden("$owner-prizes", player.prizes.size),
                     prizePositions = emptyList(), faceUpPrizeIds = emptyList()) },
                 bonusCardIds = emptyList(),
-                deckLists = emptyList(), deckNames = emptyList(), humanDeckId = "", cpuDeckId = "",
+                deckLists = original.players.indices.map { if (it == actor) original.deckLists.getOrNull(actor).orEmpty().sorted() else emptyList() }, deckNames = emptyList(), humanDeckId = "", cpuDeckId = "",
                 history = original.history.filter { it.action !is GameAction.ChooseCards && it.action !is GameAction.MulliganDraw }))
         }
     }
@@ -28,6 +28,7 @@ internal class CpuTurnSearch(private val catalog: CardCatalog, private val strat
         override fun get(id: String) = if (id == UNKNOWN) unknown else catalog.get(id)
     }
     private val engine = RulesEngine(maskedCatalog)
+    private val positionEvaluator = CpuPositionEvaluator(engine, maskedCatalog)
     private val forecast = CpuForecast(maskedCatalog)
     private val heuristic = CpuPlayer(maskedCatalog)
     private val attackCache = java.util.IdentityHashMap<GameState, MutableMap<GameAction.Attack, Pair<Double, Boolean>>>()
@@ -36,8 +37,15 @@ internal class CpuTurnSearch(private val catalog: CardCatalog, private val strat
     private data class Node(val state: GameState, val first: GameAction?, val depth: Int)
     private data class Line(val first: GameAction, val value: Double, val wins: Boolean,
         val state: GameState, val attack: GameAction.Attack?)
+    private var completed: GameAction? = null
 
     fun choose(input: CpuInput, fallback: GameAction): GameAction {
+        completed = null
+        return try { search(input, fallback) } catch (_: CpuSearchExpired) { completed ?: fallback }
+    }
+
+    private fun search(input: CpuInput, fallback: GameAction): GameAction {
+        budget.check()
         val initial = input.position?.state ?: return fallback
         val actor = input.observation.viewer
         var frontier = listOf(Node(initial, null, 0))
@@ -46,9 +54,18 @@ internal class CpuTurnSearch(private val catalog: CardCatalog, private val strat
         var transitions = 0
         val visited = hashSetOf(initial.copy(history = emptyList()))
         val directValue = input.actions.filterIsInstance<GameAction.Attack>().maxOfOrNull { attackValue(initial, actor, it).first } ?: 0.0
-        repeat(7) {
+        val baseline = directValue + development(initial, actor)
+        fun remember(line: Line) {
+            if (line.wins || line.value > baseline+tuning.improvement &&
+                !(line.first is GameAction.Attack && fallback !is GameAction.Attack)) completed = line.first
+        }
+        for (depth in 0 until 7) {
+            budget.check()
+            if (budget.preparationFinished()) break
             val children = mutableListOf<Node>()
             for (node in frontier) {
+                budget.check()
+                if (budget.preparationFinished()) break
                 if (transitions >= 260) break
                 val state = node.state
                 if (engine.actingPlayer(state) != actor || state.turn != initial.turn) continue
@@ -59,17 +76,19 @@ internal class CpuTurnSearch(private val catalog: CardCatalog, private val strat
                     else -> emptyList()
                 }
                 for (attack in actions.filterIsInstance<GameAction.Attack>()) {
+                    budget.check()
                     val (value, wins) = attackValue(state, actor, attack)
                     val score = value + development(state, actor) - node.depth * 2.0
                     val line = Line(node.first ?: attack, score, wins, state, attack)
                     finalists += line
-                    if (best == null || score > best!!.value) best = line
+                    if (best == null || score > best!!.value) { best = line; remember(line) }
+                    if (wins) return line.first
                 }
                 if (state.phase == Phase.MAIN && GameAction.EndTurn in actions) {
                     val score = development(state, actor) - replyRisk(state, actor, null) - node.depth*2
                     val line = Line(node.first ?: GameAction.EndTurn, score, false, state, null)
                     finalists += line
-                    if (best == null || score > best!!.value) best = line
+                    if (best == null || score > best!!.value) { best = line; remember(line) }
                 }
                 val groups = actions.filter { it !is GameAction.Attack && it != GameAction.EndTurn }
                     .distinctBy { equivalentAction(state, it) }.groupBy { it.javaClass.simpleName }.values
@@ -80,6 +99,8 @@ internal class CpuTurnSearch(private val catalog: CardCatalog, private val strat
                     for (index in 0 until longest) groups.forEach { group -> group.getOrNull(index)?.let(::add) }
                 }.take(if (node.first == null) 24 else 12)
                 for (action in candidates) {
+                    budget.check()
+                    if (budget.preparationFinished()) break
                     if (++transitions > 260) break
                     val result = engine.apply(state, action)
                     if (result.legality != Legality.Legal || !knownStep(state, result.state, actor)) continue
@@ -87,21 +108,28 @@ internal class CpuTurnSearch(private val catalog: CardCatalog, private val strat
                     children += Node(result.state, node.first ?: action, node.depth + 1)
                 }
             }
-            frontier = children.sortedByDescending { node ->
+            val scored = mutableListOf<Pair<Node, Double>>()
+            for (node in children) {
+                budget.check()
+                if (budget.preparationFinished()) break
                 val state = node.state
                 val tactical = if (state.phase == Phase.MAIN) engine.cpuLegalActions(state).filterIsInstance<GameAction.Attack>()
                     .maxOfOrNull { attackValue(state, actor, it).first } ?: 0.0 else 200.0
-                tactical + development(state, actor) - node.depth * 2
-            }.take(6)
-            if (frontier.isEmpty()) return@repeat
+                scored += node to (tactical + development(state, actor) - node.depth * 2)
+            }
+            frontier = scored.sortedByDescending { it.second }.take(6).map { it.first }
+            if (frontier.isEmpty()) break
         }
         var comparisonValue = directValue + development(initial, actor)
         val plan = if (strategy == CpuStrategy.MASTER) {
-            val counterplay = CpuCounterplay(engine, maskedCatalog)
+            val counterplay = CpuCounterplay(engine, maskedCatalog, budget)
             val ranked = finalists.sortedByDescending { it.value }.distinctBy { it.first }
-            val candidates = (ranked.take(4) + listOfNotNull(ranked.firstOrNull { it.first == fallback }, ranked.firstOrNull { it.first is GameAction.Attack })).distinctBy { it.first }
+            val candidates = (listOfNotNull(ranked.firstOrNull { it.first == fallback }) + ranked.take(4) + listOfNotNull(ranked.firstOrNull { it.first is GameAction.Attack })).distinctBy { it.first }
+            var confirmedBaseline: Double? = null
+            var confirmedBest = Double.NEGATIVE_INFINITY
             val evaluated = candidates.map { line ->
-                if (line.wins) line else {
+                budget.check()
+                val result = if (line.wins) line else {
                     val oldTarget = line.attack?.let { action -> line.state.players[1-actor].pokemon().firstOrNull { it.id == action.targetId }
                         ?: line.state.players[1-actor].active }
                     val ko = line.attack?.let { forecast.preview(line.state, it) }?.let { it.knockout && !it.uncertain } == true
@@ -109,9 +137,19 @@ internal class CpuTurnSearch(private val catalog: CardCatalog, private val strat
                     val response = counterplay.evaluate(line.state, actor, line.attack)
                     // Forced losses outrank material. Other forecasts are uncertain and must not outweigh a confirmed knockout.
                     val riskCorrection = if (response.risk >= 100_000 || response.wins) previousRisk-response.risk
-                        else (previousRisk-response.risk)*.35
-                    line.copy(value = line.value + riskCorrection + response.prizeRace*.15, wins = response.wins)
+                        else (previousRisk-response.risk)*tuning.counterplay
+                    line.copy(value = line.value + riskCorrection + response.prizeRace*tuning.prizeRace, wins = response.wins)
                 }
+                if (result.first == fallback) {
+                    confirmedBaseline = result.value
+                    confirmedBest = result.value
+                    completed = fallback
+                } else if (result.value > confirmedBest && (result.wins || confirmedBaseline?.let { result.value > it+tuning.improvement } == true) &&
+                    (result.wins || !(result.first is GameAction.Attack && fallback !is GameAction.Attack))) {
+                    confirmedBest = result.value
+                    completed = result.first
+                }
+                result
             }
             evaluated.firstOrNull { it.first == fallback }?.let { comparisonValue = it.value }
                 ?: evaluated.filter { it.first is GameAction.Attack }.maxOfOrNull { it.value }?.let { comparisonValue = it }
@@ -123,7 +161,7 @@ internal class CpuTurnSearch(private val catalog: CardCatalog, private val strat
         if (plan.wins) return plan.first
         // Drawing/searching may improve the position, but unknown cards must not be fabricated in simulations.
         if (plan.first is GameAction.Attack && fallback !is GameAction.Attack) return fallback
-        return if (plan.value > comparisonValue + 80) plan.first else fallback
+        return if (plan.value > comparisonValue + tuning.improvement) plan.first else fallback
     }
 
     private fun equivalentAction(state: GameState, action: GameAction): String {
@@ -180,16 +218,19 @@ internal class CpuTurnSearch(private val catalog: CardCatalog, private val strat
     }
 
     private fun computeReplyRisk(state: GameState, actor: Int, knockedOut: String?): Double {
+        budget.check()
         val opponent = 1-actor
         val target = state.players[actor].active ?: return 0.0
         val enemies = state.players[opponent].pokemon().filter { it.id != knockedOut }
         var risk = 0.0
         // Consider a ready replacement after a knockout, rather than assuming the opponent has no reply.
         for (source in enemies.filter { knockedOut != null || it.id == state.players[opponent].active?.id }) {
+            budget.check()
             val reply = state.copy(currentPlayer = opponent, turn = state.turn + 1, phase = Phase.MAIN, resolution = null,
                 players = state.players.mapIndexed { owner, player -> if (owner != opponent) player else player.copy(
                     active = source, bench = enemies.filter { it.id != source.id }, flags = TurnFlags()) })
             for (action in attacks(reply, opponent)) {
+                budget.check()
                 val preview = forecast.preview(reply, action) ?: continue
                 val sourceCard = maskedCatalog.get(target.top.definitionId)
                 val lethal = preview.knockout && !preview.uncertain
@@ -235,16 +276,6 @@ internal class CpuTurnSearch(private val catalog: CardCatalog, private val strat
     }
 
     private fun development(state: GameState, actor: Int): Double = developmentCache.getOrPut(state) { mutableMapOf() }
-        .getOrPut(actor) { computeDevelopment(state, actor) }
+        .getOrPut(actor) { positionEvaluator.value(state, actor) }
 
-    private fun computeDevelopment(state: GameState, actor: Int): Double = state.players[actor].pokemon().sumOf { pokemon ->
-        val definition = maskedCatalog.get(pokemon.top.definitionId)
-        val hp = engine.effectiveHp(state, pokemon)-pokemon.damage
-        val energy = pokemon.energies.size.coerceAtMost(definition.attacks.maxOfOrNull { it.cost.size } ?: 0)
-        val attackPotential = definition.attacks.maxOfOrNull { attack ->
-            val damage = attack.effects.filterIsInstance<Effect.Damage>().sumOf { it.amount }
-            damage.toDouble() / (1 + (attack.cost.size-energy).coerceAtLeast(0))
-        } ?: 0.0
-        attackPotential*.18 + energy*12.0 + hp.coerceAtLeast(0)*.025 + pokemon.tools.size*8
-    }
 }
