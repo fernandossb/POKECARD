@@ -12,8 +12,30 @@ data class CpuSearchTelemetry(
     var numberOfCompleteTurnSequences: Int = 0,
     var bestLine: List<GameAction> = emptyList(),
     var bestScore: Double = 0.0,
-    var alternativeScore: Double? = null
-)
+    var alternativeScore: Double? = null,
+    var playerHandThreat: Double = 0.0,
+    var playerEstimatedBestLine: List<GameAction> = emptyList(),
+    var expectedOpponentPrizes: Int = 0,
+    var opponentLethal: Boolean = false,
+    var opponentPotentialBefore: Double = 0.0,
+    var opponentPotentialAfter: Double = 0.0,
+    var counterLineLog: String = ""
+) {
+    fun formatDiagnostics(): String = buildString {
+        appendLine("PLAYER HAND THREAT: ${playerHandThreat.toInt()}/100")
+        appendLine("PLAYER NEXT TURN:")
+        appendLine("Estimated best line:")
+        if (playerEstimatedBestLine.isEmpty()) appendLine("1. None / Pass")
+        else playerEstimatedBestLine.forEachIndexed { i, a -> appendLine("${i + 1}. $a") }
+        appendLine("Expected prizes: $expectedOpponentPrizes")
+        appendLine("Opponent lethal: ${if (opponentLethal) "YES" else "NO"}")
+        appendLine()
+        appendLine("CPU COUNTER LINE:")
+        if (bestLine.isEmpty()) appendLine("1. None")
+        else bestLine.forEachIndexed { i, a -> appendLine("${i + 1}. $a") }
+        appendLine("Opponent best-turn potential: Before = ${opponentPotentialBefore.toInt()}, After = ${opponentPotentialAfter.toInt()}")
+    }
+}
 
 /** Searches complete tactical lines on a public position, then replans after each real action. */
 internal class CpuTurnSearch(
@@ -25,28 +47,31 @@ internal class CpuTurnSearch(
 ) {
     companion object {
         private const val UNKNOWN = "cpu-hidden-card"
-        internal fun publicPosition(original: GameState, actor: Int): CpuPublicPosition? {
+        internal fun publicPosition(original: GameState, actor: Int, knowledge: CpuKnowledge = CpuKnowledge.FAIR): CpuPublicPosition? {
             val publicIds = (original.players[actor].hand + original.players.flatMap { player -> player.discard + player.pokemon().flatMap { it.cards + it.energies + it.tools } } + listOfNotNull(original.stadium)).map { it.id }.toSet() + original.players.flatMap { it.pokemon() }.map { it.id }
-            val actorChoiceIds = if (original.resolution != null && original.currentPlayer == actor) {
-                (original.players[actor].deck.map { it.id } + original.players[actor].hand.map { it.id }).toSet()
-            } else emptySet()
-            val allPublicIds = publicIds + actorChoiceIds
             if (original.resolution?.choices.orEmpty().any { choice ->
-                choice.candidates.any { it !in allPublicIds && it !in choice.optionLabels } ||
-                    choice.visibleCards.any { it !in allPublicIds } ||
-                    choice.pendingCards.any { it !in allPublicIds } ||
-                    (choice.selectedEnergy != null && choice.selectedEnergy !in allPublicIds)
+                choice.candidates.any { it !in publicIds && it !in choice.optionLabels } ||
+                    choice.visibleCards.any { it !in publicIds } ||
+                    choice.pendingCards.any { it !in publicIds } ||
+                    (choice.selectedEnergy != null && choice.selectedEnergy !in publicIds)
             }) return null
             fun hidden(zone: String, size: Int) = List(size) { CardInstance("hidden-$zone-$it", UNKNOWN) }
+
+            val revealsOpponentHand = knowledge != CpuKnowledge.FAIR
+            val revealsDeckList = knowledge in listOf(CpuKnowledge.PLAYER_HAND_AND_DECK, CpuKnowledge.PERFECT_INFORMATION)
+            val revealsExactDeckAndPrizes = knowledge == CpuKnowledge.PERFECT_INFORMATION
+
             return CpuPublicPosition(original.copy(gameId = "public-position", seed = 0, rng = RngState(0),
                 players = original.players.mapIndexed { owner, player -> player.copy(
-                    hand = if (owner == actor) player.hand else hidden("$owner-hand", player.hand.size),
-                    deck = if (original.resolution != null && owner == actor) player.deck.map { it.copy(definitionId = UNKNOWN) }
-                           else hidden("$owner-deck", player.deck.size),
-                    prizes = hidden("$owner-prizes", player.prizes.size),
+                    hand = if (owner == actor || revealsOpponentHand) player.hand else hidden("$owner-hand", player.hand.size),
+                    deck = if (owner != actor && revealsExactDeckAndPrizes) player.deck else hidden("$owner-deck", player.deck.size),
+                    prizes = if (owner != actor && revealsExactDeckAndPrizes) player.prizes else hidden("$owner-prizes", player.prizes.size),
                     prizePositions = emptyList(), faceUpPrizeIds = emptyList()) },
                 bonusCardIds = emptyList(),
-                deckLists = original.players.indices.map { if (it == actor) original.deckLists.getOrNull(actor).orEmpty().sorted() else emptyList() }, deckNames = emptyList(), humanDeckId = "", cpuDeckId = "",
+                deckLists = original.players.indices.map {
+                    if (it == actor || revealsDeckList) original.deckLists.getOrNull(it).orEmpty().sorted() else emptyList()
+                },
+                deckNames = emptyList(), humanDeckId = "", cpuDeckId = "",
                 history = original.history.filter { it.action !is GameAction.ChooseCards && it.action !is GameAction.MulliganDraw }))
         }
     }
@@ -71,9 +96,21 @@ internal class CpuTurnSearch(
     private var completed: GameAction? = null
     var telemetry = CpuSearchTelemetry()
         private set
+    private var isPrivileged: Boolean = false
+    private var currentInitial: GameState? = null
+    private var currentDeckResources: ResourceExhaustion? = null
+    private var currentHandAnalysis: HandAnalysis? = null
+    private var currentPrediction: PredictionResult? = null
+    private var currentOracleDraw: CardInstance? = null
 
     fun choose(input: CpuInput, fallback: GameAction): GameAction {
         completed = null
+        isPrivileged = strategy in listOf(CpuStrategy.GRANDMASTER, CpuStrategy.ORACLE)
+        currentInitial = null
+        currentDeckResources = null
+        currentHandAnalysis = null
+        currentPrediction = null
+        currentOracleDraw = null
         attackCache.clear()
         replyCache.clear()
         developmentCache.clear()
@@ -88,23 +125,55 @@ internal class CpuTurnSearch(
     private fun search(input: CpuInput, fallback: GameAction): GameAction {
         budget.check()
         val actor = input.observation.viewer
+        val opponent = 1 - actor
         val maskedInitial = input.position?.state ?: return fallback
         activePlan = CpuDeckPlan.forDeck(input.ownDeckId, maskedInitial.deckLists.getOrNull(actor).orEmpty(), catalog)
 
         // Materialize virtual simulation deck from known unseen pool if decklist is provided
+        val fallbackEnergyId = runCatching { catalog.get("energy").id }.getOrNull()
+            ?: runCatching { catalog.get("TEST-004").id }.getOrNull()
+            ?: runCatching { catalog.get("sve-006").id }.getOrNull()
+            ?: maskedInitial.players.flatMap { p -> p.hand + p.discard + p.pokemon().flatMap { it.energies } }
+                .map { it.definitionId }
+                .firstOrNull { it != UNKNOWN && runCatching { catalog.get(it).category == Category.ENERGY }.getOrDefault(false) }
+
         val unseen = if (maskedInitial.deckLists.getOrNull(actor).orEmpty().isNotEmpty()) {
             CpuDrawOdds.pool(maskedInitial, actor) ?: maskedInitial.deckLists.getOrNull(actor)?.groupingBy { it }?.eachCount()
+        } else if (fallbackEnergyId != null) {
+            mapOf(fallbackEnergyId to maskedInitial.players[actor].deck.size)
         } else null
+
         val initial = if (unseen != null && unseen.isNotEmpty() && maskedInitial.players[actor].deck.isNotEmpty()) {
             val virtualCards = unseen.flatMap { (defId, count) ->
                 List(count) { CardInstance("sim-deck-$defId-$it", defId) }
             }.sortedBy { it.id }
             val actorDeckSize = maskedInitial.players[actor].deck.size
             val simDeck = virtualCards.take(actorDeckSize)
+            val oppDeck = if (isPrivileged && fallbackEnergyId != null && maskedInitial.players[opponent].deck.any { it.definitionId == UNKNOWN }) {
+                List(maskedInitial.players[opponent].deck.size) { CardInstance("sim-opp-deck-$it", fallbackEnergyId) }
+            } else maskedInitial.players[opponent].deck
             maskedInitial.copy(players = maskedInitial.players.mapIndexed { idx, p ->
-                if (idx == actor) p.copy(deck = simDeck) else p
+                when (idx) {
+                    actor -> p.copy(deck = simDeck)
+                    opponent -> p.copy(deck = oppDeck)
+                    else -> p
+                }
             })
         } else maskedInitial
+
+        currentInitial = initial
+        currentOracleDraw = if (strategy == CpuStrategy.ORACLE) initial.players[opponent].deck.firstOrNull() else null
+        if (isPrivileged) {
+            currentDeckResources = DeckCounterAnalyzer.analyzeDeck(initial, actor, maskedCatalog)
+            currentHandAnalysis = PlayerHandAnalyzer.analyze(initial, actor, maskedCatalog, currentOracleDraw)
+            currentPrediction = OpponentBestLinePredictor.predict(initial, actor, maskedCatalog, engine, currentOracleDraw)
+
+            telemetry.playerHandThreat = currentPrediction!!.threatScore
+            telemetry.playerEstimatedBestLine = currentPrediction!!.bestLine
+            telemetry.expectedOpponentPrizes = currentPrediction!!.expectedPrizes
+            telemetry.opponentLethal = currentPrediction!!.isLethal
+            telemetry.opponentPotentialBefore = currentPrediction!!.threatScore
+        }
 
         // Step 1: Search for immediate lethal sequence before normal positional evaluation
         val lethalLine = findLethal(initial, actor)
@@ -164,8 +233,9 @@ internal class CpuTurnSearch(
                     val firstSearchIdx = node.sequence.indexOfFirst { it is GameAction.PlayTrainer && isSearchCard(initial, it.cardId) }
                     val firstAttachIdx = node.sequence.indexOfFirst { it is GameAction.AttachEnergy }
                     val searchBeforeAttachBonus = if (firstSearchIdx != -1 && firstAttachIdx != -1 && firstSearchIdx < firstAttachIdx) 10.0 else 0.0
+                    val tacticalBonus = tacticalSequenceBonus(initial, state, node.sequence + attack, actor)
 
-                    val score = value + development(state, actor) - node.depth * 0.5 + searchBeforeAttachBonus
+                    val score = value + development(state, actor) - node.depth * 0.5 + searchBeforeAttachBonus + tacticalBonus
                     val line = Line(node.first ?: attack, node.sequence + attack, score, wins, state, attack)
                     finalists += line
                     telemetry.sequencesEvaluated++
@@ -190,8 +260,9 @@ internal class CpuTurnSearch(
                         firstDrawIdx != -1 && (firstSearchIdx == -1 || firstDrawIdx < firstSearchIdx) && initialHasSearch -> -180.0
                         else -> 0.0
                     }
+                    val tacticalBonus = tacticalSequenceBonus(initial, state, node.sequence + GameAction.EndTurn, actor)
 
-                    val score = development(state, actor) - replyRisk(state, actor, null) - node.depth * 0.5 + thinningAdjustment
+                    val score = development(state, actor) - replyRisk(state, actor, null) - node.depth * 0.5 + thinningAdjustment + tacticalBonus
                     val line = Line(node.first ?: GameAction.EndTurn, node.sequence + GameAction.EndTurn, score, false, state, null)
                     finalists += line
                     telemetry.sequencesEvaluated++
@@ -209,7 +280,7 @@ internal class CpuTurnSearch(
                     budget.check()
                     if (budget.preparationFinished()) break
                     if (++transitions > config.maxTransitions) break
-                    val result = engine.apply(state, action)
+                    val result = runCatching { engine.apply(state, action) }.getOrNull() ?: continue
                     if (result.legality == Legality.Legal && lethal.provenWin(result.state, actor)) {
                         telemetry.bestLine = node.sequence + action
                         telemetry.bestScore = 100_000.0
@@ -252,44 +323,125 @@ internal class CpuTurnSearch(
         telemetry.averageActionDepth = if (depthSum.isNotEmpty()) depthSum.average() else 0.0
         telemetry.numberOfCompleteTurnSequences = finalists.size
 
-        var comparisonValue = directValue + development(initial, actor)
-        val plan = if (strategy == CpuStrategy.MASTER && config.replyDepth > 0) {
-            val counterplay = CpuCounterplay(engine, maskedCatalog, budget, config)
-            val ranked = finalists.sortedByDescending { it.value }.distinctBy { it.first }
-            val candidates = (ranked.take(config.finalistCount) + listOfNotNull(ranked.firstOrNull { it.first == fallback }) + listOfNotNull(ranked.firstOrNull { it.first is GameAction.Attack })).distinctBy { it.first }
-            var confirmedBaseline: Double? = null
-            var confirmedBest = Double.NEGATIVE_INFINITY
-            val evaluated = candidates.map { line ->
-                budget.check()
-                val result = if (line.wins) line else {
-                    val oldTarget = line.attack?.let { action -> line.state.players[1-actor].pokemon().firstOrNull { it.id == action.targetId }
-                        ?: line.state.players[1-actor].active }
-                    val ko = line.attack?.let { forecast.preview(line.state, it) }?.let { it.knockout && !it.uncertain } == true
-                    val previousRisk = replyRisk(line.state, actor, if (ko) oldTarget?.id else null)
-                    val response = counterplay.evaluate(line.state, actor, line.attack)
-                    val riskCorrection = if (response.risk >= 100_000 || response.wins) previousRisk-response.risk
-                        else (previousRisk-response.risk)*tuning.counterplay
-                    line.copy(value = line.value + riskCorrection + response.prizeRace*tuning.prizeRace -
-                        response.winningReplyCount*config.winningReplyPenalty, wins = response.wins)
-                }
-                if (result.first == fallback) {
-                    confirmedBaseline = result.value
-                    if (confirmedBest < result.value) {
-                        confirmedBest = result.value
-                        completed = fallback
+        var comparisonValue = directValue + development(initial, actor) - (if (isPrivileged && currentPrediction?.isLethal == true) 100_000.0 else 0.0)
+        val plan = if ((strategy in listOf(CpuStrategy.MASTER, CpuStrategy.GRANDMASTER, CpuStrategy.ORACLE)) && config.replyDepth > 0) {
+            if (isPrivileged) {
+                val ranked = finalists.sortedByDescending { it.value }.distinctBy { it.sequence }
+                val candidates = (ranked.take(config.finalistCount) + listOfNotNull(ranked.firstOrNull { it.first == fallback }) + listOfNotNull(ranked.firstOrNull { it.first is GameAction.Attack })).distinctBy { it.sequence }
+                var confirmedBaseline: Double? = null
+                var confirmedBest = Double.NEGATIVE_INFINITY
+                val evaluated = candidates.map { line ->
+                    budget.check()
+                    val result = if (line.wins) line else {
+                        val lineOracleDraw = if (strategy == CpuStrategy.ORACLE) line.state.players[opponent].deck.firstOrNull() else null
+                        val replyPrediction = OpponentBestLinePredictor.predict(line.state, actor, maskedCatalog, engine, lineOracleDraw)
+                        var penalty = 0.0
+                        if (replyPrediction.isLethal) {
+                            penalty += 100_000.0
+                        } else {
+                            penalty += replyPrediction.expectedPrizes * 1500.0
+                            penalty += replyPrediction.maxDamage * 0.5
+                            penalty += replyPrediction.threatScore * 2.0
+                        }
+
+                        val beforeThreat = currentPrediction?.threatScore ?: 50.0
+                        val afterThreat = replyPrediction.threatScore
+                        var adjustment = (beforeThreat - afterThreat) * 4.0
+
+                        val playedDisruption = line.sequence.any { isHandDisruptionCard(initial, (it as? GameAction.PlayTrainer)?.cardId.orEmpty()) }
+                        if (playedDisruption) {
+                            if (currentHandAnalysis?.isDeadHand == true || beforeThreat <= 25.0) {
+                                adjustment -= 2500.0
+                            } else if (beforeThreat >= 60.0) {
+                                adjustment += 600.0
+                            }
+                        }
+
+                        if (currentDeckResources?.boardLockOpportunity == true && line.state.players[opponent].active?.id == currentDeckResources?.lockTargetId) {
+                            adjustment += 1500.0
+                        }
+
+                        val knockedOutTarget = line.attack?.let { action ->
+                            forecast.preview(line.state, action)?.let { if (it.knockout) action.targetId ?: line.state.players[opponent].active?.id else null }
+                        }
+                        if (knockedOutTarget != null) {
+                            val targetDef = initial.players[opponent].pokemon().firstOrNull { it.id == knockedOutTarget }
+                            if (targetDef != null) {
+                                val tThreat = FutureThreatEvaluator.evaluatePokemonThreat(initial, targetDef, actor, maskedCatalog, currentHandAnalysis)
+                                if (tThreat >= 90.0) {
+                                    adjustment += 2000.0
+                                }
+                            }
+                        }
+
+                        if (currentPrediction?.isLethal == true && !replyPrediction.isLethal) {
+                            adjustment += 50_000.0
+                        }
+
+                        line.copy(value = line.value - penalty + adjustment)
                     }
-                } else if (result.value > confirmedBest) {
-                    confirmedBest = result.value
-                    completed = result.first
+                    if (result.first == fallback) {
+                        confirmedBaseline = result.value
+                        if (confirmedBest < result.value) {
+                            confirmedBest = result.value
+                            completed = fallback
+                        }
+                    } else if (result.value > confirmedBest) {
+                        confirmedBest = result.value
+                        completed = result.first
+                    }
+                    result
                 }
-                result
+                evaluated.firstOrNull { it.first == fallback }?.let { comparisonValue = it.value }
+                    ?: evaluated.filter { it.first is GameAction.Attack }.maxOfOrNull { it.value }?.let { comparisonValue = it }
+                val sortedEvaluated = evaluated.sortedByDescending { it.value }
+                if (sortedEvaluated.size > 1) telemetry.alternativeScore = sortedEvaluated[1].value
+                sortedEvaluated.firstOrNull() ?: best
+            } else {
+                val counterplay = CpuCounterplay(engine, maskedCatalog, budget, config)
+                val ranked = finalists.sortedByDescending { it.value }.distinctBy { it.first }
+                val candidates = (ranked.take(config.finalistCount) + listOfNotNull(ranked.firstOrNull { it.first == fallback }) + listOfNotNull(ranked.firstOrNull { it.first is GameAction.Attack })).distinctBy { it.first }
+                var confirmedBaseline: Double? = null
+                var confirmedBest = Double.NEGATIVE_INFINITY
+                val evaluated = candidates.map { line ->
+                    budget.check()
+                    val result = if (line.wins) line else {
+                        val oldTarget = line.attack?.let { action -> line.state.players[1-actor].pokemon().firstOrNull { it.id == action.targetId }
+                            ?: line.state.players[1-actor].active }
+                        val ko = line.attack?.let { forecast.preview(line.state, it) }?.let { it.knockout && !it.uncertain } == true
+                        val previousRisk = replyRisk(line.state, actor, if (ko) oldTarget?.id else null)
+                        val response = counterplay.evaluate(line.state, actor, line.attack)
+                        val riskCorrection = if (response.risk >= 100_000 || response.wins) previousRisk-response.risk
+                            else (previousRisk-response.risk)*tuning.counterplay
+                        line.copy(value = line.value + riskCorrection + response.prizeRace*tuning.prizeRace -
+                            response.winningReplyCount*config.winningReplyPenalty, wins = response.wins)
+                    }
+                    if (result.first == fallback) {
+                        confirmedBaseline = result.value
+                        if (confirmedBest < result.value) {
+                            confirmedBest = result.value
+                            completed = fallback
+                        }
+                    } else if (result.value > confirmedBest) {
+                        confirmedBest = result.value
+                        completed = result.first
+                    }
+                    result
+                }
+                evaluated.firstOrNull { it.first == fallback }?.let { comparisonValue = it.value }
+                    ?: evaluated.filter { it.first is GameAction.Attack }.maxOfOrNull { it.value }?.let { comparisonValue = it }
+                val sortedEvaluated = evaluated.sortedByDescending { it.value }
+                if (sortedEvaluated.size > 1) telemetry.alternativeScore = sortedEvaluated[1].value
+                sortedEvaluated.firstOrNull() ?: best
             }
-            evaluated.firstOrNull { it.first == fallback }?.let { comparisonValue = it.value }
-                ?: evaluated.filter { it.first is GameAction.Attack }.maxOfOrNull { it.value }?.let { comparisonValue = it }
-            val sortedEvaluated = evaluated.sortedByDescending { it.value }
-            if (sortedEvaluated.size > 1) telemetry.alternativeScore = sortedEvaluated[1].value
-            sortedEvaluated.firstOrNull() ?: best
         } else best
+
+        if (plan != null && isPrivileged) {
+            val planOracleDraw = if (strategy == CpuStrategy.ORACLE) plan.state.players[opponent].deck.firstOrNull() else null
+            val finalPrediction = OpponentBestLinePredictor.predict(plan.state, actor, maskedCatalog, engine, planOracleDraw)
+            telemetry.opponentPotentialAfter = finalPrediction.threatScore
+            telemetry.counterLineLog = telemetry.formatDiagnostics()
+        }
 
         if (plan == null) return fallback
         if (initial.phase == Phase.MAIN && plan.first !in input.actions) return fallback
@@ -342,6 +494,41 @@ internal class CpuTurnSearch(
             objectiveBonus -= 180.0
         } else if (firstSearchIdx != -1 && firstDrawIdx != -1 && firstSearchIdx < firstDrawIdx) {
             objectiveBonus += 80.0
+        }
+
+        if (isPrivileged) {
+            val init = currentInitial ?: state
+            val playedDisruption = node.sequence.any { isHandDisruptionCard(init, (it as? GameAction.PlayTrainer)?.cardId.orEmpty()) }
+            if (playedDisruption) {
+                if (currentPrediction?.isLethal == true || (currentHandAnalysis?.threatScore ?: 0.0) >= 60.0) {
+                    objectiveBonus += 250.0
+                } else if (currentHandAnalysis?.isDeadHand == true || (currentHandAnalysis?.threatScore ?: 50.0) <= 25.0) {
+                    objectiveBonus -= 500.0
+                }
+            }
+
+            if (currentDeckResources?.boardLockOpportunity == true && opponent.active?.id == currentDeckResources?.lockTargetId) {
+                objectiveBonus += 250.0
+            }
+
+            if (opponent.active != null) {
+                val oppActiveThreat = FutureThreatEvaluator.evaluatePokemonThreat(state, opponent.active!!, actor, maskedCatalog, currentHandAnalysis)
+                if (oppActiveThreat >= 90.0 && node.sequence.any { isBossCard(init, (it as? GameAction.PlayTrainer)?.cardId.orEmpty()) }) {
+                    objectiveBonus += 300.0
+                }
+            }
+
+            if (currentPrediction?.isLethal == true && node.sequence.any { it is GameAction.Retreat }) {
+                val initialActive = init.players[actor].active
+                val newActive = state.players[actor].active
+                if (initialActive != null && newActive != null) {
+                    val initialPrizes = maskedCatalog.get(initialActive.top.definitionId).prizes
+                    val newPrizes = maskedCatalog.get(newActive.top.definitionId).prizes
+                    if (initialPrizes > newPrizes && newPrizes < opponent.prizes.size) {
+                        objectiveBonus += 350.0
+                    }
+                }
+            }
         }
 
         val depthPenalty = node.depth * 0.3
@@ -454,7 +641,7 @@ internal class CpuTurnSearch(
 
                 for (action in prep) {
                     budget.check()
-                    val result = engine.apply(state, action)
+                    val result = runCatching { engine.apply(state, action) }.getOrNull() ?: continue
                     if (result.legality != Legality.Legal || !knownStep(state, result.state, actor)) continue
                     if (!seen.add(result.state.copy(history = emptyList()))) continue
                     if (result.state.phase == Phase.GAME_OVER && result.state.winner == actor) return node.sequence + action
@@ -487,7 +674,8 @@ internal class CpuTurnSearch(
         if (after.phase !in listOf(Phase.MAIN, Phase.RESOLVE_CHOICE)) return false
         if (after.rng != before.rng) {
             val wasShuffle = before.resolution?.shuffleAfter == true ||
-                (before.phase == Phase.RESOLVE_CHOICE && after.phase == Phase.MAIN)
+                (before.phase == Phase.RESOLVE_CHOICE && after.phase == Phase.MAIN) ||
+                after.history.lastOrNull()?.action is GameAction.PlayTrainer
             if (!wasShuffle) return false
         }
         if (after.players[actor].hand.any { it.definitionId == UNKNOWN }) return false
@@ -506,7 +694,19 @@ internal class CpuTurnSearch(
 
         when {
             choice.min <= 1 && choice.max == 1 -> {
-                choice.candidates.take(config.choiceCandidates).forEach {
+                val candidatesList = if (isPrivileged) {
+                    val opp = 1 - actor
+                    val oppPokemon = state.players[opp].pokemon().associateBy { it.id }
+                    choice.candidates.sortedByDescending { candId ->
+                        if (candId == currentDeckResources?.lockTargetId) 1000.0
+                        else {
+                            val p = oppPokemon[candId]
+                            if (p != null) FutureThreatEvaluator.evaluatePokemonThreat(state, p, actor, maskedCatalog, currentHandAnalysis)
+                            else 0.0
+                        }
+                    }
+                } else choice.candidates
+                candidatesList.take(config.choiceCandidates).forEach {
                     candidates += GameAction.ChooseCards(listOf(it))
                 }
             }
@@ -608,6 +808,28 @@ internal class CpuTurnSearch(
         val opponent = state.players[1-state.currentPlayer]
         val effect = definition.trainerEffect
 
+        if (isPrivileged) {
+            val init = currentInitial ?: state
+            if (isHandDisruptionCard(init, cardId)) {
+                if (currentPrediction?.isLethal == true || (currentHandAnalysis?.threatScore ?: 0.0) >= 60.0) {
+                    return 190
+                } else if (currentHandAnalysis?.isDeadHand == true || (currentHandAnalysis?.threatScore ?: 50.0) <= 25.0) {
+                    return 10
+                }
+            }
+            if (isBossCard(init, cardId)) {
+                if (currentDeckResources?.boardLockOpportunity == true) {
+                    return 185
+                }
+                val hasHighThreatTarget = opponent.bench.any {
+                    FutureThreatEvaluator.evaluatePokemonThreat(state, it, state.currentPlayer, maskedCatalog, currentHandAnalysis) >= 90.0
+                }
+                if (hasHighThreatTarget) {
+                    return 185
+                }
+            }
+        }
+
         // Check if hand has a draw supporter and we can thin first
         val hasDrawCardInHand = player.hand.any { h ->
             val d = maskedCatalog.get(h.definitionId)
@@ -700,7 +922,7 @@ internal class CpuTurnSearch(
                     .take(12)
                 for (action in actions) {
                     budget.check()
-                    val result = engine.apply(state, action)
+                    val result = runCatching { engine.apply(state, action) }.getOrNull() ?: continue
                     val after = result.state
                     if (result.legality != Legality.Legal || after.currentPlayer != actor || after.turn != initial.turn ||
                         after.phase != Phase.MAIN || after.rng != initial.rng || !seen.add(after.copy(history = emptyList()))) continue
@@ -756,11 +978,82 @@ internal class CpuTurnSearch(
                 else minOf(effect.amount, hp).coerceAtLeast(0)*.7 + if (effect.amount >= hp) maskedCatalog.get(pokemon.top.definitionId).prizes*900.0 else 0.0
             }
         }
+        val setupBreakBonus = if (isPrivileged && knockout) {
+            val oppThreat = FutureThreatEvaluator.evaluatePokemonThreat(state, target, actor, maskedCatalog, currentHandAnalysis)
+            if (oppThreat >= 90.0) 800.0 else 0.0
+        } else 0.0
         val value = damage.toDouble() + (if (knockout) 700 + preview.prizes*1400 else 0) +
-            (if (wins) 100_000 else 0) + control + spread -
+            (if (wins) 100_000 else 0) + control + spread + setupBreakBonus -
             (if (selfKo) maskedCatalog.get(active.top.definitionId).prizes*1200.0 else 0.0) -
             (if (givesLastPrizes) 40_000 else 0) - replyRisk(state, actor, if (knockout) target.id else null)
         return value to wins
+    }
+
+    private fun isBossCard(state: GameState, cardId: String): Boolean {
+        val defId = state.players.flatMap { it.hand + it.discard }.firstOrNull { it.id == cardId }?.definitionId ?: cardId
+        val def = runCatching { maskedCatalog.get(defId) }.getOrNull() ?: return false
+        val effect = def.trainerEffect ?: return false
+        return effect is TrainerEffect.Switch && effect.opponent
+    }
+
+    private fun isHandDisruptionCard(state: GameState, cardId: String): Boolean {
+        val defId = state.players.flatMap { it.hand + it.discard }.firstOrNull { it.id == cardId }?.definitionId ?: cardId
+        val def = runCatching { maskedCatalog.get(defId) }.getOrNull() ?: return false
+        val effect = def.trainerEffect ?: return false
+        return effect is TrainerEffect.ShuffleBothHandsDraw ||
+            effect is TrainerEffect.DiscardOpponentItemsFromHand ||
+            def.name.contains("Iono", ignoreCase = true) ||
+            def.name.contains("Judge", ignoreCase = true) ||
+            def.name.contains("Roxanne", ignoreCase = true)
+    }
+
+    private fun tacticalSequenceBonus(
+        initial: GameState,
+        state: GameState,
+        sequence: List<GameAction>,
+        actor: Int
+    ): Double {
+        if (!isPrivileged) return 0.0
+        var bonus = 0.0
+        val opponent = 1 - actor
+
+        val playedDisruption = sequence.any { isHandDisruptionCard(initial, (it as? GameAction.PlayTrainer)?.cardId.orEmpty()) }
+        if (playedDisruption) {
+            if (currentPrediction?.isLethal == true || (currentHandAnalysis?.threatScore ?: 0.0) >= 60.0) {
+                bonus += 250.0
+            } else if (currentHandAnalysis?.isDeadHand == true || (currentHandAnalysis?.threatScore ?: 50.0) <= 25.0) {
+                bonus -= 500.0
+            }
+        }
+
+        if (currentDeckResources?.boardLockOpportunity == true && state.players[opponent].active?.id == currentDeckResources?.lockTargetId) {
+            bonus += 300.0
+        }
+
+        val playedBoss = sequence.any { isBossCard(initial, (it as? GameAction.PlayTrainer)?.cardId.orEmpty()) }
+        if (playedBoss) {
+            val oppActive = state.players[opponent].active
+            if (oppActive != null) {
+                val oppThreat = FutureThreatEvaluator.evaluatePokemonThreat(state, oppActive, actor, maskedCatalog, currentHandAnalysis)
+                if (oppThreat >= 90.0) {
+                    bonus += 350.0
+                }
+            }
+        }
+
+        if (currentPrediction?.isLethal == true && sequence.any { it is GameAction.Retreat }) {
+            val initialActive = initial.players[actor].active
+            val newActive = state.players[actor].active
+            if (initialActive != null && newActive != null) {
+                val initialPrizes = maskedCatalog.get(initialActive.top.definitionId).prizes
+                val newPrizes = maskedCatalog.get(newActive.top.definitionId).prizes
+                if (initialPrizes > newPrizes && newPrizes < state.players[opponent].prizes.size) {
+                    bonus += 400.0
+                }
+            }
+        }
+
+        return bonus
     }
 
     private fun development(state: GameState, actor: Int): Double = developmentCache.getOrPut(state) { mutableMapOf() }

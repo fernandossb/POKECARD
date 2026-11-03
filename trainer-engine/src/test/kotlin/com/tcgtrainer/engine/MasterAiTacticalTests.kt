@@ -32,10 +32,19 @@ class MasterAiTacticalTests {
     private val stage1Hero = CardDefinition("stage1-hero", "Stage 1 Hero", "Test", "13", category = Category.POKEMON,
         stage = Stage.STAGE_ONE, evolvesFrom = "small", hp = 220,
         attacks = listOf(AttackDefinition("smash", "Smash", listOf(EnergyType.COLORLESS), listOf(Effect.Damage(150)))))
+    private val iono = CardDefinition("iono", "Iono", "Test", "14", category = Category.TRAINER,
+        trainerType = TrainerType.SUPPORTER, trainerEffect = TrainerEffect.ShuffleBothHandsDraw(4))
+    private val rareCandy = CardDefinition("rare-candy", "Rare Candy", "Test", "15", category = Category.TRAINER,
+        trainerType = TrainerType.ITEM, trainerEffect = TrainerEffect.RareCandy)
+    private val stage2Mon = CardDefinition("stage2-sweeper", "Stage 2 Sweeper", "Test", "16", category = Category.POKEMON,
+        stage = Stage.STAGE_TWO, evolvesFrom = "stage1-hero", canonicalName = "Stage 2 Sweeper", rareCandyBasicEvolvesFromName = "Small", hp = 310,
+        attacks = listOf(AttackDefinition("sweep", "Sweep", listOf(EnergyType.COLORLESS), listOf(Effect.Damage(280)))))
+    private val heavyWall = CardDefinition("heavy-wall", "Heavy Wall", "Test", "17", category = Category.POKEMON,
+        hp = 300, retreatCost = 3, attacks = listOf(AttackDefinition("stall", "Stall", listOf(EnergyType.COLORLESS, EnergyType.COLORLESS, EnergyType.COLORLESS), listOf(Effect.Damage(20)))))
 
     private fun catalog(vararg extras: CardDefinition) = object : CardCatalog {
         val entries = (listOf(energy, extraEnergy, hero, small, ex, wall, boss, switchCard, ultraBall,
-            drawSupporter, nestBall, engineMon, bigThreat, stage1Hero) + extras).associateBy { it.id }
+            drawSupporter, nestBall, engineMon, bigThreat, stage1Hero, iono, rareCandy, stage2Mon, heavyWall) + extras).associateBy { it.id }
         override fun get(id: String) = entries[id] ?: error("Unknown $id")
     }
 
@@ -271,9 +280,233 @@ class MasterAiTacticalTests {
     }
 
     // =========================================================================
-    // AUTOMATED BENCHMARK RUNNER (10/10 TARGET, >= 9/10 REQUIRED)
+    // PUZZLE 11: ANTI-LETHAL (PREVENIR DERROTA NO PRÓXIMO TURNO)
     // =========================================================================
-    @Test fun `master ai tactical benchmark reports score across all 10 puzzles`() {
+    @Test fun `puzzle 11 - anti-lethal prioritizes defense to prevent next turn loss`() {
+        val cat = catalog()
+        val rules = RulesEngine(cat)
+        val cpu = CpuPlayer(cat, strategy = CpuStrategy.GRANDMASTER)
+        val game = GameState("p11", 11, RngState(11), listOf(
+            PlayerState(deck = List(10) { c("h-deck$it") }, prizes = List(2) { c("h-p$it") },
+                hand = listOf(c("opp-e", "energy"), c("opp-boss", "boss")),
+                active = pokemon("h-hero", "hero", 1), bench = emptyList()),
+            PlayerState(deck = List(10) { c("c-deck$it") }, prizes = List(4) { c("c-p$it") },
+                hand = listOf(c("iono-1", "iono")),
+                active = pokemon("c-small", "small", 1), bench = listOf(pokemon("c-ex", "ex", 0)))
+        ), 0, 1, turn = 4, phase = Phase.MAIN)
+
+        val input = rules.cpuInput(game, CpuKnowledge.PLAYER_HAND_AND_DECK)
+        val action = cpu.choose(input)
+        assertEquals(GameAction.PlayTrainer("iono-1"), action, "CPU must play Iono to disrupt lethal combo")
+    }
+
+    // =========================================================================
+    // PUZZLE 12: IONO CONTRA MÃO FORTE DO OPONENTE
+    // =========================================================================
+    @Test fun `puzzle 12 - iono punishes high threat opponent hand`() {
+        val cat = catalog()
+        val rules = RulesEngine(cat)
+        val cpu = CpuPlayer(cat, strategy = CpuStrategy.GRANDMASTER)
+        val game = GameState("p12", 12, RngState(12), listOf(
+            PlayerState(deck = List(10) { c("h-deck$it") }, prizes = List(4) { c("h-p$it") },
+                hand = listOf(c("opp-e", "energy"), c("opp-boss", "boss"), c("opp-candy", "rare-candy"), c("opp-s2", "stage2-sweeper")),
+                active = pokemon("h-active", "small", 0), bench = listOf(pokemon("h-small", "small"))),
+            PlayerState(deck = List(10) { c("c-deck$it") }, prizes = List(4) { c("c-p$it") },
+                hand = listOf(c("iono-1", "iono")),
+                active = pokemon("c-hero", "hero", 1), bench = emptyList())
+        ), 0, 1, turn = 4, phase = Phase.MAIN)
+
+        val input = rules.cpuInput(game, CpuKnowledge.PLAYER_HAND_AND_DECK)
+        val action = cpu.choose(input)
+        assertEquals(GameAction.PlayTrainer("iono-1"), action, "CPU must play Iono against high-threat hand")
+    }
+
+    // =========================================================================
+    // PUZZLE 13: HOLD IONO QUANDO MÃO DO OPONENTE ESTÁ MORTA
+    // =========================================================================
+    @Test fun `puzzle 13 - hold iono when opponent hand is dead`() {
+        val cat = catalog()
+        val rules = RulesEngine(cat)
+        val cpu = CpuPlayer(cat, strategy = CpuStrategy.GRANDMASTER)
+        val game = GameState("p13", 13, RngState(13), listOf(
+            PlayerState(deck = List(10) { c("h-deck$it") }, prizes = List(4) { c("h-p$it") },
+                hand = listOf(c("dead-card", "stage2-sweeper")),
+                active = pokemon("h-active", "small", 0, damage = 70), bench = emptyList()),
+            PlayerState(deck = List(10) { c("c-deck$it") }, prizes = List(4) { c("c-p$it") },
+                hand = listOf(c("iono-1", "iono")),
+                active = pokemon("c-hero", "hero", 1), bench = emptyList())
+        ), 0, 1, turn = 4, phase = Phase.MAIN)
+
+        val input = rules.cpuInput(game, CpuKnowledge.PLAYER_HAND_AND_DECK)
+        val action = cpu.choose(input)
+        assertNotEquals(GameAction.PlayTrainer("iono-1"), action, "CPU must NOT bail out a dead hand by playing Iono")
+        assertEquals(GameAction.Attack("hit"), action, "CPU should attack active for knockout")
+    }
+
+    // =========================================================================
+    // PUZZLE 14: RESOURCE EXHAUSTION BOARD LOCK
+    // =========================================================================
+    @Test fun `puzzle 14 - resource exhaustion executes board lock when opponent has zero switches`() {
+        val cat = catalog()
+        val rules = RulesEngine(cat)
+        val cpu = CpuPlayer(cat, strategy = CpuStrategy.GRANDMASTER)
+        val oppDeckList = listOf("switch", "hero", "energy", "energy")
+        val game = GameState("p14", 14, RngState(14), listOf(
+            PlayerState(deck = List(10) { c("h-deck$it") }, prizes = List(4) { c("h-p$it") },
+                discard = listOf(c("used-sw", "switch")),
+                hand = emptyList(),
+                active = pokemon("h-hero", "hero", 1),
+                bench = listOf(pokemon("h-heavy", "heavy-wall", 0))),
+            PlayerState(deck = List(10) { c("c-deck$it") }, prizes = List(4) { c("c-p$it") },
+                hand = listOf(c("boss-1", "boss")),
+                active = pokemon("c-hero", "hero", 1), bench = emptyList())
+        ), 0, 1, turn = 4, phase = Phase.MAIN,
+           deckLists = listOf(oppDeckList, emptyList()))
+
+        val input = rules.cpuInput(game, CpuKnowledge.PLAYER_HAND_AND_DECK)
+        val action = cpu.choose(input)
+        assertEquals(GameAction.PlayTrainer("boss-1"), action, "CPU must play Boss's Orders to execute board lock on heavy retreat Pokémon")
+    }
+
+    // =========================================================================
+    // PUZZLE 15: SETUP BREAK
+    // =========================================================================
+    @Test fun `puzzle 15 - setup break targets 95-threat basic when evolution and candy in hand`() {
+        val cat = catalog()
+        val rules = RulesEngine(cat)
+        val cpu = CpuPlayer(cat, strategy = CpuStrategy.GRANDMASTER)
+        val game = GameState("p15", 15, RngState(15), listOf(
+            PlayerState(deck = List(10) { c("h-deck$it") }, prizes = List(4) { c("h-p$it") },
+                hand = listOf(c("opp-candy", "rare-candy"), c("opp-s2", "stage2-sweeper")),
+                active = pokemon("h-wall", "wall", 0),
+                bench = listOf(pokemon("h-small", "small", 0))),
+            PlayerState(deck = List(10) { c("c-deck$it") }, prizes = List(4) { c("c-p$it") },
+                hand = listOf(c("boss-1", "boss")),
+                active = pokemon("c-hero", "hero", 1), bench = emptyList())
+        ), 0, 1, turn = 4, phase = Phase.MAIN)
+
+        val input = rules.cpuInput(game, CpuKnowledge.PLAYER_HAND_AND_DECK)
+        val action = cpu.choose(input)
+        assertEquals(GameAction.PlayTrainer("boss-1"), action, "CPU must Boss the 95-threat basic to break setup before it sweeps")
+    }
+
+    // =========================================================================
+    // PUZZLE 16: EXACT OUTS EXPLOITATION
+    // =========================================================================
+    @Test fun `puzzle 16 - deck counter analyzer calculates exact outs and odds`() {
+        val cat = catalog()
+        val oppDeckList = listOf("energy", "energy", "energy", "boss", "hero")
+        val game = GameState("p16", 16, RngState(16), listOf(
+            PlayerState(deck = List(3) { c("h-deck$it") }, prizes = List(4) { c("h-p$it") },
+                discard = listOf(c("used-e1", "energy"), c("used-e2", "energy")),
+                hand = emptyList(),
+                active = pokemon("h-active", "hero", 0), bench = emptyList()),
+            PlayerState(deck = List(10) { c("c-deck$it") }, prizes = List(4) { c("c-p$it") },
+                hand = emptyList(), active = pokemon("c-hero", "hero", 1), bench = emptyList())
+        ), 0, 1, turn = 4, phase = Phase.MAIN,
+           deckLists = listOf(oppDeckList, emptyList()))
+
+        val (outs, odds) = DeckCounterAnalyzer.calculateOuts(game, 1, cat) { it.category == Category.ENERGY }
+        assertEquals(1, outs, "Opponent should have exactly 1 energy out remaining")
+        assertTrue(odds in 0.3..0.35, "Odds should reflect 1 out of 3 cards in deck")
+    }
+
+    // =========================================================================
+    // PUZZLE 17: SMART SACRIFICE / PRIZE DENIAL
+    // =========================================================================
+    @Test fun `puzzle 17 - smart sacrifice retreats 2-prize ex to 1-prize pokemon to deny lethal`() {
+        val cat = catalog()
+        val rules = RulesEngine(cat)
+        val cpu = CpuPlayer(cat, strategy = CpuStrategy.GRANDMASTER)
+        val game = GameState("p17", 17, RngState(17), listOf(
+            PlayerState(deck = List(10) { c("h-deck$it") }, prizes = List(2) { c("h-p$it") },
+                hand = emptyList(),
+                active = pokemon("h-hero", "hero", 1), bench = emptyList()),
+            PlayerState(deck = List(10) { c("c-deck$it") }, prizes = List(4) { c("c-p$it") },
+                hand = emptyList(),
+                active = pokemon("c-ex", "ex", 1),
+                bench = listOf(pokemon("c-small", "small", 0)))
+        ), 0, 1, turn = 4, phase = Phase.MAIN)
+
+        val input = rules.cpuInput(game, CpuKnowledge.PLAYER_HAND_AND_DECK)
+        val action = cpu.choose(input)
+        assertIs<GameAction.Retreat>(action, "CPU must retreat 2-prize ex to 1-prize small to deny lethal win")
+        assertEquals("c-small", action.pokemonId)
+    }
+
+    // =========================================================================
+    // PUZZLE 18: ORACLE - PREVENÇÃO DE LETHAL DA PRÓXIMA COMPRA
+    // =========================================================================
+    @Test fun `puzzle 18 - oracle sees next draw lethal and disrupts with iono`() {
+        val cat = catalog()
+        val rules = RulesEngine(cat)
+        val cpu = CpuPlayer(cat, strategy = CpuStrategy.ORACLE)
+        val game = GameState("p18", 18, RngState(18), listOf(
+            PlayerState(deck = listOf(c("top-boss", "boss")) + List(9) { c("opp-d$it", "energy") },
+                prizes = List(2) { c("h-p$it") },
+                hand = listOf(c("opp-useless", "extra-energy")),
+                active = pokemon("h-hero", "hero", 1), bench = emptyList()),
+            PlayerState(deck = List(10) { c("c-deck$it") }, prizes = List(4) { c("c-p$it") },
+                hand = listOf(c("iono-1", "iono")),
+                active = pokemon("c-hero", "hero", 1), bench = listOf(pokemon("c-ex", "ex", 0)))
+        ), 0, 1, turn = 4, phase = Phase.MAIN)
+
+        val input = rules.cpuInput(game, CpuKnowledge.PERFECT_INFORMATION)
+        val action = cpu.choose(input)
+        assertEquals(GameAction.PlayTrainer("iono-1"), action, "Oracle CPU must disrupt next-draw Boss with Iono")
+    }
+
+    // =========================================================================
+    // PUZZLE 19: DESTRUIR ENGINE NO BANCO VS DANO SUPERFICIAL
+    // =========================================================================
+    @Test fun `puzzle 19 - destroy engine prioritizes knocking out engine over chip damage`() {
+        val cat = catalog()
+        val rules = RulesEngine(cat)
+        val cpu = CpuPlayer(cat, strategy = CpuStrategy.GRANDMASTER)
+        val game = GameState("p19", 19, RngState(19), listOf(
+            PlayerState(deck = List(10) { c("h-deck$it") }, prizes = List(4) { c("h-p$it") },
+                hand = emptyList(),
+                active = pokemon("h-wall", "wall", 0),
+                bench = listOf(pokemon("h-engine", "engine-mon", 0))),
+            PlayerState(deck = List(10) { c("c-deck$it") }, prizes = List(4) { c("c-p$it") },
+                hand = listOf(c("boss-1", "boss")),
+                active = pokemon("c-hero", "hero", 1), bench = emptyList())
+        ), 0, 1, turn = 4, phase = Phase.MAIN)
+
+        val input = rules.cpuInput(game, CpuKnowledge.PLAYER_HAND_AND_DECK)
+        val action = cpu.choose(input)
+        assertEquals(GameAction.PlayTrainer("boss-1"), action, "CPU must Boss the draw engine rather than chipping the 350 HP wall")
+    }
+
+    // =========================================================================
+    // PUZZLE 20: ADVERSARIAL SEARCH / MINIMAX BEST RESPONSE
+    // =========================================================================
+    @Test fun `puzzle 20 - adversarial search chooses line minimizing opponent best response potential`() {
+        val cat = catalog()
+        val rules = RulesEngine(cat)
+        val cpu = CpuPlayer(cat, strategy = CpuStrategy.GRANDMASTER)
+        val game = GameState("p20", 20, RngState(20), listOf(
+            PlayerState(deck = List(10) { c("h-deck$it") }, prizes = List(4) { c("h-p$it") },
+                hand = listOf(c("opp-e", "energy"), c("opp-boss", "boss")),
+                active = pokemon("h-hero", "hero", 1), bench = listOf(pokemon("h-small", "small"))),
+            PlayerState(deck = List(10) { c("c-deck$it") }, prizes = List(4) { c("c-p$it") },
+                hand = listOf(c("iono-1", "iono")),
+                active = pokemon("c-hero", "hero", 1), bench = listOf(pokemon("c-small", "small", 0)))
+        ), 0, 1, turn = 4, phase = Phase.MAIN)
+
+        val input = rules.cpuInput(game, CpuKnowledge.PLAYER_HAND_AND_DECK)
+        val action = cpu.choose(input)
+        val telemetry = cpu.lastTelemetry
+        assertNotNull(telemetry)
+        assertTrue(telemetry.playerHandThreat > 0.0, "Telemetry should record player hand threat: ${telemetry.playerHandThreat}")
+        assertTrue(telemetry.opponentPotentialAfter <= telemetry.opponentPotentialBefore,
+            "Chosen counter line should reduce or match opponent potential: before=${telemetry.opponentPotentialBefore}, after=${telemetry.opponentPotentialAfter}")
+    }
+
+    // =========================================================================
+    // AUTOMATED BENCHMARK RUNNER (20/20 TARGET, >= 18/20 REQUIRED)
+    // =========================================================================
+    @Test fun `master ai tactical benchmark reports score across all 20 puzzles`() {
         val puzzles = listOf(
             "Puzzle 1  [Lethal com Boss]" to { `puzzle 1 - lethal with boss chooses gust and winning knockout`() },
             "Puzzle 2  [Não Atacar Cegamente]" to { `puzzle 2 - do not attack blindly when attacking causes loss`() },
@@ -284,7 +517,17 @@ class MasterAiTacticalTests {
             "Puzzle 7  [Next Attacker]" to { `puzzle 7 - next attacker prepares bench reserve instead of overcharging active`() },
             "Puzzle 8  [Eliminar Engine no Banco]" to { `puzzle 8 - gust and eliminate engine on bench`() },
             "Puzzle 9  [Multi-Prize]" to { `puzzle 9 - multi-prize targets 2-prize ex over 1-prize active`() },
-            "Puzzle 10 [Linha de 8+ Ações]" to { `puzzle 10 - deep intra-turn sequence search executes 8+ actions combo`() }
+            "Puzzle 10 [Linha de 8+ Ações]" to { `puzzle 10 - deep intra-turn sequence search executes 8+ actions combo`() },
+            "Puzzle 11 [Anti-Lethal Defense]" to { `puzzle 11 - anti-lethal prioritizes defense to prevent next turn loss`() },
+            "Puzzle 12 [Iono vs Mão Forte]" to { `puzzle 12 - iono punishes high threat opponent hand`() },
+            "Puzzle 13 [Hold Iono vs Mão Morta]" to { `puzzle 13 - hold iono when opponent hand is dead`() },
+            "Puzzle 14 [Board Lock 0-Switch]" to { `puzzle 14 - resource exhaustion executes board lock when opponent has zero switches`() },
+            "Puzzle 15 [Setup Break 95-Threat]" to { `puzzle 15 - setup break targets 95-threat basic when evolution and candy in hand`() },
+            "Puzzle 16 [Exact Outs Calculation]" to { `puzzle 16 - deck counter analyzer calculates exact outs and odds`() },
+            "Puzzle 17 [Smart Sacrifice Denial]" to { `puzzle 17 - smart sacrifice retreats 2-prize ex to 1-prize pokemon to deny lethal`() },
+            "Puzzle 18 [Oracle Next-Draw Disrupt]" to { `puzzle 18 - oracle sees next draw lethal and disrupts with iono`() },
+            "Puzzle 19 [Destroy Engine on Bench]" to { `puzzle 19 - destroy engine prioritizes knocking out engine over chip damage`() },
+            "Puzzle 20 [Minimax Adversarial Search]" to { `puzzle 20 - adversarial search chooses line minimizing opponent best response potential`() }
         )
 
         var passed = 0
@@ -302,18 +545,18 @@ class MasterAiTacticalTests {
         }
 
         println("============================================================")
-        println("              MASTER AI TACTICAL BENCHMARK                  ")
+        println("          POKECARD AI TACTICAL BENCHMARK (20 PUZZLES)       ")
         println("============================================================")
         for ((name, ok) in results) {
             val status = if (ok) "PASS" else "FAIL"
-            println(String.format("%-42s : %s", name, status))
+            println(String.format("%-44s : %s", name, status))
         }
         val pct = (passed.toDouble() / puzzles.size) * 100.0
         println("------------------------------------------------------------")
         println(String.format("FINAL SCORE: %d/%d (%.1f%%) - %s",
-            passed, puzzles.size, pct, if (passed >= 9) "TARGET MET/EXCEEDED" else "NEEDS WORK"))
+            passed, puzzles.size, pct, if (passed >= 18) "TARGET MET/EXCEEDED" else "NEEDS WORK"))
         println("============================================================")
 
-        assertTrue(passed >= 9, "Tactical benchmark requires at least 9/10 passed puzzles, got $passed/10")
+        assertTrue(passed >= 18, "Tactical benchmark requires at least 18/20 passed puzzles, got $passed/20")
     }
 }

@@ -64,6 +64,9 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
     fun deleteDeck(id: String) { viewModelScope.launch { try { db.decks().delete(id) } catch (e: Exception) { mutableDecks.value = mutableDecks.value.copy(message = e.message) } } }
+    private val _difficulty = MutableStateFlow(AiDifficulty.MASTER)
+    val difficulty = _difficulty.asStateFlow()
+    fun setDifficulty(diff: AiDifficulty) { _difficulty.value = diff }
     private val cpu = CpuPlayer(thinking = CpuThinking.ADAPTIVE)
     fun start(seed: Long, mode: Mode, humanDeck: String = "lucario", cpuDeck: String = "random") {
         if (mutable.value.busy) return
@@ -144,8 +147,16 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                     delay(if (session?.snapshot?.state?.phase == Phase.CHOOSE_STARTER) 2200 else 950)
                     val current = checkNotNull(session)
                     val state = current.snapshot.state
+                    val currentDiff = _difficulty.value
+                    val currentStrategy = when (currentDiff) {
+                        AiDifficulty.EASY, AiDifficulty.NORMAL -> CpuStrategy.HEURISTIC
+                        AiDifficulty.HARD, AiDifficulty.EXPERT, AiDifficulty.MASTER, AiDifficulty.CHAMPION -> CpuStrategy.MASTER
+                        AiDifficulty.GRANDMASTER -> CpuStrategy.GRANDMASTER
+                        AiDifficulty.ORACLE -> CpuStrategy.ORACLE
+                    }
+                    val currentCpu = CpuPlayer(strategy = currentStrategy, thinking = CpuThinking.ADAPTIVE, config = currentDiff.toConfig())
                     val action = withContext(Dispatchers.Default) {
-                        cpu.choose(engine.cpuInput(state, CpuKnowledge.appMode))
+                        currentCpu.choose(engine.cpuInput(state, currentDiff.policy.toKnowledge()))
                     }
                     val result = current.dispatch(action, recordUndo = false)
                     check(result.legality == Legality.Legal) { "CPU: ${(result.legality as? Legality.Illegal)?.reason}" }

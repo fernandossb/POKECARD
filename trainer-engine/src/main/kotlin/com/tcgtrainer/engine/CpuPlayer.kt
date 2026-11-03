@@ -16,11 +16,30 @@ data class CpuInput(
 data class CpuPublicPosition(val state: GameState)
 
 enum class CpuKnowledge {
-    FAIR, OPPONENT_HAND;
-    companion object { val appMode = OPPONENT_HAND }
+    FAIR,
+    OPPONENT_HAND,
+    PLAYER_HAND_AND_DECK,
+    PERFECT_INFORMATION;
+
+    companion object {
+        val appMode: CpuKnowledge get() = FAIR
+        fun forStrategy(strategy: CpuStrategy): CpuKnowledge = when (strategy) {
+            CpuStrategy.HEURISTIC, CpuStrategy.TACTICAL, CpuStrategy.MASTER -> FAIR
+            CpuStrategy.GRANDMASTER -> PLAYER_HAND_AND_DECK
+            CpuStrategy.ORACLE -> PERFECT_INFORMATION
+        }
+    }
 }
 
-enum class CpuStrategy { HEURISTIC, TACTICAL, MASTER }
+enum class CpuStrategy {
+    HEURISTIC, TACTICAL, MASTER, GRANDMASTER, ORACLE;
+
+    val policy: InformationAccessPolicy get() = when (this) {
+        HEURISTIC, TACTICAL, MASTER -> InformationAccessPolicy.PUBLIC_ONLY
+        GRANDMASTER -> InformationAccessPolicy.PLAYER_HAND_AND_DECK
+        ORACLE -> InformationAccessPolicy.PERFECT_INFORMATION
+    }
+}
 
 /** Rules-bound search choices plus the explicitly selected information advantage for simulation. */
 fun RulesEngine.cpuInput(state: GameState, knowledge: CpuKnowledge = CpuKnowledge.FAIR): CpuInput {
@@ -52,13 +71,37 @@ fun RulesEngine.cpuInput(state: GameState, knowledge: CpuKnowledge = CpuKnowledg
     val safeChoice = choice?.copy(candidates = if (preserveOrder) choice.candidates else choice.candidates.sorted(),
         visibleCards = if (preserveOrder) choice.visibleCards else choice.visibleCards.sorted())
     val actions = if (safeChoice != null && state.phase == Phase.RESOLVE_CHOICE) emptyList() else cpuLegalActions(state)
-    val masked = if (state.phase in listOf(Phase.MAIN, Phase.RESOLVE_CHOICE)) CpuTurnSearch.publicPosition(state, actor) else null
-    val position = if (knowledge == CpuKnowledge.OPPONENT_HAND) masked?.let { public ->
-        CpuPublicPosition(public.state.copy(players = public.state.players.mapIndexed { index, player ->
-            if (index == actor) player else player.copy(hand = state.players[index].hand.sortedBy { it.id })
-        }))
-    } else masked
-    val previewPosition = position ?: if (actions.any { it is GameAction.Attack }) CpuTurnSearch.publicPosition(state.copy(resolution = null), actor) else null
+    val masked = if (state.phase in listOf(Phase.MAIN, Phase.RESOLVE_CHOICE)) CpuTurnSearch.publicPosition(state, actor, knowledge) else null
+    val position = when (knowledge) {
+        CpuKnowledge.OPPONENT_HAND -> masked?.let { public ->
+            CpuPublicPosition(public.state.copy(players = public.state.players.mapIndexed { index, player ->
+                if (index == actor) player else player.copy(hand = state.players[index].hand.sortedBy { it.id })
+            }))
+        }
+        CpuKnowledge.PLAYER_HAND_AND_DECK -> masked?.let { public ->
+            CpuPublicPosition(public.state.copy(
+                players = public.state.players.mapIndexed { index, player ->
+                    if (index == actor) player else player.copy(hand = state.players[index].hand.sortedBy { it.id })
+                },
+                deckLists = state.deckLists
+            ))
+        }
+        CpuKnowledge.PERFECT_INFORMATION -> masked?.let { public ->
+            CpuPublicPosition(public.state.copy(
+                players = public.state.players.mapIndexed { index, player ->
+                    if (index == actor) player
+                    else player.copy(
+                        hand = state.players[index].hand,
+                        deck = state.players[index].deck,
+                        prizes = state.players[index].prizes
+                    )
+                },
+                deckLists = state.deckLists
+            ))
+        }
+        CpuKnowledge.FAIR -> masked
+    }
+    val previewPosition = position ?: if (actions.any { it is GameAction.Attack }) CpuTurnSearch.publicPosition(state.copy(resolution = null), actor, knowledge) else null
     val forecast = CpuForecast(catalog)
     return CpuInput(PlayerObservation.from(state, actor), state.phase, state.turn, own.flags, safeChoice,
         selectable, actions, actions.filterIsInstance<GameAction.Attack>().associateWith { action ->

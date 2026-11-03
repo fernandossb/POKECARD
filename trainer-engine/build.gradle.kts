@@ -6,6 +6,8 @@ dependencies {
 }
 tasks.test {
     useJUnitPlatform()
+    jvmArgs("-Dfile.encoding=UTF-8")
+    systemProperty("file.encoding", "UTF-8")
     systemProperty("cpu.arena.baselineJar", providers.gradleProperty("cpuArenaBaselineJar").getOrElse(""))
 }
 

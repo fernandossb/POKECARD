@@ -1,3 +1,16 @@
+# POKECARD Brasil 5.99.47 — Modos GRANDMASTER e ORACLE, antecipação perfeita de combos e 20 Puzzles táticos
+
+- Novos níveis de dificuldade opcionais na CPU do TCG Trainer: `GRANDMASTER` e `ORACLE`, mantendo o nível `MASTER` estritamente justo (`PUBLIC_ONLY`).
+- GRANDMASTER: acesso deliberado à mão e baralho do jogador (`PLAYER_HAND_AND_DECK`), prevendo a melhor resposta futura com `OpponentBestLinePredictor` e neutralizando ameaças iminentes antes que aconteçam.
+- ORACLE: nível máximo de dificuldade com informação perfeita (`PERFECT_INFORMATION`), prevendo próximas compras e prêmios sem manipulação de RNG, sem trapaça de regras ou geração de cartas.
+- Hand Disruption Inteligente: uso estratégico de Iono/Judge com base no `HandThreatScore` — desestabiliza mãos agressivas e preserva mãos travadas do adversário.
+- Detecção e neutralização de combos: identificação de Rare Candy + Evolução + Aceleração + Boss no turno do jogador, elevando o `ThreatScore` de básicos no banco para 95 e forçando alvos de prioridade máxima com Boss's Orders.
+- DeckCounterAnalyzer & Board Lock: rastreamento contínuo de recursos restantes do jogador (Switch, Boss, energias, recovery), punindo falta de mobilidade com lock do Pokémon ativo adversário de alto custo de recuo.
+- Smart Sacrifice e Prize Denial: decisões táticas de sacrifício de Pokémon de 1 prêmio para negar KOs múltiplos ou fechar a corrida de prêmios favoravelmente.
+- Suíte tática automatizada `MasterAiTacticalTests` expandida de 10 para 20 cenários competitivos (Puzzles 11-20), atingindo 20/20 (100% de precisão nos benchmarks táticos).
+- Interface do TCG Trainer atualizada com seletor de dificuldade (`DifficultySelector`) e avisos de transparência para os modos de informação privilegiada.
+- Versão Android: `versionCode` 249 e `versionName` 5.99.47. Assinatura oficial e armazenamento da coleção preservados.
+
 # POKECARD Brasil 5.99.46 — Motor de IA Master com busca intra-turno profunda, Beam Search e Lethal Finder
 
 - Motor de IA de nível Master completamente reformulado com busca em árvore por feixe (Deep Intra-Turn Beam Search) com suporte a até 16 ações de profundidade.

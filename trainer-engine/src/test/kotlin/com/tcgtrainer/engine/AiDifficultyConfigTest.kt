@@ -6,7 +6,7 @@ class AiDifficultyConfigTest {
     @Test fun `invalid budgets and evaluator weights are rejected`() {
         assertFailsWith<IllegalArgumentException> { AiDifficultyConfig(maxTransitions = 0) }
         assertFailsWith<IllegalArgumentException> { AiDifficultyConfig(beamWidth = 0) }
-        assertFailsWith<IllegalArgumentException> { AiDifficultyConfig(criticalTimeBudgetMs = 2001) }
+        assertFailsWith<IllegalArgumentException> { AiDifficultyConfig(criticalTimeBudgetMs = 6001) }
         assertFailsWith<IllegalArgumentException> { AiDifficultyConfig(preparationFraction = Double.NaN) }
         assertFailsWith<IllegalArgumentException> { CpuBoardWeights(exposure = -1.0) }
         assertFailsWith<IllegalArgumentException> { CpuBoardWeights(prizeAdvantage = Double.POSITIVE_INFINITY) }

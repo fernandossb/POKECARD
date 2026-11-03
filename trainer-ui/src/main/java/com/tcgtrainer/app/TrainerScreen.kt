@@ -155,13 +155,25 @@ import kotlinx.coroutines.withContext
         if (training) Text("Treino: 14 a 60 cartas, incluindo cartas ainda não possuídas. Listas incompletas alteram as chances de compra. Desative ‘Só minhas cartas’ no editor para planejar compras.", color = Muted, fontSize = 11.sp)
         DeckSelector("BARALHO DA MÁQUINA", cpuDeckId, cpuDeckMenu) { cpuDeckId = it }
         Text(if (cpuDeckId == "random") "Baralho aleatório · a máquina escolhe a cada partida." else "A máquina usará ${opponent.name}.", color = Muted, fontSize = 11.sp)
+        val difficulty by vm.difficulty.collectAsStateWithLifecycle()
+        DifficultySelector(difficulty) { vm.setDifficulty(it) }
+        val diffDisclosure = when (difficulty) {
+            AiDifficulty.GRANDMASTER -> "GRANDMASTER: A CPU conhece sua mão e seu baralho completo para calcular a melhor resposta possível."
+            AiDifficulty.ORACLE -> "ORACLE: A CPU conhece a ordem das compras e cartas prêmio. Modo deliberadamente extremo."
+            AiDifficulty.MASTER -> "MASTER: A CPU joga de forma justa, usando apenas informações públicas."
+            AiDifficulty.EXPERT -> "EXPERT: IA avançada com busca tática justa."
+            AiDifficulty.HARD -> "HARD: IA tática justa."
+            AiDifficulty.NORMAL -> "NORMAL: IA padrão."
+            AiDifficulty.EASY -> "EASY: IA casual."
+            AiDifficulty.CHAMPION -> "CHAMPION: IA competitiva justa."
+        }
+        Text(diffDisclosure, color = if (difficulty in listOf(AiDifficulty.GRANDMASTER, AiDifficulty.ORACLE)) Coral else Muted, fontSize = 11.sp)
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) { Text(if (training) "Treinamento solo" else "Partida contra a máquina", fontWeight = FontWeight.SemiBold); Text(if (training) "Desfaz sua jogada e a resposta da CPU" else "Sem desfazer", color = Muted, fontSize = 11.sp) }
             Switch(training, { training = it })
         }
         TextButton(onClick = { options = !options }, contentPadding = PaddingValues(0.dp)) { Text("${if (options) "−" else "+"} OPÇÕES DA PARTIDA · SEED $seed", fontSize = 10.sp) }
         if (options) OutlinedTextField(seed, { seed = it }, label = { Text("Seed · abertura reproduzível") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        Text("CPU+ · A máquina vê sua mão para antecipar suas respostas.", color = Muted, fontSize = 11.sp)
         Button(onClick = { vm.start(seed.toLong(), if (training) Mode.TRAINING else Mode.MATCH, selectedDeck, cpuDeckId); seed = java.security.SecureRandom().nextLong().toString() }, enabled = !ui.busy && seed.toLongOrNull() != null && (training || (chosenValidation?.playable == true && vm.owned.allows(chosen.cards) && chosen.cards.size == 60)), modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(12.dp)) { Text(if (ui.busy) "PREPARANDO PARTIDA…" else "JOGAR CONTRA A MÁQUINA", fontWeight = FontWeight.Bold, letterSpacing = 1.sp) }
         OutlinedButton(onClick = vm::resume, enabled = ui.canContinue && !ui.busy, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(12.dp)) { Text("CONTINUAR PARTIDA") }
         TextButton(onClick = { info("Jogo exclusivamente para você contra a máquina. Crie e salve decks em MEUS DECKS. Toque em TREINAR para usar qualquer lista compatível, mesmo sem possuir as cartas e mesmo que ela não esteja legal no formato selecionado. O treino aceita listas de 14 a 60 cartas; partidas normais exigem 60 cartas válidas e posse completa.\n\nCartas sem efeitos implementados continuam como rascunhos. Padrão 2026 e Academia 2022 são categorias separadas. Treino livre permite misturar cartas implementadas. CPU+ tem uma vantagem deliberada: vê sua mão para antecipar suas jogadas. Prêmios ocultos e ordem dos decks continuam desconhecidos. As regras das cartas são mantidas.") }, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("COMO JOGAR", fontSize = 11.sp) }
@@ -182,6 +194,34 @@ import kotlinx.coroutines.withContext
                 availableDecks.forEach { entry -> DropdownMenuItem(text = {
                     Column { Text(entry.name, color = if (entry.id == selected) Aqua else Color.White); Text(entry.format.label(), color = Muted, fontSize = 10.sp) }
                 }, onClick = { choose(entry.id); expanded = false }) }
+            }
+        }
+    }
+}
+@Composable private fun DifficultySelector(selected: AiDifficulty, choose: (AiDifficulty) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text("DIFICULDADE DA CPU", color = Aqua, fontSize = 9.sp, letterSpacing = 1.sp)
+        Box {
+            OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(9.dp)) {
+                Text(selected.name, Modifier.weight(1f), fontSize = 13.sp)
+                Text("⌄", fontSize = 18.sp)
+            }
+            DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
+                listOf(AiDifficulty.EASY, AiDifficulty.NORMAL, AiDifficulty.HARD, AiDifficulty.EXPERT, AiDifficulty.MASTER, AiDifficulty.GRANDMASTER, AiDifficulty.ORACLE).forEach { entry ->
+                    DropdownMenuItem(text = {
+                        Column {
+                            Text(entry.name, color = if (entry == selected) Aqua else Color.White)
+                            val subtext = when (entry) {
+                                AiDifficulty.MASTER -> "Padrão · 100% justo"
+                                AiDifficulty.GRANDMASTER -> "Vê sua mão e deck completo"
+                                AiDifficulty.ORACLE -> "Informação perfeita (compras e prêmios)"
+                                else -> "Modo justo"
+                            }
+                            Text(subtext, color = Muted, fontSize = 10.sp)
+                        }
+                    }, onClick = { choose(entry); expanded = false })
+                }
             }
         }
     }
