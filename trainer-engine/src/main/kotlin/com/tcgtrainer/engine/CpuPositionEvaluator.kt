@@ -50,6 +50,30 @@ internal class CpuPositionEvaluator(private val engine: RulesEngine, private val
         }
         // Multiple independently ready attackers give resilience after a knockout.
         attackers += (readyCount-1).coerceAtLeast(0).coerceAtMost(2)*25
+
+        // Attacker Preparation: currentAttacker vs nextAttacker / backupAttacker
+        val active = player.active
+        val benched = player.bench
+        val nextAttacker = benched.maxByOrNull { b ->
+            val bFrame = state.copy(currentPlayer = owner, phase = Phase.MAIN, resolution = null,
+                players = state.players.mapIndexed { idx, p -> if (idx != owner) p else p.copy(active = b, bench = p.pokemon().filter { it.id != b.id }) })
+            val bAttacks = engine.availableAttacks(bFrame, owner, b)
+            val ready = bAttacks.any { engine.validate(bFrame, GameAction.Attack(it.id)) == Legality.Legal }
+            b.energies.size * 25 + (if (ready) 60 else 0)
+        }
+        val activeIsDoomed = active != null && (active.damage > 0 && (engine.effectiveHp(state, active) - active.damage) <= 60)
+        if (activeIsDoomed) {
+            if (nextAttacker == null || nextAttacker.energies.isEmpty()) {
+                // Severe penalty: active will fall and there is no prepared follow-up attacker!
+                exposure += 180.0
+            } else {
+                attackers += 80.0 + nextAttacker.energies.size * 20.0
+            }
+        } else if (nextAttacker != null && nextAttacker.energies.isNotEmpty()) {
+            // Reward healthy bench backup preparation
+            attackers += 45.0 + nextAttacker.energies.size * 15.0
+        }
+
         var recovery = 0.0
         val damaged = player.pokemon().any { it.damage > 0 }
         for (card in player.hand.filter { it.definitionId != "cpu-hidden-card" }) {

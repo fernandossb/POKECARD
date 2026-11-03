@@ -6,15 +6,15 @@ enum class AiDifficulty { EASY, NORMAL, HARD, EXPERT, MASTER, CHAMPION }
  * Depth counts actions/choices inside a turn, not complete alternating player turns.
  */
 data class AiDifficultyConfig(
-    val beamWidth: Int = 8,
-    val maxActionsPerSequence: Int = 7,
-    val maxTransitions: Int = 260,
-    val rootBranches: Int = 24,
-    val childBranches: Int = 12,
-    val choiceCandidates: Int = 24,
-    val finalistCount: Int = 4,
+    val beamWidth: Int = 10,
+    val maxActionsPerSequence: Int = 16,
+    val maxTransitions: Int = 600,
+    val rootBranches: Int = 32,
+    val childBranches: Int = 16,
+    val choiceCandidates: Int = 32,
+    val finalistCount: Int = 6,
     val replyDepth: Int = 4,
-    val replyTransitions: Int = 28,
+    val replyTransitions: Int = 36,
     val replyBranches: Int = 8,
     val continuationCount: Int = 4,
     val continuationDepth: Int = 3,

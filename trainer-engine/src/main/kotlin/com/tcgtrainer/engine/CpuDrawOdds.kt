@@ -29,7 +29,7 @@ internal object CpuDrawOdds {
             if (left < 0) return null
             counts[card.definitionId] = left
         }
-        if (counts.values.sum() != player.deck.size+player.prizes.size) return null
+        if (counts.values.sum() != player.deck.size+player.prizes.size && counts.values.sum() != player.deck.size) return null
         return counts.filterValues { it > 0 }
     }
 
@@ -38,5 +38,15 @@ internal object CpuDrawOdds {
         var miss = 1.0
         repeat(draws) { i -> miss *= ((total-successes-i).coerceAtLeast(0)).toDouble()/(total-i) }
         return 1.0-miss
+    }
+
+    /** Mathematical advantage (probability gain) of thinning the deck before drawing outs. */
+    fun thinningGain(totalDeck: Int, outs: Int, cardsToThin: Int, draws: Int): Double {
+        if (totalDeck <= 0 || outs <= 0 || cardsToThin <= 0 || draws <= 0 || outs > totalDeck || draws > totalDeck) return 0.0
+        val before = atLeastOne(totalDeck, outs, minOf(draws, totalDeck))
+        val afterDeck = (totalDeck - cardsToThin).coerceAtLeast(outs)
+        if (afterDeck <= 0) return 0.0
+        val after = atLeastOne(afterDeck, outs, minOf(draws, afterDeck))
+        return (after - before).coerceAtLeast(0.0)
     }
 }

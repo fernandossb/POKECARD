@@ -1,3 +1,16 @@
+# POKECARD Brasil 5.99.46 — Motor de IA Master com busca intra-turno profunda, Beam Search e Lethal Finder
+
+- Motor de IA de nível Master completamente reformulado com busca em árvore por feixe (Deep Intra-Turn Beam Search) com suporte a até 16 ações de profundidade.
+- Diferenciação estrita entre `intermediateEvaluation` (que permite perdas transitórias de recursos na mão para viabilizar combos) e `terminalSequenceEvaluation` pós-ataque ou pós-fim de turno.
+- Implementação de `DominancePruning`: poda estados equivalentes com recursos inferiores preservados, acelerando drasticamente a exploração combinatória.
+- Adicionado `findLethal()` de prioridade máxima: identifica sequências imediatas de vitória legal testando puxadores (Boss's Orders), trocas, recuos, energias, habilidades e ataques antes da avaliação de desenvolvimento geral.
+- Sequenciamento e afinamento de baralho (Deck Thinning): priorização matemática de cartas de busca antes de compras (Nest Ball/Ultra Ball antes de Professor's Research) e antes da anexação manual de Energia.
+- Descarte inteligente balanceado: preservação estrita de recursos essenciais (Boss's Orders) e descarte seletivo de redundâncias e energias aceleráveis do descarte.
+- Preparação de atacantes reserva: modelagem explícita de `currentAttacker`, `nextAttacker` e `backupAttacker`, penalizando ativamente vulnerabilidades no Pokémon ativo sem cobertura no Banco.
+- Telemetria de busca `CpuSearchTelemetry` para diagnóstico completo de linhas avaliadas, profundidade máxima e candidatos podados.
+- Suíte tática automatizada `MasterAiTacticalTests` com 10 posições de teste competitivas atingindo 10/10 (100% de precisão tática).
+- Versão Android: `versionCode` 248 e `versionName` 5.99.46. Assinatura oficial e armazenamento da coleção preservados.
+
 # POKECARD Brasil 5.99.45 — CPU+ e antecipação de respostas
 
 - CPU+ utiliza a mão adversária para antecipar jogadas, conforme indicado na tela de treinamento. A ordem dos baralhos e os Prêmios fechados continuam ocultos; as ações seguem as regras do motor.

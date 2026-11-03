@@ -80,14 +80,22 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog, private val s
     private val effects = EffectEngine(catalog)
     private fun d(card: CardInstance) = catalog.get(card.definitionId)
 
+    var lastTelemetry: CpuSearchTelemetry? = null
+        private set
+
     fun thinkingLimitMillis(input: CpuInput): Long? = if (thinking == CpuThinking.ADAPTIVE) config.limitMillis(input) else null
 
     fun choose(input: CpuInput): GameAction {
         val budget = CpuSearchBudget.create(input, thinking, config)
         val fallback = chooseHeuristic(input)
         input.previews[fallback]?.let { if (it.knockout && !it.uncertain && it.prizes >= input.observation.ownPrizeCount) return fallback }
-        return if (strategy != CpuStrategy.HEURISTIC && input.phase in listOf(Phase.MAIN, Phase.RESOLVE_CHOICE) && input.position != null)
-            CpuTurnSearch(catalog, strategy, tuning, budget, config).choose(input, fallback) else fallback
+        if (strategy != CpuStrategy.HEURISTIC && input.phase in listOf(Phase.MAIN, Phase.RESOLVE_CHOICE) && input.position != null) {
+            val search = CpuTurnSearch(catalog, strategy, tuning, budget, config)
+            val action = search.choose(input, fallback)
+            lastTelemetry = search.telemetry
+            return action
+        }
+        return fallback
     }
 
     internal fun chooseHeuristic(input: CpuInput): GameAction {
@@ -700,7 +708,14 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog, private val s
             }
             is GameAction.Promote -> attackValue(pokemon(a.pokemonId)) + potential(pokemon(a.pokemonId))*.4
             is GameAction.PlayTrainer -> when (val effect = d(checkNotNull(card(a.cardId))).trainerEffect) {
-                is TrainerEffect.Search -> if (o.ownDeckCount == 0 || o.ownHand.size > 11) -5.0 else 110.0-effect.discardCost*12
+                is TrainerEffect.Search -> if (o.ownDeckCount == 0 || o.ownHand.size > 11) -5.0 else {
+                    val thinningBonus = if (o.ownHand.any { card ->
+                        val def = d(card)
+                        def.trainerType == TrainerType.SUPPORTER && (def.trainerEffect is TrainerEffect.DrawCards || def.trainerEffect is TrainerEffect.ShuffleHandDraw || def.trainerEffect is TrainerEffect.DrawTo)
+                    }) 45.0 else 0.0
+                    val needsAttackerBonus = if (active == null || (active.cards.asReversed().flatMap { d(it).attacks }.none { a -> input.previews[GameAction.Attack(a.id)]?.knockout == true })) 60.0 else 0.0
+                    120.0 - effect.discardCost * 10 + thinningBonus + needsAttackerBonus
+                }
                 is TrainerEffect.ShuffleHandDraw -> if (o.ownDeckCount <= 3 || o.ownHand.size > (if (o.ownPrizeCount == 6) effect.sixPrizeCount else effect.count)) -5.0 else 65.0-o.ownHand.size
                 is TrainerEffect.ShuffleBothHandsDraw -> if (o.ownDeckCount > 0 && o.ownHand.size < effect.count && (!effect.requiresPreviousKnockout || o.ownLastKnockedOutTurn == input.turn-1)) 55.0 else -5.0
                 TrainerEffect.Ciphermaniac -> if (o.ownDeckCount >= 2 && o.ownHand.size < 8) 68.0 else -5.0
