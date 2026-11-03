@@ -59,14 +59,19 @@ object PlayerHandAnalyzer {
 
         // Check if hand enables lethal on the CPU's current field
         val cpuPrizesNeeded = state.players[opponent].prizes.size
-        val hasAttackerWithEnergy = player.pokemon().any { p ->
+        val hasSwitch = rawHand.any { card ->
+            val def = catalog.get(card.definitionId)
+            def.category == Category.TRAINER && (def.trainerEffect is TrainerEffect.Switch && !(def.trainerEffect as TrainerEffect.Switch).opponent || def.trainerEffect is TrainerEffect.SwitchAndHealMovedEx)
+        }
+        val activeOrSwitchable = if (hasSwitch || player.active == null) player.pokemon() else listOfNotNull(player.active)
+        val hasAttackerWithEnergy = activeOrSwitchable.any { p ->
             val pDef = catalog.get(p.top.definitionId)
             pDef.attacks.any { it.cost.size <= p.energies.size + (if (hasEnergy) 1 else 0) }
         }
 
         var hasLethalCombo = false
         if (hasAttackerWithEnergy) {
-            val maxDamage = player.pokemon().maxOfOrNull { p ->
+            val maxDamage = activeOrSwitchable.maxOfOrNull { p ->
                 val pDef = catalog.get(p.top.definitionId)
                 pDef.attacks.filter { it.cost.size <= p.energies.size + (if (hasEnergy) 1 else 0) }
                     .maxOfOrNull { atk -> atk.effects.filterIsInstance<Effect.Damage>().maxOfOrNull { it.amount } ?: 0 } ?: 0
@@ -76,7 +81,7 @@ object PlayerHandAnalyzer {
             val cpuActiveHp = cpuActive?.let { catalog.get(it.top.definitionId).hp - it.damage } ?: 0
             val cpuActivePrizes = cpuActive?.let { catalog.get(it.top.definitionId).prizes } ?: 1
 
-            if (maxDamage >= cpuActiveHp && cpuActivePrizes >= cpuPrizesNeeded) {
+            if (maxDamage >= cpuActiveHp && cpuActivePrizes >= cpuPrizesNeeded && cpuActiveHp > 0) {
                 hasLethalCombo = true
             }
 
@@ -84,15 +89,15 @@ object PlayerHandAnalyzer {
                 val lethalTarget = state.players[actor].bench.firstOrNull { b ->
                     val bHp = catalog.get(b.top.definitionId).hp - b.damage
                     val bPrizes = catalog.get(b.top.definitionId).prizes
-                    maxDamage >= bHp && bPrizes >= cpuPrizesNeeded
+                    maxDamage >= bHp && bPrizes >= cpuPrizesNeeded && bHp > 0
                 }
                 if (lethalTarget != null) hasLethalCombo = true
             }
         }
 
         if (hasLethalCombo) {
-            score = 100.0
-            combos += "LETHAL COMBO"
+            score = 90.0
+            combos += "POTENTIAL LETHAL THREAT"
         }
 
         val isDeadHand = !hasEnergy && !hasSupporterDraw && !hasRareCandy && !hasBoss && rawHand.size <= 3

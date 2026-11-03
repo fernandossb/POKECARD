@@ -49,7 +49,8 @@ internal data class DraggedCard(val card: CardInstance, val origin: Rect, val po
 
 @Composable internal fun BattleScene(state: GameState, viewer: Int, reveal: Boolean, busy: Boolean, error: String?, engine: RulesEngine,
     dispatch: (List<GameAction>) -> Unit, inspect: (CardInstance) -> Unit, discard: (Int) -> Unit,
-    prizes: () -> Unit, resolve: () -> Unit, endTurn: () -> Unit, menu: () -> Unit, history: () -> Unit, undo: () -> Unit, deck: () -> Unit) {
+    prizes: () -> Unit, resolve: () -> Unit, endTurn: () -> Unit, menu: () -> Unit, history: () -> Unit, undo: () -> Unit, deck: () -> Unit,
+    isRecording: Boolean = true, exportJson: () -> Unit = {}, exportTxt: () -> Unit = {}, share: () -> Unit = {}) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("battle-presentation", 0) }
     var pace by remember { mutableStateOf(AnimationPace.entries.getOrElse(prefs.getInt("pace", 0)) { AnimationPace.NORMAL }) }
@@ -317,6 +318,9 @@ internal data class DraggedCard(val card: CardInstance, val origin: Rect, val po
                 Row(Modifier.padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                     if (actor == 1 && busy) CircularProgressIndicator(Modifier.size(12.dp), color = Coral, strokeWidth = 2.dp)
                     Text(if (actor == 1) { if (state.turn == 0) "MÁQUINA PREPARANDO O CAMPO" else "TURNO DA MÁQUINA" } else { if (state.turn == 0) "PREPARE SEU CAMPO" else "SEU TURNO · ${state.turn}" }, color = if (actor == 1) Coral else Aqua, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    if (isRecording) {
+                        Text("● GRAVANDO", color = Coral, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
@@ -325,7 +329,10 @@ internal data class DraggedCard(val card: CardInstance, val origin: Rect, val po
                 Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(state.winner?.let { if (it == 0) "VOCÊ VENCEU!" else "A MÁQUINA VENCEU" } ?: "PARTIDA EMPATADA", color = Color(0xFF153C4B), fontSize = 20.sp, fontWeight = FontWeight.Black)
                     Text(state.winReason.orEmpty(), color = Color(0xFF435563), fontSize = 13.sp)
-                    Button(onClick = menu) { Text("VOLTAR AO MENU") }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = share) { Text("COMPARTILHAR") }
+                        Button(onClick = menu) { Text("VOLTAR AO MENU") }
+                    }
                 }
             }
         }
@@ -337,6 +344,9 @@ internal data class DraggedCard(val card: CardInstance, val origin: Rect, val po
                     Text(when (option) { AnimationPace.NORMAL -> "Normais"; AnimationPace.FAST -> "Rápidas"; AnimationPace.OFF -> "Desativadas" })
                 } }
                 TextButton(onClick = { settings = false; history() }, enabled = state.turn > 0 && reveal) { Text("HISTÓRICO") }
+                TextButton(onClick = { settings = false; share() }) { Text("COMPARTILHAR PARTIDA") }
+                TextButton(onClick = { settings = false; exportJson() }) { Text("EXPORTAR GRAVAÇÃO (JSON)") }
+                TextButton(onClick = { settings = false; exportTxt() }) { Text("EXPORTAR GRAVAÇÃO (TXT)") }
                 TextButton(onClick = { settings = false; undo() }, enabled = reveal && state.mode == Mode.TRAINING && state.history.isNotEmpty() && !busy) { Text("DESFAZER") }
                 TextButton(onClick = { settings = false; deck() }) { Text("VER BARALHO") }
                 TextButton(onClick = { settings = false; menu() }, enabled = !busy) { Text("VOLTAR AO MENU") }

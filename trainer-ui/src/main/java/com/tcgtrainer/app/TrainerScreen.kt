@@ -58,6 +58,7 @@ import kotlinx.coroutines.withContext
             textDialog = withContext(Dispatchers.Default) { TrainingReview.describe(state) }
         }
     }
+    val isRecording by vm.isRecordingEnabled.collectAsStateWithLifecycle()
     Surface(Modifier.fillMaxSize(), color = Color(0xFF080F1C)) {
         if (state == null && managingDecks) DeckManager(vm, { managingDecks = false }, { selectedDeck = it; managingDecks = false })
         else if (state == null) HomeScreen(ui, vm, selectedDeck, { selectedDeck = it }, availableDecks, { managingDecks = true }, { deckOpen = true }, { textDialog = it })
@@ -68,7 +69,11 @@ import kotlinx.coroutines.withContext
             prizes = { prizesOpen = true }, resolve = { resolveOpen = true }, endTurn = { confirmEnd = true },
             menu = vm::menu,
             history = { textDialog = state.history.joinToString("\n\n") { "T${it.turn} • ${if (it.player == 0) "Você" else "Máquina"}\n${it.events.joinToString("\n") { event -> event.message }}" }.ifEmpty { "Sem ações registradas." } },
-            undo = { vm.undo(); inspected = null }, deck = { deckOpen = true }
+            undo = { vm.undo(); inspected = null }, deck = { deckOpen = true },
+            isRecording = isRecording,
+            exportJson = { vm.shareCurrentRecording(asJson = true) },
+            exportTxt = { vm.shareCurrentRecording(asJson = false) },
+            share = { vm.shareCurrentRecording(asJson = false) }
         )
     }
     if (state != null) {
@@ -98,6 +103,7 @@ import kotlinx.coroutines.withContext
     var seed by remember { mutableStateOf(java.security.SecureRandom().nextLong().toString()) }; var training by remember { mutableStateOf(true) }
     var options by remember { mutableStateOf(false) }
     var cpuDeckId by remember { mutableStateOf("random") }
+    var cpuIntelligenceOpen by remember { mutableStateOf(false) }
     val chosen = availableDecks.firstOrNull { it.id == selectedDeck } ?: availableDecks.first()
     val chosenValidation by produceState<DeckValidation?>(initialValue = null, chosen) {
         value = withContext(Dispatchers.Default) { DeckValidator.validate(chosen) }
@@ -174,11 +180,17 @@ import kotlinx.coroutines.withContext
         }
         TextButton(onClick = { options = !options }, contentPadding = PaddingValues(0.dp)) { Text("${if (options) "−" else "+"} OPÇÕES DA PARTIDA · SEED $seed", fontSize = 10.sp) }
         if (options) OutlinedTextField(seed, { seed = it }, label = { Text("Seed · abertura reproduzível") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        OutlinedButton(onClick = { cpuIntelligenceOpen = true }, modifier = Modifier.fillMaxWidth()) {
+            Text("🧠 INTELIGÊNCIA DA CPU & GRAVAÇÕES")
+        }
         Button(onClick = { vm.start(seed.toLong(), if (training) Mode.TRAINING else Mode.MATCH, selectedDeck, cpuDeckId); seed = java.security.SecureRandom().nextLong().toString() }, enabled = !ui.busy && seed.toLongOrNull() != null && (training || (chosenValidation?.playable == true && vm.owned.allows(chosen.cards) && chosen.cards.size == 60)), modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(12.dp)) { Text(if (ui.busy) "PREPARANDO PARTIDA…" else "JOGAR CONTRA A MÁQUINA", fontWeight = FontWeight.Bold, letterSpacing = 1.sp) }
         OutlinedButton(onClick = vm::resume, enabled = ui.canContinue && !ui.busy, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(12.dp)) { Text("CONTINUAR PARTIDA") }
         TextButton(onClick = { info("Jogo exclusivamente para você contra a máquina. Crie e salve decks em MEUS DECKS. Toque em TREINAR para usar qualquer lista compatível, mesmo sem possuir as cartas e mesmo que ela não esteja legal no formato selecionado. O treino aceita listas de 14 a 60 cartas; partidas normais exigem 60 cartas válidas e posse completa.\n\nCartas sem efeitos implementados continuam como rascunhos. Padrão 2026 e Academia 2022 são categorias separadas. Treino livre permite misturar cartas implementadas. CPU+ tem uma vantagem deliberada: vê sua mão para antecipar suas jogadas. Prêmios ocultos e ordem dos decks continuam desconhecidos. As regras das cartas são mantidas.") }, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("COMO JOGAR", fontSize = 11.sp) }
         Text("1 JOGADOR × MÁQUINA  ·  PARTIDAS OFFLINE", Modifier.fillMaxWidth(), color = Muted, fontSize = 9.sp)
         ui.message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+    }
+    if (cpuIntelligenceOpen) {
+        CpuIntelligenceDialog(vm, onDismiss = { cpuIntelligenceOpen = false })
     }
 }
 @Composable private fun DeckSelector(label: String, selected: String, availableDecks: List<TrainingDeck>, choose: (String) -> Unit) {
@@ -237,5 +249,136 @@ internal fun phaseLabel(phase: Phase) = when (phase) {
     Phase.SELECT_PRIZES -> "Escolha seus Prêmios"
     Phase.PROMOTE -> "Promova um Pokémon do Banco"
     Phase.GAME_OVER -> "Partida encerrada"
+}
+
+@Composable
+private fun CpuIntelligenceDialog(vm: GameViewModel, onDismiss: () -> Unit) {
+    var tab by remember { mutableStateOf(0) }
+    var confirmReset by remember { mutableStateOf(false) }
+    val isRecording by vm.isRecordingEnabled.collectAsStateWithLifecycle()
+    var learningEnabled by remember { mutableStateOf(vm.learningEngine.learningEnabled) }
+    var refreshTrigger by remember { mutableStateOf(0) }
+    val memory = vm.learningEngine.experienceMemory
+    val savedMatches = remember(refreshTrigger) { vm.listSavedRecordings() }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Inteligência da CPU & Gravações", fontWeight = FontWeight.Bold, fontSize = 18.sp) },
+        text = {
+            Column(Modifier.fillMaxWidth().heightIn(max = 480.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    TextButton(onClick = { tab = 0 }) { Text("VISÃO GERAL", color = if (tab == 0) Aqua else Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                    TextButton(onClick = { tab = 1 }) { Text("LIÇÕES (${memory.lessons.size})", color = if (tab == 1) Aqua else Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                    TextButton(onClick = { tab = 2 }) { Text("GRAVAÇÕES (${savedMatches.size})", color = if (tab == 2) Aqua else Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                }
+
+                if (tab == 0) {
+                    Surface(shape = RoundedCornerShape(8.dp), color = Color(0xFF142436)) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("STATUS DO MOTOR", color = Aqua, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text("Partidas analisadas pela CPU: ${memory.matchesAnalyzed}", fontSize = 13.sp)
+                            Text("Padrões aprendidos com derrotas: ${memory.lessons.size}", fontSize = 13.sp)
+                            val penalty = memory.lessons.find { it.type == "AVOID_REDUNDANT_ENERGY" }
+                            if (penalty != null) {
+                                Text("Ajuste de energia redundante ativo: ${(penalty.confidence * 100).toInt()}%", fontSize = 12.sp, color = Aqua)
+                            }
+                        }
+                    }
+
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Aprendizado Contínuo", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Text("A CPU ajusta parâmetros após derrotas", color = Muted, fontSize = 10.sp)
+                        }
+                        Switch(checked = learningEnabled, onCheckedChange = {
+                            learningEnabled = it
+                            vm.toggleLearning(it)
+                        })
+                    }
+
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Gravação Automática", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Text("Salva as últimas 30 partidas completas", color = Muted, fontSize = 10.sp)
+                        }
+                        Switch(checked = isRecording, onCheckedChange = { vm.setRecordingEnabled(it) })
+                    }
+
+                    OutlinedButton(onClick = { confirmReset = true }, modifier = Modifier.fillMaxWidth()) {
+                        Text("REDEFINIR MEMÓRIA DA CPU", color = Coral, fontSize = 12.sp)
+                    }
+                } else if (tab == 1) {
+                    if (memory.lessons.isEmpty()) {
+                        Text("Nenhuma lição aprendida ainda. A CPU analisará partidas quando for derrotada e ajustará seu jogo automaticamente.", color = Muted, fontSize = 12.sp)
+                    } else {
+                        for (lesson in memory.lessons) {
+                            Surface(shape = RoundedCornerShape(8.dp), color = Color(0xFF142436)) {
+                                Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text(lesson.type, fontWeight = FontWeight.Bold, color = Aqua, fontSize = 12.sp)
+                                        Text("${(lesson.confidence * 100).toInt()}% conf.", color = Muted, fontSize = 11.sp)
+                                    }
+                                    Text(lesson.description, fontSize = 11.sp)
+                                    Text("Arquétipo: ${lesson.archetype} · Ocorrências: ${lesson.occurrences}", color = Muted, fontSize = 10.sp)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    if (savedMatches.isEmpty()) {
+                        Text("Nenhuma gravação de partida encontrada no aparelho.", color = Muted, fontSize = 12.sp)
+                    } else {
+                        for (summary in savedMatches) {
+                            Surface(shape = RoundedCornerShape(8.dp), color = Color(0xFF142436)) {
+                                Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    val resultText = if (summary.winner == 0) "VITÓRIA DO JOGADOR" else if (summary.winner == 1) "VITÓRIA DA CPU" else "PARTIDA INCOMPLETA"
+                                    val resultColor = if (summary.winner == 0) Aqua else if (summary.winner == 1) Coral else Muted
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text(resultText, fontWeight = FontWeight.Bold, color = resultColor, fontSize = 11.sp)
+                                        Text(summary.difficulty, color = Muted, fontSize = 10.sp)
+                                    }
+                                    Text("Você: ${summary.humanDeck} vs CPU: ${summary.cpuDeck} · ${summary.totalTurns} turnos", fontSize = 11.sp)
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        TextButton(onClick = { vm.shareSavedRecording(summary.gameId, asJson = false) }) {
+                                            Text("TXT (ChatGPT)", fontSize = 10.sp)
+                                        }
+                                        TextButton(onClick = { vm.shareSavedRecording(summary.gameId, asJson = true) }) {
+                                            Text("JSON", fontSize = 10.sp)
+                                        }
+                                        TextButton(onClick = {
+                                            vm.deleteSavedRecording(summary.gameId)
+                                            refreshTrigger++
+                                        }) {
+                                            Text("EXCLUIR", color = Coral, fontSize = 10.sp)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("FECHAR") }
+        }
+    )
+
+    if (confirmReset) {
+        AlertDialog(
+            onDismissRequest = { confirmReset = false },
+            title = { Text("Redefinir memória?") },
+            text = { Text("Isso apagará todas as lições aprendidas pela CPU e redefinirá os parâmetros adaptativos aos valores padrão.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.resetCpuLearning()
+                    confirmReset = false
+                }) { Text("REDEFINIR", color = Coral) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmReset = false }) { Text("CANCELAR") }
+            }
+        )
+    }
 }
 

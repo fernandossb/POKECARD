@@ -119,12 +119,20 @@ fun RulesEngine.cpuInput(state: GameState, knowledge: CpuKnowledge = CpuKnowledg
 
 /** Deterministic CPU. Heuristic uses observations; search also uses the selected knowledge mode. */
 class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog, private val strategy: CpuStrategy = CpuStrategy.MASTER, private val tuning: CpuTuning = CpuTuning(), private val thinking: CpuThinking = CpuThinking.DETERMINISTIC, private val config: AiDifficultyConfig = AiDifficultyConfig()) {
-    private val benchSafety by lazy { CpuBenchSafety(RulesEngine(catalog), catalog) }
+    private val engine by lazy { RulesEngine(catalog) }
+    private val benchSafety by lazy { CpuBenchSafety(engine, catalog) }
     private val effects = EffectEngine(catalog)
     private fun d(card: CardInstance) = catalog.get(card.definitionId)
 
     var lastTelemetry: CpuSearchTelemetry? = null
         private set
+
+    var currentTurnPlan: CpuTurnPlan? = null
+        private set
+
+    fun resetPlan() {
+        currentTurnPlan = null
+    }
 
     fun thinkingLimitMillis(input: CpuInput): Long? = if (thinking == CpuThinking.ADAPTIVE) config.limitMillis(input) else null
 
@@ -132,10 +140,38 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog, private val s
         val budget = CpuSearchBudget.create(input, thinking, config)
         val fallback = chooseHeuristic(input)
         input.previews[fallback]?.let { if (it.knockout && !it.uncertain && it.prizes >= input.observation.ownPrizeCount) return fallback }
+
+        // Reuse active planned sequence if legal and from current turn
+        val activePlan = currentTurnPlan
+        val currentState = input.position?.state
+        if (activePlan != null && currentState != null && activePlan.turn == input.turn && activePlan.actor == input.observation.viewer && !activePlan.isComplete()) {
+            val nextPlanned = activePlan.nextAction()
+            if (nextPlanned != null) {
+                val isLegal = if (input.phase == Phase.MAIN) {
+                    nextPlanned in input.actions && engine.validate(currentState, nextPlanned) == Legality.Legal
+                } else {
+                    engine.validate(currentState, nextPlanned) == Legality.Legal
+                }
+                if (isLegal) {
+                    activePlan.advance()
+                    return nextPlanned
+                } else {
+                    currentTurnPlan = null
+                }
+            } else {
+                currentTurnPlan = null
+            }
+        }
+
         if (strategy != CpuStrategy.HEURISTIC && input.phase in listOf(Phase.MAIN, Phase.RESOLVE_CHOICE) && input.position != null) {
             val search = CpuTurnSearch(catalog, strategy, tuning, budget, config)
             val action = search.choose(input, fallback)
             lastTelemetry = search.telemetry
+            val newPlan = search.turnPlan
+            if (newPlan != null && newPlan.sequence.isNotEmpty()) {
+                newPlan.advance() // Advance past the action being dispatched now
+                currentTurnPlan = newPlan
+            }
             return action
         }
         return fallback

@@ -1,3 +1,22 @@
+# POKECARD Brasil 5.99.48 — Gravador de Partidas (JSON/TXT para ChatGPT) e Aprendizado Contínuo da CPU
+
+- Gravador Completo de Partidas (`MatchRecorder`): registro cronológico e detalhado de todas as ações, listas de baralho, identificadores TCGdex e instâncias, mãos completas de ambos os jogadores (início e fim de turno), estados de campo e telemetria da CPU.
+- Exportação e Compartilhamento para ChatGPT: exportação nativa em JSON e TXT legível e contextualizado, pronto para colar diretamente no ChatGPT para diagnóstico de linhas e jogadas.
+- Armazenamento local com rotação automática das últimas 30 partidas e suporte a compartilhamento via Android ShareSheet (`FileProvider`).
+- Motor de Aprendizado Contínuo da CPU (`CpuLearningEngine`):
+  - `EnergyEfficiencyAnalyzer`: elimina a sobre-anexação excessiva (ex.: 5 energias em Pokémon que precisa de 2), avaliando o custo máximo de ataque, ataques de dano escalável e a carência de energia no banco.
+  - `HandEfficiencyAnalyzer`: detecta retenção passiva e improdutiva de cartas de Treinador na mão.
+  - `MissedComboAnalyzer`: identifica oportunidades perdidas de busca, evolução, aceleração e compra.
+  - `PostMatchCpuReview`: análise automática após derrotas da CPU, diagnosticando a fraqueza primária da partida e gerando lições táticas.
+  - `CpuExperienceMemory`: registro persistente (`cpu_experience_memory.json`) de lições por arquétipo com contagem de ocorrências e índice de confiança.
+  - `AdaptiveStrategyTuner`: ajuste dinâmico e seguro dos multiplicadores de busca (penalidade de energia redundante, bônus de atacante reserva e utilização de mão).
+- Interface de Usuário & Gestão de Inteligência:
+  - Indicador visual discreto durante a batalha: `● GRAVANDO`.
+  - Opções na mesa de jogo para histórico, compartilhamento e exportação rápida em JSON/TXT.
+  - Painel "🧠 INTELIGÊNCIA DA CPU & GRAVAÇÕES" na tela inicial com estatísticas, lições ativas por arquétipo, switches de controle e redefinição de memória com confirmação.
+- Suíte de Testes Automatizada: 8/8 testes unitários passando em `CpuLearningEngineTests` e 100% de aprovação nos testes de regressão tática (`MasterAiTacticalTests` e `OracleAiEngineTests`).
+- Versão Android: `versionCode` 250 e `versionName` 5.99.48. Assinatura oficial e armazenamento da coleção preservados.
+
 # POKECARD Brasil 5.99.47 — Modos GRANDMASTER e ORACLE, antecipação perfeita de combos e 20 Puzzles táticos
 
 - Novos níveis de dificuldade opcionais na CPU do TCG Trainer: `GRANDMASTER` e `ORACLE`, mantendo o nível `MASTER` estritamente justo (`PUBLIC_ONLY`).
