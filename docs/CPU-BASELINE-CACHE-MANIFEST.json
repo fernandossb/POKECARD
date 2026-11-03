@@ -1,0 +1,9 @@
+{
+  "name": "cache-before-reply-planning-20261102",
+  "createdUtc": "2026-11-02T15:22:32.3975568Z",
+  "gitHead": "8a35db06fd9d64f6546069da0a6750fd2a8ad25e",
+  "includesWorkingTreeChanges": true,
+  "jarSha256": "6c6e1780ff2ecf317c13d744cb22a9015c18911bfcdf077fb38ca59a2fb7d22c",
+  "sourceSha256": "a6c2a42dc9c07f8ec552e1accaa705f85052e62831e368d270524509293d5c06",
+  "mode": "MASTER / DETERMINISTIC / default tuning"
+}

@@ -1,20 +1,29 @@
 package com.tcgtrainer.engine
 
-/** Only observations and a position with hidden zones replaced by anonymous cards cross this boundary. */
+/** FAIR masks hidden zones; OPPONENT_HAND explicitly grants the requested training advantage. */
 data class CpuInput(
     val observation: PlayerObservation, val phase: Phase, val turn: Int, val flags: TurnFlags,
     val choice: ChoiceRequest?, val selectableCards: List<CardInstance>,
     val actions: List<GameAction>, val previews: Map<GameAction.Attack, AttackPreview>,
     val stadium: CardInstance?, val effectiveAbilities: Map<String, List<AbilityDefinition>> = emptyMap(),
-    val position: CpuPublicPosition? = null
+    val position: CpuPublicPosition? = null,
+    /** The CPU's selected archetype; deck identity is public and lets it follow its own game plan. */
+    val ownDeckId: String = "custom",
+    val knowledge: CpuKnowledge = CpuKnowledge.FAIR
 )
 
+/** Compatibility name: FAIR is public; OPPONENT_HAND explicitly enriches this simulation copy. */
 data class CpuPublicPosition(val state: GameState)
+
+enum class CpuKnowledge {
+    FAIR, OPPONENT_HAND;
+    companion object { val appMode = OPPONENT_HAND }
+}
 
 enum class CpuStrategy { HEURISTIC, TACTICAL, MASTER }
 
-/** Controller adapter: reveals search results only while the rules permit that search. */
-fun RulesEngine.cpuInput(state: GameState): CpuInput {
+/** Rules-bound search choices plus the explicitly selected information advantage for simulation. */
+fun RulesEngine.cpuInput(state: GameState, knowledge: CpuKnowledge = CpuKnowledge.FAIR): CpuInput {
     val actor = actingPlayer(state)
     val own = state.players[actor]
     val choice = state.resolution?.choices?.firstOrNull()
@@ -43,7 +52,12 @@ fun RulesEngine.cpuInput(state: GameState): CpuInput {
     val safeChoice = choice?.copy(candidates = if (preserveOrder) choice.candidates else choice.candidates.sorted(),
         visibleCards = if (preserveOrder) choice.visibleCards else choice.visibleCards.sorted())
     val actions = if (safeChoice != null && state.phase == Phase.RESOLVE_CHOICE) emptyList() else cpuLegalActions(state)
-    val position = if (state.phase in listOf(Phase.MAIN, Phase.RESOLVE_CHOICE)) CpuTurnSearch.publicPosition(state, actor) else null
+    val masked = if (state.phase in listOf(Phase.MAIN, Phase.RESOLVE_CHOICE)) CpuTurnSearch.publicPosition(state, actor) else null
+    val position = if (knowledge == CpuKnowledge.OPPONENT_HAND) masked?.let { public ->
+        CpuPublicPosition(public.state.copy(players = public.state.players.mapIndexed { index, player ->
+            if (index == actor) player else player.copy(hand = state.players[index].hand.sortedBy { it.id })
+        }))
+    } else masked
     val previewPosition = position ?: if (actions.any { it is GameAction.Attack }) CpuTurnSearch.publicPosition(state.copy(resolution = null), actor) else null
     val forecast = CpuForecast(catalog)
     return CpuInput(PlayerObservation.from(state, actor), state.phase, state.turn, own.flags, safeChoice,
@@ -56,27 +70,30 @@ fun RulesEngine.cpuInput(state: GameState): CpuInput {
             }
         }, state.stadium,
         state.players.flatMap { it.pokemon() }.associate { pokemon -> pokemon.id to effectiveAbilities(state, state.players.indexOfFirst { player -> player.pokemon().any { it.id == pokemon.id } }, pokemon) },
-        position)
+        position,
+        if (actor == 0) state.humanDeckId else state.cpuDeckId, knowledge)
 }
 
-/** Deterministic, public-information heuristic CPU. No fabricated hidden draws or random tie breaks. */
-class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog, private val strategy: CpuStrategy = CpuStrategy.MASTER, private val tuning: CpuTuning = CpuTuning(), private val thinking: CpuThinking = CpuThinking.DETERMINISTIC) {
+/** Deterministic CPU. Heuristic uses observations; search also uses the selected knowledge mode. */
+class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog, private val strategy: CpuStrategy = CpuStrategy.MASTER, private val tuning: CpuTuning = CpuTuning(), private val thinking: CpuThinking = CpuThinking.DETERMINISTIC, private val config: AiDifficultyConfig = AiDifficultyConfig()) {
+    private val benchSafety by lazy { CpuBenchSafety(RulesEngine(catalog), catalog) }
     private val effects = EffectEngine(catalog)
     private fun d(card: CardInstance) = catalog.get(card.definitionId)
 
-    fun thinkingLimitMillis(input: CpuInput): Long? = if (thinking == CpuThinking.ADAPTIVE) CpuSearchBudget.limitMillis(input) else null
+    fun thinkingLimitMillis(input: CpuInput): Long? = if (thinking == CpuThinking.ADAPTIVE) config.limitMillis(input) else null
 
     fun choose(input: CpuInput): GameAction {
-        val budget = CpuSearchBudget.create(input, thinking)
+        val budget = CpuSearchBudget.create(input, thinking, config)
         val fallback = chooseHeuristic(input)
         input.previews[fallback]?.let { if (it.knockout && !it.uncertain && it.prizes >= input.observation.ownPrizeCount) return fallback }
         return if (strategy != CpuStrategy.HEURISTIC && input.phase in listOf(Phase.MAIN, Phase.RESOLVE_CHOICE) && input.position != null)
-            CpuTurnSearch(catalog, strategy, tuning, budget).choose(input, fallback) else fallback
+            CpuTurnSearch(catalog, strategy, tuning, budget, config).choose(input, fallback) else fallback
     }
 
     internal fun chooseHeuristic(input: CpuInput): GameAction {
         val o = input.observation
         val own = o.ownField
+        val plan = CpuDeckPlan.forDeck(input.ownDeckId, input.position?.state?.deckLists?.getOrNull(o.viewer).orEmpty(), catalog)
         val active = own.find { it.id == o.ownActiveId }
         val enemy = o.opponentField.find { it.id == o.opponentActiveId }
         input.previews.entries.firstOrNull { it.value.knockout && it.value.prizes >= o.ownPrizeCount && !it.value.uncertain }?.let { return it.key }
@@ -586,17 +603,29 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog, private val s
             is GameAction.MulliganDraw -> if (a.count <= minOf(7, (o.ownDeckCount-2).coerceAtLeast(0))) a.count.toDouble() else -1.0
             is GameAction.PlayBasic -> {
                 val c = checkNotNull(card(a.cardId))
-                if (own.size < 4 || keepValue(c) >= 100) 90.0+keepValue(c)*.1 else -5.0
+                val strategic = plan.priority(c.definitionId)
+                val exposure = input.position?.state?.let { state ->
+                    // Keep a reserve when it prevents losing the last Pokémon; otherwise avoid
+                    // adding an unnecessary final-prize target. Search can still find a winning combo.
+                    own.size > 1 && benchSafety.exposesFinalPrizes(state, o.viewer,
+                        PokemonInstance(listOf(c), enteredPlayTurn = input.turn))
+                } == true
+                if (exposure) -20.0 else
+                if (own.size < plan.desiredBench + 1 || keepValue(c) >= 100 || strategic >= 65 && own.count { it.top.definitionId == c.definitionId } < 2)
+                    90.0+keepValue(c)*.1+strategic*.18 else -5.0
             }
-            is GameAction.Evolve -> 130.0 + potential(pokemon(a.pokemonId).copy(cards = pokemon(a.pokemonId).cards + checkNotNull(card(a.cardId))))*.1
+            is GameAction.Evolve -> 130.0 + potential(pokemon(a.pokemonId).copy(cards = pokemon(a.pokemonId).cards + checkNotNull(card(a.cardId))))*.1 + plan.priority(checkNotNull(card(a.cardId)).definitionId)*.45
             is GameAction.AttachEnergy -> {
                 val p = pokemon(a.pokemonId); val after = p.copy(energies = p.energies + checkNotNull(card(a.cardId)))
                 val improvement = attackValue(after)-attackValue(p)
                 val readiness = d(p.top).attacks.filter(effects::supported).any { missing(p, it) > 0 && missing(after, it) == 0 }
                 val exposed = p.id == active?.id && replyDamage(p) >= hp(p)-p.damage
                 val investmentRisk = if (exposed && improvement < 150) 90.0 else 0.0
+                val profileEnergyFit = if (plan.energyType != null && d(checkNotNull(card(a.cardId))).type == plan.energyType &&
+                    (p.top.definitionId in plan.attackers || p.top.definitionId in plan.engines)) 6.0 else 0.0
                 if (potential(after) <= potential(p) && !readiness) -5.0
-                else 100.0 + improvement + (potential(after)-potential(p))*.5 + (if (readiness) 55 else 0) - investmentRisk
+                else 100.0 + improvement + (potential(after)-potential(p))*.5 + (if (readiness) 55 else 0) +
+                    (if (p.top.definitionId in plan.attackers) 24.0 else if (p.top.definitionId in plan.engines) 9.0 else 0.0) + profileEnergyFit - investmentRisk
             }
             is GameAction.Attack -> {
                 val p = checkNotNull(input.previews[a])

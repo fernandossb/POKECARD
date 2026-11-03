@@ -28,6 +28,23 @@ class MasterCpuTest {
         assertEquals(800L, CpuSearchBudget.limitMillis(normal.copy(actions = List(3) { GameAction.EndTurn })))
         assertEquals(200L, CpuSearchBudget.limitMillis(normal.copy(actions = listOf(GameAction.EndTurn))))
     }
+    @Test fun `master search ranks a decisive gust ahead of a crowded hand of low value trainers`() {
+        val lowValueTrainers = (0 until 30).map { index ->
+            CardDefinition("low-$index", "Low value $index", "Test", "$index", category = Category.TRAINER,
+                trainerType = TrainerType.ITEM, trainerEffect = TrainerEffect.HpModifier(Stage.BASIC, 20))
+        }
+        val catalog = catalog(*lowValueTrainers.toTypedArray())
+        val game = state().let { current -> current.copy(players = current.players.mapIndexed { index, player ->
+            if (index != current.currentPlayer) player else player.copy(hand = player.hand + lowValueTrainers.mapIndexed { n, card ->
+                c("low-card-$n", card.id)
+            })
+        }) }
+        val actions = game.players[game.currentPlayer].hand.map { GameAction.PlayTrainer(it.id) }
+        val groups = CpuTurnSearch(catalog).prioritizedPreparationGroups(game, actions)
+        val ordered = groups.flatten()
+        assertEquals(GameAction.PlayTrainer("boss-card"), ordered.first())
+        assertTrue(GameAction.PlayTrainer("boss-card") in ordered.take(24))
+    }
     @Test fun `expired and interrupted searches return a legal fallback without leaking cancellation`() {
         val catalog = catalog()
         val engine = RulesEngine(catalog)
@@ -220,6 +237,58 @@ class MasterCpuTest {
         assertEquals(0L, public.seed)
         assertTrue(public.players.flatMap { it.deck + it.prizes }.all { it.definitionId == "cpu-hidden-card" })
         assertEquals("cpu-hidden-card", public.players[0].hand.single().definitionId)
+    }
+
+    @Test fun `opponent hand is unavailable at every difficulty and input contains no private seed`() {
+        val engine = RulesEngine(catalog())
+        val game = state()
+        val originalSnapshot = GameSession.encode(SessionSnapshot(game))
+        val changed = game.copy(players = game.players.mapIndexed { i, p ->
+            if (i == 0) p.copy(hand = p.hand.map { it.copy(definitionId = "boss") }) else p
+        })
+        for (difficulty in AiDifficulty.entries) {
+            val cpu = CpuPlayer(catalog(), config = AiDifficultyConfig.forDifficulty(difficulty))
+            assertEquals(cpu.choose(engine.cpuInput(game)), cpu.choose(engine.cpuInput(changed)), difficulty.name)
+        }
+        assertEquals(originalSnapshot, GameSession.encode(SessionSnapshot(game)))
+        assertTrue(engine.cpuInput(game).position!!.state.players[0].hand.all { it.definitionId == "cpu-hidden-card" })
+    }
+
+    @Test fun `known hand reply search uses an available Energy attachment before attacking`() {
+        val catalog = catalog()
+        val engine = RulesEngine(catalog)
+        val reply = state().let { current -> current.copy(
+            currentPlayer = 1,
+            turn = current.turn+1,
+            phase = Phase.MAIN,
+            players = current.players.mapIndexed { owner, player -> if (owner == 1) player.copy(
+                active = pokemon("cpu", "hero"), hand = listOf(c("known-energy")), flags = TurnFlags()
+            ) else player.copy(active = pokemon("human", "small")) }
+        ) }
+        val positions = CpuTurnSearch(catalog).knownReplyPreparations(reply, actor = 1)
+
+        assertTrue(positions.any { position ->
+            position.players[1].active?.energies?.isNotEmpty() == true &&
+                engine.cpuLegalActions(position).any { it is GameAction.Attack }
+        })
+    }
+
+    @Test fun `master retreats a fragile Active when public attached Energy enables a knockout`() {
+        val weak = small.copy(hp = 100)
+        val wall = small.copy(id = "wall", name = "Wall", hp = 300)
+        val attacker = hero.copy(attacks = listOf(AttackDefinition("hit", "Hit", listOf(EnergyType.COLORLESS),
+            listOf(Effect.Damage(120)))))
+        val catalog = catalog(weak, wall, attacker)
+        val engine = RulesEngine(catalog)
+        val base = state()
+        val game = base.copy(players = listOf(
+            base.players[0].copy(active = pokemon("opponent-attacker", "hero", 1), hand = emptyList()),
+            base.players[1].copy(active = pokemon("cpu-fragile", "small"), bench = listOf(pokemon("cpu-wall", "wall")), hand = emptyList())
+        ))
+        val action = CpuPlayer(catalog).choose(engine.cpuInput(game))
+
+        assertIs<GameAction.Retreat>(action)
+        assertEquals("cpu-wall", action.pokemonId)
     }
 
     @Test fun `master sacrifices a one prize wall rather than exposing the last two prizes`() {

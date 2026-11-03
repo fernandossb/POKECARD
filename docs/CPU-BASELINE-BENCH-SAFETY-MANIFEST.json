@@ -1,0 +1,9 @@
+{
+  "name": "bench-safety-before-cache-20261102",
+  "createdUtc": "2026-11-02T15:11:39.6865605Z",
+  "gitHead": "8a35db06fd9d64f6546069da0a6750fd2a8ad25e",
+  "includesWorkingTreeChanges": true,
+  "jarSha256": "b939fc242fba5cfa8b9857e00da062940e93d12dd0918b0b1e8faf5472014585",
+  "sourceSha256": "a1f40bdfcac927bf01a5df00657aaaa67dfa0ce1eed79dc6395bebf471a3adfe",
+  "mode": "MASTER / DETERMINISTIC / default tuning"
+}

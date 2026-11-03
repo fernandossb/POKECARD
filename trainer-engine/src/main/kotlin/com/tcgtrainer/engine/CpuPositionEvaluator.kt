@@ -1,15 +1,19 @@
 package com.tcgtrainer.engine
 
 /** Public board and known resources only. Scores are heuristic, never guaranteed win probabilities. */
-internal class CpuPositionEvaluator(private val engine: RulesEngine, private val catalog: CardCatalog) {
+internal class CpuPositionEvaluator(private val engine: RulesEngine, private val catalog: CardCatalog, private val weights: CpuBoardWeights = CpuBoardWeights()) {
+    private val benchSafety = CpuBenchSafety(engine, catalog)
     data class Features(val attackers: Double, val engines: Double, val recovery: Double, val exposure: Double, val locks: Double) {
         val total get() = attackers + engines + recovery - exposure - locks
     }
 
     fun value(state: GameState, actor: Int): Double {
         if (state.phase == Phase.GAME_OVER) return if (state.winner == actor) 100_000.0 else if (state.winner == 1-actor) -100_000.0 else 0.0
-        return features(state, actor).total - features(state, 1-actor).total*.35 +
-            (state.players[1-actor].prizes.size-state.players[actor].prizes.size)*45.0
+        val phaseWeights = weights.forPosition(state)
+        fun weighted(f: Features) = f.attackers*phaseWeights.attackers + f.engines*phaseWeights.engines + f.recovery*phaseWeights.recovery -
+            f.exposure*phaseWeights.exposure - f.locks*phaseWeights.locks
+        return weighted(features(state, actor)) - weighted(features(state, 1-actor))*phaseWeights.opponent +
+            (state.players[1-actor].prizes.size-state.players[actor].prizes.size)*phaseWeights.prizeAdvantage
     }
 
     internal fun features(state: GameState, owner: Int): Features {
@@ -38,6 +42,7 @@ internal class CpuPositionEvaluator(private val engine: RulesEngine, private val
             val abilities = engine.effectiveAbilities(state, owner, pokemon)
             engines += abilities.sumOf { (it.draw + it.drawTo.coerceAtMost(5))*3.0 + if (it.attachHandEnergyType != null) 15.0 else 0.0 }
             if (player.bench.any { it.id == pokemon.id }) {
+                if (benchSafety.exposesFinalPrizes(state, owner, pokemon)) exposure += 150.0
                 val fragile = 1.0-remaining.toDouble()/hp
                 exposure += fragile*definition.prizes*(if (benchThreat) 65 else 20)
                 if (definition.prizes >= opponent.prizes.size && fragile > .5) exposure += if (benchThreat) 60 else 15

@@ -998,7 +998,7 @@ internal object CatalogRuleCompiler {
                 return CardDefinition(id, raw.s("name") ?: return null, raw.s("setCode").orEmpty(), raw.s("localId") ?: return null,
                     category = Category.TRAINER, verified = true, source = source,
                     artAsset = "remote:$image/high.webp", text = trainerText,
-                    trainerType = TrainerType.ITEM, trainerEffect = TrainerEffect.OpponentBottomHandDraw(3), aceSpec = true)
+                    trainerType = TrainerType.ITEM, trainerEffect = TrainerEffect.OpponentBottomHandDraw(3))
             }
             if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Item" &&
                 trainerText == "Flip a coin. If heads, discard an Energy from 1 of your opponent's Pokémon.") {

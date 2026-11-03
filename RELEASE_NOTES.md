@@ -1,3 +1,12 @@
+# POKECARD Brasil 5.99.45 — CPU+ e antecipação de respostas
+
+- CPU+ utiliza a mão adversária para antecipar jogadas, conforme indicado na tela de treinamento. A ordem dos baralhos e os Prêmios fechados continuam ocultos; as ações seguem as regras do motor.
+- Ampliada a análise de respostas, preparação de atacantes, proteção do Banco e caminhos para conquistar os últimos Prêmios.
+- A busca evita repetir preparações equivalentes e preserva alternativas de Energia e evolução entre os candidatos.
+- Corrigida a classificação de Special Red Card como Item comum.
+- Validação: 74 testes direcionados sem falhas e compilação Android. Comparação com a CPU+ anterior: 10 vitórias e 10 derrotas, sem erros, em 20 partidas de Mega Lucario ex espelhado (10 sementes, lados alternados). A amostra não demonstra aumento de taxa de vitória; os tempos da arena no computador não representam o desempenho no celular.
+- Versão Android: `versionCode` 247 e `versionName` 5.99.45. Assinatura oficial e armazenamento da coleção preservados.
+
 # POKECARD Brasil 5.99.44 — CPU com planejamento ampliado
 
 - A CPU considera a resposta pública do adversário e a preparação do próprio turno seguinte, usando os recursos conhecidos.

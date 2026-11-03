@@ -1,0 +1,10 @@
+{
+  "name": "cpu-plus-before-reply-efficiency-20261102",
+  "createdUtc": "2026-11-03T00:06:07.1918444Z",
+  "gitHead": "8a35db06fd9d64f6546069da0a6750fd2a8ad25e",
+  "includesWorkingTreeChanges": true,
+  "jarSha256": "7b05c9b7e00ac0808d512e8cf8a759e5aaf74d24f1e08e8fd3fba21fd366c5b8",
+  "sourceSha256": "acbaecadbb3d641944ab09ab368488c32703f80c93671ab6bea58f1acceb9916",
+  "mode": "MASTER / DETERMINISTIC / default tuning",
+  "knowledgePolicy": "Embedded in FrozenCpuBridge using CpuKnowledge.appMode; query knowledgeMode for exact mode"
+}

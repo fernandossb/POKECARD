@@ -5,6 +5,7 @@ local.properties
 **/build/
 *.iml
 .DS_Store
+.cpu-baselines/
 
 # Chaves e segredos de assinatura — nunca enviar ao GitHub
 *.jks

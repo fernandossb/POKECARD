@@ -118,7 +118,7 @@ internal val BoardBlue = Color(0xFF599BC6)
             Counter("${state.players[1-geometry.viewer].prizes.size}", Modifier.weight(1f).fillMaxWidth(), BoardRed)
             Counter("${state.players[geometry.viewer].prizes.size}", Modifier.weight(1f).fillMaxWidth(), BoardBlue)
         }
-        Text("CPU", Modifier.sceneRect(geometry.rect(.02f, .048f, .105f, .025f)), color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+        Text("CPU+", Modifier.sceneRect(geometry.rect(.02f, .048f, .105f, .025f)), color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
         // Opponent hand stays anonymous and deliberately gives no card identities.
         val count = state.players[1-geometry.viewer].hand.size.coerceAtMost(9)
         repeat(count) { index ->

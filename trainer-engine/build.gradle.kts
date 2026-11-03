@@ -4,7 +4,17 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0")
     testImplementation(kotlin("test"))
 }
-tasks.test { useJUnitPlatform() }
+tasks.test {
+    useJUnitPlatform()
+    systemProperty("cpu.arena.baselineJar", providers.gradleProperty("cpuArenaBaselineJar").getOrElse(""))
+}
+
+tasks.register<Jar>("cpuBaselineJar") {
+    dependsOn(tasks.testClasses)
+    from(sourceSets.main.get().output)
+    from(sourceSets.test.get().output) { include("com/tcgtrainer/engine/FrozenCpuBridge*") }
+    archiveClassifier.set("cpu-baseline")
+}
 
 val cpuDeviceSmoke by sourceSets.creating
 cpuDeviceSmoke.compileClasspath += sourceSets.main.get().output
@@ -27,7 +37,10 @@ tasks.register<Test>("cpuArena") {
     systemProperty("cpu.arena.seedBase", providers.gradleProperty("cpuArenaSeedBase").getOrElse("1000003"))
     systemProperty("cpu.arena.traceGame", providers.gradleProperty("cpuArenaTraceGame").getOrElse("-1"))
     systemProperty("cpu.arena.baseline", providers.gradleProperty("cpuArenaBaseline").getOrElse("TACTICAL"))
+    systemProperty("cpu.arena.knowledge", providers.gradleProperty("cpuArenaKnowledge").getOrElse("FAIR"))
+    systemProperty("cpu.arena.baselineJar", providers.gradleProperty("cpuArenaBaselineJar").getOrElse(""))
     systemProperty("cpu.arena.tuning", providers.gradleProperty("cpuArenaTuning").getOrElse(".35,.15,80"))
+    systemProperty("cpu.arena.deck", providers.gradleProperty("cpuArenaDeck").getOrElse(""))
     maxHeapSize = "2g"
     outputs.upToDateWhen { false }
     outputs.cacheIf { false }

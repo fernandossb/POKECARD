@@ -144,7 +144,9 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                     delay(if (session?.snapshot?.state?.phase == Phase.CHOOSE_STARTER) 2200 else 950)
                     val current = checkNotNull(session)
                     val state = current.snapshot.state
-                    val action = withContext(Dispatchers.Default) { cpu.choose(engine.cpuInput(state)) }
+                    val action = withContext(Dispatchers.Default) {
+                        cpu.choose(engine.cpuInput(state, CpuKnowledge.appMode))
+                    }
                     val result = current.dispatch(action, recordUndo = false)
                     check(result.legality == Legality.Legal) { "CPU: ${(result.legality as? Legality.Illegal)?.reason}" }
                     publish(busy = true)

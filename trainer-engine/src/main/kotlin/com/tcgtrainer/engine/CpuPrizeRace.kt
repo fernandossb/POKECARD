@@ -18,6 +18,16 @@ internal class CpuPrizeRace(private val engine: RulesEngine, private val catalog
         if (remaining == 0) return 0.0
         val targets = state.players[1-owner].pokemon()
         val sources = state.players[owner].pokemon()
+        // Only known, currently playable, unrestricted gust cards count as access resources.
+        // Hidden hands and future draws never provide guaranteed access in this estimate.
+        val accessFrame = state.copy(currentPlayer = owner, phase = Phase.MAIN, resolution = null)
+        val gusts = state.players[owner].hand.count { card ->
+            if (card.definitionId == "cpu-hidden-card") false else {
+                val effect = catalog.get(card.definitionId).trainerEffect as? TrainerEffect.Switch
+                effect != null && effect.opponent && !effect.opponentBasicOnly && effect.ownPokemonNamePrefix == null &&
+                    engine.validate(accessFrame, GameAction.PlayTrainer(card.id)) == Legality.Legal
+            }
+        }.coerceAtMost(remaining)
         val costs = targets.map { target ->
             val cost = sources.minOfOrNull { source ->
                 val frame = frame(state, owner, source, target)
@@ -31,19 +41,26 @@ internal class CpuPrizeRace(private val engine: RulesEngine, private val catalog
                     hits + preparation + (hits-1).coerceAtLeast(0.0)*(discard-1).coerceAtLeast(0)
                 } ?: 20.0
             } ?: 20.0
-            catalog.get(target.top.definitionId).prizes to cost
+            Triple(catalog.get(target.top.definitionId).prizes, cost, target.id != state.players[1-owner].active?.id)
         }
-        val dp = DoubleArray(remaining+1) { 50.0 }
-        dp[0] = 0.0
-        for ((prizes, cost) in costs) {
-            val previous = dp.copyOf()
-            for (taken in 0 until remaining) {
+        val dp = Array(remaining+1) { DoubleArray(gusts+1) { Double.POSITIVE_INFINITY } }
+        dp[0][0] = 0.0
+        for ((prizes, cost, benched) in costs) {
+            val previous = dp.map { it.copyOf() }
+            for (taken in 0 until remaining) for (used in 0..gusts) {
                 val next = minOf(remaining, taken+prizes)
-                dp[next] = minOf(dp[next], previous[taken]+cost)
+                // A target may eventually be promoted without gust, but timing is uncertain.
+                // This is a tempo penalty, not a claim that the opponent must promote it.
+                val accessDelay = if (benched) 1.0 else 0.0
+                dp[next][used] = minOf(dp[next][used], previous[taken][used]+cost+accessDelay)
+                if (benched && used < gusts) {
+                    // Spending a scarce gust has a small resource cost, even with no turn delay.
+                    dp[next][used+1] = minOf(dp[next][used+1], previous[taken][used]+cost+0.15)
+                }
             }
         }
         // Future unseen targets are possible; insufficient visible Prizes do not imply an immediate win.
-        return if (dp[remaining] >= 50) remaining+6.0 else dp[remaining]
+        return dp[remaining].minOrNull()!!.takeIf { it.isFinite() } ?: (remaining+6.0)
     }
 
     private fun frame(state: GameState, owner: Int, source: PokemonInstance, target: PokemonInstance) = state.copy(

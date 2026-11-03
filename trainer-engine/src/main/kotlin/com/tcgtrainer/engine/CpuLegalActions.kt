@@ -1,5 +1,45 @@
 package com.tcgtrainer.engine
 
+/** Physical copies with the same definition and target are interchangeable at this decision. */
+internal fun cpuActionKey(state: GameState, action: GameAction): String {
+    val hand = state.players[state.currentPlayer].hand
+    fun definition(id: String) = hand.firstOrNull { it.id == id }?.definitionId ?: id
+    return when (action) {
+        is GameAction.AttachEnergy -> "energy:${definition(action.cardId)}:${action.pokemonId}"
+        is GameAction.Evolve -> "evolve:${definition(action.cardId)}:${action.pokemonId}"
+        is GameAction.PlayTrainer -> "trainer:${definition(action.cardId)}"
+        is GameAction.PlayBasic -> "basic:${definition(action.cardId)}"
+        else -> action.toString()
+    }
+}
+
+/** Cheap subset for the two-step energy/evolution reply probe; same order and rule validation. */
+internal fun RulesEngine.cpuKnownPreparationActions(state: GameState): List<GameAction> {
+    if (state.phase != Phase.MAIN) return emptyList()
+    val own = state.players[actingPlayer(state)]
+    return own.hand.filter { it.definitionId != "cpu-hidden-card" }.flatMap { card ->
+        when (definition(card).category) {
+            Category.ENERGY -> own.pokemon().map { GameAction.AttachEnergy(card.id, it.id) }
+            Category.POKEMON -> own.pokemon().map { GameAction.Evolve(card.id, it.id) }
+            else -> emptyList()
+        }
+    }.filter { validate(state, it) == Legality.Legal }
+}
+
+/** Preserve different preparation types before applying the width limit, without imposing a play order. */
+internal fun cpuReplyPreparations(state: GameState, actions: List<GameAction>, limit: Int): List<GameAction> {
+    val groups = actions.filter { it !is GameAction.Attack && it != GameAction.EndTurn }
+        .distinctBy { cpuActionKey(state, it) }.groupBy { it.javaClass }.values.toList()
+    return buildList {
+        for (index in 0 until (groups.maxOfOrNull { it.size } ?: 0)) {
+            for (group in groups) group.getOrNull(index)?.let { action ->
+                if (size < limit) add(action)
+            }
+            if (size >= limit) break
+        }
+    }
+}
+
 /** CPU candidate generation avoids factorial retreat payments; the normal rules/validation remain authoritative. */
 internal fun RulesEngine.cpuLegalActions(state: GameState): List<GameAction> {
     if (state.phase != Phase.MAIN) return legalActions(state)

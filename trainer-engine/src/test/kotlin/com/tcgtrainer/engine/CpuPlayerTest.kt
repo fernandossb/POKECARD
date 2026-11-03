@@ -3,6 +3,16 @@ package com.tcgtrainer.engine
 import kotlin.test.*
 
 class CpuPlayerTest {
+    @Test fun `every built in deck has a strategy profile`() {
+        TrainingDecks.all.forEach { deck ->
+            val plan = CpuDeckPlan.forDeck(deck.id, deck.cards)
+            assertNotEquals("custom", plan.id, "${deck.id} fell back to a generic CPU plan")
+            assertTrue(plan.attackers.isNotEmpty(), "${deck.id} has no preferred attacker")
+        }
+        assertNotEquals(CpuDeckPlan.forDeck("competitive-dragapult"), CpuDeckPlan.forDeck("competitive-mega-excadrill"))
+        assertEquals("competitive-n-zoroark", CpuDeckPlan.forDeck("competitive-n-zoroark").id)
+    }
+
     private fun threatenedPosition(benchEnergy: Int, handEnergy: Boolean): Triple<RulesEngine, CpuPlayer, GameState> {
         val weak = CardDefinition("weak", "Weak", "Test", "1", category = Category.POKEMON, hp = 200,
             attacks = listOf(AttackDefinition("weak-hit", "Hit", listOf(EnergyType.COLORLESS), listOf(Effect.Damage(30))),
@@ -83,11 +93,12 @@ class CpuPlayerTest {
             assertEquals(60, deck.cards.size)
             deck.cards.groupingBy { it }.eachCount().forEach { (id, n) ->
                 val d = TrainerCatalog.get(id)
-                assertTrue(d.verified && d.artAsset != null)
+                assertTrue(d.verified && d.artAsset != null, "${deck.id}: $id is not verified or has no art")
                 assertTrue(d.category == Category.ENERGY || n <= 4)
                 assertTrue(d.attacks.all(rules.effects::supported))
             }
-            assertTrue(deck.cards.count { TrainerCatalog.get(it).aceSpec } <= 1)
+            val aceSpecs = deck.cards.filter { TrainerCatalog.get(it).aceSpec }
+            assertTrue(aceSpecs.size <= 1, "${deck.id} has multiple ACE SPEC cards: ${aceSpecs.distinct()}")
         }
     }
     @Test fun `hidden hand prizes and both deck orders do not affect CPU input or decision`() {
