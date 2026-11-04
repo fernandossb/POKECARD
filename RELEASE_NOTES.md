@@ -1,3 +1,11 @@
+# POKECARD Brasil 5.99.51 — Unificação dos Decks na Aba Decks e Sincronização com o TCG Trainer
+
+- Unificação completa dos decks: todos os baralhos do TCG Trainer (os 17 decks oficiais de treino, Academia 2022 e competitivos, além de eventuais decks salvos anteriormente no simulador) agora aparecem diretamente na aba **Decks** como **Decks salvos**.
+- A aba **Decks** passa a ser o local único para cadastrar, importar e editar baralhos para jogar, com busca integrada em todo o catálogo no modal de adição de cartas e botão rápido **Jogar no TCG Trainer** dentro do editor de cada deck.
+- Sincronização bidirecional automática (`TrainerDeckBridge` / `trainer-decks.json`): qualquer criação, edição, renomeação ou exclusão de deck na aba **Decks** reflete imediatamente nos seletores de baralho (**Seu Baralho** e **Baralho da Máquina**) do TCG Trainer.
+- Removido o botão separado **Meus Decks · Criar e Editar** de dentro da tela inicial do TCG Trainer, centralizando toda a gestão de listas na aba **Decks** do aplicativo principal.
+- Versão Android: `versionCode` 253 e `versionName` 5.99.51. Assinatura oficial e dados locais preservados.
+
 # POKECARD Brasil 5.99.50 — Correção de Contra-Jogo, Recuo Tático e Sincronização de Turno da CPU
 
 - Corrigida a avaliação de contra-jogo (`CpuCounterplay`): o estado inspecionado para simular o ataque agora utiliza corretamente o estado anterior ao ataque (`stateBeforeAttack`), garantindo que ataques defensivos com efeitos de prevenção (ex.: imunidade contra ataque no próximo turno) sejam plenamente considerados e valorizados pela IA.

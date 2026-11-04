@@ -2550,6 +2550,7 @@ async function init() {
     loadConditionMultipliers();
     await loadCentralPriceCache();
     state = await loadState();
+    if (typeof sincronizarDecksDoTrainer === 'function') sincronizarDecksDoTrainer();
     if (clearNonDatabaseAutomaticPrices()) saveState();
     // Ao mudar para a média brasileira, removemos uma vez os valores internacionais antigos.
     const storedLogicVersion = Number(localStorage.getItem(PRICE_LOGIC_VERSION_KEY) || 0);
@@ -2927,6 +2928,7 @@ function saveStateNow() {
   }
   const numero = ultimaGravacao;
   stateSaveDirty = false;
+  if (typeof syncDecksToTrainerNative === 'function') syncDecksToTrainerNative();
   let copiaLocalOk = false;
   if (texto.length < copiaLocalQueNaoCoube) {
     try {
@@ -10641,7 +10643,8 @@ function energiaBasicaCanonica(tipo) {
   const peso = card => {
     const raridade = normalize(card.rarity || '');
     const comum = !raridade || /^(common|comum|none)$/.test(raridade);
-    return (comum ? 0 : 10) + (/^(sve|mee)$/.test(String(card.setId)) ? 0 : 1);
+    const trainerReady = /^sve-00[1-8]$/.test(String(card.id)) ? -2 : 0;
+    return (comum ? 0 : 10) + (/^(sve|mee)$/.test(String(card.setId)) ? 0 : 1) + trainerReady;
   };
   return cards.filter(card => ehEnergiaBasica(card) && tipoDaEnergiaBasica(card) === alvo)
     .sort((a, b) => peso(a) - peso(b) || quantityFor(b.id) - quantityFor(a.id)
@@ -10904,6 +10907,7 @@ function custoDoDeck(deck) {
 function cardsFaltandoParaDecks() {
   const demanda = new Map();
   for (const deck of state.decks || []) {
+    if (deck.trainerPreset && !deck.incluirNaWishlist) continue;
     for (const [cardId, qtdRaw] of Object.entries(deck.cards || {})) {
       const qtd = Math.max(0, Number(qtdRaw) || 0);
       if (!qtd) continue;
@@ -11469,7 +11473,7 @@ function cartaoDeDeck(deck) {
       ? `<img src="${esc(upgradeCardImageUrl(capa.imageUrl))}" alt="" loading="lazy">`
       : '<span class="card-placeholder">TCG</span>'}</span>
     <span class="deck-cartao-dados">
-      <strong>${esc(deck.name)}${deckPlanejando(deck) ? ' <em>· planejando</em>' : ''}</strong>
+      <strong>${esc(deck.name)}${deck.trainerPreset ? ' <em>· TCG Trainer</em>' : deckPlanejando(deck) ? ' <em>· planejando</em>' : ''}</strong>
       <small>${report.split.pokemon} Pokémon · ${report.split.trainerTotal} Treinadores · ${report.split.energy} Energias</small>
       <small class="deck-cartao-linha">
         <b class="${report.valid ? 'ok' : ''}">${report.total}/60</b>
@@ -11651,7 +11655,7 @@ function addDeck() {
   const name = input?.value.trim();
   if (!name) return notify('Digite um nome para o deck');
   state.decks = state.decks || [];
-  const deck = { id: `deck-${Date.now()}`, name, cards: {}, createdAt: new Date().toISOString() };
+  const deck = { id: `deck-${Date.now()}`, name, cards: {}, planejando: true, tcgTrainer: true, createdAt: new Date().toISOString() };
   state.decks.push(deck); selectedDeckId = deck.id;
   saveState(); render(); notify('Deck criado');
 }
@@ -11667,13 +11671,13 @@ function renameDeck(id) {
   if (!deck) return;
   const name = prompt('Novo nome do deck:', deck.name);
   if (!name?.trim()) return;
-  deck.name = name.trim(); saveState(); render();
+  deck.name = name.trim(); deck.trainerPreset = false; saveState(); render();
 }
 
 function duplicateDeck(id) {
   const source = (state.decks || []).find(item => item.id === id);
   if (!source) return;
-  const copy = { ...source, id:`deck-${Date.now()}`, name:`${source.name} (cópia)`, cards:{...(source.cards||{})}, createdAt:new Date().toISOString(), generated:false };
+  const copy = { ...source, id:`deck-${Date.now()}`, name:`${source.name} (cópia)`, cards:{...(source.cards||{})}, trainerPreset:false, createdAt:new Date().toISOString(), generated:false };
   state.decks.push(copy); selectedDeckId=copy.id; saveState(); render(); notify('Deck duplicado.');
 }
 
@@ -11692,6 +11696,7 @@ function changeDeckCard(deckId, cardId, delta) {
   const card = cardMap.get(cardId);
   if (!deck || !card) return;
   deck.cards = deck.cards || {};
+  deck.trainerPreset = false;
   const current = Math.max(0, Number(deck.cards[cardId]) || 0);
   // Só a Energia básica passa das 4 cópias; a especial segue o limite.
   const basica = ehEnergiaBasica(card);
@@ -11710,28 +11715,55 @@ function changeDeckCard(deckId, cardId, delta) {
   saveState(); render();
 }
 
+function renderDeckCardPickerRows(deckId, rawQuery) {
+  const deck = (state.decks || []).find(item => item.id === deckId);
+  if (!deck) return '';
+  const query = normalize(rawQuery || '');
+  let base;
+  if (deckPlanejando(deck)) {
+    if (query) {
+      base = cards.map(card => ({ card, owned: quantityFor(card.id) }));
+    } else {
+      const ownedPool = ownedDeckPool();
+      base = ownedPool.length ? ownedPool : cards.slice(0, 300).map(card => ({ card, owned: quantityFor(card.id) }));
+    }
+  } else {
+    base = ownedDeckPool();
+  }
+  const pool = base
+    .filter(item => !query || normalize(`${item.card.name} ${item.card.nameEn || ''} ${item.card.number} ${item.card.setName} ${item.card.id}`).includes(query))
+    .sort((a,b)=>deckStrengthScore(b.card,deck.preferredType)-deckStrengthScore(a.card,deck.preferredType))
+    .slice(0,160);
+  return pool.length ? pool.map(item=>{
+    const inDeck = Math.max(0, Number(deck.cards?.[item.card.id]) || 0);
+    return `<button onclick="changeDeckCard('${esc(deckId)}','${esc(item.card.id)}',1);atualizarModalDeckPicker('${esc(deckId)}')">
+      <strong>${esc(item.card.name)}${inDeck ? ` (${inDeck} no deck)` : ''}</strong>
+      <span>${esc(item.card.number)} · ${esc(item.card.setName)} · ${item.owned ? `você tem ${item.owned}` : 'catálogo'} · ${deckCardClass(item.card)}</span>
+    </button>`;
+  }).join('') : '<div class="empty">Nenhuma carta encontrada. Digite o nome da carta acima para buscar no catálogo.</div>';
+}
+
+function atualizarModalDeckPicker(deckId) {
+  const deck = (state.decks || []).find(item => item.id === deckId);
+  if (!deck) return;
+  const input = document.getElementById('modalDeckCardSearch');
+  const listEl = document.getElementById('modalDeckPickerList');
+  const countEl = document.getElementById('modalDeckPickerCount');
+  if (countEl) countEl.textContent = `${deckTotal(deck)}/60 cartas no deck`;
+  if (listEl) listEl.innerHTML = renderDeckCardPickerRows(deckId, input?.value || '');
+}
+
 function openDeckCardPicker(deckId) {
   const deck = (state.decks || []).find(item => item.id === deckId);
   if (!deck) return;
-  const query = normalize(document.getElementById('deckCardSearch')?.value || '');
-  /* No planejamento o catálogo inteiro entra na busca. Sem consulta digitada
-     seriam 36 mil cartas de uma vez: aí a lista fica só com o que você tem,
-     que é o começo natural. */
-  const base = deckPlanejando(deck) && query
-    ? cards.map(card => ({ card, owned: quantityFor(card.id) }))
-    : ownedDeckPool();
-  const pool = base
-    .filter(item => !query || normalize(`${item.card.name} ${item.card.number} ${item.card.setName}`).includes(query))
-    .sort((a,b)=>deckStrengthScore(b.card,deck.preferredType)-deckStrengthScore(a.card,deck.preferredType))
-    .slice(0,160);
+  const initialQuery = document.getElementById('deckCardSearch')?.value || '';
   showModal(`<button class="modal-close" onclick="closeModal()">×</button><h2>Adicionar carta ao deck</h2>
-    <p class="screen-subtitle">${deckPlanejando(deck)
-      ? 'Planejamento ligado: dá para escolher cartas que você ainda não tem. Digite para buscar no catálogo inteiro.'
-      : 'Respeita sua quantidade, o limite de 4 cópias pelo mesmo nome e o máximo de 60 cartas.'}</p>
-    <div class="deck-picker">${pool.length ? pool.map(item=>`<button onclick="changeDeckCard('${esc(deckId)}','${esc(item.card.id)}',1);closeModal()">
-      <strong>${esc(item.card.name)}</strong>
-      <span>${esc(item.card.number)} · ${esc(item.card.setName)} · ${item.owned ? `você tem ${item.owned}` : 'você não tem'} · ${deckCardClass(item.card)}</span>
-    </button>`).join('') : '<div class="empty">Nenhuma carta encontrada.</div>'}</div>`);
+    <p class="screen-subtitle"><strong id="modalDeckPickerCount">${deckTotal(deck)}/60 cartas no deck</strong> · ${deckPlanejando(deck)
+      ? 'Busque qualquer carta do catálogo para montar ou editar seu deck.'
+      : 'Mostrando apenas cartas que você possui no fichário.'}</p>
+    <div class="toolbar"><input id="modalDeckCardSearch" class="field search" value="${esc(initialQuery)}" placeholder="Digite o nome, número ou coleção da carta..." oninput="atualizarModalDeckPicker('${esc(deckId)}')"></div>
+    <div id="modalDeckPickerList" class="deck-picker">${renderDeckCardPickerRows(deckId, initialQuery)}</div>
+    <div class="modal-actions"><button class="primary-btn" onclick="closeModal()">Concluir</button></div>`);
 }
 
 /* 5. COLAR UMA LISTA PRONTA

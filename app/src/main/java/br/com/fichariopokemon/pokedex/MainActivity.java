@@ -109,13 +109,14 @@ public final class MainActivity extends Activity {
     private double bottomInsetCss;
     private FirebaseAnalytics firebaseAnalytics;
 
-    @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
+    @SuppressLint({ "SetJavaScriptEnabled", "JavascriptInterface" })
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         firebaseAnalytics = FirebaseAnalytics.getInstance(this);
         // O conteúdo ocupa também a área da barra de status. O cabeçalho Web ajusta
-        // internamente o safe-area para que títulos e botões nunca fiquem sob os ícones.
+        // internamente o safe-area para que títulos e botões nunca fiquem sob os
+        // ícones.
         getWindow().setStatusBarColor(Color.TRANSPARENT);
         getWindow().setNavigationBarColor(Color.rgb(8, 5, 13));
         int systemUiFlags = View.SYSTEM_UI_FLAG_LAYOUT_STABLE
@@ -138,43 +139,52 @@ public final class MainActivity extends Activity {
         }
     }
 
-    /* A tela do aplicativo. Fica num método próprio porque pode precisar ser
-       recriada: quando o Android encerra o processo do WebView por falta de
-       memória, o padrão é derrubar o aplicativo inteiro junto. */
-    @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
+    /*
+     * A tela do aplicativo. Fica num método próprio porque pode precisar ser
+     * recriada: quando o Android encerra o processo do WebView por falta de
+     * memória, o padrão é derrubar o aplicativo inteiro junto.
+     */
+    @SuppressLint({ "SetJavaScriptEnabled", "JavascriptInterface" })
     private void criarWebView() {
         webView = new WebView(this);
         webView.setBackgroundColor(Color.rgb(255, 248, 220));
         configureWebView(webView);
         webView.setWebViewClient(new WebViewClient() {
-            /* O processo que desenha a página caiu (quase sempre memória).
-               Sem este tratamento, o Android fecha o aplicativo. Aqui a tela
-               morta sai e uma nova é criada: a coleção está salva no aparelho,
-               então é só recarregar. */
+            /*
+             * O processo que desenha a página caiu (quase sempre memória).
+             * Sem este tratamento, o Android fecha o aplicativo. Aqui a tela
+             * morta sai e uma nova é criada: a coleção está salva no aparelho,
+             * então é só recarregar.
+             */
             @Override
             public boolean onRenderProcessGone(WebView view, android.webkit.RenderProcessGoneDetail detail) {
-                if (view != webView) return true;
+                if (view != webView)
+                    return true;
                 // A tela morta não pode receber mais nenhuma chamada.
                 webView = null;
                 closeLiveScanner();
                 rootView.removeView(view);
                 view.destroy();
                 criarWebView();
-                Toast.makeText(MainActivity.this, "O aplicativo recarregou para liberar memória", Toast.LENGTH_LONG).show();
+                Toast.makeText(MainActivity.this, "O aplicativo recarregou para liberar memória", Toast.LENGTH_LONG)
+                        .show();
                 return true;
             }
         });
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
-            public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
-                if (pendingImageChooser != null) pendingImageChooser.onReceiveValue(null);
+            public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> filePathCallback,
+                    FileChooserParams fileChooserParams) {
+                if (pendingImageChooser != null)
+                    pendingImageChooser.onReceiveValue(null);
                 pendingImageChooser = filePathCallback;
                 try {
                     launchImageChooser(fileChooserParams != null && fileChooserParams.isCaptureEnabled());
                     return true;
                 } catch (Exception error) {
                     pendingImageChooser = null;
-                    Toast.makeText(MainActivity.this, "Não foi possível abrir câmera ou galeria", Toast.LENGTH_LONG).show();
+                    Toast.makeText(MainActivity.this, "Não foi possível abrir câmera ou galeria", Toast.LENGTH_LONG)
+                            .show();
                     return false;
                 }
             }
@@ -202,7 +212,8 @@ public final class MainActivity extends Activity {
 
     private double systemBarHeightCss(String resourceName) {
         int resourceId = getResources().getIdentifier(resourceName, "dimen", "android");
-        if (resourceId == 0) return 0;
+        if (resourceId == 0)
+            return 0;
         int pixels = getResources().getDimensionPixelSize(resourceId);
         float density = getResources().getDisplayMetrics().density;
         return density > 0 ? pixels / density : 0;
@@ -231,15 +242,17 @@ public final class MainActivity extends Activity {
     @Override
     public void onBackPressed() {
         if (webView != null) {
-            webView.evaluateJavascript("window.handleAndroidBack && window.handleAndroidBack()", new ValueCallback<String>() {
-                @Override
-                public void onReceiveValue(String value) {
-                    // Na tela inicial o botão Voltar apenas envia o app para o
-                    // segundo plano. A Activity continua viva e o estado local
-                    // da coleção não é descartado.
-                    if (!"true".equals(value)) MainActivity.this.moveTaskToBack(true);
-                }
-            });
+            webView.evaluateJavascript("window.handleAndroidBack && window.handleAndroidBack()",
+                    new ValueCallback<String>() {
+                        @Override
+                        public void onReceiveValue(String value) {
+                            // Na tela inicial o botão Voltar apenas envia o app para o
+                            // segundo plano. A Activity continua viva e o estado local
+                            // da coleção não é descartado.
+                            if (!"true".equals(value))
+                                MainActivity.this.moveTaskToBack(true);
+                        }
+                    });
         } else {
             moveTaskToBack(true);
         }
@@ -247,7 +260,10 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        try { unregisterReceiver(updateReceiver); } catch (Exception ignored) {}
+        try {
+            unregisterReceiver(updateReceiver);
+        } catch (Exception ignored) {
+        }
         backgroundExecutor.shutdownNow();
         if (webView != null) {
             webView.destroy();
@@ -256,15 +272,17 @@ public final class MainActivity extends Activity {
         super.onDestroy();
     }
 
-    /* O Android avisa por aqui QUANDO a memória do aparelho está ficando
-       escassa — antes de precisar matar alguém para liberar espaço. Sem
-       ouvir esse aviso, o único jeito do aplicativo "descobrir" que estava
-       pesado demais era o processo do WebView já ter caído (onRenderProcessGone
-       recupera daquilo, mas recuperar já é recarregar a tela inteira, o que
-       para quem está usando parece a coleção "piscar"). Repassando o aviso
-       para o lado do JavaScript, os caches que só servem de atalho — não a
-       coleção, não o que está na tela — têm a chance de esvaziar sozinhos
-       antes que o sistema precise agir. */
+    /*
+     * O Android avisa por aqui QUANDO a memória do aparelho está ficando
+     * escassa — antes de precisar matar alguém para liberar espaço. Sem
+     * ouvir esse aviso, o único jeito do aplicativo "descobrir" que estava
+     * pesado demais era o processo do WebView já ter caído (onRenderProcessGone
+     * recupera daquilo, mas recuperar já é recarregar a tela inteira, o que
+     * para quem está usando parece a coleção "piscar"). Repassando o aviso
+     * para o lado do JavaScript, os caches que só servem de atalho — não a
+     * coleção, não o que está na tela — têm a chance de esvaziar sozinhos
+     * antes que o sistema precise agir.
+     */
     @Override
     public void onTrimMemory(int level) {
         super.onTrimMemory(level);
@@ -277,7 +295,8 @@ public final class MainActivity extends Activity {
         galleryIntent.setType("image/*");
 
         Intent cameraIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-        File cameraFile = File.createTempFile("card-photo-", ".jpg", getExternalCacheDir() != null ? getExternalCacheDir() : getCacheDir());
+        File cameraFile = File.createTempFile("card-photo-", ".jpg",
+                getExternalCacheDir() != null ? getExternalCacheDir() : getCacheDir());
         pendingCameraImageUri = FileProvider.getUriForFile(
                 this,
                 getPackageName() + ".fileprovider",
@@ -291,34 +310,38 @@ public final class MainActivity extends Activity {
         } else {
             chooser = Intent.createChooser(galleryIntent, "Escolher imagem da carta");
             if (cameraIntent.resolveActivity(getPackageManager()) != null) {
-                chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{cameraIntent});
+                chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[] { cameraIntent });
             }
         }
         startActivityForResult(chooser, PICK_CARD_IMAGE);
     }
 
     private Uri[] imageChooserResult(int resultCode, Intent data) {
-        if (resultCode != RESULT_OK) return null;
+        if (resultCode != RESULT_OK)
+            return null;
         if (data == null || (data.getData() == null && data.getClipData() == null)) {
-            return pendingCameraImageUri == null ? null : new Uri[]{pendingCameraImageUri};
+            return pendingCameraImageUri == null ? null : new Uri[] { pendingCameraImageUri };
         }
         if (data.getClipData() != null) {
             int count = data.getClipData().getItemCount();
             Uri[] uris = new Uri[count];
-            for (int index = 0; index < count; index++) uris[index] = data.getClipData().getItemAt(index).getUri();
+            for (int index = 0; index < count; index++)
+                uris[index] = data.getClipData().getItemAt(index).getUri();
             return uris;
         }
-        return data.getData() == null ? null : new Uri[]{data.getData()};
+        return data.getData() == null ? null : new Uri[] { data.getData() };
     }
 
-    private Bitmap enhancedScannerCrop(Bitmap source, float leftRatio, float topRatio, float widthRatio, float heightRatio) {
+    private Bitmap enhancedScannerCrop(Bitmap source, float leftRatio, float topRatio, float widthRatio,
+            float heightRatio) {
         int left = Math.max(0, Math.min(source.getWidth() - 1, Math.round(source.getWidth() * leftRatio)));
         int top = Math.max(0, Math.min(source.getHeight() - 1, Math.round(source.getHeight() * topRatio)));
         int width = Math.max(1, Math.min(source.getWidth() - left, Math.round(source.getWidth() * widthRatio)));
         int height = Math.max(1, Math.min(source.getHeight() - top, Math.round(source.getHeight() * heightRatio)));
         Bitmap crop = Bitmap.createBitmap(source, left, top, width, height);
 
-        /* Ampliação com teto de memória.
+        /*
+         * Ampliação com teto de memória.
          *
          * A conta antiga mirava 3000 pixels de largura, o que fazia sentido
          * enquanto o quadro tinha 640: dava 4× e uma imagem pequena. Com o
@@ -328,23 +351,26 @@ public final class MainActivity extends Activity {
          *
          * Agora existe um orçamento de pixels: amplia o quanto der até 2,5×,
          * respeitando o limite. O ganho de nitidez veio da captura, não do
-         * esticão — quem já foi capturado grande não precisa esticar tanto. */
-        final int TETO_DE_PIXELS = 4_000_000;   // ~16 MB por bitmap ARGB
+         * esticão — quem já foi capturado grande não precisa esticar tanto.
+         */
+        final int TETO_DE_PIXELS = 4_000_000; // ~16 MB por bitmap ARGB
         float escala = Math.max(1f, Math.min(2.5f, 1800f / Math.max(1, crop.getWidth())));
         long previsto = (long) (crop.getWidth() * escala) * (long) (crop.getHeight() * escala);
         if (previsto > TETO_DE_PIXELS) {
             escala = (float) Math.sqrt((double) TETO_DE_PIXELS / (double) (crop.getWidth() * crop.getHeight()));
             escala = Math.max(1f, escala);
         }
-        Bitmap enlarged = escala <= 1.01f ? crop : Bitmap.createScaledBitmap(
-                crop, Math.round(crop.getWidth() * escala), Math.round(crop.getHeight() * escala), true);
-        if (crop != enlarged) crop.recycle();
+        Bitmap enlarged = escala <= 1.01f ? crop
+                : Bitmap.createScaledBitmap(
+                        crop, Math.round(crop.getWidth() * escala), Math.round(crop.getHeight() * escala), true);
+        if (crop != enlarged)
+            crop.recycle();
         Bitmap enhanced = Bitmap.createBitmap(enlarged.getWidth(), enlarged.getHeight(), Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(enhanced);
         Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         ColorMatrix matrix = new ColorMatrix();
         matrix.setSaturation(0f);
-        ColorMatrix contrast = new ColorMatrix(new float[]{
+        ColorMatrix contrast = new ColorMatrix(new float[] {
                 1.75f, 0, 0, 0, -72,
                 0, 1.75f, 0, 0, -72,
                 0, 0, 1.75f, 0, -72,
@@ -358,7 +384,8 @@ public final class MainActivity extends Activity {
     }
 
     private void deliverScannerText(String text, String finish) {
-        runJavascript("window.receiveScannerText&&window.receiveScannerText(" + JSONObject.quote(text == null ? "" : text) + "," + JSONObject.quote(finish) + ");");
+        runJavascript("window.receiveScannerText&&window.receiveScannerText("
+                + JSONObject.quote(text == null ? "" : text) + "," + JSONObject.quote(finish) + ");");
     }
 
     @Override
@@ -374,17 +401,23 @@ public final class MainActivity extends Activity {
             return;
         }
 
-        if (resultCode != RESULT_OK || data == null || data.getData() == null) return;
+        if (resultCode != RESULT_OK || data == null || data.getData() == null)
+            return;
         Uri uri = data.getData();
         try {
             if (requestCode == CREATE_BACKUP && pendingBackup != null) {
                 OutputStream output = null;
                 try {
                     output = getContentResolver().openOutputStream(uri);
-                    if (output == null) throw new IllegalStateException("Arquivo indisponível");
+                    if (output == null)
+                        throw new IllegalStateException("Arquivo indisponível");
                     output.write(pendingBackup.getBytes(StandardCharsets.UTF_8));
                 } finally {
-                    if (output != null) try { output.close(); } catch (Exception ignored) {}
+                    if (output != null)
+                        try {
+                            output.close();
+                        } catch (Exception ignored) {
+                        }
                 }
                 pendingBackup = null;
                 Toast.makeText(this, "Backup salvo", Toast.LENGTH_SHORT).show();
@@ -392,10 +425,15 @@ public final class MainActivity extends Activity {
                 OutputStream output = null;
                 try {
                     output = getContentResolver().openOutputStream(uri);
-                    if (output == null) throw new IllegalStateException("Arquivo indisponível");
+                    if (output == null)
+                        throw new IllegalStateException("Arquivo indisponível");
                     output.write(pendingCsvExport.getBytes(StandardCharsets.UTF_8));
                 } finally {
-                    if (output != null) try { output.close(); } catch (Exception ignored) {}
+                    if (output != null)
+                        try {
+                            output.close();
+                        } catch (Exception ignored) {
+                        }
                 }
                 pendingCsvExport = null;
                 pendingCsvExportName = null;
@@ -404,10 +442,15 @@ public final class MainActivity extends Activity {
                 OutputStream output = null;
                 try {
                     output = getContentResolver().openOutputStream(uri);
-                    if (output == null) throw new IllegalStateException("Arquivo indisponível");
+                    if (output == null)
+                        throw new IllegalStateException("Arquivo indisponível");
                     output.write(arquivoPendente);
                 } finally {
-                    if (output != null) try { output.close(); } catch (Exception ignored) {}
+                    if (output != null)
+                        try {
+                            output.close();
+                        } catch (Exception ignored) {
+                        }
                 }
                 arquivoPendente = null;
                 Toast.makeText(this, "Arquivo salvo", Toast.LENGTH_SHORT).show();
@@ -419,14 +462,24 @@ public final class MainActivity extends Activity {
                 try {
                     input = getContentResolver().openInputStream(uri);
                     output = new ByteArrayOutputStream();
-                    if (input == null) throw new IllegalStateException("Arquivo indisponível");
+                    if (input == null)
+                        throw new IllegalStateException("Arquivo indisponível");
                     byte[] buffer = new byte[8192];
                     int count;
-                    while ((count = input.read(buffer)) >= 0) output.write(buffer, 0, count);
+                    while ((count = input.read(buffer)) >= 0)
+                        output.write(buffer, 0, count);
                     json = output.toString(StandardCharsets.UTF_8.name());
                 } finally {
-                    if (input != null) try { input.close(); } catch (Exception ignored) {}
-                    if (output != null) try { output.close(); } catch (Exception ignored) {}
+                    if (input != null)
+                        try {
+                            input.close();
+                        } catch (Exception ignored) {
+                        }
+                    if (output != null)
+                        try {
+                            output.close();
+                        } catch (Exception ignored) {
+                        }
                 }
                 webView.evaluateJavascript(
                         "window.receiveImportedBackup(" + JSONObject.quote(json) + ")", null);
@@ -439,9 +492,11 @@ public final class MainActivity extends Activity {
     private final BroadcastReceiver updateReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            if (!DownloadManager.ACTION_DOWNLOAD_COMPLETE.equals(intent.getAction())) return;
+            if (!DownloadManager.ACTION_DOWNLOAD_COMPLETE.equals(intent.getAction()))
+                return;
             long id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L);
-            if (id != updateDownloadId) return;
+            if (id != updateDownloadId)
+                return;
             DownloadManager manager = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
             DownloadManager.Query query = new DownloadManager.Query().setFilterById(id);
             android.database.Cursor cursor = null;
@@ -449,56 +504,75 @@ public final class MainActivity extends Activity {
                 cursor = manager.query(query);
                 if (cursor != null && cursor.moveToFirst()) {
                     int status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS));
-                    if (status == DownloadManager.STATUS_SUCCESSFUL && pendingInstallFile != null && pendingInstallFile.exists()) {
-                        runJavascript("window.receiveUpdateDownload && window.receiveUpdateDownload(true,'Download concluído.');");
+                    if (status == DownloadManager.STATUS_SUCCESSFUL && pendingInstallFile != null
+                            && pendingInstallFile.exists()) {
+                        runJavascript(
+                                "window.receiveUpdateDownload && window.receiveUpdateDownload(true,'Download concluído.');");
                         installDownloadedApk(pendingInstallFile);
                     } else {
-                        runJavascript("window.receiveUpdateDownload && window.receiveUpdateDownload(false,'Não foi possível baixar a atualização.');");
+                        runJavascript(
+                                "window.receiveUpdateDownload && window.receiveUpdateDownload(false,'Não foi possível baixar a atualização.');");
                     }
                 }
             } catch (Exception error) {
-                runJavascript("window.receiveUpdateDownload && window.receiveUpdateDownload(false,'Falha ao verificar o download.');");
+                runJavascript(
+                        "window.receiveUpdateDownload && window.receiveUpdateDownload(false,'Falha ao verificar o download.');");
             } finally {
-                if (cursor != null) cursor.close();
+                if (cursor != null)
+                    cursor.close();
             }
         }
     };
 
     private void registerUpdateReceiver() {
         IntentFilter filter = new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE);
-        if (Build.VERSION.SDK_INT >= 33) registerReceiver(updateReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
-        else registerReceiver(updateReceiver, filter);
+        if (Build.VERSION.SDK_INT >= 33)
+            registerReceiver(updateReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        else
+            registerReceiver(updateReceiver, filter);
     }
 
     private void runJavascript(final String script) {
         runOnUiThread(new Runnable() {
-            @Override public void run() {
-                if (webView != null) webView.evaluateJavascript(script, null);
+            @Override
+            public void run() {
+                if (webView != null)
+                    webView.evaluateJavascript(script, null);
             }
         });
     }
 
     private String readText(HttpURLConnection connection) throws Exception {
-        InputStream stream = connection.getResponseCode() >= 400 ? connection.getErrorStream() : connection.getInputStream();
-        if (stream == null) return "";
+        InputStream stream = connection.getResponseCode() >= 400 ? connection.getErrorStream()
+                : connection.getInputStream();
+        if (stream == null)
+            return "";
         BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8));
         StringBuilder result = new StringBuilder();
         String line;
-        while ((line = reader.readLine()) != null) result.append(line).append('\n');
+        while ((line = reader.readLine()) != null)
+            result.append(line).append('\n');
         reader.close();
         return result.toString();
     }
 
     private int releaseBuildNumber(String tag) {
-        if (tag == null) return 0;
+        if (tag == null)
+            return 0;
         java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("(\\d+)$").matcher(tag.trim());
-        if (!matcher.find()) return 0;
-        try { return Integer.parseInt(matcher.group(1)); } catch (Exception ignored) { return 0; }
+        if (!matcher.find())
+            return 0;
+        try {
+            return Integer.parseInt(matcher.group(1));
+        } catch (Exception ignored) {
+            return 0;
+        }
     }
 
     private void checkForUpdateNative() {
         backgroundExecutor.execute(new Runnable() {
-            @Override public void run() {
+            @Override
+            public void run() {
                 HttpURLConnection connection = null;
                 try {
                     connection = (HttpURLConnection) new URL(UPDATE_API_URL).openConnection();
@@ -507,7 +581,8 @@ public final class MainActivity extends Activity {
                     connection.setRequestProperty("Accept", "application/vnd.github+json");
                     connection.setRequestProperty("User-Agent", "Fichario-Pokemon-Android");
                     int code = connection.getResponseCode();
-                    if (code < 200 || code >= 300) throw new IllegalStateException("GitHub respondeu HTTP " + code);
+                    if (code < 200 || code >= 300)
+                        throw new IllegalStateException("GitHub respondeu HTTP " + code);
                     JSONObject release = new JSONObject(readText(connection));
                     String tag = release.optString("tag_name", "");
                     int latestBuild = releaseBuildNumber(tag);
@@ -522,7 +597,8 @@ public final class MainActivity extends Activity {
                     if (assets != null) {
                         for (int i = 0; i < assets.length(); i++) {
                             JSONObject asset = assets.optJSONObject(i);
-                            if (asset == null) continue;
+                            if (asset == null)
+                                continue;
                             String name = asset.optString("name", "");
                             if (name.toLowerCase(Locale.US).endsWith(".apk")) {
                                 apkUrl = asset.optString("browser_download_url", "");
@@ -543,17 +619,22 @@ public final class MainActivity extends Activity {
                     result.put("apkName", apkName);
                     result.put("updateAvailable", latestBuild > currentBuild && apkUrl.length() > 0);
                     final String payload = result.toString();
-                    runJavascript("window.receiveUpdateInfo && window.receiveUpdateInfo(" + JSONObject.quote(payload) + ");");
+                    runJavascript(
+                            "window.receiveUpdateInfo && window.receiveUpdateInfo(" + JSONObject.quote(payload) + ");");
                 } catch (Exception error) {
                     JSONObject result = new JSONObject();
                     try {
                         result.put("ok", false);
-                        result.put("error", error.getMessage() == null ? "Falha ao consultar atualizações." : error.getMessage());
-                    } catch (Exception ignored) {}
+                        result.put("error",
+                                error.getMessage() == null ? "Falha ao consultar atualizações." : error.getMessage());
+                    } catch (Exception ignored) {
+                    }
                     final String payload = result.toString();
-                    runJavascript("window.receiveUpdateInfo && window.receiveUpdateInfo(" + JSONObject.quote(payload) + ");");
+                    runJavascript(
+                            "window.receiveUpdateInfo && window.receiveUpdateInfo(" + JSONObject.quote(payload) + ");");
                 } finally {
-                    if (connection != null) connection.disconnect();
+                    if (connection != null)
+                        connection.disconnect();
                 }
             }
         });
@@ -564,7 +645,8 @@ public final class MainActivity extends Activity {
     }
 
     private void requestInstallPermission() {
-        if (Build.VERSION.SDK_INT < 26) return;
+        if (Build.VERSION.SDK_INT < 26)
+            return;
         Intent intent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                 Uri.parse("package:" + getPackageName()));
         startActivity(intent);
@@ -573,13 +655,16 @@ public final class MainActivity extends Activity {
     private void downloadUpdateNative(String url, String fileName) {
         try {
             URL parsed = new URL(url);
-            if (!"github.com".equalsIgnoreCase(parsed.getHost()) && !"objects.githubusercontent.com".equalsIgnoreCase(parsed.getHost())) {
+            if (!"github.com".equalsIgnoreCase(parsed.getHost())
+                    && !"objects.githubusercontent.com".equalsIgnoreCase(parsed.getHost())) {
                 throw new IllegalArgumentException("Endereço de atualização não autorizado.");
             }
             String safeName = String.valueOf(fileName).replaceAll("[^a-zA-Z0-9._-]", "_");
-            if (!safeName.toLowerCase(Locale.US).endsWith(".apk")) safeName += ".apk";
+            if (!safeName.toLowerCase(Locale.US).endsWith(".apk"))
+                safeName += ".apk";
             pendingInstallFile = new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), safeName);
-            if (pendingInstallFile.exists()) pendingInstallFile.delete();
+            if (pendingInstallFile.exists())
+                pendingInstallFile.delete();
             DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
             request.setTitle("Atualizando Fichário Pokémon");
             request.setDescription("Baixando a nova versão do aplicativo");
@@ -591,7 +676,8 @@ public final class MainActivity extends Activity {
             runJavascript("window.receiveUpdateDownload && window.receiveUpdateDownload(null,'Download iniciado.');");
         } catch (Exception error) {
             String message = error.getMessage() == null ? "Não foi possível iniciar o download." : error.getMessage();
-            runJavascript("window.receiveUpdateDownload && window.receiveUpdateDownload(false," + JSONObject.quote(message) + ");");
+            runJavascript("window.receiveUpdateDownload && window.receiveUpdateDownload(false,"
+                    + JSONObject.quote(message) + ");");
         }
     }
 
@@ -619,7 +705,8 @@ public final class MainActivity extends Activity {
 
     // O arquivo de exportação que a página terminou de mandar, ou null.
     private synchronized byte[] arquivoMontado() {
-        if (arquivoEmMontagem == null || arquivoEmMontagem.size() == 0) return null;
+        if (arquivoEmMontagem == null || arquivoEmMontagem.size() == 0)
+            return null;
         return arquivoEmMontagem.toByteArray();
     }
 
@@ -636,27 +723,59 @@ public final class MainActivity extends Activity {
         @JavascriptInterface
         public void openTcgTrainer(String snapshot) {
             try {
-                if (snapshot == null || snapshot.length() > 4_000_000) throw new IllegalArgumentException();
+                if (snapshot == null || snapshot.length() > 8_000_000)
+                    throw new IllegalArgumentException();
                 JSONObject data = new JSONObject(snapshot);
-                if (data.getInt("version") != 1) throw new IllegalArgumentException();
+                if (data.getInt("version") != 1)
+                    throw new IllegalArgumentException();
                 JSONObject counts = data.getJSONObject("counts");
                 java.util.Iterator<String> ids = counts.keys();
                 while (ids.hasNext()) {
                     String id = ids.next();
                     Object value = counts.get(id);
                     if (id.length() < 1 || id.length() > 120 || !(value instanceof Integer)
-                            || ((Integer) value) < 0 || ((Integer) value) > 1_000_000) throw new IllegalArgumentException();
+                            || ((Integer) value) < 0 || ((Integer) value) > 1_000_000)
+                        throw new IllegalArgumentException();
                 }
-                android.util.AtomicFile file = new android.util.AtomicFile(new File(getFilesDir(), "trainer-owned.json"));
+                JSONObject ownedPayload = new JSONObject();
+                ownedPayload.put("version", 1);
+                ownedPayload.put("counts", counts);
+                android.util.AtomicFile file = new android.util.AtomicFile(
+                        new File(getFilesDir(), "trainer-owned.json"));
                 java.io.FileOutputStream stream = file.startWrite();
                 try {
-                    stream.write(data.toString().getBytes(StandardCharsets.UTF_8));
+                    stream.write(ownedPayload.toString().getBytes(StandardCharsets.UTF_8));
                     file.finishWrite(stream);
-                } catch (Exception error) { file.failWrite(stream); throw error; }
-                runOnUiThread(() -> startActivity(new Intent(MainActivity.this, com.tcgtrainer.app.TrainerActivity.class)));
+                } catch (Exception error) {
+                    file.failWrite(stream);
+                    throw error;
+                }
+                com.tcgtrainer.app.TrainerDeckBridge.saveSyncedDecks(MainActivity.this, snapshot);
+                final String selectedDeckId = data.optString("selectedDeckId", "");
+                runOnUiThread(() -> {
+                    Intent intent = new Intent(MainActivity.this, com.tcgtrainer.app.TrainerActivity.class);
+                    if (!selectedDeckId.isEmpty())
+                        intent.putExtra("selectedDeckId", selectedDeckId);
+                    startActivity(intent);
+                });
             } catch (Exception error) {
-                runOnUiThread(() -> Toast.makeText(MainActivity.this, "Não foi possível carregar a coleção para o jogo. Tente novamente.", Toast.LENGTH_LONG).show());
+                runOnUiThread(() -> Toast
+                        .makeText(MainActivity.this,
+                                "Não foi possível carregar a coleção para o jogo. Tente novamente.", Toast.LENGTH_LONG)
+                        .show());
             }
+        }
+
+        @JavascriptInterface
+        public void syncTrainerDecks(String snapshot) {
+            if (snapshot == null || snapshot.length() > 8_000_000)
+                return;
+            com.tcgtrainer.app.TrainerDeckBridge.saveSyncedDecks(MainActivity.this, snapshot);
+        }
+
+        @JavascriptInterface
+        public String getInitialTrainerDecks() {
+            return com.tcgtrainer.app.TrainerDeckBridge.exportInitialDecksJson(MainActivity.this);
         }
 
         @JavascriptInterface
@@ -697,7 +816,8 @@ public final class MainActivity extends Activity {
         @JavascriptInterface
         public void salvarBackupAutomatico(final String json, final String nomeArquivo) {
             final String nome = (nomeArquivo == null || nomeArquivo.trim().isEmpty())
-                    ? "pokecard-backup-automatico.json" : nomeArquivo.trim();
+                    ? "pokecard-backup-automatico.json"
+                    : nomeArquivo.trim();
             new Thread(new Runnable() {
                 @Override
                 public void run() {
@@ -710,14 +830,16 @@ public final class MainActivity extends Activity {
                             dados.put(MediaStore.MediaColumns.MIME_TYPE, "application/json");
                             dados.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
                             Uri destino = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, dados);
-                            if (destino != null) saida = getContentResolver().openOutputStream(destino, "wt");
+                            if (destino != null)
+                                saida = getContentResolver().openOutputStream(destino, "wt");
                         } else {
                             File pasta = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
                             if (pasta != null && (pasta.exists() || pasta.mkdirs())) {
                                 saida = new java.io.FileOutputStream(new File(pasta, nome));
                             }
                         }
-                        if (saida == null) throw new Exception("sem acesso à pasta Download");
+                        if (saida == null)
+                            throw new Exception("sem acesso à pasta Download");
                         saida.write(json.getBytes(StandardCharsets.UTF_8));
                         saida.flush();
                         saida.close();
@@ -740,7 +862,8 @@ public final class MainActivity extends Activity {
         @JavascriptInterface
         public void exportCsv(String csv, String fileName) {
             pendingCsvExport = csv;
-            pendingCsvExportName = (fileName == null || fileName.trim().isEmpty()) ? "pokecard-exportacao.csv" : fileName;
+            pendingCsvExportName = (fileName == null || fileName.trim().isEmpty()) ? "pokecard-exportacao.csv"
+                    : fileName;
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
@@ -753,11 +876,13 @@ public final class MainActivity extends Activity {
             });
         }
 
-        /* Exportação das cartas em PDF ou Excel (tela "Exportar" da Coleção).
-           O arquivo é binário e pode passar de alguns megabytes — uma foto por
-           carta —, então chega em pedaços de base64 que aqui voltam a ser
-           bytes. Depois vai para o "Salvar como" do sistema ou para o
-           compartilhamento (WhatsApp, e-mail, Drive). */
+        /*
+         * Exportação das cartas em PDF ou Excel (tela "Exportar" da Coleção).
+         * O arquivo é binário e pode passar de alguns megabytes — uma foto por
+         * carta —, então chega em pedaços de base64 que aqui voltam a ser
+         * bytes. Depois vai para o "Salvar como" do sistema ou para o
+         * compartilhamento (WhatsApp, e-mail, Drive).
+         */
         @JavascriptInterface
         public void arquivoComecar() {
             synchronized (MainActivity.this) {
@@ -767,10 +892,12 @@ public final class MainActivity extends Activity {
 
         @JavascriptInterface
         public void arquivoPedaco(String base64) {
-            if (base64 == null || base64.isEmpty()) return;
+            if (base64 == null || base64.isEmpty())
+                return;
             byte[] pedaco = android.util.Base64.decode(base64, android.util.Base64.DEFAULT);
             synchronized (MainActivity.this) {
-                if (arquivoEmMontagem == null) arquivoEmMontagem = new ByteArrayOutputStream();
+                if (arquivoEmMontagem == null)
+                    arquivoEmMontagem = new ByteArrayOutputStream();
                 arquivoEmMontagem.write(pedaco, 0, pedaco.length);
             }
         }
@@ -778,7 +905,8 @@ public final class MainActivity extends Activity {
         @JavascriptInterface
         public void arquivoSalvar(final String nome, final String mime) {
             final byte[] bytes = arquivoMontado();
-            if (bytes == null) return;
+            if (bytes == null)
+                return;
             arquivoPendente = bytes;
             runOnUiThread(new Runnable() {
                 @Override
@@ -795,7 +923,8 @@ public final class MainActivity extends Activity {
         @JavascriptInterface
         public void arquivoCompartilhar(final String nome, final String mime) {
             final byte[] bytes = arquivoMontado();
-            if (bytes == null) return;
+            if (bytes == null)
+                return;
             backgroundExecutor.execute(new Runnable() {
                 @Override
                 public void run() {
@@ -803,11 +932,17 @@ public final class MainActivity extends Activity {
                         // A pasta de cache já está liberada no FileProvider
                         // (cache-path "."), como as fotos da câmera.
                         File pasta = new File(getCacheDir(), "exportacoes");
-                        if (!pasta.exists() && !pasta.mkdirs()) throw new IllegalStateException("sem pasta");
+                        if (!pasta.exists() && !pasta.mkdirs())
+                            throw new IllegalStateException("sem pasta");
                         File arquivo = new File(pasta, nomeDeArquivoSeguro(nome));
                         java.io.FileOutputStream saida = new java.io.FileOutputStream(arquivo);
-                        try { saida.write(bytes); } finally { saida.close(); }
-                        final Uri uri = FileProvider.getUriForFile(MainActivity.this, getPackageName() + ".fileprovider", arquivo);
+                        try {
+                            saida.write(bytes);
+                        } finally {
+                            saida.close();
+                        }
+                        final Uri uri = FileProvider.getUriForFile(MainActivity.this,
+                                getPackageName() + ".fileprovider", arquivo);
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
@@ -824,7 +959,8 @@ public final class MainActivity extends Activity {
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
-                                Toast.makeText(MainActivity.this, "Não foi possível compartilhar o arquivo", Toast.LENGTH_LONG).show();
+                                Toast.makeText(MainActivity.this, "Não foi possível compartilhar o arquivo",
+                                        Toast.LENGTH_LONG).show();
                             }
                         });
                     }
@@ -849,7 +985,8 @@ public final class MainActivity extends Activity {
         public void checkForUpdate() {
             if (BuildConfig.PLAY_STORE) {
                 runJavascript("window.receiveUpdateInfo&&window.receiveUpdateInfo(" +
-                        JSONObject.quote("{\"ok\":false,\"error\":\"Atualizações são gerenciadas pela Google Play.\"}") + ");");
+                        JSONObject.quote("{\"ok\":false,\"error\":\"Atualizações são gerenciadas pela Google Play.\"}")
+                        + ");");
                 return;
             }
             checkForUpdateNative();
@@ -857,23 +994,30 @@ public final class MainActivity extends Activity {
 
         @JavascriptInterface
         public void downloadAndInstallUpdate(final String url, final String fileName) {
-            if (BuildConfig.PLAY_STORE) return;
+            if (BuildConfig.PLAY_STORE)
+                return;
             runOnUiThread(new Runnable() {
-                @Override public void run() { downloadUpdateNative(url, fileName); }
+                @Override
+                public void run() {
+                    downloadUpdateNative(url, fileName);
+                }
             });
         }
 
-        /* Toque de confirmação: a carta entrou, sem precisar olhar para a tela
-           — no scanner a mão está segurando a carta. Usa o retorno tátil do
-           sistema, que respeita a opção "vibrar ao tocar" do aparelho e não
-           precisa de permissão nova. "curto": carta lida ou adicionada.
-           "duplo": coleção completa, troféu, cartas do scanner gravadas. */
+        /*
+         * Toque de confirmação: a carta entrou, sem precisar olhar para a tela
+         * — no scanner a mão está segurando a carta. Usa o retorno tátil do
+         * sistema, que respeita a opção "vibrar ao tocar" do aparelho e não
+         * precisa de permissão nova. "curto": carta lida ou adicionada.
+         * "duplo": coleção completa, troféu, cartas do scanner gravadas.
+         */
         @JavascriptInterface
         public void vibrar(final String padrao) {
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    if (webView == null) return;
+                    if (webView == null)
+                        return;
                     final int efeito = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
                             ? HapticFeedbackConstants.CONFIRM
                             : HapticFeedbackConstants.VIRTUAL_KEY;
@@ -882,7 +1026,8 @@ public final class MainActivity extends Activity {
                         webView.postDelayed(new Runnable() {
                             @Override
                             public void run() {
-                                if (webView != null) webView.performHapticFeedback(efeito);
+                                if (webView != null)
+                                    webView.performHapticFeedback(efeito);
                             }
                         }, 140);
                     }
@@ -920,10 +1065,12 @@ public final class MainActivity extends Activity {
             });
         }
 
-        /* Enquanto o painel de confirmação está aberto a câmera continua
-           ligada — o usuário pediu para não sair da câmera —, mas parar de
-           entregar leituras. Sem isto a carta seguinte chegaria por cima da
-           pergunta que ainda está na tela. */
+        /*
+         * Enquanto o painel de confirmação está aberto a câmera continua
+         * ligada — o usuário pediu para não sair da câmera —, mas parar de
+         * entregar leituras. Sem isto a carta seguinte chegaria por cima da
+         * pergunta que ainda está na tela.
+         */
         @JavascriptInterface
         public void pauseLiveScanner() {
             liveScannerPaused = true;
@@ -935,35 +1082,43 @@ public final class MainActivity extends Activity {
             liveScannerLastDelivery = System.currentTimeMillis();
         }
 
-        /* A leitura parecia carta mas não fechou — quase sempre reflexo em
-           cima do nome ou do número. Tentar de novo logo, em vez de esperar o
-           intervalo inteiro, aproveita o momento em que a pessoa inclina a
-           carta e o brilho sai de cima do texto. */
+        /*
+         * A leitura parecia carta mas não fechou — quase sempre reflexo em
+         * cima do nome ou do número. Tentar de novo logo, em vez de esperar o
+         * intervalo inteiro, aproveita o momento em que a pessoa inclina a
+         * carta e o brilho sai de cima do texto.
+         */
         @JavascriptInterface
         public void lerDeNovoLogo() {
             liveScannerLastDelivery = System.currentTimeMillis() - LIVE_SCAN_INTERVAL_MS + LIVE_RETRY_MS;
         }
     }
 
-    /* =====================================================================
-       Scanner — câmera ao vivo dentro do aplicativo (modo único).
-
-       A imagem aparece dentro do app e cada quadro é lido pelo reconhecedor de
-       texto, sem precisar tirar foto. Uma carta reconhecida não é reenviada
-       enquanto a anterior não for concluída ou até passar o tempo de espera,
-       para não cadastrar a mesma carta várias vezes.
-       ===================================================================== */
+    /*
+     * =====================================================================
+     * Scanner — câmera ao vivo dentro do aplicativo (modo único).
+     * 
+     * A imagem aparece dentro do app e cada quadro é lido pelo reconhecedor de
+     * texto, sem precisar tirar foto. Uma carta reconhecida não é reenviada
+     * enquanto a anterior não for concluída ou até passar o tempo de espera,
+     * para não cadastrar a mesma carta várias vezes.
+     * =====================================================================
+     */
 
     private static final int LIVE_CAMERA_PERMISSION = 2001;
-    /* Espaço mínimo entre dois envios, para o app conseguir mostrar a carta
-       reconhecida antes de aceitar a próxima. */
+    /*
+     * Espaço mínimo entre dois envios, para o app conseguir mostrar a carta
+     * reconhecida antes de aceitar a próxima.
+     */
     private static final long LIVE_SCAN_INTERVAL_MS = 1800L;
     // Depois de uma leitura que não fechou, a próxima tentativa vem antes.
     private static final long LIVE_RETRY_MS = 600L;
     /* Texto muito curto costuma ser reflexo ou borda; não vale tentar. */
     private static final int LIVE_MIN_TEXT_LENGTH = 12;
-    /* Reflexo: fração do miolo da imagem que está branco estourado. Acima de
-       3% a exposição desce meio ponto; acima de 4% a pessoa recebe o aviso. */
+    /*
+     * Reflexo: fração do miolo da imagem que está branco estourado. Acima de
+     * 3% a exposição desce meio ponto; acima de 4% a pessoa recebe o aviso.
+     */
     private static final float REFLEXO_BAIXAR_EXPOSICAO = 0.03f;
     private static final float REFLEXO_AVISAR = 0.04f;
 
@@ -976,8 +1131,10 @@ public final class MainActivity extends Activity {
     private String pendingLiveFinish = "comum";
     private volatile boolean liveScannerBusy;
     private volatile long liveScannerLastDelivery;
-    /* Ligada enquanto o app mostra o painel "é esta carta?": a câmera segue
-       ligada, só não entrega leitura nova até o usuário responder. */
+    /*
+     * Ligada enquanto o app mostra o painel "é esta carta?": a câmera segue
+     * ligada, só não entrega leitura nova até o usuário responder.
+     */
     private volatile boolean liveScannerPaused;
     // Pixels do quadro em análise, reaproveitados de um quadro para o outro.
     private int[] quadroPixels;
@@ -987,8 +1144,10 @@ public final class MainActivity extends Activity {
     private volatile long ultimoAjusteDeExposicao;
     private volatile long ultimoAvisoDeReflexo;
 
-    /** Ciclo de vida próprio: a tela principal estende Activity simples,
-        que a CameraX não aceita como dona da câmera. */
+    /**
+     * Ciclo de vida próprio: a tela principal estende Activity simples,
+     * que a CameraX não aceita como dona da câmera.
+     */
     private static final class ScannerLifecycle implements LifecycleOwner {
         private final LifecycleRegistry registry = new LifecycleRegistry(this);
 
@@ -1013,10 +1172,9 @@ public final class MainActivity extends Activity {
 
     private void requestLiveScanner(String finish) {
         pendingLiveFinish = finish == null || finish.isEmpty() ? "comum" : finish;
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
-                != PackageManager.PERMISSION_GRANTED) {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this,
-                    new String[]{Manifest.permission.CAMERA}, LIVE_CAMERA_PERMISSION);
+                    new String[] { Manifest.permission.CAMERA }, LIVE_CAMERA_PERMISSION);
             return;
         }
         openLiveScanner();
@@ -1024,9 +1182,10 @@ public final class MainActivity extends Activity {
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
-                                           @NonNull int[] grantResults) {
+            @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode != LIVE_CAMERA_PERMISSION) return;
+        if (requestCode != LIVE_CAMERA_PERMISSION)
+            return;
         boolean liberada = grantResults.length > 0
                 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
         if (liberada) {
@@ -1038,18 +1197,21 @@ public final class MainActivity extends Activity {
     }
 
     private void openLiveScanner() {
-        /* Deixar a tela pronta para mostrar a câmera vem ANTES de conferir se
-           ela já está aberta. Assim `startLiveScanner` pode ser chamado a
-           qualquer momento com o sentido de "garanta que a câmera aparece":
-           se algo tiver devolvido o fundo opaco no meio do caminho, esta
-           chamada conserta, em vez de sair calada e deixar o aplicativo
-           desenhado por cima da imagem. */
+        /*
+         * Deixar a tela pronta para mostrar a câmera vem ANTES de conferir se
+         * ela já está aberta. Assim `startLiveScanner` pode ser chamado a
+         * qualquer momento com o sentido de "garanta que a câmera aparece":
+         * se algo tiver devolvido o fundo opaco no meio do caminho, esta
+         * chamada conserta, em vez de sair calada e deixar o aplicativo
+         * desenhado por cima da imagem.
+         */
         if (webView != null) {
             webView.setBackgroundColor(Color.TRANSPARENT);
             runJavascript("document.documentElement.classList.add('camera-ao-vivo');");
         }
         liveScannerPaused = false;
-        if (liveScannerOverlay != null) return;
+        if (liveScannerOverlay != null)
+            return;
         try {
             liveScannerBusy = false;
             liveScannerLastDelivery = 0L;
@@ -1059,13 +1221,15 @@ public final class MainActivity extends Activity {
             PreviewView previewView = new PreviewView(this);
             previewView.setScaleType(PreviewView.ScaleType.FILL_CENTER);
 
-            /* A câmera fica ATRÁS da tela do aplicativo, não por cima.
-               Antes este overlay era preto e cobria tudo, então a única coisa
-               possível era um botão nativo "Encerrar" — nada da interface do
-               app aparecia. Colocando a imagem embaixo e deixando a WebView
-               transparente, a moldura, a faixa de miniaturas e o painel de
-               confirmação são desenhados em HTML por cima da imagem ao vivo,
-               junto com o resto do aplicativo. */
+            /*
+             * A câmera fica ATRÁS da tela do aplicativo, não por cima.
+             * Antes este overlay era preto e cobria tudo, então a única coisa
+             * possível era um botão nativo "Encerrar" — nada da interface do
+             * app aparecia. Colocando a imagem embaixo e deixando a WebView
+             * transparente, a moldura, a faixa de miniaturas e o painel de
+             * confirmação são desenhados em HTML por cima da imagem ao vivo,
+             * junto com o resto do aplicativo.
+             */
             liveScannerOverlay = new FrameLayout(this);
             liveScannerOverlay.setBackgroundColor(Color.BLACK);
             liveScannerOverlay.addView(previewView, new FrameLayout.LayoutParams(
@@ -1097,7 +1261,8 @@ public final class MainActivity extends Activity {
         Preview preview = new Preview.Builder().build();
         preview.setSurfaceProvider(previewView.getSurfaceProvider());
 
-        /* Resolução da análise: 1920×1080, não os 640×480 do padrão.
+        /*
+         * Resolução da análise: 1920×1080, não os 640×480 do padrão.
          *
          * Era esta a razão de o número do rodapé nunca sair. A 640×480, com a
          * carta ocupando metade da altura do quadro, "049/193" mede cerca de
@@ -1106,7 +1271,8 @@ public final class MainActivity extends Activity {
          * é que ficava fora de alcance, e o número é o que identifica a carta.
          *
          * A 1080 de largura o mesmo número passa dos vinte pixels, que é o
-         * mínimo confortável para o reconhecimento de texto. */
+         * mínimo confortável para o reconhecimento de texto.
+         */
         ResolutionSelector seletor = new ResolutionSelector.Builder()
                 .setResolutionStrategy(new ResolutionStrategy(
                         new Size(1080, 1920),
@@ -1154,34 +1320,42 @@ public final class MainActivity extends Activity {
             int linha = y * rowStride;
             for (int x = largura / 6; x < largura - largura / 6; x += passo) {
                 int posicao = linha + x * pixelStride;
-                if (posicao >= limite) break;
+                if (posicao >= limite)
+                    break;
                 // Leitura por índice: não mexe na posição do buffer.
                 int v = buffer.get(posicao) & 0xFF;
                 soma += v;
                 total++;
-                if (v >= 250) estourados++;
+                if (v >= 250)
+                    estourados++;
             }
         }
-        if (total == 0) return;
+        if (total == 0)
+            return;
         float reflexo = estourados / (float) total;
         ajustarExposicao(reflexo, soma / (float) total);
         avisarReflexo(reflexo);
     }
 
-    /* Com reflexo, a exposição desce meio ponto por vez, até dois pontos
-       abaixo do normal: a mancha estourada encolhe e as letras em volta dela
-       voltam a aparecer. As letras da carta têm contraste de sobra para uma
-       imagem um pouco mais escura. Só volta a subir quando a imagem ficou
-       escura de verdade — subir assim que o reflexo some faria a exposição
-       ficar subindo e descendo. */
+    /*
+     * Com reflexo, a exposição desce meio ponto por vez, até dois pontos
+     * abaixo do normal: a mancha estourada encolhe e as letras em volta dela
+     * voltam a aparecer. As letras da carta têm contraste de sobra para uma
+     * imagem um pouco mais escura. Só volta a subir quando a imagem ficou
+     * escura de verdade — subir assim que o reflexo some faria a exposição
+     * ficar subindo e descendo.
+     */
     private void ajustarExposicao(float reflexo, float media) {
         final Camera camera = liveCamera;
-        if (camera == null) return;
+        if (camera == null)
+            return;
         long agora = System.currentTimeMillis();
         // Cada mudança leva alguns quadros para assentar.
-        if (agora - ultimoAjusteDeExposicao < 900L) return;
+        if (agora - ultimoAjusteDeExposicao < 900L)
+            return;
         ExposureState estado = camera.getCameraInfo().getExposureState();
-        if (!estado.isExposureCompensationSupported()) return;
+        if (!estado.isExposureCompensationSupported())
+            return;
         Range<Integer> faixa = estado.getExposureCompensationRange();
         Rational passo = estado.getExposureCompensationStep();
         float ev = passo == null || passo.floatValue() <= 0f ? 1f / 3f : passo.floatValue();
@@ -1195,13 +1369,15 @@ public final class MainActivity extends Activity {
         } else if (reflexo < 0.005f && media < 75f && atual < 0) {
             alvo = Math.min(0, atual + degrau);
         }
-        if (alvo == atual) return;
+        if (alvo == atual)
+            return;
         ultimoAjusteDeExposicao = agora;
         final int indice = alvo;
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                if (liveCamera != camera) return;
+                if (liveCamera != camera)
+                    return;
                 try {
                     camera.getCameraControl().setExposureCompensationIndex(indice);
                 } catch (Exception ignorado) {
@@ -1212,9 +1388,11 @@ public final class MainActivity extends Activity {
 
     // O aviso "incline a carta" aparece no máximo a cada três segundos.
     private void avisarReflexo(float reflexo) {
-        if (reflexo < REFLEXO_AVISAR) return;
+        if (reflexo < REFLEXO_AVISAR)
+            return;
         long agora = System.currentTimeMillis();
-        if (agora - ultimoAvisoDeReflexo < 3000L) return;
+        if (agora - ultimoAvisoDeReflexo < 3000L)
+            return;
         ultimoAvisoDeReflexo = agora;
         runJavascript("window.receiveScannerGlare&&window.receiveScannerGlare("
                 + Math.round(reflexo * 100f) + ");");
@@ -1236,17 +1414,21 @@ public final class MainActivity extends Activity {
         int rowStride = plano.getRowStride();
         int pixelStride = plano.getPixelStride();
 
-        /* O mesmo vetor serve a todos os quadros: a 1080×1920 são 8 MB, e
-           alocar isso de novo a cada leitura, numa sessão de centenas de
-           cartas, fazia a memória do aplicativo subir em serra. */
+        /*
+         * O mesmo vetor serve a todos os quadros: a 1080×1920 são 8 MB, e
+         * alocar isso de novo a cada leitura, numa sessão de centenas de
+         * cartas, fazia a memória do aplicativo subir em serra.
+         */
         int total = largura * altura;
-        if (quadroPixels == null || quadroPixels.length != total) quadroPixels = new int[total];
+        if (quadroPixels == null || quadroPixels.length != total)
+            quadroPixels = new int[total];
         int[] pixels = quadroPixels;
         byte[] linha = new byte[rowStride];
         int destino = 0;
         for (int y = 0; y < altura; y++) {
             int inicio = y * rowStride;
-            if (inicio >= buffer.limit()) break;
+            if (inicio >= buffer.limit())
+                break;
             buffer.position(inicio);
             int lidos = Math.min(rowStride, buffer.remaining());
             buffer.get(linha, 0, lidos);
@@ -1259,11 +1441,13 @@ public final class MainActivity extends Activity {
 
         Bitmap bitmap = Bitmap.createBitmap(pixels, largura, altura, Bitmap.Config.ARGB_8888);
         int giro = proxy.getImageInfo().getRotationDegrees();
-        if (giro == 0) return bitmap;
+        if (giro == 0)
+            return bitmap;
         Matrix matriz = new Matrix();
         matriz.postRotate(giro);
         Bitmap girado = Bitmap.createBitmap(bitmap, 0, 0, largura, altura, matriz, true);
-        if (girado != bitmap) bitmap.recycle();
+        if (girado != bitmap)
+            bitmap.recycle();
         return girado;
     }
 
@@ -1278,8 +1462,10 @@ public final class MainActivity extends Activity {
     @SuppressWarnings("UnsafeOptInUsageError")
     private void analisarQuadro(final ImageProxy proxy) {
         long agora = System.currentTimeMillis();
-        /* O reflexo é medido mesmo nos quadros que não vão para a leitura:
-           a exposição precisa acompanhar a mão, não só os quadros lidos. */
+        /*
+         * O reflexo é medido mesmo nos quadros que não vão para a leitura:
+         * a exposição precisa acompanhar a mão, não só os quadros lidos.
+         */
         if (!liveScannerPaused && agora - ultimaMedidaDeReflexo >= 250L) {
             ultimaMedidaDeReflexo = agora;
             try {
@@ -1308,7 +1494,11 @@ public final class MainActivity extends Activity {
         }
 
         final TextRecognizer reconhecedor = liveRecognizer;
-        if (reconhecedor == null) { quadro.recycle(); liveScannerBusy = false; return; }
+        if (reconhecedor == null) {
+            quadro.recycle();
+            liveScannerBusy = false;
+            return;
+        }
 
         reconhecedor.process(InputImage.fromBitmap(quadro, 0))
                 .addOnSuccessListener(new OnSuccessListener<Text>() {
@@ -1321,14 +1511,16 @@ public final class MainActivity extends Activity {
                             // Metade de baixo, ampliada e com contraste: é onde
                             // fica a numeração e o código da coleção.
                             rodape = enhancedScannerCrop(quadro, 0f, .55f, 1f, .45f);
-                            /* E uma segunda passada só na tira do número.
+                            /*
+                             * E uma segunda passada só na tira do número.
                              *
                              * O recorte grande traz junto o texto de ataque e a
                              * história da carta, que são letras bem maiores. O
                              * reconhecimento se firma nelas e passa por cima da
                              * numeração, que é a menor coisa impressa na carta.
                              * Numa tira estreita não há concorrência: só sobra
-                             * o rodapé, e ele vem ampliado o dobro. */
+                             * o rodapé, e ele vem ampliado o dobro.
+                             */
                             faixaNumero = enhancedScannerCrop(quadro, 0f, .80f, 1f, .20f);
                         } catch (Exception ignorado) {
                         }
@@ -1386,10 +1578,13 @@ public final class MainActivity extends Activity {
     }
 
     private void concluirLeitura(String textoCheio, String textoRodape, String textoNumero,
-                                 Bitmap quadro, Bitmap recorte, Bitmap tira) {
-        if (quadro != null) quadro.recycle();
-        if (recorte != null) recorte.recycle();
-        if (tira != null) tira.recycle();
+            Bitmap quadro, Bitmap recorte, Bitmap tira) {
+        if (quadro != null)
+            quadro.recycle();
+        if (recorte != null)
+            recorte.recycle();
+        if (tira != null)
+            tira.recycle();
         liveScannerBusy = false;
 
         StringBuilder juntar = new StringBuilder(textoCheio == null ? "" : textoCheio);
@@ -1400,7 +1595,8 @@ public final class MainActivity extends Activity {
             juntar.append("\n[NUMERO AMPLIADO]\n").append(textoNumero);
         }
         String junto = juntar.toString();
-        if (junto.trim().length() < LIVE_MIN_TEXT_LENGTH) return;
+        if (junto.trim().length() < LIVE_MIN_TEXT_LENGTH)
+            return;
 
         liveScannerLastDelivery = System.currentTimeMillis();
         final String finish = pendingLiveFinish;
@@ -1408,7 +1604,8 @@ public final class MainActivity extends Activity {
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                if (liveScannerHint != null) liveScannerHint.setText("Carta lida — procurando…");
+                if (liveScannerHint != null)
+                    liveScannerHint.setText("Carta lida — procurando…");
                 deliverScannerText(entrega, finish);
             }
         });
@@ -1419,7 +1616,8 @@ public final class MainActivity extends Activity {
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                if (liveScannerHint != null) liveScannerHint.setText(mensagem);
+                if (liveScannerHint != null)
+                    liveScannerHint.setText(mensagem);
                 liveScannerLastDelivery = System.currentTimeMillis();
             }
         });
@@ -1436,7 +1634,8 @@ public final class MainActivity extends Activity {
 
     private void closeLiveScanner() {
         try {
-            if (liveCameraProvider != null) liveCameraProvider.unbindAll();
+            if (liveCameraProvider != null)
+                liveCameraProvider.unbindAll();
         } catch (Exception ignored) {
         }
         if (liveScannerLifecycle != null) {
@@ -1444,7 +1643,10 @@ public final class MainActivity extends Activity {
             liveScannerLifecycle = null;
         }
         if (liveRecognizer != null) {
-            try { liveRecognizer.close(); } catch (Exception ignored) {}
+            try {
+                liveRecognizer.close();
+            } catch (Exception ignored) {
+            }
             liveRecognizer = null;
         }
         if (liveScannerExecutor != null) {

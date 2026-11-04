@@ -25,11 +25,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable internal fun TrainerScreen(vm: GameViewModel = viewModel()) {
+@Composable internal fun TrainerScreen(vm: GameViewModel = viewModel(), initialDeckId: String? = null) {
     val ui by vm.ui.collectAsStateWithLifecycle(); val state = ui.game
     val deckUi by vm.deckUi.collectAsStateWithLifecycle()
-    val availableDecks = remember(deckUi.saved) { vm.playableDecks() }
-    var managingDecks by remember { mutableStateOf(false) }
+    val binderDecks by vm.binderDecks.collectAsStateWithLifecycle()
+    val availableDecks = remember(deckUi.saved, binderDecks) { vm.playableDecks() }
     var inspected by remember { mutableStateOf<CardInstance?>(null) }
     var textDialog by remember { mutableStateOf<String?>(null) }
     var deckOpen by remember { mutableStateOf(false) }
@@ -38,7 +38,12 @@ import kotlinx.coroutines.withContext
     var confirmEnd by remember { mutableStateOf(false) }
     var resolveOpen by remember { mutableStateOf(true) }
     var prizesOpen by remember { mutableStateOf(true) }
-    var selectedDeck by remember { mutableStateOf("lucario") }
+    var selectedDeck by remember { mutableStateOf(initialDeckId ?: "lucario") }
+    LaunchedEffect(initialDeckId, availableDecks) {
+        if (!initialDeckId.isNullOrBlank() && availableDecks.any { it.id == initialDeckId }) {
+            selectedDeck = initialDeckId
+        }
+    }
     var panelsReady by remember { mutableStateOf(true) }
     val presentation = LocalContext.current.getSharedPreferences("battle-presentation", 0)
     val actor = state?.let(vm.engine::actingPlayer) ?: 0
@@ -65,8 +70,7 @@ import kotlinx.coroutines.withContext
     }
     val isRecording by vm.isRecordingEnabled.collectAsStateWithLifecycle()
     Surface(Modifier.fillMaxSize(), color = Color(0xFF080F1C)) {
-        if (state == null && managingDecks) DeckManager(vm, { managingDecks = false }, { selectedDeck = it; managingDecks = false })
-        else if (state == null) HomeScreen(ui, vm, selectedDeck, { selectedDeck = it }, availableDecks, { managingDecks = true }, { deckOpen = true }, { textDialog = it })
+        if (state == null) HomeScreen(ui, vm, selectedDeck, { selectedDeck = it }, availableDecks, { deckOpen = true }, { textDialog = it })
         else BattleScene(
             state = state, viewer = 0, reveal = true,
             busy = ui.busy, error = ui.message, engine = vm.engine,
@@ -106,7 +110,7 @@ import kotlinx.coroutines.withContext
     if (confirmEnd) AlertDialog(onDismissRequest = { confirmEnd = false }, title = { Text("Encerrar seu turno?") }, text = { Text("A máquina jogará em seguida.") }, confirmButton = { TextButton(onClick = { vm.act(GameAction.EndTurn); confirmEnd = false }, enabled = !ui.busy && actor == 0) { Text("ENCERRAR") } }, dismissButton = { TextButton(onClick = { confirmEnd = false }) { Text("VOLTAR") } })
 }
 
-@Composable private fun HomeScreen(ui: UiState, vm: GameViewModel, selectedDeck: String, selectDeck: (String) -> Unit, availableDecks: List<TrainingDeck>, manage: () -> Unit, deck: () -> Unit, info: (String) -> Unit) {
+@Composable private fun HomeScreen(ui: UiState, vm: GameViewModel, selectedDeck: String, selectDeck: (String) -> Unit, availableDecks: List<TrainingDeck>, deck: () -> Unit, info: (String) -> Unit) {
     var seed by remember { mutableStateOf(java.security.SecureRandom().nextLong().toString()) }; var training by remember { mutableStateOf(true) }
     var options by remember { mutableStateOf(false) }
     var cpuDeckId by remember { mutableStateOf("random") }
@@ -117,7 +121,9 @@ import kotlinx.coroutines.withContext
     }
     val cpuDeckOptions by produceState(initialValue = availableDecks.filter { it.cards.size == 60 }, availableDecks, chosen.format, training) {
         value = withContext(Dispatchers.Default) {
-            val fullDecks = availableDecks.filter { it.cards.size == 60 && DeckValidator.validate(it).playable }
+            val fullDecks = availableDecks.filter {
+                it.cards.size == 60 && (if (training) DeckValidator.validate(it).trainingReady else DeckValidator.validate(it).playable)
+            }
             if (!training && chosen.format == DeckFormat.STANDARD) fullDecks.filter { cpu ->
                 DeckValidator.validate(SavedDeck(cpu.id, cpu.name, DeckFormat.STANDARD, cpu.cards.groupingBy { it }.eachCount())).playable
             } else fullDecks
@@ -138,8 +144,8 @@ import kotlinx.coroutines.withContext
         Text("TCG\nTRAINER", style = MaterialTheme.typography.displayMedium, lineHeight = 42.sp, fontWeight = FontWeight.Black)
         Text("Pratique. Entenda. Evolua.", color = Muted, fontSize = 15.sp)
         val activity = LocalContext.current as? android.app.Activity
-        TextButton(onClick = { activity?.finish() }) { Text("‹ VOLTAR AO POKECARD") }
-        Text("Coleção PokeCard · ${vm.owned.counts.values.sum()} cópias. Para atualizar, volte ao fichário e abra o jogo novamente.", color = Muted, fontSize = 11.sp)
+        TextButton(onClick = { activity?.finish() }) { Text("‹ VOLTAR AO POKECARD (ABA DECKS)") }
+        Text("Coleção PokeCard · ${vm.owned.counts.values.sum()} cópias · ${availableDecks.size} decks sincronizados da aba Decks.", color = Muted, fontSize = 11.sp)
         Row(Modifier.height(160.dp).fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
             CardArt("me01-074", Modifier.width(84.dp).height(125.dp))
             CardArt(chosen.cover, Modifier.padding(horizontal = 8.dp).width(110.dp).height(154.dp))
@@ -149,11 +155,10 @@ import kotlinx.coroutines.withContext
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Text("BARALHO SELECIONADO", fontSize = 9.sp, color = Aqua, letterSpacing = 2.sp)
                 Text(chosen.name, fontSize = 21.sp, fontWeight = FontWeight.Bold)
-                Text("${chosen.cards.size} cartas · lista de treino", color = Muted, fontSize = 11.sp)
+                Text("${chosen.cards.size} cartas · ${chosen.format.label()}", color = Muted, fontSize = 11.sp)
                 Text("VER CARTAS  ›", color = Aqua, fontSize = 10.sp)
             }
         }
-        OutlinedButton(onClick = manage, modifier = Modifier.fillMaxWidth()) { Text("MEUS DECKS · CRIAR E EDITAR") }
         val updateContext = LocalContext.current
         OutlinedButton(onClick = {
             val intent = android.content.Intent().setClassName(updateContext.packageName, "br.com.fichariopokemon.pokedex.MainActivity")
@@ -161,11 +166,23 @@ import kotlinx.coroutines.withContext
                 .putExtra("checkTrainerUpdate", true)
             updateContext.startActivity(intent)
         }, modifier = Modifier.fillMaxWidth()) { Text("VERIFICAR ATUALIZAÇÕES DE CARTAS E REGRAS") }
-        Text("Novas regras automáticas chegam nas versões revisadas do aplicativo. A verificação usa as versões oficiais publicadas do PokeCard.", color = Muted, fontSize = 11.sp)
+        Text("Crie e edite seus baralhos diretamente na aba Decks do PokeCard. Todos os decks salvos lá aparecem automaticamente abaixo.", color = Muted, fontSize = 11.sp)
         DeckSelector("SEU BARALHO", chosen.id, availableDecks, selectDeck)
         Text(chosen.strategy, color = Muted, fontSize = 11.sp)
+        chosenValidation?.let { valResult ->
+            if (!valResult.trainingReady) {
+                val reasons = buildList {
+                    addAll(valResult.trainingErrors.take(2))
+                    if (valResult.unsupported.isNotEmpty()) {
+                        val names = valResult.unsupported.take(3).map { CardLibrary.byId[it]?.name ?: it }
+                        add("${valResult.unsupported.size} carta(s) com efeitos ainda não implementados (${names.joinToString()}${if (valResult.unsupported.size > 3) "…" else ""}). Edite na aba Decks do PokeCard.")
+                    }
+                }
+                if (reasons.isNotEmpty()) Text(reasons.joinToString("\n"), color = Coral, fontSize = 11.sp)
+            }
+        }
         if (!training) vm.ownershipMessage(chosen.cards)?.let { Text(it, color = Coral, fontSize = 11.sp) }
-        if (training) Text("Treino: 14 a 60 cartas, incluindo cartas ainda não possuídas. Listas incompletas alteram as chances de compra. Desative ‘Só minhas cartas’ no editor para planejar compras.", color = Muted, fontSize = 11.sp)
+        if (training) Text("Treino: 14 a 60 cartas, incluindo cartas ainda não possuídas. Para criar ou editar listas, volte à aba Decks do PokeCard.", color = Muted, fontSize = 11.sp)
         DeckSelector("BARALHO DA MÁQUINA", cpuDeckId, cpuDeckMenu) { cpuDeckId = it }
         Text(if (cpuDeckId == "random") "Baralho aleatório · a máquina escolhe a cada partida." else "A máquina usará ${opponent.name}.", color = Muted, fontSize = 11.sp)
         val difficulty by vm.difficulty.collectAsStateWithLifecycle()
@@ -190,9 +207,9 @@ import kotlinx.coroutines.withContext
         OutlinedButton(onClick = { cpuIntelligenceOpen = true }, modifier = Modifier.fillMaxWidth()) {
             Text("🧠 INTELIGÊNCIA DA CPU & GRAVAÇÕES")
         }
-        Button(onClick = { vm.start(seed.toLong(), if (training) Mode.TRAINING else Mode.MATCH, selectedDeck, cpuDeckId); seed = java.security.SecureRandom().nextLong().toString() }, enabled = !ui.busy && seed.toLongOrNull() != null && (training || (chosenValidation?.playable == true && vm.owned.allows(chosen.cards) && chosen.cards.size == 60)), modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(12.dp)) { Text(if (ui.busy) "PREPARANDO PARTIDA…" else "JOGAR CONTRA A MÁQUINA", fontWeight = FontWeight.Bold, letterSpacing = 1.sp) }
+        Button(onClick = { vm.start(seed.toLong(), if (training) Mode.TRAINING else Mode.MATCH, selectedDeck, cpuDeckId); seed = java.security.SecureRandom().nextLong().toString() }, enabled = !ui.busy && seed.toLongOrNull() != null && (if (training) chosenValidation?.trainingReady == true else (chosenValidation?.playable == true && vm.owned.allows(chosen.cards) && chosen.cards.size == 60)), modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(12.dp)) { Text(if (ui.busy) "PREPARANDO PARTIDA…" else "JOGAR CONTRA A MÁQUINA", fontWeight = FontWeight.Bold, letterSpacing = 1.sp) }
         OutlinedButton(onClick = vm::resume, enabled = ui.canContinue && !ui.busy, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(12.dp)) { Text("CONTINUAR PARTIDA") }
-        TextButton(onClick = { info("Jogo exclusivamente para você contra a máquina. Crie e salve decks em MEUS DECKS. Toque em TREINAR para usar qualquer lista compatível, mesmo sem possuir as cartas e mesmo que ela não esteja legal no formato selecionado. O treino aceita listas de 14 a 60 cartas; partidas normais exigem 60 cartas válidas e posse completa.\n\nCartas sem efeitos implementados continuam como rascunhos. Padrão 2026 e Academia 2022 são categorias separadas. Treino livre permite misturar cartas implementadas. CPU+ tem uma vantagem deliberada: vê sua mão para antecipar suas jogadas. Prêmios ocultos e ordem dos decks continuam desconhecidos. As regras das cartas são mantidas.") }, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("COMO JOGAR", fontSize = 11.sp) }
+        TextButton(onClick = { info("Jogo exclusivamente para você contra a máquina. Crie, salve e edite seus baralhos na aba Decks do PokeCard — todos os decks salvos lá aparecem automaticamente aqui em SEU BARALHO. No modo Treinamento solo você pode usar qualquer lista compatível de 14 a 60 cartas, mesmo sem possuir as cartas físicas; partidas normais exigem 60 cartas válidas e posse completa.\n\nPadrão 2026 e Academia 2022 são categorias separadas. Treino livre permite misturar cartas implementadas. As regras das cartas são mantidas.") }, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("COMO JOGAR", fontSize = 11.sp) }
         Text("1 JOGADOR × MÁQUINA  ·  PARTIDAS OFFLINE", Modifier.fillMaxWidth(), color = Muted, fontSize = 9.sp)
         ui.message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     }
@@ -206,12 +223,16 @@ import kotlinx.coroutines.withContext
         Text(label, color = Aqua, fontSize = 9.sp, letterSpacing = 1.sp)
         Box {
             OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(9.dp)) {
-                Text(availableDecks.first { it.id == selected }.name, Modifier.weight(1f), fontSize = 13.sp)
+                Text((availableDecks.firstOrNull { it.id == selected } ?: availableDecks.first()).name, Modifier.weight(1f), fontSize = 13.sp)
                 Text("⌄", fontSize = 18.sp)
             }
             DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
                 availableDecks.forEach { entry -> DropdownMenuItem(text = {
-                    Column { Text(entry.name, color = if (entry.id == selected) Aqua else Color.White); Text(entry.format.label(), color = Muted, fontSize = 10.sp) }
+                    Column {
+                        Text(entry.name, color = if (entry.id == selected) Aqua else Color.White)
+                        val detail = if (entry.cards.isEmpty()) entry.format.label() else "${entry.cards.size} cartas · ${entry.format.label()}"
+                        Text(detail, color = Muted, fontSize = 10.sp)
+                    }
                 }, onClick = { choose(entry.id); expanded = false }) }
             }
         }

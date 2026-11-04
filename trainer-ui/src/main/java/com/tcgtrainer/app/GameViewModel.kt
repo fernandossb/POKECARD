@@ -22,9 +22,11 @@ data class DeckUiState(
 )
 
 class GameViewModel(app: Application) : AndroidViewModel(app) {
-    val owned = try {
-        OwnedCollection.decode(java.io.File(app.filesDir, "trainer-owned.json").readText(Charsets.UTF_8))
+    private fun loadOwned(context: Application) = try {
+        OwnedCollection.decode(java.io.File(context.filesDir, "trainer-owned.json").readText(Charsets.UTF_8))
     } catch (_: Exception) { OwnedCollection(emptyMap(), available = false) }
+    var owned = loadOwned(app)
+        private set
     fun ownershipMessage(cards: List<String>) = owned.message(cards)
     val engine = RulesEngine(TrainerCatalog)
     private val db = GameDatabase.open(app)
@@ -33,8 +35,19 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     val ui = mutable.asStateFlow()
     private val mutableDecks = MutableStateFlow(DeckUiState())
     val deckUi = mutableDecks.asStateFlow()
+    private val mutableBinderDecks = MutableStateFlow<List<TrainingDeck>?>(TrainerDeckBridge.loadSyncedDecks(app))
+    val binderDecks = mutableBinderDecks.asStateFlow()
+    fun refreshSyncedDecks() {
+        val context = getApplication<Application>()
+        owned = loadOwned(context)
+        mutableBinderDecks.value = TrainerDeckBridge.loadSyncedDecks(context)
+    }
     fun clearDeckMessage() { mutableDecks.value = mutableDecks.value.copy(message = null) }
-    fun playableDecks() = TrainingDecks.all + mutableDecks.value.trainingSaved.map { it.playableDeck() }
+    fun playableDecks(): List<TrainingDeck> {
+        val synced = mutableBinderDecks.value?.filter { it.cards.isNotEmpty() }
+        if (!synced.isNullOrEmpty()) return synced
+        return TrainingDecks.all + mutableDecks.value.trainingSaved.map { it.playableDeck() }
+    }
     fun deck(id: String) = playableDecks().firstOrNull { it.id == id }
     init {
         viewModelScope.launch {
