@@ -65,7 +65,15 @@ import kotlinx.coroutines.withContext
     LaunchedEffect(state?.gameId, state?.phase) {
         if (state?.phase == Phase.GAME_OVER) {
             textDialog = "Analisando suas decisões e comparando alternativas legais…"
-            textDialog = withContext(Dispatchers.Default) { TrainingReview.describe(state) }
+            val humanReview = withContext(Dispatchers.Default) { TrainingReview.describe(state) }
+            val cpuLesson = vm.learningEngine.lastMatchReview
+                ?.takeIf { it.gameId == state.gameId }
+                ?.reviewSummaryText
+            textDialog = if (!cpuLesson.isNullOrBlank()) {
+                "$humanReview\n\n────────────────────────\nLIÇÃO EXTRAÍDA PELA CPU NESTA PARTIDA\n$cpuLesson"
+            } else {
+                humanReview
+            }
         }
     }
     val isRecording by vm.isRecordingEnabled.collectAsStateWithLifecycle()
@@ -301,11 +309,22 @@ private fun CpuIntelligenceDialog(vm: GameViewModel, onDismiss: () -> Unit) {
                 }
 
                 if (tab == 0) {
+                    val params = vm.learningEngine.getTuningForArchetype("general")
                     Surface(shape = RoundedCornerShape(8.dp), color = Color(0xFF142436)) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text("STATUS DO MOTOR", color = Aqua, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             Text("Partidas analisadas pela CPU: ${memory.matchesAnalyzed}", fontSize = 13.sp)
-                            Text("Padrões aprendidos com derrotas: ${memory.lessons.size}", fontSize = 13.sp)
+                            Text("Lições e padrões consolidados: ${memory.lessons.size}", fontSize = 13.sp)
+                            Text(
+                                "Setup pré-ataque: ${(params.preAttackSetupBonusMultiplier * 100).toInt()}% · Reserva no banco: ${(params.backupAttackerBonusMultiplier * 100).toInt()}%",
+                                fontSize = 11.sp,
+                                color = Aqua
+                            )
+                            Text(
+                                "Uso da mão/busca: ${(params.searchCardBonusMultiplier * 100).toInt()}% · Evolução/banco: ${(params.evolutionPriorityMultiplier * 100).toInt()}%",
+                                fontSize = 11.sp,
+                                color = Aqua
+                            )
                             val penalty = memory.lessons.find { it.type == "AVOID_REDUNDANT_ENERGY" }
                             if (penalty != null) {
                                 Text("Ajuste de energia redundante ativo: ${(penalty.confidence * 100).toInt()}%", fontSize = 12.sp, color = Aqua)
@@ -316,7 +335,7 @@ private fun CpuIntelligenceDialog(vm: GameViewModel, onDismiss: () -> Unit) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("Aprendizado Contínuo", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                            Text("A CPU ajusta parâmetros após derrotas", color = Muted, fontSize = 10.sp)
+                            Text("A CPU extrai uma lição a cada partida e ajusta seu jogo", color = Muted, fontSize = 10.sp)
                         }
                         Switch(checked = learningEnabled, onCheckedChange = {
                             learningEnabled = it
@@ -337,7 +356,7 @@ private fun CpuIntelligenceDialog(vm: GameViewModel, onDismiss: () -> Unit) {
                     }
                 } else if (tab == 1) {
                     if (memory.lessons.isEmpty()) {
-                        Text("Nenhuma lição aprendida ainda. A CPU analisará partidas quando for derrotada e ajustará seu jogo automaticamente.", color = Muted, fontSize = 12.sp)
+                        Text("Nenhuma lição aprendida ainda. A CPU analisa cada partida concluída, extrai uma lição específica e ajusta sua preparação de campo e atacantes automaticamente.", color = Muted, fontSize = 12.sp)
                     } else {
                         for (lesson in memory.lessons) {
                             Surface(shape = RoundedCornerShape(8.dp), color = Color(0xFF142436)) {

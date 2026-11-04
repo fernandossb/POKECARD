@@ -715,8 +715,26 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog, private val s
                 val investmentRisk = if (exposed && improvement < 150) 90.0 else 0.0
                 val profileEnergyFit = if (plan.energyType != null && d(checkNotNull(card(a.cardId))).type == plan.energyType &&
                     (p.top.definitionId in plan.attackers || p.top.definitionId in plan.engines)) 6.0 else 0.0
-                if (potential(after) <= potential(p) && !readiness) -5.0
+                val evoInHandNeed = o.ownHand.filter {
+                    d(it).category == Category.POKEMON && (d(it).canEvolveFrom(d(p.top)) || d(it).canRareCandyEvolveFrom(d(p.top)))
+                }.maxOfOrNull { evo -> d(evo).attacks.maxOfOrNull { it.cost.size } ?: 0 } ?: 0
+                val needsEvoEnergy = evoInHandNeed > p.energies.size
+                val maxOwnAttackCost = d(p.top).attacks.maxOfOrNull { it.cost.size } ?: 0
+                val targetCap = maxOf(
+                    maxOwnAttackCost,
+                    evoInHandNeed,
+                    if (p.top.definitionId in plan.attackers || p.top.definitionId in plan.backupAttackers || p.top.definitionId in plan.support) 2 else 0
+                )
+                val isBackupCandidate = p.id != active?.id && p.energies.size < targetCap &&
+                    (p.top.definitionId in plan.attackers || p.top.definitionId in plan.backupAttackers || p.top.definitionId in plan.support || needsEvoEnergy || maxOwnAttackCost > 0)
+                val activeAlreadyReady = active != null && d(active.top).attacks.filter(effects::supported).let { attacks ->
+                    attacks.isNotEmpty() && attacks.all { missing(active, it) == 0 }
+                }
+                if (p.id == active?.id && activeAlreadyReady && !needsEvoEnergy && improvement <= 0.0) -10.0
+                else if (potential(after) <= potential(p) && !readiness && !needsEvoEnergy && !isBackupCandidate) -5.0
                 else 100.0 + improvement + (potential(after)-potential(p))*.5 + (if (readiness) 55 else 0) +
+                    (if (needsEvoEnergy) 38.0 else 0.0) +
+                    (if (isBackupCandidate && activeAlreadyReady) 32.0 else if (isBackupCandidate) 18.0 else 0.0) +
                     (if (p.top.definitionId in plan.attackers) 24.0 else if (p.top.definitionId in plan.engines) 9.0 else 0.0) + profileEnergyFit - investmentRisk
             }
             is GameAction.Attack -> {

@@ -1,3 +1,15 @@
+# POKECARD Brasil 5.99.52 — Preparo Completo de Turno (Ativo + Reserva no Banco) e Lição por Partida na CPU
+
+- **Preparação completa de turno antes de atacar (`CpuTurnSearch` & `CpuPositionEvaluator`)**: corrigido o cálculo de objetivo de turno para que bônus de desenvolvimento (baixar Básicos, evoluir, usar Itens de busca, ativar Apoiadores de compra e habilidades, e anexar a Energia do turno) sejam preservados também nas linhas terminais que encerram em ataque (`GameAction.Attack`), evitando ataques imediatos na profundidade `0` quando o jogador passa o turno sem agir.
+- **Planejamento simultâneo de Atacante Ativo + Próximo Atacante no Banco (`CpuDeckPlan` & `CpuPositionEvaluator`)**: a CPU agora avalia a necessidade de energia considerando também as evoluções na mão/baralho (`expectedEnergyNeed`), priorizando energizar o próximo atacante do Banco assim que o Pokémon Ativo já está pronto para atacar e corrigindo a avaliação de presença de Banco (`boardValue`).
+- **Correção da poda de dominância intra-turno (`DominanceKey` & `knownStep`)**: a poda por dominância agora atua exclusivamente na `Phase.MAIN` (sem podar estados intermediários em `Phase.RESOLVE_CHOICE` logo após jogar um Treinador) e libera habilidades de compra/busca em simulação de baralho virtual.
+- **Uma lição específica extraída a cada partida (`CpuLearningEngine` & `PostMatchCpuReview`)**:
+  - A CPU agora analisa **todas as partidas concluídas** (vitórias e derrotas) e registra uma lição única por partida (`PARTIDA_<ID>_...`) com o turno e o diagnóstico tático real, além de consolidar padrões recorrentes.
+  - Novos analisadores pós-partida: `PrematureAttackAnalyzer` (detecta ataques executados sem preparar o jogo mesmo com recursos jogáveis na mão), `BackupAttackerAnalyzer` (detecta falta de preparação do próximo atacante no Banco) e detecção de `UNATTACHED_TURN_ENERGY` em `EnergyEfficiencyAnalyzer`.
+  - Corrigido `MissedComboAnalyzer` para inspecionar o `TrainerEffect` real das cartas no catálogo (compatível com IDs TCGdex como `me01-119`) e corrigido o preenchimento de `target`, `energyBefore` e `energyAfter` na telemetria de decisão (`GameViewModel`).
+  - O diálogo de fim de jogo no TCG Trainer agora apresenta também a **Lição Extraída pela CPU nesta Partida**.
+- Versão Android: `versionCode` 254 e `versionName` 5.99.52. Assinatura oficial e dados locais preservados.
+
 # POKECARD Brasil 5.99.51 — Unificação dos Decks na Aba Decks e Sincronização com o TCG Trainer
 
 - Unificação completa dos decks: todos os baralhos do TCG Trainer (os 17 decks oficiais de treino, Academia 2022 e competitivos, além de eventuais decks salvos anteriormente no simulador) agora aparecem diretamente na aba **Decks** como **Decks salvos**.

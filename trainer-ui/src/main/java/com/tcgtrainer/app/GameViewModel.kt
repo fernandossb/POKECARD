@@ -99,6 +99,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     val recorder = MatchRecorder(TrainerCatalog)
     val learningEngine = CpuLearningEngine(TrainerCatalog)
+    private var lastReviewedMatchId: String? = null
 
     private var activeCpuPlayer: CpuPlayer? = null
     private var activeCpuDifficulty: AiDifficulty? = null
@@ -151,12 +152,12 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             }
             session = newSession
             activeCpuPlayer = null
-            if (isRecordingEnabled.value) {
+            if (isRecordingEnabled.value || learningEngine.learningEnabled) {
                 val ownDeck = playableDecks().firstOrNull { it.id == humanDeck }
                 recorder.startMatch(
                     gameId = java.util.UUID.randomUUID().toString(),
-                    appVersion = "PokeCard 2.0.0",
-                    engineVersion = "trainer-engine-v2.0",
+                    appVersion = "PokeCard 5.99.52",
+                    engineVersion = "trainer-engine-v2.1",
                     difficulty = _difficulty.value.name,
                     initialState = newSession.snapshot.state,
                     humanDeckId = humanDeck,
@@ -179,11 +180,11 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             val resumedSession = GameSession(engine, snapshot)
             session = resumedSession
             activeCpuPlayer = null
-            if (isRecordingEnabled.value && !recorder.isRecordingActive) {
+            if ((isRecordingEnabled.value || learningEngine.learningEnabled) && !recorder.isRecordingActive) {
                 recorder.startMatch(
                     gameId = snapshot.state.gameId,
-                    appVersion = "PokeCard 2.0.0",
-                    engineVersion = "trainer-engine-v2.0",
+                    appVersion = "PokeCard 5.99.52",
+                    engineVersion = "trainer-engine-v2.1",
                     difficulty = _difficulty.value.name,
                     initialState = snapshot.state,
                     humanDeckId = snapshot.state.humanDeckId,
@@ -204,7 +205,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             val result = current.dispatch(action)
             if (result.legality is Legality.Illegal) error((result.legality as Legality.Illegal).reason)
             val afterState = current.snapshot.state
-            if (isRecordingEnabled.value) {
+            if (isRecordingEnabled.value || learningEngine.learningEnabled) {
                 recorder.recordAction(
                     playerIndex = 0,
                     action = action,
@@ -226,7 +227,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 val result = candidate.dispatch(action, recordUndo = index == 0)
                 check(result.legality == Legality.Legal) { (result.legality as? Legality.Illegal)?.reason ?: "Jogada inválida." }
                 val afterState = candidate.snapshot.state
-                if (isRecordingEnabled.value) {
+                if (isRecordingEnabled.value || learningEngine.learningEnabled) {
                     recorder.recordAction(
                         playerIndex = 0,
                         action = action,
@@ -274,26 +275,42 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                     val result = current.dispatch(action, recordUndo = false)
                     check(result.legality == Legality.Legal) { "CPU: ${(result.legality as? Legality.Illegal)?.reason}" }
                     val afterState = current.snapshot.state
-                    val telemetry = currentCpu.lastTelemetry?.let { t ->
+                    val targetId = when (action) {
+                        is GameAction.AttachEnergy -> action.pokemonId
+                        is GameAction.Evolve -> action.pokemonId
+                        is GameAction.Attack -> action.targetId ?: beforeState.players[0].active?.id
+                        is GameAction.Retreat -> action.pokemonId
+                        else -> null
+                    }
+                    val energyBefore = if (action is GameAction.AttachEnergy) {
+                        beforeState.players.flatMap { it.pokemon() }.firstOrNull { it.id == action.pokemonId }?.energies?.size
+                    } else null
+                    val energyAfter = if (action is GameAction.AttachEnergy) {
+                        afterState.players.flatMap { it.pokemon() }.firstOrNull { it.id == action.pokemonId }?.energies?.size
+                    } else null
+                    val telemetry = currentCpu.lastTelemetry.let { t ->
                         CpuDecisionTelemetry(
                             turn = beforeState.turn,
                             difficulty = currentDiff.name,
-                            objective = if (currentCpu.currentTurnPlan?.isComplete() == false) "Executing planned sequence" else "Search optimal line",
+                            objective = currentCpu.currentTurnPlan?.objective?.name ?: "SEARCH_OPTIMAL_LINE",
                             legalActionsCount = cpuInput.actions.size,
                             legalAttacksCount = cpuInput.actions.count { it is GameAction.Attack },
                             playableTrainersCount = cpuInput.actions.count { it is GameAction.PlayTrainer },
                             legalTrainerCardIds = cpuInput.actions.filterIsInstance<GameAction.PlayTrainer>().map { it.cardId },
                             selectedAction = action.toString(),
-                            decisionScore = t.bestScore,
-                            alternativeScores = listOfNotNull(t.alternativeScore),
-                            searchDepth = t.maxSequenceDepth,
-                            sequencesEvaluated = t.sequencesEvaluated,
-                            searchTimeMs = t.searchTimeMs,
-                            opponentThreatBefore = t.opponentPotentialBefore,
-                            opponentThreatAfter = t.opponentPotentialAfter
+                            target = targetId,
+                            energyBefore = energyBefore,
+                            energyAfter = energyAfter,
+                            decisionScore = t?.bestScore ?: 0.0,
+                            alternativeScores = listOfNotNull(t?.alternativeScore),
+                            searchDepth = t?.maximumActionDepthReached ?: 0,
+                            sequencesEvaluated = t?.sequencesEvaluated ?: 0,
+                            searchTimeMs = t?.searchTimeMs ?: 0L,
+                            opponentThreatBefore = t?.opponentPotentialBefore ?: 0.0,
+                            opponentThreatAfter = t?.opponentPotentialAfter ?: 0.0
                         )
                     }
-                    if (isRecordingEnabled.value) {
+                    if (isRecordingEnabled.value || learningEngine.learningEnabled) {
                         recorder.recordAction(
                             playerIndex = 1,
                             action = action,
@@ -312,8 +329,11 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                     val recording = recorder.getCompletedRecording()
                     if (recording != null) {
                         withContext(Dispatchers.IO) {
-                            MatchRecordingStore.saveRecording(getApplication(), recording)
-                            if (winner == 0 && learningEngine.learningEnabled) {
+                            if (isRecordingEnabled.value) {
+                                MatchRecordingStore.saveRecording(getApplication(), recording)
+                            }
+                            if (learningEngine.learningEnabled && lastReviewedMatchId != recording.gameId) {
+                                lastReviewedMatchId = recording.gameId
                                 val review = learningEngine.reviewMatch(recording)
                                 if (review.lessonsLearned.isNotEmpty()) {
                                     MatchRecordingStore.saveExperienceMemory(

@@ -37,20 +37,18 @@ internal data class CpuDeckPlan(
     }
 
     fun boardValue(pokemon: List<PokemonInstance>, catalog: CardCatalog): Double {
-        if (id == "custom") return 0.0
+        if (pokemon.isEmpty()) return 0.0
         val counts = pokemon.groupingBy { it.top.definitionId }.eachCount()
         val attackerCount = attackers.sumOf { counts[it] ?: 0 }
         val engineCount = engines.sumOf { counts[it] ?: 0 }
         val supportCount = support.sumOf { counts[it] ?: 0 }
         val earlyCount = earlyAttackers.sumOf { counts[it] ?: 0 }
         val backupCount = backupAttackers.sumOf { counts[it] ?: 0 }
-        val benchSlots = (desiredBench - (pokemon.size - 1)).coerceAtLeast(0)
-        return minOf(2, attackerCount) * 24.0 + minOf(2, engineCount) * 20.0 +
-            minOf(2, backupCount) * 16.0 +
-            minOf(2, supportCount) * 11.0 + minOf(1, earlyCount) * 7.0 +
-            (benchSlots * 2.0).coerceAtMost(8.0) -
-            pokemon.filter { it.top.definitionId in attackers && catalog.get(it.top.definitionId).prizes > 1 }
-                .count { it.id != pokemon.firstOrNull()?.id && it.energies.isEmpty() } * 3.0
+        val filledBench = (pokemon.size - 1).coerceIn(0, desiredBench)
+        return minOf(2, attackerCount) * 28.0 + minOf(2, engineCount) * 24.0 +
+            minOf(2, backupCount) * 20.0 +
+            minOf(2, supportCount) * 14.0 + minOf(1, earlyCount) * 10.0 +
+            filledBench * 6.0
     }
 
     companion object {
@@ -112,11 +110,27 @@ internal data class CpuDeckPlan(
 
         fun forDeck(id: String, deckCards: List<String> = emptyList(), catalog: CardCatalog = TrainerCatalog): CpuDeckPlan = known[id] ?: run {
             if (deckCards.isEmpty()) return CpuDeckPlan("custom", emptySet())
-            val pokemonIds = deckCards.groupingBy { it }.eachCount().filter { (_, count) -> count >= 2 }.keys
-            val attackers = pokemonIds.filterTo(mutableSetOf()) { cardId ->
-                runCatching { catalog.get(cardId).category == Category.POKEMON && catalog.get(cardId).attacks.isNotEmpty() }.getOrDefault(false)
+            val pokemonDefs = deckCards.distinct().mapNotNull { cardId ->
+                runCatching { catalog.get(cardId) }.getOrNull()?.takeIf { it.category == Category.POKEMON }
             }
-            CpuDeckPlan("custom", attackers)
+            val attackers = pokemonDefs.filter { def ->
+                def.attacks.any { a -> a.effects.filterIsInstance<Effect.Damage>().sumOf { it.amount } >= 70 || a.effects.isNotEmpty() }
+            }.mapTo(mutableSetOf()) { it.id }
+            val engines = pokemonDefs.filter { def ->
+                def.abilities.isNotEmpty()
+            }.mapTo(mutableSetOf()) { it.id }
+            val evolvesFromNames = pokemonDefs.mapNotNull { it.evolvesFrom }.toSet()
+            val support = pokemonDefs.filter { def ->
+                def.name in evolvesFromNames || def.canonicalName in evolvesFromNames || def.stage == Stage.BASIC
+            }.mapTo(mutableSetOf()) { it.id }
+            CpuDeckPlan(
+                id = id.ifBlank { "custom" },
+                attackers = attackers.ifEmpty { pokemonDefs.mapTo(mutableSetOf()) { it.id } },
+                engines = engines,
+                support = support,
+                backupAttackers = attackers,
+                desiredBench = 3
+            )
         }
     }
 }

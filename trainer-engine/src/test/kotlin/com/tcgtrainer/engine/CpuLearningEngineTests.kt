@@ -535,4 +535,113 @@ class CpuLearningEngineTests {
         assertTrue(HandEfficiencyAnalyzer.analyze(recording(emptyList()), catalog()).isEmpty())
         assertTrue(HandEfficiencyAnalyzer.analyze(recording(null), catalog()).isEmpty())
     }
+
+    @Test
+    fun `cpu prepares bench and next attacker before attacking when human passes turn`() {
+        val cat = catalog()
+        val rules = RulesEngine(cat)
+        val cpu = CpuPlayer(cat, strategy = CpuStrategy.MASTER)
+
+        // Scenario: Human ended turn without doing anything.
+        // CPU Active ("cpu-active") is ALREADY powered up with 2 Energy and can attack right now ("punch" for 60).
+        // CPU has cards in hand: a Basic backup attacker ("backup-mon"), a Basic Energy ("energy"), and a Professor's Research ("research").
+        // Previously, the CPU would immediately execute Attack("punch") at depth 0 without playing its Basic, attaching energy to backup, or using its Supporter!
+        var state = createGameState(
+            id = "human-pass-cpu-prep",
+            turn = 3,
+            currentPlayer = 1,
+            phase = Phase.MAIN,
+            players = listOf(
+                PlayerState(
+                    active = pokemon("p0-active", "active-mon", energies = 1),
+                    bench = listOf(pokemon("p0-bench", "dummy-basic", energies = 0)),
+                    hand = emptyList(),
+                    prizes = List(6) { c("p0-pz$it") },
+                    deck = List(15) { c("p0-dk$it", "dummy-basic") }
+                ),
+                PlayerState(
+                    active = pokemon("cpu-active", "active-mon", energies = 2),
+                    bench = emptyList(),
+                    hand = listOf(
+                        c("hand-backup", "backup-mon"),
+                        c("hand-energy", "energy"),
+                        c("hand-research", "research")
+                    ),
+                    prizes = List(6) { c("cpu-pz$it") },
+                    deck = List(15) { c("cpu-dk$it", "backup-mon") }
+                )
+            )
+        )
+
+        val firstAction = cpu.choose(rules.cpuInput(state, CpuKnowledge.FAIR))
+        assertTrue(
+            firstAction !is GameAction.Attack && firstAction != GameAction.EndTurn,
+            "CPU must NOT attack immediately at step 0 without developing its board and next attacker! Got: $firstAction"
+        )
+
+        // Play out the full CPU turn and verify it benches a backup attacker, attaches energy to it, plays its supporter, and THEN attacks
+        val actionsTaken = mutableListOf<GameAction>()
+        var guard = 0
+        while (state.currentPlayer == 1 && state.phase != Phase.GAME_OVER && guard++ < 15) {
+            val action = cpu.choose(rules.cpuInput(state, CpuKnowledge.FAIR))
+            actionsTaken += action
+            state = rules.apply(state, action).state
+        }
+
+        assertTrue(actionsTaken.any { it is GameAction.PlayBasic }, "CPU should bench its Basic backup attacker during the turn. Actions: $actionsTaken")
+        assertTrue(
+            actionsTaken.any { it is GameAction.AttachEnergy && it.pokemonId != "cpu-active" },
+            "CPU should attach the turn's energy to the benched backup attacker rather than wasting it or skipping it. Actions: $actionsTaken"
+        )
+        assertTrue(actionsTaken.last() is GameAction.Attack, "CPU should finish the turn by attacking after completing setup. Actions: $actionsTaken")
+    }
+
+    @Test
+    fun `every match generates a distinct lesson and detects premature attack without setup`() {
+        val cat = catalog()
+        val engine = CpuLearningEngine(cat)
+
+        // Match A: CPU attacks immediately while holding a playable Basic, Energy, and Supporter
+        val recorderA = MatchRecorder(cat)
+        val stateA0 = createGameState(
+            id = "match-alpha-101",
+            turn = 2,
+            currentPlayer = 1,
+            phase = Phase.MAIN,
+            players = listOf(
+                PlayerState(active = pokemon("p0", "active-mon", 1), bench = emptyList(), hand = emptyList(), prizes = List(6) { c("pz0-$it") }, deck = List(10) { c("d0-$it") }),
+                PlayerState(
+                    active = pokemon("cpu-act", "active-mon", energies = 2),
+                    bench = emptyList(),
+                    hand = listOf(c("h-basic", "backup-mon"), c("h-en", "energy"), c("h-sup", "research")),
+                    prizes = List(6) { c("pzc-$it") },
+                    deck = List(10) { c("dc-$it") }
+                )
+            )
+        )
+        recorderA.startRecording(stateA0, "MASTER")
+        val stateA1 = stateA0.copy(
+            players = listOf(
+                stateA0.players[0].copy(active = pokemon("p0", "active-mon", 1, damage = 60)),
+                stateA0.players[1]
+            )
+        )
+        recorderA.recordAction(1, GameAction.Attack("punch"), stateA0, stateA1, emptyList())
+        recorderA.recordGameEnd(stateA1.copy(phase = Phase.GAME_OVER, winner = 0), 0)
+
+        val reportA = engine.reviewMatch(checkNotNull(recorderA.getCompletedRecording()))
+        assertTrue(reportA.detectedIssues.any { it.type == CpuErrorType.PREMATURE_ATTACK_WITHOUT_SETUP }, "Should detect premature attack without setup")
+        assertTrue(reportA.detectedIssues.any { it.type == CpuErrorType.FAILURE_TO_PREPARE_BACKUP }, "Should detect failure to prepare backup attacker")
+
+        // Match B: Different match ID, CPU wins after a clean game -> still extracts a distinct per-match lesson
+        val recorderB = MatchRecorder(cat)
+        val stateB0 = stateA0.copy(gameId = "match-beta-202")
+        recorderB.startRecording(stateB0, "MASTER")
+        recorderB.recordGameEnd(stateB0.copy(phase = Phase.GAME_OVER, winner = 1), 1)
+        val reportB = engine.reviewMatch(checkNotNull(recorderB.getCompletedRecording()))
+
+        val matchLessonA = reportA.generatedLessons.first { it.lessonId.startsWith("PARTIDA_") }
+        val matchLessonB = reportB.generatedLessons.first { it.lessonId.startsWith("PARTIDA_") }
+        assertNotEquals(matchLessonA.lessonId, matchLessonB.lessonId, "Each match must generate its own distinct lesson ID")
+    }
 }

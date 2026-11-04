@@ -242,10 +242,11 @@ internal class CpuTurnSearch(
                     val (value, wins) = attackValue(state, actor, attack)
                     val firstSearchIdx = node.sequence.indexOfFirst { it is GameAction.PlayTrainer && isSearchCard(initial, it.cardId) }
                     val firstAttachIdx = node.sequence.indexOfFirst { it is GameAction.AttachEnergy }
-                    val searchBeforeAttachBonus = if (firstSearchIdx != -1 && firstAttachIdx != -1 && firstSearchIdx < firstAttachIdx) 10.0 else 0.0
+                    val searchBeforeAttachBonus = if (firstSearchIdx != -1 && firstAttachIdx != -1 && firstSearchIdx < firstAttachIdx) 15.0 else 0.0
+                    val setupBonus = turnSetupObjectiveBonus(initial, state, node.sequence + attack, actor, isTerminal = true, wins = wins)
                     val tacticalBonus = tacticalSequenceBonus(initial, state, node.sequence + attack, actor)
 
-                    val score = value + development(state, actor) - node.depth * 0.5 + searchBeforeAttachBonus + tacticalBonus
+                    val score = value + development(state, actor) + setupBonus + searchBeforeAttachBonus + tacticalBonus - node.depth * 0.2
                     val postState = postAction(state, actor, attack)
                     val line = Line(node.first ?: attack, node.sequence + attack, score, wins, postState, attack, stateBeforeAttack = state)
                     finalists += line
@@ -272,9 +273,10 @@ internal class CpuTurnSearch(
                         firstDrawIdx != -1 && (firstSearchIdx == -1 || firstDrawIdx < firstSearchIdx) && initialHasSearch -> -180.0
                         else -> 0.0
                     }
+                    val setupBonus = turnSetupObjectiveBonus(initial, state, node.sequence + GameAction.EndTurn, actor, isTerminal = true, wins = false)
                     val tacticalBonus = tacticalSequenceBonus(initial, state, node.sequence + GameAction.EndTurn, actor)
 
-                    val score = development(state, actor) - replyRisk(state, actor, null) - node.depth * 0.5 + thinningAdjustment + tacticalBonus
+                    val score = development(state, actor) + setupBonus - replyRisk(state, actor, null) - node.depth * 0.2 + thinningAdjustment + tacticalBonus
                     val postState = postAction(state, actor, null)
                     val line = Line(node.first ?: GameAction.EndTurn, node.sequence + GameAction.EndTurn, score, false, postState, null, stateBeforeAttack = state)
                     finalists += line
@@ -304,14 +306,16 @@ internal class CpuTurnSearch(
                         continue
                     }
 
-                    // Dominance Pruning: check if an equivalent state was reached with better preserved resources
-                    val domKey = dominanceKey(result.state, actor)
-                    val existing = dominanceSeen[domKey]
-                    if (existing != null && isDominated(result.state, existing, actor)) {
-                        telemetry.candidatesPruned++
-                        continue
+                    // Dominance Pruning: only on MAIN phase states (never prune in-flight RESOLVE_CHOICE states)
+                    if (result.state.phase == Phase.MAIN) {
+                        val domKey = dominanceKey(result.state, actor)
+                        val existing = dominanceSeen[domKey]
+                        if (existing != null && isDominated(result.state, existing, actor)) {
+                            telemetry.candidatesPruned++
+                            continue
+                        }
+                        dominanceSeen[domKey] = result.state
                     }
-                    dominanceSeen[domKey] = result.state
 
                     if (!visited.add(result.state.copy(history = emptyList()))) {
                         telemetry.statesFromCache++
@@ -578,23 +582,49 @@ internal class CpuTurnSearch(
         } else 220.0
 
         val inProgressBonus = if (state.phase == Phase.RESOLVE_CHOICE) 250.0 else 0.0
+        val init = currentInitial ?: state
+        val objectiveBonus = turnSetupObjectiveBonus(init, state, node.sequence, actor, isTerminal = false, wins = false)
+        val depthPenalty = node.depth * 0.2
+        return tactical + development(state, actor) + inProgressBonus + objectiveBonus - depthPenalty
+    }
 
-        // Objective bonuses
+    /** Player-like setup evaluation: rewards preparing active + bench backup attacker and using hand/board engine before attacking. */
+    private fun turnSetupObjectiveBonus(
+        initial: GameState,
+        state: GameState,
+        sequence: List<GameAction>,
+        actor: Int,
+        isTerminal: Boolean,
+        wins: Boolean
+    ): Double {
         var objectiveBonus = 0.0
         val player = state.players[actor]
         val opponent = state.players[1 - actor]
         val tuningAdaptive = tuning.adaptive
 
+        val knownPoolIds = (player.hand.map { it.definitionId } + state.deckLists.getOrNull(actor).orEmpty())
+            .filter { it != UNKNOWN }
+            .distinct()
+
+        fun expectedCost(p: PokemonInstance): Int {
+            val ownAttacks = engine.availableAttacks(state, actor, p)
+            val ownMax = ownAttacks.maxOfOrNull { engine.attackCost(state, p, it).size } ?: 1
+            val def = maskedCatalog.get(p.top.definitionId)
+            val evoMax = knownPoolIds.mapNotNull { id -> runCatching { maskedCatalog.get(id) }.getOrNull() }
+                .filter { cand -> cand.category == Category.POKEMON && (cand.canEvolveFrom(def) || cand.canRareCandyEvolveFrom(def)) }
+                .flatMap { it.attacks }
+                .maxOfOrNull { it.cost.size } ?: 0
+            return maxOf(ownMax, evoMax).coerceAtLeast(1)
+        }
+
         val benchNeedsEnergy = player.bench.any { b ->
-            val bAttacks = engine.availableAttacks(state, actor, b)
-            val bCost = bAttacks.maxOfOrNull { engine.attackCost(state, b, it).size } ?: 1
-            b.energies.size < bCost
+            b.energies.size < expectedCost(b)
         }
 
         // Energy Efficiency & Anti-Overattachment
         player.pokemon().forEach { p ->
             val attacks = engine.availableAttacks(state, actor, p)
-            val maxCost = attacks.maxOfOrNull { engine.attackCost(state, p, it).size } ?: 1
+            val maxCost = expectedCost(p)
             val hasScaling = attacks.any { a ->
                 a.effects.any { eff ->
                     eff is Effect.DiscardHandEnergyDamageBonus ||
@@ -614,7 +644,7 @@ internal class CpuTurnSearch(
                         objectiveBonus += 15.0 * extraCount
                     } else if (benchNeedsEnergy) {
                         // Penalize redundant energy when bench backup needs energy!
-                        objectiveBonus -= 50.0 * extraCount * tuningAdaptive.redundantEnergyPenaltyMultiplier
+                        objectiveBonus -= 65.0 * extraCount * tuningAdaptive.redundantEnergyPenaltyMultiplier
                     }
                 }
             }
@@ -624,20 +654,38 @@ internal class CpuTurnSearch(
         val activeIsReady = player.active?.let { act ->
             val actAttacks = engine.availableAttacks(state, actor, act)
             val actCost = actAttacks.maxOfOrNull { engine.attackCost(state, act, it).size } ?: 1
-            act.energies.size >= actCost
+            act.energies.size >= actCost && actAttacks.any { engine.validate(state, GameAction.Attack(it.id)) == Legality.Legal }
         } ?: false
 
         if (activeIsReady) {
             val benchBackupWithEnergy = player.bench.count { it.energies.isNotEmpty() }
+            val benchBackupEnergies = player.bench.sumOf { minOf(it.energies.size, expectedCost(it)) }
             if (benchBackupWithEnergy > 0) {
-                objectiveBonus += 45.0 * benchBackupWithEnergy * tuningAdaptive.backupAttackerBonusMultiplier
+                objectiveBonus += (45.0 * benchBackupWithEnergy + 20.0 * benchBackupEnergies) * tuningAdaptive.backupAttackerBonusMultiplier
             }
         }
 
-        // Hand Engine Optimization: reward taking legal setup actions with trainers instead of hoarding
-        val trainersPlayedCount = node.sequence.count { it is GameAction.PlayTrainer }
-        if (trainersPlayedCount > 0) {
-            objectiveBonus += 25.0 * trainersPlayedCount * tuningAdaptive.handUtilizationBonusMultiplier
+        // Reward bench development & evolutions executed this turn
+        val basicsPlayedCount = sequence.count { it is GameAction.PlayBasic }
+        if (basicsPlayedCount > 0 && player.bench.size <= activePlan.desiredBench.coerceAtLeast(3)) {
+            objectiveBonus += 32.0 * basicsPlayedCount * tuningAdaptive.benchDevelopmentBonusMultiplier
+        }
+        val evolutionsCount = sequence.count { it is GameAction.Evolve }
+        if (evolutionsCount > 0) {
+            objectiveBonus += 45.0 * evolutionsCount * tuningAdaptive.evolutionPriorityMultiplier
+        }
+        val abilitiesUsedCount = sequence.count { it is GameAction.UseAbility || it is GameAction.UseStadiumAbility }
+        if (abilitiesUsedCount > 0) {
+            objectiveBonus += 30.0 * abilitiesUsedCount * tuningAdaptive.handUtilizationBonusMultiplier
+        }
+
+        // Hand Engine Optimization: reward taking constructive setup actions with trainers instead of hoarding
+        val constructiveTrainersCount = sequence.count { action ->
+            if (action !is GameAction.PlayTrainer) false
+            else !isBossCard(initial, action.cardId) && !isHandDisruptionCard(initial, action.cardId)
+        }
+        if (constructiveTrainersCount > 0) {
+            objectiveBonus += 28.0 * constructiveTrainersCount * tuningAdaptive.handUtilizationBonusMultiplier
         }
 
         // Reward gusting multi-prize target
@@ -647,24 +695,69 @@ internal class CpuTurnSearch(
         }
 
         // Search Sequencing Bonus: playing search as first action to assemble attacker
-        val firstActionIsSearch = node.sequence.firstOrNull()?.let { it is GameAction.PlayTrainer && isSearchCard(state, it.cardId) } == true
+        val firstActionIsSearch = sequence.firstOrNull()?.let { it is GameAction.PlayTrainer && isSearchCard(initial, it.cardId) } == true
         if (firstActionIsSearch) objectiveBonus += 40.0 * tuningAdaptive.searchCardBonusMultiplier
-        val searchActionsPlayed = node.sequence.count { it is GameAction.PlayTrainer && isSearchCard(state, it.cardId) }
+        val searchActionsPlayed = sequence.count { it is GameAction.PlayTrainer && isSearchCard(initial, it.cardId) }
         objectiveBonus += 50.0 * searchActionsPlayed * (tuningAdaptive.searchCardBonusMultiplier - 1.0)
 
-        // Deck Thinning sequencing check during beam search
-        val firstSearchIdx = node.sequence.indexOfFirst { it is GameAction.PlayTrainer && isSearchCard(state, it.cardId) }
-        val firstDrawIdx = node.sequence.indexOfFirst { it is GameAction.PlayTrainer && isDrawCard(state, it.cardId) }
-        val initialHasSearch = player.hand.any { isSearchCard(state, it.id) }
+        // Deck Thinning sequencing check
+        val firstSearchIdx = sequence.indexOfFirst { it is GameAction.PlayTrainer && isSearchCard(initial, it.cardId) }
+        val firstDrawIdx = sequence.indexOfFirst { it is GameAction.PlayTrainer && isDrawCard(initial, it.cardId) }
+        val initialHasSearch = initial.players[actor].hand.any { isSearchCard(initial, it.id) }
         if (firstDrawIdx != -1 && (firstSearchIdx == -1 || firstDrawIdx < firstSearchIdx) && initialHasSearch) {
             objectiveBonus -= 180.0
         } else if (firstSearchIdx != -1 && firstDrawIdx != -1 && firstSearchIdx < firstDrawIdx) {
             objectiveBonus += 80.0 * tuningAdaptive.thinningBonusMultiplier
         }
 
+        // Terminal Penalty for Premature Attack / Pass when obvious safe setup actions were skipped
+        if (isTerminal && !wins && state.phase == Phase.MAIN) {
+            val remainingLegal = engine.cpuLegalActions(state)
+
+            // 1. Unspent manual energy attachment when active or bench backup needs energy
+            if (!player.flags.manualEnergy && remainingLegal.any { it is GameAction.AttachEnergy }) {
+                val activeNeedsEnergy = player.active?.let { it.energies.size < expectedCost(it) } == true
+                if (activeNeedsEnergy || benchNeedsEnergy) {
+                    objectiveBonus -= 155.0 * tuningAdaptive.preAttackSetupBonusMultiplier
+                }
+            }
+
+            // 2. Unplayed legal Evolution in hand
+            if (remainingLegal.any { it is GameAction.Evolve }) {
+                objectiveBonus -= 140.0 * tuningAdaptive.evolutionPriorityMultiplier
+            }
+
+            // 3. Unplayed Basic to Bench when bench has < 2 Pokemon
+            if (player.bench.size < 2 && remainingLegal.any { it is GameAction.PlayBasic }) {
+                objectiveBonus -= 120.0 * tuningAdaptive.benchDevelopmentBonusMultiplier
+            }
+
+            // 4. Unplayed Search Item when bench < 3 or active/bench needs evolution
+            val hasLegalSearch = remainingLegal.any { it is GameAction.PlayTrainer && isSearchCard(state, it.cardId) }
+            if (hasLegalSearch && player.deck.isNotEmpty() && (player.bench.size < 3 || player.pokemon().any { maskedCatalog.get(it.top.definitionId).stage == Stage.BASIC })) {
+                objectiveBonus -= 115.0 * tuningAdaptive.searchCardBonusMultiplier
+            }
+
+            // 5. Unplayed Pure Draw Supporter (DrawCards / DrawTo / ShuffleHandDraw with small hand)
+            if (!player.flags.supporter && player.deck.size > 4) {
+                val hasSafeDrawSupporter = remainingLegal.filterIsInstance<GameAction.PlayTrainer>().any { play ->
+                    val card = player.hand.firstOrNull { it.id == play.cardId } ?: return@any false
+                    val def = maskedCatalog.get(card.definitionId)
+                    when (val eff = def.trainerEffect) {
+                        is TrainerEffect.DrawCards, is TrainerEffect.DrawTo -> player.hand.size <= 7
+                        is TrainerEffect.ShuffleHandDraw -> player.hand.size <= 4 && player.hand.none { isBossCard(state, it.id) }
+                        else -> false
+                    }
+                }
+                if (hasSafeDrawSupporter) {
+                    objectiveBonus -= 110.0 * tuningAdaptive.handUtilizationBonusMultiplier
+                }
+            }
+        }
+
         if (isPrivileged) {
-            val init = currentInitial ?: state
-            val playedDisruption = node.sequence.any { isHandDisruptionCard(init, (it as? GameAction.PlayTrainer)?.cardId.orEmpty()) }
+            val init = currentInitial ?: initial
+            val playedDisruption = sequence.any { isHandDisruptionCard(init, (it as? GameAction.PlayTrainer)?.cardId.orEmpty()) }
             if (playedDisruption) {
                 if (currentPrediction?.isLethal == true || (currentHandAnalysis?.threatScore ?: 0.0) >= 60.0) {
                     objectiveBonus += 250.0
@@ -679,12 +772,12 @@ internal class CpuTurnSearch(
 
             if (opponent.active != null) {
                 val oppActiveThreat = FutureThreatEvaluator.evaluatePokemonThreat(state, opponent.active!!, actor, maskedCatalog, currentHandAnalysis)
-                if (oppActiveThreat >= 90.0 && node.sequence.any { isBossCard(init, (it as? GameAction.PlayTrainer)?.cardId.orEmpty()) }) {
+                if (oppActiveThreat >= 90.0 && sequence.any { isBossCard(init, (it as? GameAction.PlayTrainer)?.cardId.orEmpty()) }) {
                     objectiveBonus += 300.0
                 }
             }
 
-            if (currentPrediction?.isLethal == true && node.sequence.any { it is GameAction.Retreat }) {
+            if (currentPrediction?.isLethal == true && sequence.any { it is GameAction.Retreat }) {
                 val initialActive = init.players[actor].active
                 val newActive = state.players[actor].active
                 if (initialActive != null && newActive != null) {
@@ -697,13 +790,13 @@ internal class CpuTurnSearch(
             }
         }
 
-        val depthPenalty = node.depth * 0.3
-        return tactical + development(state, actor) + inProgressBonus + objectiveBonus - depthPenalty
+        return objectiveBonus
     }
 
     /** Dominance Pruning Key */
     private data class DominanceKey(
         val activeDef: String?,
+        val activeCards: Int,
         val activeHp: Int,
         val activeEnergies: Int,
         val benchSig: String,
@@ -711,6 +804,7 @@ internal class CpuTurnSearch(
         val oppActiveHp: Int,
         val supporter: Boolean,
         val energyAttached: Boolean,
+        val handSig: String,
         val ownPrizes: Int,
         val oppPrizes: Int
     )
@@ -718,9 +812,13 @@ internal class CpuTurnSearch(
     private fun dominanceKey(state: GameState, actor: Int): DominanceKey {
         val p = state.players[actor]
         val opp = state.players[1 - actor]
-        val bSig = p.bench.map { "${it.top.definitionId}:${it.damage}:${it.energies.size}" }.sorted().joinToString(";")
+        val bSig = p.bench.map { "${it.top.definitionId}:${it.cards.size}:${it.damage}:${it.energies.size}:${it.tools.size}" }.sorted().joinToString(";")
+        val hPokemon = p.hand.count { it.definitionId != UNKNOWN && maskedCatalog.get(it.definitionId).category == Category.POKEMON }
+        val hEnergy = p.hand.count { it.definitionId != UNKNOWN && maskedCatalog.get(it.definitionId).category == Category.ENERGY }
+        val hTrainer = p.hand.count { it.definitionId != UNKNOWN && maskedCatalog.get(it.definitionId).category == Category.TRAINER }
         return DominanceKey(
             activeDef = p.active?.top?.definitionId,
+            activeCards = p.active?.cards?.size ?: 0,
             activeHp = p.active?.let { (engine.effectiveHp(state, it) - it.damage) } ?: 0,
             activeEnergies = p.active?.energies?.size ?: 0,
             benchSig = bSig,
@@ -728,6 +826,7 @@ internal class CpuTurnSearch(
             oppActiveHp = opp.active?.let { (engine.effectiveHp(state, it) - it.damage) } ?: 0,
             supporter = p.flags.supporter,
             energyAttached = p.flags.manualEnergy,
+            handSig = "$hPokemon:$hEnergy:$hTrainer",
             ownPrizes = p.prizes.size,
             oppPrizes = opp.prizes.size
         )
@@ -736,7 +835,9 @@ internal class CpuTurnSearch(
     private fun isDominated(candidate: GameState, existing: GameState, actor: Int): Boolean {
         val candP = candidate.players[actor]
         val existP = existing.players[actor]
-        return existP.hand.size > candP.hand.size && existP.deck.size >= candP.deck.size
+        val candDefs = candP.hand.map { it.definitionId }.toSet()
+        val existDefs = existP.hand.map { it.definitionId }.toSet()
+        return existP.hand.size > candP.hand.size && existP.deck.size >= candP.deck.size && existDefs.containsAll(candDefs)
     }
 
     /** Extremely aggressive lethal finder: explores if ANY legal sequence of actions wins this turn. */
@@ -839,9 +940,13 @@ internal class CpuTurnSearch(
         if (after.turn != before.turn || after.currentPlayer != actor || engine.actingPlayer(after) != actor) return false
         if (after.phase !in listOf(Phase.MAIN, Phase.RESOLVE_CHOICE)) return false
         if (after.rng != before.rng) {
+            val lastAction = after.history.lastOrNull()?.action
             val wasShuffle = before.resolution?.shuffleAfter == true ||
                 (before.phase == Phase.RESOLVE_CHOICE && after.phase == Phase.MAIN) ||
-                after.history.lastOrNull()?.action is GameAction.PlayTrainer
+                lastAction is GameAction.PlayTrainer ||
+                lastAction is GameAction.UseAbility ||
+                lastAction is GameAction.UseStadiumAbility ||
+                lastAction is GameAction.Evolve
             if (!wasShuffle) return false
         }
         if (after.players[actor].hand.any { it.definitionId == UNKNOWN }) return false
@@ -946,13 +1051,22 @@ internal class CpuTurnSearch(
             .sortedByDescending { group -> actionPriority(state, group.first()) }
 
     private fun actionPriority(state: GameState, action: GameAction): Int = when(action) {
-        is GameAction.Evolve -> 110 + state.players[state.currentPlayer].hand.firstOrNull { it.id == action.cardId }?.let { activePlan.priority(it.definitionId) }?.div(5)!!
-        is GameAction.AttachEnergy -> 105 + state.players[state.currentPlayer].pokemon().firstOrNull { it.id == action.pokemonId }?.let { activePlan.priority(it.top.definitionId) }?.div(10)!!
-        is GameAction.UseAbility -> 100
-        is GameAction.ChooseCards -> 100
+        is GameAction.Evolve -> 125 + (state.players[state.currentPlayer].hand.firstOrNull { it.id == action.cardId }?.let { activePlan.priority(it.definitionId) }?.div(5) ?: 0)
+        is GameAction.AttachEnergy -> {
+            val player = state.players[state.currentPlayer]
+            val target = player.pokemon().firstOrNull { it.id == action.pokemonId }
+            val planPrio = target?.let { activePlan.priority(it.top.definitionId) / 10 } ?: 0
+            val maxCost = target?.let { p ->
+                engine.availableAttacks(state, state.currentPlayer, p).maxOfOrNull { engine.attackCost(state, p, it).size } ?: 1
+            } ?: 1
+            val needsEnergyBonus = if (target != null && target.energies.size < maxCost) 20 else -25
+            105 + planPrio + needsEnergyBonus
+        }
+        is GameAction.UseAbility -> 115
+        is GameAction.ChooseCards -> 110
         is GameAction.PlayTrainer -> trainerPriority(state, action.cardId)
         is GameAction.Retreat -> 90
-        is GameAction.PlayBasic -> 60 + state.players[state.currentPlayer].hand.firstOrNull { it.id == action.cardId }?.let { activePlan.priority(it.definitionId) / 3 }!!
+        is GameAction.PlayBasic -> 85 + (state.players[state.currentPlayer].hand.firstOrNull { it.id == action.cardId }?.let { activePlan.priority(it.definitionId) / 3 } ?: 0)
         else -> 0
     }
 
