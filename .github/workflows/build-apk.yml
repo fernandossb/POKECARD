@@ -144,9 +144,11 @@ jobs:
           APK_NAME: ${{ steps.version.outputs.apk_name }}
         run: |
           set -e
+          NOTES_FILE="$RUNNER_TEMP/release-notes-trimmed.md"
+          head -n 600 RELEASE_NOTES.md | head -c 110000 > "$NOTES_FILE"
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "saida/$APK_NAME" --clobber
-            gh release edit "$TAG" --title "POKECARD Brasil $VERSION_NAME" --notes-file RELEASE_NOTES.md --latest
+            gh release edit "$TAG" --title "POKECARD Brasil $VERSION_NAME" --notes-file "$NOTES_FILE" --latest
           else
-            gh release create "$TAG" "saida/$APK_NAME" --title "POKECARD Brasil $VERSION_NAME" --notes-file RELEASE_NOTES.md --latest
+            gh release create "$TAG" "saida/$APK_NAME" --title "POKECARD Brasil $VERSION_NAME" --notes-file "$NOTES_FILE" --latest
           fi
