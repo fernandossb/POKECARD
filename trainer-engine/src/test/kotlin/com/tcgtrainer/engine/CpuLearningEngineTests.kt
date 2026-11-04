@@ -16,11 +16,13 @@ class CpuLearningEngineTests {
         trainerType = TrainerType.ITEM, trainerEffect = TrainerEffect.Search(listOf(CardFilter.BASIC_POKEMON)))
     private val drawSupporter = CardDefinition("research", "Professor's Research", "Test", "6", category = Category.TRAINER,
         trainerType = TrainerType.SUPPORTER, trainerEffect = TrainerEffect.DrawCards(3))
+    private val greatBall = CardDefinition("great-ball", "Great Ball", "Test", "8", category = Category.TRAINER,
+        trainerType = TrainerType.ITEM, trainerEffect = TrainerEffect.GreatBall)
     private val dummyBasic = CardDefinition("dummy-basic", "Dummy Basic", "Test", "7", category = Category.POKEMON, hp = 70,
         attacks = listOf(AttackDefinition("slap", "Slap", listOf(EnergyType.COLORLESS), listOf(Effect.Damage(10)))))
 
     private fun catalog(vararg extras: CardDefinition) = object : CardCatalog {
-        val entries = (listOf(energy, activeAttacker, backupAttacker, scalingAttacker, searchItem, drawSupporter, dummyBasic) + extras).associateBy { it.id }
+        val entries = (listOf(energy, activeAttacker, backupAttacker, scalingAttacker, searchItem, drawSupporter, greatBall, dummyBasic) + extras).associateBy { it.id }
         override fun get(id: String) = entries[id] ?: error("Unknown $id")
     }
 
@@ -455,5 +457,82 @@ class CpuLearningEngineTests {
         assertEquals(2, opponentInOracle.hand.size, "ORACLE position should see opponent hand")
         assertEquals(1, opponentInOracle.deck.size, "ORACLE position should see opponent deck")
         assertEquals("secret-deck-1", opponentInOracle.deck.first().id, "ORACLE position knows exact deck cards and order")
+    }
+
+    @Test
+    fun `repeated hand-resource lessons merge globally across decks`() {
+        val memory = CpuExperienceMemory()
+        fun lesson(deck: String, occurrences: Int) = CpuLesson(
+            lessonId = "ACTIVATE_HAND_RESOURCES",
+            errorType = CpuErrorType.UNPROMOTED_HAND_STAGNATION,
+            archetype = deck,
+            occurrences = occurrences,
+            confidence = .7,
+            recommendedBehavior = "Use search cards",
+            contextSummary = deck
+        )
+        memory.learn(listOf(lesson("dragapult", 1)), "match-1")
+        memory.learn(listOf(lesson("lucario", 3)), "match-2")
+
+        val merged = memory.getAllLessons().single()
+        assertEquals("general", merged.archetype)
+        assertEquals(4, merged.occurrences)
+        assertTrue(AdaptiveStrategyTuner(memory).computeParameters("dhelmise").searchCardBonusMultiplier > 1.0)
+
+        val legacyJson = """[
+            {"lessonId":"ACTIVATE_HAND_RESOURCES","errorType":"UNPROMOTED_HAND_STAGNATION","archetype":"dragapult","occurrences":1,"confidence":0.7,"recommendedBehavior":"Use search cards","contextSummary":"dragapult"},
+            {"lessonId":"ACTIVATE_HAND_RESOURCES","errorType":"UNPROMOTED_HAND_STAGNATION","archetype":"lucario","occurrences":3,"confidence":0.8,"recommendedBehavior":"Use search cards","contextSummary":"lucario"}
+        ]"""
+        val migrated = CpuExperienceMemory.fromJson(legacyJson).getAllLessons().single()
+        assertEquals("general", migrated.archetype)
+        assertEquals(4, migrated.occurrences)
+        assertEquals(.8, migrated.confidence)
+    }
+
+    @Test
+    fun `learned search bonus changes a passive attachment into a search play`() {
+        val cat = catalog()
+        val rules = RulesEngine(cat)
+        val game = createGameState(
+            turn = 4,
+            players = listOf(
+                PlayerState(active = pokemon("human", "dummy-basic", 1), deck = emptyList()),
+                PlayerState(
+                    active = pokemon("cpu", "active-mon"),
+                    hand = listOf(c("ball", "great-ball"), c("energy-card", "energy")),
+                    deck = listOf(c("target", "dummy-basic")),
+                    prizes = listOf(c("prize", "energy"))
+                )
+            )
+        )
+        val input = rules.cpuInput(game)
+        val defaultChoice = CpuPlayer(cat, CpuStrategy.HEURISTIC).choose(input)
+        val learnedChoice = CpuPlayer(cat, CpuStrategy.HEURISTIC,
+            CpuTuning(adaptive = AdaptiveTuningParameters(searchCardBonusMultiplier = 2.0))).choose(input)
+
+        assertEquals(GameAction.AttachEnergy("energy-card", "cpu"), defaultChoice)
+        assertEquals(GameAction.PlayTrainer("ball"), learnedChoice)
+    }
+
+    @Test
+    fun `hand analyzer requires the retained search card to have been legal`() {
+        val ball = RecordedCard("ball", "great-ball", "Great Ball", "TRAINER")
+        val hand = listOf(ball) + List(3) { RecordedCard("energy-$it", "energy", "Energy", "ENERGY") }
+        val active = RecordedPokemon("cpu", "active-mon", "Active Mon", 150, 150, 0)
+        val cpu = RecordedPlayerState(1, active, hand = hand, handCount = hand.size, prizesRemaining = 6, deckCount = 10, discardCount = 0)
+        val human = RecordedPlayerState(0, null, handCount = 0, prizesRemaining = 6, deckCount = 10, discardCount = 0)
+        val board = RecordedBoardState(4, Phase.MAIN, 1, players = listOf(human, cpu))
+        fun recording(legalIds: List<String>?) = MatchRecording(
+            gameId = "learning", seed = 1, difficulty = "MASTER", humanDeckId = "human", cpuDeckId = "cpu", mode = "TRAINING",
+            turns = mutableListOf(RecordedTurn(4, 1, hand, hand, mutableListOf(RecordedAction(
+                0, 4, 1, "EndTurn", "EndTurn", board, board,
+                cpuDecision = CpuDecisionTelemetry(4, "MASTER", "PASS", 2, 0, 1,
+                    legalTrainerCardIds = legalIds, selectedAction = "EndTurn")
+            ))))
+        )
+
+        assertEquals(1, HandEfficiencyAnalyzer.analyze(recording(listOf("ball")), catalog()).size)
+        assertTrue(HandEfficiencyAnalyzer.analyze(recording(emptyList()), catalog()).isEmpty())
+        assertTrue(HandEfficiencyAnalyzer.analyze(recording(null), catalog()).isEmpty())
     }
 }

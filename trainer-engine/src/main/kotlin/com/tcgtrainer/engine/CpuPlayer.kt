@@ -147,11 +147,11 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog, private val s
         if (activePlan != null && currentState != null && activePlan.turn == input.turn && activePlan.actor == input.observation.viewer && !activePlan.isComplete()) {
             val nextPlanned = activePlan.nextAction()
             if (nextPlanned != null) {
-                val isLegal = if (input.phase == Phase.MAIN) {
-                    nextPlanned in input.actions && engine.validate(currentState, nextPlanned) == Legality.Legal
-                } else {
-                    engine.validate(currentState, nextPlanned) == Legality.Legal
-                }
+                // MAIN actions were already validated against the real state in cpuInput.
+                // A public position has a masked deck, so validating it again can neither
+                // establish legality of deck searches nor safely consult the real catalog.
+                // Choices are resolved afresh from the current request and selectable cards.
+                val isLegal = input.phase == Phase.MAIN && nextPlanned in input.actions
                 if (isLegal) {
                     activePlan.advance()
                     return nextPlanned
@@ -186,6 +186,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog, private val s
         input.previews.entries.firstOrNull { it.value.knockout && it.value.prizes >= o.ownPrizeCount && !it.value.uncertain }?.let { return it.key }
         fun card(id: String) = (o.ownHand + input.selectableCards + o.ownDiscard + own.flatMap { it.energies } + listOfNotNull(input.stadium)).firstOrNull { it.id == id }
         fun pokemon(id: String) = (own + o.opponentField).first { it.id == id }
+        fun learnedSearchValue(value: Double) = value * tuning.adaptive.searchCardBonusMultiplier
         fun abilities(p: PokemonInstance) = input.effectiveAbilities[p.id] ?: d(p.top).abilities
         fun hp(p: PokemonInstance): Int {
             val modifier = input.stadium?.let { d(it).trainerEffect as? TrainerEffect.HpModifier }
@@ -793,7 +794,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog, private val s
                         def.trainerType == TrainerType.SUPPORTER && (def.trainerEffect is TrainerEffect.DrawCards || def.trainerEffect is TrainerEffect.ShuffleHandDraw || def.trainerEffect is TrainerEffect.DrawTo)
                     }) 45.0 else 0.0
                     val needsAttackerBonus = if (active == null || (active.cards.asReversed().flatMap { d(it).attacks }.none { a -> input.previews[GameAction.Attack(a.id)]?.knockout == true })) 60.0 else 0.0
-                    120.0 - effect.discardCost * 10 + thinningBonus + needsAttackerBonus
+                    learnedSearchValue(120.0 - effect.discardCost * 10 + thinningBonus + needsAttackerBonus)
                 }
                 is TrainerEffect.ShuffleHandDraw -> if (o.ownDeckCount <= 3 || o.ownHand.size > (if (o.ownPrizeCount == 6) effect.sixPrizeCount else effect.count)) -5.0 else 65.0-o.ownHand.size
                 is TrainerEffect.ShuffleBothHandsDraw -> if (o.ownDeckCount > 0 && o.ownHand.size < effect.count && (!effect.requiresPreviousKnockout || o.ownLastKnockedOutTurn == input.turn-1)) 55.0 else -5.0
@@ -806,7 +807,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog, private val s
                 TrainerEffect.BattleCage -> if (o.opponentField.any { it.damage > 0 }) 35.0 else 10.0
                 TrainerEffect.HandheldFan -> if (active != null && active.tools.isEmpty()) 48.0 else 15.0
                 TrainerEffect.CoinDiscardOpponentEnergy -> if (o.opponentField.sumOf { it.energies.size } > 0) 65.0 else 15.0
-                is TrainerEffect.CoinSearch -> if (o.ownDeckCount > 0) 78.0 else -5.0
+                is TrainerEffect.CoinSearch -> if (o.ownDeckCount > 0) learnedSearchValue(78.0) else -5.0
                 TrainerEffect.Crispin -> if (o.ownDeckCount > 0 && own.isNotEmpty()) 72.0 else -5.0
                 TrainerEffect.MoveBasicEnergyBetweenOwnPokemon -> if (own.size > 1 && own.sumOf { it.energies.size } > 0) 55.0 else -5.0
                 TrainerEffect.RosaEncouragement -> if (o.ownPrizeCount > o.opponentPrizeCount && own.any { d(it.top).stage == Stage.STAGE_TWO } && o.ownDiscard.any { d(it).category == Category.ENERGY && d(it).basicEnergy }) 70.0 else -5.0
@@ -869,8 +870,8 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog, private val s
                             (effect.type == null || d(it).type == effect.type) ||
                             d(it).category == Category.ENERGY && d(it).basicEnergy && (effect.type == null || d(it).type == effect.type)
                     }) 45.0 else -5.0
-                TrainerEffect.GreatBall, TrainerEffect.Sonia -> if (o.ownDeckCount > 0 && own.size < 5) 90.0 else -5.0
-                TrainerEffect.SearchEachEvolutionStage -> if (o.ownDeckCount > 0) 85.0 else -5.0
+                TrainerEffect.GreatBall, TrainerEffect.Sonia -> if (o.ownDeckCount > 0 && own.size < 5) learnedSearchValue(90.0) else -5.0
+                TrainerEffect.SearchEachEvolutionStage -> if (o.ownDeckCount > 0) learnedSearchValue(85.0) else -5.0
                 is TrainerEffect.DiscardHandPokemonAndDraw -> {
                     val eligible = o.ownHand.count { d(it).category == Category.POKEMON && !d(it).hasRuleBox }
                     if (eligible > 0 && o.ownDeckCount > 0) 60.0 + minOf(effect.max, eligible) * effect.drawPerCard * 8.0 else -5.0
@@ -878,7 +879,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog, private val s
                 TrainerEffect.CoinSwitch -> if (o.opponentField.size > 1) 20.0 else -5.0
                 TrainerEffect.ForestOfVitality -> 30.0
                 TrainerEffect.MysteryGarden -> -5.0
-                TrainerEffect.BuddyBuddyPoffin -> if (own.size < 6) 105.0 else -5.0
+                TrainerEffect.BuddyBuddyPoffin -> if (own.size < 6) learnedSearchValue(105.0) else -5.0
                 TrainerEffect.WallyCompassion -> own.filter { d(it.top).name.startsWith("Mega ") && d(it.top).name.endsWith(" ex") }
                     .maxOfOrNull { it.damage.toDouble() + if (it.damage > 0) it.energies.sumOf { energy -> keepValue(energy) + 12.0 } else 0.0 }
                     ?.takeIf { it > 0.0 }?.plus(55.0) ?: -5.0
@@ -896,7 +897,7 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog, private val s
                 is TrainerEffect.RecoverEnergy -> if (o.ownDiscard.any { d(it).category == Category.ENERGY && d(it).basicEnergy }) 45.0 else -5.0
                 is TrainerEffect.RecoverPokemonToDeck -> if (o.ownDiscard.any { d(it).category == Category.POKEMON }) 35.0 else -5.0
                 is TrainerEffect.AttachBasicEnergyFromDiscardToBenchedType -> if (own.any { d(it.top).type == effect.type } && o.ownDiscard.any { d(it).category == Category.ENERGY && d(it).basicEnergy && d(it).type == effect.type }) 75.0 else -5.0
-                is TrainerEffect.SearchBasicPokemonToBench -> if (own.size < 6 && o.ownDeckCount > 0) 95.0 else -5.0
+                is TrainerEffect.SearchBasicPokemonToBench -> if (own.size < 6 && o.ownDeckCount > 0) learnedSearchValue(95.0) else -5.0
                 is TrainerEffect.DiscardSearchDeck -> if (o.ownDeckCount > 0) 18.0 else -5.0
                 TrainerEffect.Kofu -> if (o.ownHand.size >= 3 && o.ownDeckCount > 1) 55.0 else -5.0
                 TrainerEffect.RebootPod -> if (own.any { d(it.top).isFuturePokemon } && o.ownDiscard.any { d(it).category == Category.ENERGY && d(it).basicEnergy }) 75.0 else -5.0

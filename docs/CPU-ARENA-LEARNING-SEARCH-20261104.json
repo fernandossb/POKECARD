@@ -1,0 +1,189 @@
+{
+    "master": "MASTER: turn search + public counterplay + prize race",
+    "baseline": "FROZEN",
+    "baselineArtifact": "C:\\Users\\PPCP\\Downloads\\github\\POKECARD\\.cpu-baselines\\learning-search-before-20261104\\engine.jar",
+    "baselineSha256": "6c17f849640561a983cf166a0c9118cf6c84fdf03c19b4cc19292318f6b539d1",
+    "baselineKnowledge": "FAIR",
+    "baselineDecisionMedianMs": 0.7564,
+    "baselineDecisionP95Ms": 1425.9945,
+    "candidateTuning": ".35,.15,80",
+    "gamesRequested": 4,
+    "gamesCompleted": 4,
+    "errors": 0,
+    "masterWins": 2,
+    "baselineWins": 2,
+    "draws": 0,
+    "masterWinRate": 0.5,
+    "masterDecisionMedianMs": 0.5989,
+    "masterDecisionP95Ms": 1352.5389,
+    "masterDecisionMaxMs": 3945.4778,
+    "timingScope": "CpuPlayer.choose only; excludes cpuInput and diagnostic heuristic/trace",
+    "elapsedSeconds": 68.926776,
+    "pairedSeeds": true,
+    "publicPositionsHiddenZonesMasked": true,
+    "deckAndPrizeIdentitiesMasked": true,
+    "candidateKnowledge": "FAIR",
+    "masterKnowsOpponentHand": false,
+    "seedBase": 58000003,
+    "decks": [
+        "lucario"
+    ],
+    "byBaseline": [
+        {
+            "baseline": "FROZEN_MASTER",
+            "games": 4,
+            "masterWins": 2,
+            "baselineWins": 2,
+            "draws": 0,
+            "errors": 0
+        }
+    ],
+    "lossReasons": [
+        {
+            "reason": "Você retirou seu último Prêmio.",
+            "losses": 2,
+            "games": [
+                0,
+                2
+            ]
+        }
+    ],
+    "outcomes": [
+        {
+            "game": 0,
+            "seed": 58000003,
+            "masterSeat": 0,
+            "baseline": "MASTER",
+            "decks": [
+                "lucario",
+                "lucario"
+            ],
+            "winner": 1,
+            "turns": 12,
+            "actions": 90,
+            "winReason": "Você retirou seu último Prêmio.",
+            "recentActions": [
+                "T8 P1 BASELINE TakePrize(cardId=1-21)",
+                "T8 P0 MASTER promoveu Lunatone",
+                "T9 P0 MASTER jogou Gongo de Luta",
+                "T9 P0 MASTER ChooseCards(cardIds=[0-48])",
+                "T9 P0 MASTER ligou Energia de Luta Básica em Makuhita",
+                "T9 P0 MASTER encerrou o turno",
+                "T10 P1 BASELINE jogou Gongo de Luta",
+                "T10 P1 BASELINE ChooseCards(cardIds=[1-48])",
+                "T10 P1 BASELINE ligou Energia de Luta Básica em Lunatone",
+                "T10 P1 BASELINE atacou com Soco Aura mirando null",
+                "T10 P1 BASELINE TakePrize(cardId=1-52)",
+                "T10 P0 MASTER promoveu Makuhita",
+                "T11 P0 MASTER ligou Energia de Luta Básica em Lunatone",
+                "T11 P0 MASTER atacou com Soco Saca-rolha mirando null",
+                "T12 P1 BASELINE atacou com Soco Aura mirando null",
+                "T12 P1 BASELINE TakePrize(cardId=1-1)"
+            ],
+            "error": null,
+            "slowestMasterDecision": "T1 MAIN jogou Ultra Bola: 475.9746 ms"
+        },
+        {
+            "game": 1,
+            "seed": 58000003,
+            "masterSeat": 1,
+            "baseline": "MASTER",
+            "decks": [
+                "lucario",
+                "lucario"
+            ],
+            "winner": 1,
+            "turns": 12,
+            "actions": 90,
+            "winReason": "Você retirou seu último Prêmio.",
+            "recentActions": [
+                "T8 P1 MASTER TakePrize(cardId=1-21)",
+                "T8 P0 BASELINE promoveu Lunatone",
+                "T9 P0 BASELINE jogou Gongo de Luta",
+                "T9 P0 BASELINE ChooseCards(cardIds=[0-48])",
+                "T9 P0 BASELINE ligou Energia de Luta Básica em Makuhita",
+                "T9 P0 BASELINE encerrou o turno",
+                "T10 P1 MASTER jogou Gongo de Luta [heurística simples escolheria: atacou com Soco Aura mirando null]",
+                "T10 P1 MASTER ChooseCards(cardIds=[1-48])",
+                "T10 P1 MASTER ligou Energia de Luta Básica em Lunatone [heurística simples escolheria: ligou Energia de Luta Básica em Mega Lucario ex]",
+                "T10 P1 MASTER atacou com Soco Aura mirando null",
+                "T10 P1 MASTER TakePrize(cardId=1-52)",
+                "T10 P0 BASELINE promoveu Makuhita",
+                "T11 P0 BASELINE ligou Energia de Luta Básica em Lunatone",
+                "T11 P0 BASELINE atacou com Soco Saca-rolha mirando null",
+                "T12 P1 MASTER atacou com Soco Aura mirando null",
+                "T12 P1 MASTER TakePrize(cardId=1-1)"
+            ],
+            "error": null,
+            "slowestMasterDecision": "T10 MAIN jogou Gongo de Luta: 1619.4227 ms"
+        },
+        {
+            "game": 2,
+            "seed": 58104732,
+            "masterSeat": 0,
+            "baseline": "MASTER",
+            "decks": [
+                "lucario",
+                "lucario"
+            ],
+            "winner": 1,
+            "turns": 20,
+            "actions": 184,
+            "winReason": "Você retirou seu último Prêmio.",
+            "recentActions": [
+                "T19 P0 MASTER colocou Solrock no Banco [heurística simples escolheria: atacou com Soco Aura mirando null]",
+                "T19 P0 MASTER atacou com Soco Aura mirando null",
+                "T19 P0 MASTER ChooseCards(cardIds=[0-48])",
+                "T19 P0 MASTER ChooseCards(cardIds=[0-13])",
+                "T19 P0 MASTER ChooseCards(cardIds=[0-49])",
+                "T19 P0 MASTER ChooseCards(cardIds=[0-9])",
+                "T19 P0 MASTER ChooseCards(cardIds=[0-50])",
+                "T19 P0 MASTER ChooseCards(cardIds=[0-9])",
+                "T19 P0 MASTER TakePrize(cardId=0-45)",
+                "T19 P0 MASTER TakePrize(cardId=0-59)",
+                "T19 P1 BASELINE promoveu Mega Lucario ex",
+                "T20 P1 BASELINE jogou Ordem da Chefia",
+                "T20 P1 BASELINE ChooseCards(cardIds=[0-17])",
+                "T20 P1 BASELINE atacou com Soco Aura mirando null",
+                "T20 P1 BASELINE ChooseCards(cardIds=[])",
+                "T20 P1 BASELINE TakePrize(cardId=1-20)"
+            ],
+            "error": null,
+            "slowestMasterDecision": "T19 MAIN evoluiu Makuhita com Hariyama: 3945.4778 ms"
+        },
+        {
+            "game": 3,
+            "seed": 58104732,
+            "masterSeat": 1,
+            "baseline": "MASTER",
+            "decks": [
+                "lucario",
+                "lucario"
+            ],
+            "winner": 1,
+            "turns": 20,
+            "actions": 184,
+            "winReason": "Você retirou seu último Prêmio.",
+            "recentActions": [
+                "T19 P0 BASELINE colocou Solrock no Banco",
+                "T19 P0 BASELINE atacou com Soco Aura mirando null",
+                "T19 P0 BASELINE ChooseCards(cardIds=[0-48])",
+                "T19 P0 BASELINE ChooseCards(cardIds=[0-13])",
+                "T19 P0 BASELINE ChooseCards(cardIds=[0-49])",
+                "T19 P0 BASELINE ChooseCards(cardIds=[0-9])",
+                "T19 P0 BASELINE ChooseCards(cardIds=[0-50])",
+                "T19 P0 BASELINE ChooseCards(cardIds=[0-9])",
+                "T19 P0 BASELINE TakePrize(cardId=0-45)",
+                "T19 P0 BASELINE TakePrize(cardId=0-59)",
+                "T19 P1 MASTER promoveu Mega Lucario ex",
+                "T20 P1 MASTER jogou Ordem da Chefia",
+                "T20 P1 MASTER ChooseCards(cardIds=[0-17])",
+                "T20 P1 MASTER atacou com Soco Aura mirando null",
+                "T20 P1 MASTER ChooseCards(cardIds=[]) [heurística simples escolheria: ChooseCards(cardIds=[1-48])]",
+                "T20 P1 MASTER TakePrize(cardId=1-20)"
+            ],
+            "error": null,
+            "slowestMasterDecision": "T16 MAIN jogou Gongo de Luta: 2503.0078 ms"
+        }
+    ]
+}

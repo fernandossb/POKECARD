@@ -56,6 +56,7 @@ data class CpuDecisionTelemetry(
     val legalActionsCount: Int,
     val legalAttacksCount: Int,
     val playableTrainersCount: Int,
+    val legalTrainerCardIds: List<String>? = null,
     val selectedAction: String,
     val target: String? = null,
     val energyBefore: Int? = null,

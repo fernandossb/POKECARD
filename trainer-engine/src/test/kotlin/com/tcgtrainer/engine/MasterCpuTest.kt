@@ -3,6 +3,32 @@ package com.tcgtrainer.engine
 import kotlin.test.*
 
 class MasterCpuTest {
+    @Test fun `reusing a search item plan does not inspect masked deck cards`() {
+        val poffin = CardDefinition("poffin", "Poffin", "Test", "6", category = Category.TRAINER,
+            trainerType = TrainerType.ITEM, trainerEffect = TrainerEffect.BuddyBuddyPoffin)
+        val basic = small.copy(id = "basic", hp = 60)
+        val catalog = catalog(poffin, basic)
+        val engine = RulesEngine(catalog)
+        val original = state()
+        val game = original.copy(players = listOf(original.players[0], original.players[1].copy(
+            deck = listOf(c("target", "basic")), hand = listOf(c("poffin-card", "poffin")),
+            active = pokemon("cpu", "hero"))))
+        val action = GameAction.PlayTrainer("poffin-card")
+        for (strategy in listOf(CpuStrategy.MASTER, CpuStrategy.ORACLE)) {
+            val knowledge = CpuKnowledge.forStrategy(strategy)
+            val input = engine.cpuInput(game, knowledge)
+            assertTrue(action in input.actions)
+            val cpu = CpuPlayer(catalog, strategy)
+            val field = CpuPlayer::class.java.getDeclaredField("currentTurnPlan")
+            field.isAccessible = true
+            field.set(cpu, CpuTurnPlan(CpuTurnObjective.FIND_ATTACKER, listOf(action, GameAction.ChooseCards(listOf("target"))), initialTurn = game.turn, actor = 1))
+            assertEquals(action, cpu.choose(input))
+            assertEquals(Legality.Legal, engine.validate(game, action))
+            val after = engine.apply(game, action).state
+            val choice = cpu.choose(engine.cpuInput(after, knowledge))
+            assertEquals(Legality.Legal, engine.validate(after, choice))
+        }
+    }
     @Test fun `a reused expired search never returns a decision from an earlier position`() {
         val catalog = catalog()
         val engine = RulesEngine(catalog)

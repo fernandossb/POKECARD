@@ -125,28 +125,30 @@ object HandEfficiencyAnalyzer {
         val issues = mutableListOf<DetectedCpuIssue>()
 
         for (turn in recording.turns.filter { it.player == 1 }) {
-            val trainersAtStart = turn.handAtStart.filter { it.category == "TRAINER" }
-            val playedTrainerActions = turn.actions.filter { it.actionType == "PlayTrainer" || it.actionDetails.startsWith("PlayTrainer") }
-
-            val unplayedTrainers = turn.handAtEnd.filter { it.category == "TRAINER" }
-            val hasSearchOrDraw = unplayedTrainers.any {
-                val def = runCatching { catalog.get(it.definitionId) }.getOrNull()
-                def?.trainerEffect is TrainerEffect.DrawCards ||
-                def?.trainerEffect is TrainerEffect.ShuffleBothHandsDraw ||
-                def?.trainerEffect is TrainerEffect.Search
+            val legalTrainerIds = turn.actions.mapNotNull { it.cpuDecision?.legalTrainerCardIds }.flatten().toSet()
+            if (legalTrainerIds.isEmpty()) continue
+            val retainedDevelopmentCard = turn.handAtEnd.firstOrNull { card ->
+                card.id in legalTrainerIds && runCatching { catalog.get(card.definitionId).trainerEffect }.getOrNull().let { effect ->
+                    effect is TrainerEffect.Search || effect is TrainerEffect.GreatBall ||
+                        effect is TrainerEffect.BuddyBuddyPoffin || effect is TrainerEffect.SearchEachEvolutionStage ||
+                        effect is TrainerEffect.SearchBasicPokemonToBench || effect is TrainerEffect.DrawCards ||
+                        effect is TrainerEffect.DrawTo || effect is TrainerEffect.ShuffleHandDraw ||
+                        effect is TrainerEffect.ShuffleBothHandsDraw
+                }
+            } ?: continue
+            val initialBoard = turn.actions.firstOrNull()?.stateBefore?.players?.getOrNull(1) ?: continue
+            val hasReadyAttacker = listOfNotNull(initialBoard.active).plus(initialBoard.bench).any { pokemon ->
+                val definition = runCatching { catalog.get(pokemon.definitionId) }.getOrNull() ?: return@any false
+                definition.attacks.any { attack -> attack.cost.size <= pokemon.energies.size }
             }
 
-            val lastState = turn.actions.lastOrNull()?.stateAfter ?: continue
-            val cpuBoard = lastState.players[1]
-            val activeNeedsEnergyOrHelp = cpuBoard.active?.let { it.energies.isEmpty() } ?: true
-            val benchNeedsSetup = cpuBoard.bench.isEmpty()
-
-            if (turn.handAtStart.size >= 4 && playedTrainerActions.isEmpty() && hasSearchOrDraw && (activeNeedsEnergyOrHelp || benchNeedsSetup)) {
+            if (turn.handAtStart.size >= 4 && !hasReadyAttacker) {
                 issues += DetectedCpuIssue(
                     turn = turn.turnNumber,
                     type = CpuErrorType.UNPROMOTED_HAND_STAGNATION,
-                    description = "A CPU encerrou o turno ${turn.turnNumber} acumulando ${turn.handAtEnd.size} cartas sem usar cartas de busca/compra disponíveis, enquanto o campo precisava de preparação.",
+                    description = "A CPU encerrou o turno ${turn.turnNumber} com ${retainedDevelopmentCard.name}, embora a carta estivesse legal e nenhum atacante estivesse pronto.",
                     severityScore = 35.0,
+                    cardIdInvolved = retainedDevelopmentCard.id,
                     recommendedAction = "Utilizar Itens ou Apoiadores para acelerar o desenvolvimento do campo"
                 )
             }
@@ -225,7 +227,7 @@ class PostMatchCpuReview(
             lessons += CpuLesson(
                 lessonId = "ACTIVATE_HAND_RESOURCES",
                 errorType = CpuErrorType.UNPROMOTED_HAND_STAGNATION,
-                archetype = archetype,
+                archetype = "general",
                 occurrences = handIssues.size,
                 confidence = (0.5 + handIssues.size * 0.1).coerceAtMost(0.95),
                 recommendedBehavior = "Utilizar cartas de busca e compra para acelerar atacantes em vez de retê-las passivamente.",
@@ -292,15 +294,16 @@ class CpuExperienceMemory {
 
     fun learn(lessons: List<CpuLesson>, matchId: String) {
         for (newLesson in lessons) {
-            val key = "${newLesson.archetype}:${newLesson.lessonId}"
+            val normalizedLesson = if (newLesson.lessonId == "ACTIVATE_HAND_RESOURCES") newLesson.copy(archetype = "general") else newLesson
+            val key = "${normalizedLesson.archetype}:${normalizedLesson.lessonId}"
             val existing = lessonsMap[key]
             if (existing != null) {
-                existing.occurrences += newLesson.occurrences
+                existing.occurrences += normalizedLesson.occurrences
                 existing.confidence = (existing.confidence + 0.1).coerceAtMost(0.99)
                 existing.lastObservedMatchId = matchId
             } else {
-                newLesson.lastObservedMatchId = matchId
-                lessonsMap[key] = newLesson
+                normalizedLesson.lastObservedMatchId = matchId
+                lessonsMap[key] = normalizedLesson
             }
         }
     }
@@ -320,7 +323,15 @@ class CpuExperienceMemory {
         val loaded = runCatching { json.decodeFromString<List<CpuLesson>>(jsonText) }.getOrNull() ?: return
         lessonsMap.clear()
         for (lesson in loaded) {
-            lessonsMap["${lesson.archetype}:${lesson.lessonId}"] = lesson
+            val normalizedLesson = if (lesson.lessonId == "ACTIVATE_HAND_RESOURCES") lesson.copy(archetype = "general") else lesson
+            val key = "${normalizedLesson.archetype}:${normalizedLesson.lessonId}"
+            val existing = lessonsMap[key]
+            if (existing == null) lessonsMap[key] = normalizedLesson
+            else {
+                existing.occurrences += normalizedLesson.occurrences
+                existing.confidence = maxOf(existing.confidence, normalizedLesson.confidence)
+                if (normalizedLesson.lastObservedMatchId != null) existing.lastObservedMatchId = normalizedLesson.lastObservedMatchId
+            }
         }
     }
 }

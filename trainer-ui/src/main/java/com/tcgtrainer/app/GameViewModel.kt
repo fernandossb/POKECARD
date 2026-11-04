@@ -269,6 +269,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                             legalActionsCount = cpuInput.actions.size,
                             legalAttacksCount = cpuInput.actions.count { it is GameAction.Attack },
                             playableTrainersCount = cpuInput.actions.count { it is GameAction.PlayTrainer },
+                            legalTrainerCardIds = cpuInput.actions.filterIsInstance<GameAction.PlayTrainer>().map { it.cardId },
                             selectedAction = action.toString(),
                             decisionScore = t.bestScore,
                             alternativeScores = listOfNotNull(t.alternativeScore),

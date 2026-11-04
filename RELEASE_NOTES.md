@@ -1,3 +1,16 @@
+# POKECARD Brasil 5.99.49 — Aprendizado global da CPU e correções do TCG Trainer
+
+- A CPU passa a transformar a lição de usar cartas de busca para acelerar atacantes em aprendizado global, compartilhado entre diferentes decks, em vez de registrar a mesma lição separadamente várias vezes.
+- O bônus aprendido agora influencia de fato a escolha, a prioridade e o sequenciamento de cartas de busca, incluindo busca antes de compra e afinamento do baralho.
+- A análise só registra retenção passiva quando a carta de busca estava realmente legal para uso e havia necessidade de preparar um atacante, reduzindo falsos aprendizados.
+- Memórias antigas duplicadas por arquétipo são migradas e consolidadas automaticamente, preservando ocorrências e confiança.
+- Corrigido o travamento `Key cpu-hidden-card is missing in the map` ao resolver buscas no baralho oculto da CPU.
+- Corrigida a avaliação de ataques para respeitar os tipos reais de Energia exigidos, evitando superestimar ameaças que não podem atacar.
+- Condições especiais ficam visíveis nos detalhes e na mesa; Confusão agora exibe aviso antes do ataque e informa quando o ataque falha.
+- Incluídos testes de regressão para aprendizado global, migração de memória, uso efetivo do bônus de busca, cartas legalmente jogáveis e busca em informação oculta.
+- Validação em arena congelada: 4 partidas espelhadas, 2 vitórias e 2 derrotas, sem erros; o cenário controlado confirmou a mudança de decisão aprendida para usar a carta de busca.
+- Versão Android: `versionCode` 251 e `versionName` 5.99.49. Assinatura oficial e dados locais preservados.
+
 # POKECARD Brasil 5.99.48 — Gravador de Partidas (JSON/TXT para ChatGPT) e Aprendizado Contínuo da CPU
 
 - Gravador Completo de Partidas (`MatchRecorder`): registro cronológico e detalhado de todas as ações, listas de baralho, identificadores TCGdex e instâncias, mãos completas de ambos os jogadores (início e fim de turno), estados de campo e telemetria da CPU.

@@ -642,7 +642,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         }
     }
 
-    private fun energyCost(state: GameState, owner: Int, pokemon: PokemonInstance, cost: List<EnergyType>): Legality {
+    internal fun energyCost(state: GameState, owner: Int, pokemon: PokemonInstance, cost: List<EnergyType>): Legality {
         val doubleGrassEnergy = state.players[owner].pokemon().any { source ->
             effectiveAbilities(state, owner, source).any { it.providesDoubleBasicGrassEnergy }
         }

@@ -20,7 +20,10 @@ object FutureThreatEvaluator {
         if (hasEngineAbility) return 85.0
 
         // 2. Ready active or ready benched attacker
-        val readyAttackDamage = def.attacks.filter { it.cost.size <= pokemon.energies.size }
+        val rules = RulesEngine(catalog)
+        val readyAttackDamage = def.attacks.filter {
+            rules.energyCost(state, opponent, pokemon, rules.attackCost(state, pokemon, it)) == Legality.Legal
+        }
             .maxOfOrNull { atk -> atk.effects.filterIsInstance<Effect.Damage>().maxOfOrNull { it.amount } ?: 0 } ?: 0
         if (readyAttackDamage >= 100) return 90.0
         if (readyAttackDamage > 0) return 70.0

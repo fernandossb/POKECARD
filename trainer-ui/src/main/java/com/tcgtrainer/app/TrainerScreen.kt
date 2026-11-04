@@ -46,6 +46,11 @@ import kotlinx.coroutines.withContext
     LaunchedEffect(state?.phase) { if (state?.phase == Phase.SELECT_PRIZES) prizesOpen = true }
     LaunchedEffect(state?.gameId, state?.history?.size) {
         val last = state?.history?.lastOrNull()
+        if (last?.player == 0 && last.action is GameAction.Attack) {
+            last.events.firstOrNull { it.type == "ConfusionDamage" }?.let { event ->
+                textDialog = "COROA — CONFUSÃO\n\n${event.message}"
+            }
+        }
         val pace = AnimationPace.entries.getOrElse(presentation.getInt("pace", 0)) { AnimationPace.NORMAL }
         panelsReady = false
         val duration = if (last?.action is GameAction.Attack || last?.events?.any { it.type == "PokemonKnockedOut" } == true) pace.duration+260 else if (last?.action is GameAction.PlayTrainer) pace.duration else 0
@@ -91,8 +96,10 @@ import kotlinx.coroutines.withContext
     textDialog?.let { text -> AlertDialog(onDismissRequest = { textDialog = null }, text = { Text(text, Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState())) }, confirmButton = { TextButton(onClick = { textDialog = null }) { Text("FECHAR") } }) }
     confirmAttack?.let { action ->
         val preview = state?.let { vm.engine.preview(it, action.attackId, action.targetId) }
+        val confused = state?.players?.get(0)?.active?.takeIf { SpecialCondition.CONFUSED in it.conditions }
         AlertDialog(onDismissRequest = { confirmAttack = null }, title = { Text("Confirmar ataque") }, text = {
-            Text(if (preview?.uncertain == true) "Dano por moedas: ${preview.minDamage}–${preview.maxDamage}.\nMédia estimada: ${preview.damage}. O resultado só será sorteado ao atacar.\n\nOs demais efeitos do ataque serão resolvidos em seguida."
+            Text((if (confused != null) "CONFUSO: se a moeda der coroa, o ataque falha e seu Pokémon recebe ${confused.confusionDamageOnFail} de dano. A previsão abaixo supõe cara.\n\n" else "") +
+                if (preview?.uncertain == true) "Dano por moedas: ${preview.minDamage}–${preview.maxDamage}.\nMédia estimada: ${preview.damage}. O resultado só será sorteado ao atacar.\n\nOs demais efeitos do ataque serão resolvidos em seguida."
                 else "Dano previsto: ${preview?.damage}\nHP efetivo: ${preview?.effectiveHp}\nDano atual: ${preview?.currentDamage}\nApós o ataque: ${preview?.remainingHp} HP\n${if (preview?.knockout == true) "NOCAUTE · ${preview.prizes} Prêmio(s)" else "NÃO É NOCAUTE"}\n\nOs demais efeitos do ataque serão resolvidos em seguida.")
         }, confirmButton = { TextButton(onClick = { vm.act(action); confirmAttack = null; inspected = null }, enabled = !ui.busy) { Text("ATACAR") } }, dismissButton = { TextButton(onClick = { confirmAttack = null }) { Text("VOLTAR") } })
     }

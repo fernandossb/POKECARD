@@ -21,6 +21,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tcgtrainer.engine.*
 
+internal fun conditionLabel(condition: SpecialCondition): String = when (condition) {
+    SpecialCondition.POISONED -> "Envenenado"
+    SpecialCondition.BURNED -> "Queimado"
+    SpecialCondition.ASLEEP -> "Adormecido"
+    SpecialCondition.PARALYZED -> "Paralisado"
+    SpecialCondition.CONFUSED -> "Confuso"
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable internal fun CardDetailSheet(card: CardInstance, state: GameState, engine: RulesEngine, busy: Boolean,
     onDismiss: () -> Unit, dispatch: (GameAction) -> Unit, attack: (GameAction.Attack) -> Unit) {
@@ -49,7 +57,7 @@ import com.tcgtrainer.engine.*
                 val hp = engine.effectiveHp(state, pokemon)
                 Text("${(hp-pokemon.damage).coerceAtLeast(0)} / $hp HP  ·  Dano: ${pokemon.damage}", fontWeight = FontWeight.Bold)
                 Text("Energias: ${pokemon.energies.groupingBy { engine.definition(it).type }.eachCount().entries.joinToString { "${energyLabel(it.key)} ×${it.value}" }.ifEmpty { "nenhuma" }}", fontSize = 12.sp)
-                Text("Ferramentas: ${pokemon.tools.joinToString { engine.definition(it).name }.ifEmpty { "nenhuma" }} · Condição: nenhuma", fontSize = 12.sp)
+                Text("Ferramentas: ${pokemon.tools.joinToString { engine.definition(it).name }.ifEmpty { "nenhuma" }} · Condição: ${pokemon.conditions.joinToString { conditionLabel(it) }.ifEmpty { "nenhuma" }}", fontSize = 12.sp)
             }
             if (d.text.isNotEmpty()) Text(d.text, fontSize = 13.sp)
             if (inHand && humanTurn) {
@@ -84,6 +92,7 @@ import com.tcgtrainer.engine.*
                 val targets = if (benchOnly) state.players[1-actor].bench else state.players[1-actor].pokemon()
                 val choices = if (targeted) targets.map { GameAction.Attack(definition.id, it.id) } else listOf(GameAction.Attack(definition.id))
                 if (humanTurn && own.active?.top?.id == card.id && state.turn > 0) choices.forEach { action ->
+                    if (ownPokemon != null && SpecialCondition.CONFUSED in ownPokemon.conditions) Text("Confuso: ao atacar, lance uma moeda. Se der coroa, o ataque falha e este Pokémon recebe ${ownPokemon.confusionDamageOnFail} de dano.", color = Coral, fontSize = 12.sp)
                     val legality = engine.validate(state, action)
                     val preview = engine.preview(state, action.attackId, action.targetId)
                     if (preview != null) Text(if (preview.uncertain) "${preview.minDamage}–${preview.maxDamage} de dano por moedas · média ${preview.damage}" else "${preview.damage} de dano · ${preview.remainingHp} HP após · ${if (preview.knockout) "KO / ${preview.prizes} Prêmio(s)" else "não é KO"}", color = Aqua, fontSize = 12.sp)

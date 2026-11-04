@@ -145,6 +145,9 @@ internal val BoardBlue = Color(0xFF599BC6)
     }
     Box(modifier.clickable(onClick = inspect)) {
         CardArt(engine.definition(p.top), Modifier.fillMaxSize())
+        if (p.conditions.isNotEmpty()) Surface(Modifier.align(Alignment.TopStart), color = Color(0xFF702F75), shape = RoundedCornerShape(4.dp)) {
+            Text(p.conditions.joinToString(" · ") { conditionLabel(it) }, Modifier.padding(horizontal = 3.dp), color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+        }
         if (attachmentPulse.value > 0f) Box(Modifier.fillMaxSize().border(3.dp, Aqua.copy(alpha = attachmentPulse.value), RoundedCornerShape(4.dp)))
         Surface(Modifier.align(Alignment.TopEnd).offset(x = 7.dp, y = (-4).dp), color = Color(0xFFF4F5EF), shape = RoundedCornerShape(4.dp), border = androidx.compose.foundation.BorderStroke(1.dp, accent)) {
             Text("$animatedHp/$maxHp", Modifier.padding(horizontal = 4.dp, vertical = 1.dp), color = if (remaining < maxHp/3) Color(0xFFA42D37) else Color(0xFF182A36), fontWeight = FontWeight.Black, fontSize = 10.sp, maxLines = 1)

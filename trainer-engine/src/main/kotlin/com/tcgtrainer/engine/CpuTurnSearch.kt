@@ -645,7 +645,9 @@ internal class CpuTurnSearch(
 
         // Search Sequencing Bonus: playing search as first action to assemble attacker
         val firstActionIsSearch = node.sequence.firstOrNull()?.let { it is GameAction.PlayTrainer && isSearchCard(state, it.cardId) } == true
-        if (firstActionIsSearch) objectiveBonus += 40.0
+        if (firstActionIsSearch) objectiveBonus += 40.0 * tuningAdaptive.searchCardBonusMultiplier
+        val searchActionsPlayed = node.sequence.count { it is GameAction.PlayTrainer && isSearchCard(state, it.cardId) }
+        objectiveBonus += 50.0 * searchActionsPlayed * (tuningAdaptive.searchCardBonusMultiplier - 1.0)
 
         // Deck Thinning sequencing check during beam search
         val firstSearchIdx = node.sequence.indexOfFirst { it is GameAction.PlayTrainer && isSearchCard(state, it.cardId) }
@@ -654,7 +656,7 @@ internal class CpuTurnSearch(
         if (firstDrawIdx != -1 && (firstSearchIdx == -1 || firstDrawIdx < firstSearchIdx) && initialHasSearch) {
             objectiveBonus -= 180.0
         } else if (firstSearchIdx != -1 && firstDrawIdx != -1 && firstSearchIdx < firstDrawIdx) {
-            objectiveBonus += 80.0
+            objectiveBonus += 80.0 * tuningAdaptive.thinningBonusMultiplier
         }
 
         if (isPrivileged) {
@@ -997,6 +999,7 @@ internal class CpuTurnSearch(
             d.trainerType == TrainerType.SUPPORTER && (d.trainerEffect is TrainerEffect.DrawCards || d.trainerEffect is TrainerEffect.ShuffleHandDraw || d.trainerEffect is TrainerEffect.DrawTo)
         }
         val hasSearchInHand = player.hand.any { isSearchCard(state, it.id) }
+        fun learnedSearchPriority(base: Int) = (base * tuning.adaptive.searchCardBonusMultiplier).toInt()
 
         return when (effect) {
             is TrainerEffect.Switch -> if (effect.opponent && opponent.bench.isNotEmpty()) 155
@@ -1006,7 +1009,7 @@ internal class CpuTurnSearch(
                     effect.includeV && maskedCatalog.get(it.top.definitionId).name.endsWith(" V") } == true) 148 else 45
             is TrainerEffect.NonRuleBoxDamageBoost -> if (player.hand.size == 2 && player.active?.let { !maskedCatalog.get(it.top.definitionId).hasRuleBox } == true) 148 else 45
             is TrainerEffect.Search, TrainerEffect.GreatBall, TrainerEffect.BuddyBuddyPoffin, TrainerEffect.SearchEachEvolutionStage ->
-                if (player.deck.isNotEmpty()) (if (hasDrawCardInHand) 170 else 150) else 35
+                if (player.deck.isNotEmpty()) learnedSearchPriority(if (hasDrawCardInHand) 170 else 150) else 35
             is TrainerEffect.DrawTo -> if (hasSearchInHand) 25 else if (player.deck.isNotEmpty() && player.hand.size-1 < (effect.teamRocketSize ?: effect.size)) 120 else 40
             is TrainerEffect.ShuffleHandDraw -> if (hasSearchInHand) 25 else if (player.deck.size > 2 && player.hand.size < 6) 115 else 40
             is TrainerEffect.DrawCards -> if (hasSearchInHand) 25 else if (player.deck.size > effect.count+1 && player.hand.size < 9) 112 else 38
