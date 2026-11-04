@@ -325,6 +325,18 @@ private fun CpuIntelligenceDialog(vm: GameViewModel, onDismiss: () -> Unit) {
                                 fontSize = 11.sp,
                                 color = Aqua
                             )
+                            Text(
+                                "Contra-estratégia (alvo no banco): ${(params.counterStrategyBonusMultiplier * 100).toInt()}% · Disrupção de mão: ${(params.handDisruptionBonusMultiplier * 100).toInt()}%",
+                                fontSize = 11.sp,
+                                color = Aqua
+                            )
+                            if (params.learnedPlayerThreatPokemonIds.isNotEmpty()) {
+                                Text(
+                                    "Alvos-chave aprendidos do jogador: ${params.learnedPlayerThreatPokemonIds.take(4).joinToString(", ")}",
+                                    fontSize = 11.sp,
+                                    color = Aqua
+                                )
+                            }
                             val penalty = memory.lessons.find { it.type == "AVOID_REDUNDANT_ENERGY" }
                             if (penalty != null) {
                                 Text("Ajuste de energia redundante ativo: ${(penalty.confidence * 100).toInt()}%", fontSize = 12.sp, color = Aqua)

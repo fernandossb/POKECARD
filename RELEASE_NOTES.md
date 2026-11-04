@@ -1,3 +1,17 @@
+# POKECARD Brasil 5.99.53 — Aprendizado com as Jogadas do Jogador e Detector de Intenções em Tempo Real
+
+- **Aprendizado com os Movimentos do Jogador (`HumanStrategyAnalyzer` em `CpuLearningEngine`)**:
+  - Ao final de cada partida, a CPU analisa também todos os turnos do jogador humano (`player == 0`) e aprende:
+    - **Quais são os Pokémon-chave que o jogador prepara no Banco (`PLAYER_BENCH_SWEEPER_STRATEGY`)**: identifica a linha evolutiva e os atacantes que o jogador baixa, evolui e energiza no Banco (`learnedPlayerThreatPokemonIds`), gravando tanto a evolução quanto o Básico pré-evolução para reconhecê-lo já nas próximas partidas.
+    - **Padrão de acúmulo de mão para turno explosivo (`PLAYER_HAND_BURST_COMBO`)**: detecta quando o jogador acumula 5+ cartas na mão após buscas e executa múltiplos passos de evolução/combo no turno seguinte, elevando o multiplicador de disrupção de mão (`handDisruptionBonusMultiplier`).
+    - **Padrão de caça ao Banco com puxadores (`PLAYER_GUST_BENCH_HUNTER`)**: detecta o uso de *Boss's Orders* / trocas forçadas pelo jogador e eleva a proteção de Banco da CPU (`benchProtectionMultiplier`).
+- **Detector de Intenções do Jogador em Tempo Real (`PlayerIntentionDetector` & `FutureThreatEvaluator`)**:
+  - Durante a partida (inclusive no modo justo `MASTER`, usando apenas informações públicas da mesa, descarte, tamanho da mão e histórico do turno anterior), a CPU identifica a intenção do jogador e reage para derrubar sua estratégia:
+    - **Pivô/Isca no Ativo + Ameaça no Banco**: reconhece quando o jogador deixa um Pokémon de 1 Prêmio passivo no Ativo enquanto energiza ou evolui seu atacante principal no Banco, priorizando **Boss's Orders / Counter Catcher** ou ataques no Banco para nocautear a ameaça antes que fique pronta (`counterStrategyBonusMultiplier`).
+    - **Acúmulo de mão após busca**: reconhece quando o jogador buscou cartas e reteve mão cheia sem evoluir ainda, priorizando **Iono / Judge / Hand Trimmer** para embaralhar a mão do jogador e desmontar o combo.
+- Painel **Inteligência da CPU & Gravações** atualizado para exibir os multiplicadores de contra-estratégia, disrupção de mão e os alvos-chave aprendidos do baralho do jogador.
+- Versão Android: `versionCode` 255 e `versionName` 5.99.53. Assinatura oficial e dados locais preservados.
+
 # POKECARD Brasil 5.99.52 — Preparo Completo de Turno (Ativo + Reserva no Banco) e Lição por Partida na CPU
 
 - **Preparação completa de turno antes de atacar (`CpuTurnSearch` & `CpuPositionEvaluator`)**: corrigido o cálculo de objetivo de turno para que bônus de desenvolvimento (baixar Básicos, evoluir, usar Itens de busca, ativar Apoiadores de compra e habilidades, e anexar a Energia do turno) sejam preservados também nas linhas terminais que encerram em ataque (`GameAction.Attack`), evitando ataques imediatos na profundidade `0` quando o jogador passa o turno sem agir.

@@ -111,6 +111,7 @@ internal class CpuTurnSearch(
     private var currentHandAnalysis: HandAnalysis? = null
     private var currentPrediction: PredictionResult? = null
     private var currentOracleDraw: CardInstance? = null
+    private var currentPlayerIntention: PlayerIntentionReport? = null
 
     fun choose(input: CpuInput, fallback: GameAction): GameAction {
         completed = null
@@ -121,6 +122,7 @@ internal class CpuTurnSearch(
         currentHandAnalysis = null
         currentPrediction = null
         currentOracleDraw = null
+        currentPlayerIntention = null
         attackCache.clear()
         replyCache.clear()
         developmentCache.clear()
@@ -173,6 +175,7 @@ internal class CpuTurnSearch(
 
         currentInitial = initial
         currentOracleDraw = if (strategy == CpuStrategy.ORACLE) initial.players[opponent].deck.firstOrNull() else null
+        currentPlayerIntention = PlayerIntentionDetector.detect(initial, actor, maskedCatalog, engine, tuning.adaptive)
         if (isPrivileged) {
             currentDeckResources = DeckCounterAnalyzer.analyzeDeck(initial, actor, maskedCatalog)
             currentHandAnalysis = PlayerHandAnalyzer.analyze(initial, actor, maskedCatalog, currentOracleDraw)
@@ -771,9 +774,9 @@ internal class CpuTurnSearch(
             }
 
             if (opponent.active != null) {
-                val oppActiveThreat = FutureThreatEvaluator.evaluatePokemonThreat(state, opponent.active!!, actor, maskedCatalog, currentHandAnalysis)
+                val oppActiveThreat = FutureThreatEvaluator.evaluatePokemonThreat(state, opponent.active!!, actor, maskedCatalog, currentHandAnalysis, tuningAdaptive)
                 if (oppActiveThreat >= 90.0 && sequence.any { isBossCard(init, (it as? GameAction.PlayTrainer)?.cardId.orEmpty()) }) {
-                    objectiveBonus += 300.0
+                    objectiveBonus += 300.0 * tuningAdaptive.counterStrategyBonusMultiplier
                 }
             }
 
@@ -786,6 +789,20 @@ internal class CpuTurnSearch(
                     if (initialPrizes > newPrizes && newPrizes < opponent.prizes.size) {
                         objectiveBonus += 350.0
                     }
+                }
+            }
+        } else {
+            val init = currentInitial ?: initial
+            val intention = currentPlayerIntention
+            val playedDisruption = sequence.any { isHandDisruptionCard(init, (it as? GameAction.PlayTrainer)?.cardId.orEmpty()) }
+            if (playedDisruption && intention?.holdingComboHand == true && init.players[1 - actor].hand.size >= 5) {
+                objectiveBonus += 190.0 * tuningAdaptive.handDisruptionBonusMultiplier
+            }
+            if (opponent.active != null && sequence.any { isBossCard(init, (it as? GameAction.PlayTrainer)?.cardId.orEmpty()) }) {
+                val pulledTarget = opponent.active!!
+                val oppActiveThreat = FutureThreatEvaluator.evaluatePokemonThreat(state, pulledTarget, actor, maskedCatalog, null, tuningAdaptive)
+                if (pulledTarget.id == intention?.buildingBenchThreatId || oppActiveThreat >= 88.0) {
+                    objectiveBonus += 280.0 * tuningAdaptive.counterStrategyBonusMultiplier
                 }
             }
         }
@@ -965,14 +982,15 @@ internal class CpuTurnSearch(
 
         when {
             choice.min <= 1 && choice.max == 1 -> {
-                val candidatesList = if (isPrivileged) {
+                val candidatesList = if (isPrivileged || choice.kind == ChoiceKind.SWITCH_OPPONENT) {
                     val opp = 1 - actor
                     val oppPokemon = state.players[opp].pokemon().associateBy { it.id }
                     choice.candidates.sortedByDescending { candId ->
-                        if (candId == currentDeckResources?.lockTargetId) 1000.0
+                        if (isPrivileged && candId == currentDeckResources?.lockTargetId) 1000.0
+                        else if (!isPrivileged && candId == currentPlayerIntention?.buildingBenchThreatId) 980.0
                         else {
                             val p = oppPokemon[candId]
-                            if (p != null) FutureThreatEvaluator.evaluatePokemonThreat(state, p, actor, maskedCatalog, currentHandAnalysis)
+                            if (p != null) FutureThreatEvaluator.evaluatePokemonThreat(state, p, actor, maskedCatalog, currentHandAnalysis, tuning.adaptive)
                             else 0.0
                         }
                     }
@@ -1102,10 +1120,24 @@ internal class CpuTurnSearch(
                     return 185
                 }
                 val hasHighThreatTarget = opponent.bench.any {
-                    FutureThreatEvaluator.evaluatePokemonThreat(state, it, state.currentPlayer, maskedCatalog, currentHandAnalysis) >= 90.0
+                    FutureThreatEvaluator.evaluatePokemonThreat(state, it, state.currentPlayer, maskedCatalog, currentHandAnalysis, tuning.adaptive) >= 90.0
                 }
                 if (hasHighThreatTarget) {
                     return 185
+                }
+            }
+        } else {
+            val init = currentInitial ?: state
+            val intention = currentPlayerIntention
+            if (isHandDisruptionCard(init, cardId) && intention?.holdingComboHand == true && opponent.hand.size >= 5 && player.hand.size <= opponent.hand.size) {
+                return (168 * tuning.adaptive.handDisruptionBonusMultiplier).toInt().coerceAtMost(190)
+            }
+            if (isBossCard(init, cardId) && opponent.bench.isNotEmpty()) {
+                val hasBenchTarget = intention?.buildingBenchThreatId != null || opponent.bench.any {
+                    FutureThreatEvaluator.evaluatePokemonThreat(state, it, state.currentPlayer, maskedCatalog, null, tuning.adaptive) >= 88.0
+                }
+                if (hasBenchTarget) {
+                    return (175 * tuning.adaptive.counterStrategyBonusMultiplier).toInt().coerceAtMost(192)
                 }
             }
         }
@@ -1259,9 +1291,9 @@ internal class CpuTurnSearch(
                 else minOf(effect.amount, hp).coerceAtLeast(0)*.7 + if (effect.amount >= hp) maskedCatalog.get(pokemon.top.definitionId).prizes*900.0 else 0.0
             }
         }
-        val setupBreakBonus = if (isPrivileged && knockout) {
-            val oppThreat = FutureThreatEvaluator.evaluatePokemonThreat(state, target, actor, maskedCatalog, currentHandAnalysis)
-            if (oppThreat >= 90.0) 800.0 else 0.0
+        val setupBreakBonus = if (knockout) {
+            val oppThreat = FutureThreatEvaluator.evaluatePokemonThreat(state, target, actor, maskedCatalog, currentHandAnalysis, tuning.adaptive)
+            if (oppThreat >= 88.0) 800.0 * tuning.adaptive.counterStrategyBonusMultiplier else 0.0
         } else 0.0
         val value = damage.toDouble() + (if (knockout) 700 + preview.prizes*1400 else 0) +
             (if (wins) 100_000 else 0) + control + spread + setupBreakBonus -
@@ -1294,14 +1326,31 @@ internal class CpuTurnSearch(
         sequence: List<GameAction>,
         actor: Int
     ): Double {
-        if (!isPrivileged) return 0.0
         var bonus = 0.0
         val opponent = 1 - actor
-
         val playedDisruption = sequence.any { isHandDisruptionCard(initial, (it as? GameAction.PlayTrainer)?.cardId.orEmpty()) }
+        val playedBoss = sequence.any { isBossCard(initial, (it as? GameAction.PlayTrainer)?.cardId.orEmpty()) }
+
+        if (!isPrivileged) {
+            val intention = currentPlayerIntention
+            if (playedDisruption && intention?.holdingComboHand == true && initial.players[opponent].hand.size >= 5) {
+                bonus += 220.0 * tuning.adaptive.handDisruptionBonusMultiplier
+            }
+            if (playedBoss) {
+                val oppActive = state.players[opponent].active
+                if (oppActive != null) {
+                    val oppThreat = FutureThreatEvaluator.evaluatePokemonThreat(state, oppActive, actor, maskedCatalog, null, tuning.adaptive)
+                    if (oppActive.id == intention?.buildingBenchThreatId || oppThreat >= 88.0) {
+                        bonus += 320.0 * tuning.adaptive.counterStrategyBonusMultiplier
+                    }
+                }
+            }
+            return bonus
+        }
+
         if (playedDisruption) {
             if (currentPrediction?.isLethal == true || (currentHandAnalysis?.threatScore ?: 0.0) >= 60.0) {
-                bonus += 250.0
+                bonus += 250.0 * tuning.adaptive.handDisruptionBonusMultiplier
             } else if (currentHandAnalysis?.isDeadHand == true || (currentHandAnalysis?.threatScore ?: 50.0) <= 25.0) {
                 bonus -= 500.0
             }
@@ -1311,13 +1360,12 @@ internal class CpuTurnSearch(
             bonus += 300.0
         }
 
-        val playedBoss = sequence.any { isBossCard(initial, (it as? GameAction.PlayTrainer)?.cardId.orEmpty()) }
         if (playedBoss) {
             val oppActive = state.players[opponent].active
             if (oppActive != null) {
-                val oppThreat = FutureThreatEvaluator.evaluatePokemonThreat(state, oppActive, actor, maskedCatalog, currentHandAnalysis)
-                if (oppThreat >= 90.0) {
-                    bonus += 350.0
+                val oppThreat = FutureThreatEvaluator.evaluatePokemonThreat(state, oppActive, actor, maskedCatalog, currentHandAnalysis, tuning.adaptive)
+                if (oppThreat >= 88.0) {
+                    bonus += 350.0 * tuning.adaptive.counterStrategyBonusMultiplier
                 }
             }
         }

@@ -12,7 +12,10 @@ enum class CpuErrorType {
     FAILURE_TO_PREPARE_BACKUP,
     SUICIDAL_ATTACK,
     PREMATURE_ATTACK_WITHOUT_SETUP,
-    UNATTACHED_TURN_ENERGY
+    UNATTACHED_TURN_ENERGY,
+    PLAYER_BENCH_SWEEPER_STRATEGY,
+    PLAYER_HAND_BURST_COMBO,
+    PLAYER_GUST_BENCH_HUNTER
 }
 
 @Serializable
@@ -51,7 +54,11 @@ data class AdaptiveTuningParameters(
     val thinningBonusMultiplier: Double = 1.0,
     val preAttackSetupBonusMultiplier: Double = 1.0,
     val evolutionPriorityMultiplier: Double = 1.0,
-    val benchDevelopmentBonusMultiplier: Double = 1.0
+    val benchDevelopmentBonusMultiplier: Double = 1.0,
+    val counterStrategyBonusMultiplier: Double = 1.0,
+    val handDisruptionBonusMultiplier: Double = 1.0,
+    val benchProtectionMultiplier: Double = 1.0,
+    val learnedPlayerThreatPokemonIds: Set<String> = emptySet()
 ) {
     fun clamp(): AdaptiveTuningParameters = copy(
         redundantEnergyPenaltyMultiplier = redundantEnergyPenaltyMultiplier.coerceIn(0.5, 3.0),
@@ -61,7 +68,10 @@ data class AdaptiveTuningParameters(
         thinningBonusMultiplier = thinningBonusMultiplier.coerceIn(0.5, 2.0),
         preAttackSetupBonusMultiplier = preAttackSetupBonusMultiplier.coerceIn(0.5, 2.5),
         evolutionPriorityMultiplier = evolutionPriorityMultiplier.coerceIn(0.5, 2.5),
-        benchDevelopmentBonusMultiplier = benchDevelopmentBonusMultiplier.coerceIn(0.5, 2.5)
+        benchDevelopmentBonusMultiplier = benchDevelopmentBonusMultiplier.coerceIn(0.5, 2.5),
+        counterStrategyBonusMultiplier = counterStrategyBonusMultiplier.coerceIn(0.5, 2.5),
+        handDisruptionBonusMultiplier = handDisruptionBonusMultiplier.coerceIn(0.5, 2.5),
+        benchProtectionMultiplier = benchProtectionMultiplier.coerceIn(0.5, 2.5)
     )
 }
 
@@ -371,26 +381,144 @@ object MissedComboAnalyzer {
     }
 }
 
+/**
+ * Analyzes the HUMAN player's moves (player == 0) in a recorded match so the CPU learns:
+ * 1. Which Pokémon/evolution lines the player builds on the bench as their win condition (PLAYER_BENCH_SWEEPER_STRATEGY).
+ * 2. Whether the player accumulates large hands via searches/draws before executing multi-card combo turns (PLAYER_HAND_BURST_COMBO).
+ * 3. Whether the player uses Gust (Boss's Orders) or bench snipes to hunt the CPU's bench (PLAYER_GUST_BENCH_HUNTER).
+ */
+object HumanStrategyAnalyzer {
+    fun analyze(recording: MatchRecording, catalog: CardCatalog): List<DetectedCpuIssue> {
+        val issues = mutableListOf<DetectedCpuIssue>()
+        val humanTurns = recording.turns.filter { it.player == 0 }
+        if (humanTurns.isEmpty()) return issues
+
+        val benchPreparedThreats = linkedSetOf<String>()
+        val benchPreparedNames = linkedSetOf<String>()
+        var firstBenchPrepTurn = 1
+
+        for (turn in humanTurns) {
+            // 1. Detect bench attacker preparation & evolution lines played by the human
+            for (action in turn.actions) {
+                val beforeHuman = action.stateBefore.players.getOrNull(0) ?: continue
+                val afterHuman = action.stateAfter.players.getOrNull(0) ?: continue
+
+                if (action.actionType == "AttachEnergy") {
+                    for (afterBench in afterHuman.bench) {
+                        val beforeBench = beforeHuman.bench.find { it.id == afterBench.id }
+                        if (beforeBench != null && afterBench.energies.size > beforeBench.energies.size) {
+                            val def = runCatching { catalog.get(afterBench.definitionId) }.getOrNull()
+                            benchPreparedThreats += afterBench.definitionId
+                            if (def != null) {
+                                benchPreparedThreats += def.canonicalName
+                                def.evolvesFrom?.let { benchPreparedThreats += it }
+                                benchPreparedNames += def.name
+                            } else {
+                                benchPreparedNames += afterBench.name
+                            }
+                            if (firstBenchPrepTurn == 1) firstBenchPrepTurn = turn.turnNumber
+                        }
+                    }
+                }
+
+                if (action.actionType == "Evolve") {
+                    val allBefore = (listOfNotNull(beforeHuman.active) + beforeHuman.bench).associateBy { it.id }
+                    val allAfter = listOfNotNull(afterHuman.active) + afterHuman.bench
+                    for (afterMon in allAfter) {
+                        val beforeMon = allBefore[afterMon.id]
+                        if (beforeMon != null && afterMon.definitionId != beforeMon.definitionId) {
+                            val beforeDef = runCatching { catalog.get(beforeMon.definitionId) }.getOrNull()
+                            val afterDef = runCatching { catalog.get(afterMon.definitionId) }.getOrNull()
+                            benchPreparedThreats += beforeMon.definitionId
+                            benchPreparedThreats += afterMon.definitionId
+                            if (beforeDef != null) benchPreparedThreats += beforeDef.canonicalName
+                            if (afterDef != null) {
+                                benchPreparedThreats += afterDef.canonicalName
+                                afterDef.evolvesFrom?.let { benchPreparedThreats += it }
+                                benchPreparedNames += afterDef.name
+                            } else {
+                                benchPreparedNames += afterMon.name
+                            }
+                            if (firstBenchPrepTurn == 1) firstBenchPrepTurn = turn.turnNumber
+                        }
+                    }
+                }
+
+                // 3. Detect if the human used Boss's Orders / Gust to pull a benched CPU Pokémon
+                if (action.actionType == "PlayTrainer") {
+                    val beforeCpuActive = action.stateBefore.players.getOrNull(1)?.active?.id
+                    val afterCpuActive = action.stateAfter.players.getOrNull(1)?.active?.id
+                    val playedGust = (beforeCpuActive != null && afterCpuActive != null && beforeCpuActive != afterCpuActive) ||
+                        turn.handAtStart.any { c ->
+                            action.actionDetails.contains(c.id) &&
+                                (runCatching { catalog.get(c.definitionId).trainerEffect }.getOrNull() as? TrainerEffect.Switch)?.opponent == true
+                        }
+                    if (playedGust) {
+                        issues += DetectedCpuIssue(
+                            turn = turn.turnNumber,
+                            type = CpuErrorType.PLAYER_GUST_BENCH_HUNTER,
+                            description = "Jogador usou puxador (Boss's Orders / troca forçada) no turno ${turn.turnNumber} para caçar alvo do banco da CPU.",
+                            severityScore = 44.0,
+                            recommendedAction = "Contra este baralho, proteger Pokémon de 2 Prêmios e evitar deixar alvos danificados ou vulneráveis no banco"
+                        )
+                    }
+                }
+            }
+
+            // 2. Detect hand accumulation / burst combo turns by the human player
+            val nonTrivialActions = turn.actions.count { it.actionType in listOf("PlayBasic", "Evolve", "PlayTrainer", "UseAbility", "AttachEnergy") }
+            if (turn.handAtStart.size >= 5 && nonTrivialActions >= 3) {
+                issues += DetectedCpuIssue(
+                    turn = turn.turnNumber,
+                    type = CpuErrorType.PLAYER_HAND_BURST_COMBO,
+                    description = "Jogador acumulou ${turn.handAtStart.size} cartas na mão e executou turno explosivo com $nonTrivialActions ações de preparação no turno ${turn.turnNumber}.",
+                    severityScore = 46.0,
+                    recommendedAction = "Usar Iono, Judge ou Hand Trimmer preventivamente quando o jogador terminar o turno com 5+ cartas na mão após buscas"
+                )
+            }
+        }
+
+        if (benchPreparedThreats.isNotEmpty()) {
+            val namesSummary = benchPreparedNames.take(3).joinToString(", ").ifBlank { benchPreparedThreats.take(3).joinToString(", ") }
+            issues += DetectedCpuIssue(
+                turn = firstBenchPrepTurn,
+                type = CpuErrorType.PLAYER_BENCH_SWEEPER_STRATEGY,
+                description = "Jogador estruturou sua estratégia preparando [$namesSummary] no banco antes de avançar para o ataque.",
+                severityScore = 50.0,
+                cardIdInvolved = benchPreparedThreats.joinToString("|"),
+                recommendedAction = "Reconhecer [$namesSummary] como ameaça prioritária no banco do jogador e usar Boss's Orders ou dano no banco para neutralizá-lo antes que complete o setup"
+            )
+        }
+
+        return issues
+    }
+}
+
 class PostMatchCpuReview(
     private val catalog: CardCatalog = TrainerCatalog
 ) {
     fun review(recording: MatchRecording): MatchReviewReport {
         val cpuLost = recording.winner == 0
         val archetype = recording.cpuDeckId.ifBlank { "general" }
+        val humanDeck = recording.humanDeckId.ifBlank { "player" }
 
         val energyIssues = EnergyEfficiencyAnalyzer.analyze(recording, catalog)
         val backupIssues = BackupAttackerAnalyzer.analyze(recording, catalog)
         val prematureAttackIssues = PrematureAttackAnalyzer.analyze(recording, catalog)
         val handIssues = HandEfficiencyAnalyzer.analyze(recording, catalog)
         val comboIssues = MissedComboAnalyzer.analyze(recording, catalog)
+        val humanStrategyIssues = HumanStrategyAnalyzer.analyze(recording, catalog)
 
-        val allIssues = (energyIssues + backupIssues + prematureAttackIssues + handIssues + comboIssues)
+        val allIssues = (energyIssues + backupIssues + prematureAttackIssues + handIssues + comboIssues + humanStrategyIssues)
             .sortedByDescending { it.severityScore }
 
         val topIssue = allIssues.firstOrNull()
         val primaryWeakness = when (topIssue?.type) {
             CpuErrorType.PREMATURE_ATTACK_WITHOUT_SETUP -> "Atacou sem preparar o próprio jogo e usar recursos da mão"
             CpuErrorType.FAILURE_TO_PREPARE_BACKUP -> "Falta de preparação do próximo atacante no banco"
+            CpuErrorType.PLAYER_BENCH_SWEEPER_STRATEGY -> "Permitir que o jogador prepare seu atacante principal no banco sem contestação"
+            CpuErrorType.PLAYER_HAND_BURST_COMBO -> "Permitir que o jogador acumule mão cheia para combo sem disrupção"
+            CpuErrorType.PLAYER_GUST_BENCH_HUNTER -> "Exposição de alvos no banco contra puxadores (Boss's Orders) do jogador"
             CpuErrorType.UNATTACHED_TURN_ENERGY -> "Energia do turno retida na mão sem alimentar ativo/banco"
             CpuErrorType.REDUNDANT_ENERGY_ATTACHMENT -> "Alocação ineficiente de energia no ativo em vez do banco"
             CpuErrorType.MISSED_SETUP_COMBO -> "Combinações de busca e evolução não executadas antes do ataque"
@@ -475,10 +603,52 @@ class PostMatchCpuReview(
             )
         }
 
+        // 1b. Lessons learned from observing the HUMAN PLAYER's deck & strategy
+        val benchSweeperIssues = humanStrategyIssues.filter { it.type == CpuErrorType.PLAYER_BENCH_SWEEPER_STRATEGY }
+        for (sweeperIssue in benchSweeperIssues) {
+            val encodedThreats = sweeperIssue.cardIdInvolved.orEmpty()
+            lessons += CpuLesson(
+                lessonId = "COUNTER_PLAYER_BENCH_SETUP_${humanDeck.uppercase()}",
+                errorType = CpuErrorType.PLAYER_BENCH_SWEEPER_STRATEGY,
+                archetype = "general",
+                occurrences = 1,
+                confidence = 0.80,
+                recommendedBehavior = sweeperIssue.recommendedAction ?: sweeperIssue.description,
+                contextSummary = "THREATS=$encodedThreats | Deck do jogador: $humanDeck"
+            )
+        }
+
+        val handBurstIssues = humanStrategyIssues.filter { it.type == CpuErrorType.PLAYER_HAND_BURST_COMBO }
+        if (handBurstIssues.isNotEmpty()) {
+            lessons += CpuLesson(
+                lessonId = "DISRUPT_PLAYER_HAND_COMBO",
+                errorType = CpuErrorType.PLAYER_HAND_BURST_COMBO,
+                archetype = "general",
+                occurrences = handBurstIssues.size,
+                confidence = (0.65 + handBurstIssues.size * 0.1).coerceAtMost(0.95),
+                recommendedBehavior = "Quando o jogador acumular 5+ cartas na mão após buscas, priorizar Iono/Judge/Hand Trimmer para desmontar o combo antes que evolua.",
+                contextSummary = "Padrão explosivo de mão observado em ${handBurstIssues.size} turno(s) do jogador ($humanDeck)."
+            )
+        }
+
+        val playerGustIssues = humanStrategyIssues.filter { it.type == CpuErrorType.PLAYER_GUST_BENCH_HUNTER }
+        if (playerGustIssues.isNotEmpty()) {
+            lessons += CpuLesson(
+                lessonId = "GUARD_AGAINST_PLAYER_GUST",
+                errorType = CpuErrorType.PLAYER_GUST_BENCH_HUNTER,
+                archetype = "general",
+                occurrences = playerGustIssues.size,
+                confidence = (0.65 + playerGustIssues.size * 0.1).coerceAtMost(0.95),
+                recommendedBehavior = "Jogador caça alvos no banco com Boss's Orders: evitar expor Pokémon de 2 Prêmios sem necessidade e priorizar cura/evolução do banco.",
+                contextSummary = "Uso de puxadores pelo jogador em ${playerGustIssues.size} turno(s) ($humanDeck)."
+            )
+        }
+
         // 2. Guarantee a distinct, concrete per-match lesson from EVERY match
         val shortMatchId = recording.gameId.takeLast(6).uppercase()
         val cpuTurns = recording.turns.filter { it.player == 1 }
         val matchLesson = if (topIssue != null) {
+            val encodedThreats = topIssue.cardIdInvolved?.takeIf { topIssue.type == CpuErrorType.PLAYER_BENCH_SWEEPER_STRATEGY }
             CpuLesson(
                 lessonId = "PARTIDA_${shortMatchId}_T${topIssue.turn}_${topIssue.type.name}",
                 errorType = topIssue.type,
@@ -486,7 +656,10 @@ class PostMatchCpuReview(
                 occurrences = 1,
                 confidence = 0.85,
                 recommendedBehavior = "[Partida #$shortMatchId · T${topIssue.turn}] ${topIssue.description} Lição: ${topIssue.recommendedAction ?: "Executar setup completo do ativo e do próximo atacante no banco antes de atacar."}",
-                contextSummary = "Deck: $archetype · Fraqueza: $primaryWeakness"
+                contextSummary = buildString {
+                    if (!encodedThreats.isNullOrBlank()) append("THREATS=$encodedThreats | ")
+                    append("Deck: $archetype vs $humanDeck · Foco: $primaryWeakness")
+                }
             )
         } else {
             val totalTrainersUsed = cpuTurns.sumOf { t -> t.actions.count { it.actionType == "PlayTrainer" } }
@@ -499,16 +672,16 @@ class PostMatchCpuReview(
                 occurrences = 1,
                 confidence = 0.78,
                 recommendedBehavior = "[Partida #$shortMatchId] Em ${cpuTurns.size} turno(s) com $archetype (usou $totalTrainersUsed treinador(es) e ligou $totalEnergiesAttached energia(s)): reforçar preparação simultânea do atacante ativo e do próximo atacante no banco antes de cada ataque.",
-                contextSummary = "Deck: $archetype · Análise pós-partida completa"
+                contextSummary = "Deck: $archetype vs $humanDeck · Análise pós-partida completa"
             )
         }
         lessons += matchLesson
 
         val summaryText = buildString {
             appendLine("=== ANÁLISE DE APRENDIZADO DA CPU ===")
-            appendLine("Partida: #$shortMatchId | Deck da CPU: $archetype | Resultado: ${if (cpuLost) "DERROTA DA CPU" else "VITÓRIA DA CPU"}")
+            appendLine("Partida: #$shortMatchId | CPU ($archetype) vs Jogador ($humanDeck) | Resultado: ${if (cpuLost) "DERROTA DA CPU" else "VITÓRIA DA CPU"}")
             appendLine("Foco de Melhoria: $primaryWeakness")
-            appendLine("Pontos Analisados: ${allIssues.size} (Ataque s/ setup: ${prematureAttackIssues.size}, Reserva no banco: ${backupIssues.size}, Energia: ${energyIssues.size}, Combos: ${comboIssues.size}, Mão: ${handIssues.size})")
+            appendLine("Pontos Analisados: ${allIssues.size} (Ataque s/ setup: ${prematureAttackIssues.size}, Reserva no banco: ${backupIssues.size}, Estratégia do Jogador: ${humanStrategyIssues.size}, Energia: ${energyIssues.size}, Combos: ${comboIssues.size})")
             if (allIssues.isNotEmpty()) {
                 appendLine()
                 for (issue in allIssues.take(4)) {
@@ -614,8 +787,20 @@ class AdaptiveStrategyTuner(
         var preAttackSetupBonus = 1.0
         var evolutionBonus = 1.0
         var benchBonus = 1.0
+        var counterStrategyBonus = 1.0
+        var handDisruptionBonus = 1.0
+        var benchProtection = 1.0
+        val learnedThreats = linkedSetOf<String>()
 
         for (l in allLessons) {
+            // Extract any encoded player threat Pokémon IDs / canonical names from contextSummary
+            val threatsPrefix = "THREATS="
+            val idx = l.contextSummary.indexOf(threatsPrefix)
+            if (idx >= 0) {
+                val raw = l.contextSummary.substring(idx + threatsPrefix.length).substringBefore(" |")
+                raw.split("|").map { it.trim() }.filter { it.isNotEmpty() }.forEach { learnedThreats += it }
+            }
+
             // Skip per-match narrative entries when computing aggregate multipliers if a pattern lesson is also present,
             // or weight them gently so multipliers grow smoothly across matches.
             val isMatchNarrative = l.lessonId.startsWith("PARTIDA_")
@@ -653,6 +838,18 @@ class AdaptiveStrategyTuner(
                     benchBonus += impact * 0.25
                     preAttackSetupBonus += impact * 0.20
                 }
+                CpuErrorType.PLAYER_BENCH_SWEEPER_STRATEGY -> {
+                    counterStrategyBonus += impact * 0.30
+                    backupBonus += impact * 0.15
+                }
+                CpuErrorType.PLAYER_HAND_BURST_COMBO -> {
+                    handDisruptionBonus += impact * 0.30
+                    counterStrategyBonus += impact * 0.15
+                }
+                CpuErrorType.PLAYER_GUST_BENCH_HUNTER -> {
+                    benchProtection += impact * 0.25
+                    backupBonus += impact * 0.20
+                }
                 CpuErrorType.SUICIDAL_ATTACK -> {}
             }
         }
@@ -665,7 +862,11 @@ class AdaptiveStrategyTuner(
             thinningBonusMultiplier = thinningBonus,
             preAttackSetupBonusMultiplier = preAttackSetupBonus,
             evolutionPriorityMultiplier = evolutionBonus,
-            benchDevelopmentBonusMultiplier = benchBonus
+            benchDevelopmentBonusMultiplier = benchBonus,
+            counterStrategyBonusMultiplier = counterStrategyBonus,
+            handDisruptionBonusMultiplier = handDisruptionBonus,
+            benchProtectionMultiplier = benchProtection,
+            learnedPlayerThreatPokemonIds = learnedThreats
         ).clamp()
     }
 }

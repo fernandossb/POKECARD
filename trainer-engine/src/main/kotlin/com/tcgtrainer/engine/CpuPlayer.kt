@@ -516,7 +516,13 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog, private val s
                 ChoiceKind.ATTACK_REORDER_OPPONENT_TOP -> opponentDrawValue(checkNotNull(card(id)))
                 ChoiceKind.ATTACK_LOOK_TOP_KEEP_CARDS -> keepValue(checkNotNull(card(id))) + setupValue(checkNotNull(card(id))) * .25
                 ChoiceKind.ATTACK_LOOK_TOP_POKEMON_TO_BENCH -> setupValue(checkNotNull(card(id)))
-                ChoiceKind.SWITCH_OPPONENT, ChoiceKind.EVOLUTION_SWITCH -> active?.let { attackValue(it, pokemon(id)) } ?: 0.0
+                ChoiceKind.SWITCH_OPPONENT, ChoiceKind.EVOLUTION_SWITCH -> {
+                    val target = pokemon(id)
+                    val targetDef = d(target.top)
+                    val learnedThreatBonus = if (targetDef.id in tuning.adaptive.learnedPlayerThreatPokemonIds ||
+                        targetDef.canonicalName in tuning.adaptive.learnedPlayerThreatPokemonIds) 150.0 * tuning.adaptive.counterStrategyBonusMultiplier else 0.0
+                    (active?.let { attackValue(it, target) } ?: 0.0) + learnedThreatBonus + target.energies.size * 25.0
+                }
                 ChoiceKind.EVOLUTION_CONFUSE_ACTIVE -> 80.0
                 ChoiceKind.SWITCH_OWN -> attackValue(pokemon(id)) - (active?.let(::attackValue) ?: 0.0) + potential(pokemon(id))*.05
                 ChoiceKind.ENERGY_TARGET -> {

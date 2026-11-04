@@ -644,4 +644,133 @@ class CpuLearningEngineTests {
         val matchLessonB = reportB.generatedLessons.first { it.lessonId.startsWith("PARTIDA_") }
         assertNotEquals(matchLessonA.lessonId, matchLessonB.lessonId, "Each match must generate its own distinct lesson ID")
     }
+
+    @Test
+    fun `cpu learns player bench setup strategy and counters player intention with boss orders`() {
+        val bossOrders = CardDefinition(
+            "boss-orders", "Boss's Orders", "Test", "9",
+            category = Category.TRAINER,
+            trainerType = TrainerType.SUPPORTER,
+            trainerEffect = TrainerEffect.Switch(opponent = true)
+        )
+        val cat = catalog(bossOrders)
+        val rules = RulesEngine(cat)
+        val learningEngine = CpuLearningEngine(cat)
+
+        // Step 1: Record a match where the human player (player 0) builds "backup-mon" on the bench
+        // with energy and executes a 3-action burst turn from a 5-card hand.
+        val recorder = MatchRecorder(cat)
+        val humanStartHand = listOf(
+            c("h1", "backup-mon"),
+            c("h2", "energy"),
+            c("h3", "nest-ball"),
+            c("h4", "research"),
+            c("h5", "energy")
+        )
+        val s0 = createGameState(
+            id = "learn-player-pattern-1",
+            turn = 1,
+            currentPlayer = 0,
+            phase = Phase.MAIN,
+            players = listOf(
+                PlayerState(
+                    active = pokemon("p0-bait", "dummy-basic", energies = 0),
+                    bench = listOf(pokemon("p0-sweeper", "backup-mon", energies = 0)),
+                    hand = humanStartHand,
+                    prizes = List(6) { c("pz0-$it") },
+                    deck = List(10) { c("d0-$it") }
+                ),
+                PlayerState(
+                    active = pokemon("cpu-act", "active-mon", energies = 2),
+                    bench = emptyList(),
+                    hand = emptyList(),
+                    prizes = List(6) { c("pzc-$it") },
+                    deck = List(10) { c("dc-$it") }
+                )
+            )
+        )
+        recorder.startRecording(s0, "MASTER")
+
+        val s1 = s0.copy(
+            players = listOf(
+                s0.players[0].copy(
+                    bench = listOf(pokemon("p0-sweeper", "backup-mon", energies = 1)),
+                    hand = humanStartHand.drop(1)
+                ),
+                s0.players[1]
+            )
+        )
+        recorder.recordAction(0, GameAction.AttachEnergy("h2", "p0-sweeper"), s0, s1, emptyList())
+        recorder.recordAction(0, GameAction.PlayTrainer("h3"), s1, s1, emptyList())
+        recorder.recordAction(0, GameAction.PlayTrainer("h4"), s1, s1, emptyList())
+        recorder.recordGameEnd(s1.copy(phase = Phase.GAME_OVER, winner = 0), 0)
+
+        val report = learningEngine.reviewMatch(checkNotNull(recorder.getCompletedRecording()))
+        assertTrue(
+            report.detectedIssues.any { it.type == CpuErrorType.PLAYER_BENCH_SWEEPER_STRATEGY },
+            "Should learn the player's bench sweeper setup pattern"
+        )
+        assertTrue(
+            report.detectedIssues.any { it.type == CpuErrorType.PLAYER_HAND_BURST_COMBO },
+            "Should learn the player's hand burst combo pattern"
+        )
+
+        val learnedAdaptive = learningEngine.getTuningForArchetype("lucario")
+        assertTrue(
+            "backup-mon" in learnedAdaptive.learnedPlayerThreatPokemonIds || "Backup Mon" in learnedAdaptive.learnedPlayerThreatPokemonIds,
+            "Learned parameters must include the player's key bench threat. Got: ${learnedAdaptive.learnedPlayerThreatPokemonIds}"
+        )
+        assertTrue(learnedAdaptive.counterStrategyBonusMultiplier > 1.0, "Counter-strategy multiplier should increase")
+        assertTrue(learnedAdaptive.handDisruptionBonusMultiplier > 1.0, "Hand disruption multiplier should increase")
+
+        // Step 2: In the next match (FAIR / MASTER mode), the player leaves a 1-prize bait in Active ("dummy-basic", 0 energy)
+        // while preparing "backup-mon" on the bench. CPU Active ("active-mon", 60 dmg) can KO a damaged/60HP target or hit the bench threat,
+        // and CPU holds Boss's Orders in hand!
+        var nextMatchState = createGameState(
+            id = "counter-player-intention-2",
+            turn = 3,
+            currentPlayer = 1,
+            phase = Phase.MAIN,
+            players = listOf(
+                PlayerState(
+                    active = pokemon("p0-bait", "dummy-basic", energies = 0, damage = 0),
+                    bench = listOf(
+                        pokemon("p0-decoy", "dummy-basic", energies = 0, damage = 0),
+                        pokemon("p0-bench-threat", "backup-mon", energies = 1, damage = 70)
+                    ),
+                    hand = List(5) { c("p0-h$it", "energy") },
+                    prizes = List(6) { c("p0-pz$it") },
+                    deck = List(15) { c("p0-dk$it") }
+                ),
+                PlayerState(
+                    active = pokemon("cpu-active", "active-mon", energies = 2),
+                    bench = listOf(pokemon("cpu-b1", "backup-mon", energies = 1)),
+                    hand = listOf(c("cpu-boss", "boss-orders")),
+                    prizes = List(6) { c("cpu-pz$it") },
+                    deck = List(15) { c("cpu-dk$it") }
+                )
+            )
+        )
+
+        val intention = PlayerIntentionDetector.detect(nextMatchState, 1, cat, rules, learnedAdaptive)
+        assertEquals("p0-bench-threat", intention.buildingBenchThreatId, "Intention detector should identify the player's bench threat")
+        assertTrue(intention.stallingWithBaitActive, "Intention detector should recognize the 1-prize bait active")
+        assertTrue(intention.holdingComboHand, "Intention detector should recognize the 5-card hand accumulation")
+
+        val cpu = CpuPlayer(cat, strategy = CpuStrategy.MASTER, tuning = CpuTuning(adaptive = learnedAdaptive))
+        val firstAction = cpu.choose(rules.cpuInput(nextMatchState, CpuKnowledge.FAIR))
+        assertEquals(
+            GameAction.PlayTrainer("cpu-boss"),
+            firstAction,
+            "CPU should play Boss's Orders to disrupt the player's bench threat instead of hitting the bait active"
+        )
+
+        nextMatchState = rules.apply(nextMatchState, firstAction).state
+        val secondAction = cpu.choose(rules.cpuInput(nextMatchState, CpuKnowledge.FAIR))
+        assertEquals(
+            GameAction.ChooseCards(listOf("p0-bench-threat")),
+            secondAction,
+            "CPU should select the player's learned bench threat ('p0-bench-threat') over the decoy bench Pokemon"
+        )
+    }
 }
