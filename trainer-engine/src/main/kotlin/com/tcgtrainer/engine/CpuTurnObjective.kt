@@ -39,7 +39,8 @@ data class CpuTurnPlan(
     var noAttackReason: String? = null,
     var bestAttackScore: Double? = null,
     var bestNoAttackScore: Double? = null,
-    var lethalThreatDescription: String? = null
+    var lethalThreatDescription: String? = null,
+    val initialHistorySize: Int = -1
 ) {
     val turn: Int get() = initialTurn
     val sequence: List<GameAction> get() = plannedSequence

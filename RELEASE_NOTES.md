@@ -1,3 +1,10 @@
+# POKECARD Brasil 5.99.50 — Correção de Contra-Jogo, Recuo Tático e Sincronização de Turno da CPU
+
+- Corrigida a avaliação de contra-jogo (`CpuCounterplay`): o estado inspecionado para simular o ataque agora utiliza corretamente o estado anterior ao ataque (`stateBeforeAttack`), garantindo que ataques defensivos com efeitos de prevenção (ex.: imunidade contra ataque no próximo turno) sejam plenamente considerados e valorizados pela IA.
+- Eliminação de recuos improdutivos de Pokémon ativos saudáveis: refinamento na decisão de encerramento de turno (`shouldPreferAttack`) e aplicação de penalidade a trocas desnecessárias quando o Pokémon ativo já está seguro e o recuo não melhora o poder ofensivo.
+- Controle de sincronização de histórico (`initialHistorySize`): o plano de turno da CPU (`CpuTurnPlan`) agora valida o progresso do histórico antes de avançar para os próximos passos, impedindo a execução de passos defasados fora de ordem.
+- Versão Android: `versionCode` 252 e `versionName` 5.99.50. Assinatura oficial e dados locais preservados.
+
 # POKECARD Brasil 5.99.49 — Aprendizado global da CPU e correções do TCG Trainer
 
 - A CPU passa a transformar a lição de usar cartas de busca para acelerar atacantes em aprendizado global, compartilhado entre diferentes decks, em vez de registrar a mesma lição separadamente várias vezes.

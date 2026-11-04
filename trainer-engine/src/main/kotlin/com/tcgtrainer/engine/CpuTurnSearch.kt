@@ -256,7 +256,7 @@ internal class CpuTurnSearch(
                         telemetry.bestLine = line.sequence
                         telemetry.bestScore = score
                         telemetry.maximumActionDepthReached = maxDepth
-                        turnPlan = CpuTurnPlan(objective = CpuTurnObjective.EXECUTE_ATTACK, plannedSequence = line.sequence, initialTurn = initial.turn, actor = actor)
+                        turnPlan = CpuTurnPlan(objective = CpuTurnObjective.EXECUTE_ATTACK, plannedSequence = line.sequence, initialTurn = initial.turn, actor = actor, initialHistorySize = initial.history.size)
                         return line.first
                     }
                 }
@@ -447,7 +447,8 @@ internal class CpuTurnSearch(
                     plannedSequence = preferredLine.sequence,
                     initialTurn = initial.turn,
                     actor = actor,
-                    stepIndex = 0
+                    stepIndex = 0,
+                    initialHistorySize = initial.history.size
                 )
 
                 if (strategy in listOf(CpuStrategy.ORACLE, CpuStrategy.GRANDMASTER)) {
@@ -484,8 +485,9 @@ internal class CpuTurnSearch(
                         val oldTarget = line.attack?.let { action -> line.state.players[1-actor].pokemon().firstOrNull { it.id == action.targetId }
                             ?: line.state.players[1-actor].active }
                         val ko = line.attack?.let { forecast.preview(line.state, it) }?.let { it.knockout && !it.uncertain } == true
-                        val previousRisk = replyRisk(line.state, actor, if (ko) oldTarget?.id else null)
-                        val response = counterplay.evaluate(line.state, actor, line.attack)
+                        val stateBefore = line.stateBeforeAttack ?: line.state
+                        val previousRisk = replyRisk(stateBefore, actor, if (ko) oldTarget?.id else null)
+                        val response = counterplay.evaluate(stateBefore, actor, line.attack)
                         val riskCorrection = if (response.risk >= 100_000 || response.wins) previousRisk-response.risk
                             else (previousRisk-response.risk)*tuning.counterplay
                         line.copy(value = line.value + riskCorrection + response.prizeRace*tuning.prizeRace -
@@ -531,7 +533,8 @@ internal class CpuTurnSearch(
                     plannedSequence = preferredLine.sequence,
                     initialTurn = initial.turn,
                     actor = actor,
-                    stepIndex = 0
+                    stepIndex = 0,
+                    initialHistorySize = initial.history.size
                 )
 
                 val sortedEvaluated = evaluated.sortedByDescending { it.value }
@@ -541,7 +544,7 @@ internal class CpuTurnSearch(
         } else {
             best?.let { b ->
                 val objective = if (b.attack != null) CpuTurnObjective.EXECUTE_ATTACK else CpuTurnObjective.PASSIVE_DEVELOPMENT
-                turnPlan = CpuTurnPlan(objective = objective, plannedSequence = b.sequence, initialTurn = initial.turn, actor = actor, stepIndex = 0)
+                turnPlan = CpuTurnPlan(objective = objective, plannedSequence = b.sequence, initialTurn = initial.turn, actor = actor, stepIndex = 0, initialHistorySize = initial.history.size)
             }
             best
         }
@@ -1205,6 +1208,19 @@ internal class CpuTurnSearch(
             }
         }
 
+        if (sequence.any { it is GameAction.Retreat }) {
+            val initialActive = initial.players[actor].active
+            val newActive = state.players[actor].active
+            val initialAttacks = initialActive?.let { engine.availableAttacks(initial, actor, it) } ?: emptyList()
+            val newAttacks = newActive?.let { engine.availableAttacks(state, actor, it) } ?: emptyList()
+            val initialBestDmg = initialAttacks.maxOfOrNull { a -> a.effects.filterIsInstance<Effect.Damage>().maxOfOrNull { it.amount } ?: 0 } ?: 0
+            val newBestDmg = newAttacks.maxOfOrNull { a -> a.effects.filterIsInstance<Effect.Damage>().maxOfOrNull { it.amount } ?: 0 } ?: 0
+            val savesFromKo = initialActive != null && (engine.effectiveHp(initial, initialActive) - initialActive.damage) <= 100 && (newActive == null || (engine.effectiveHp(state, newActive) - newActive.damage) > 100)
+            if (newBestDmg <= initialBestDmg && !savesFromKo && currentPrediction?.isLethal != true) {
+                bonus -= 60.0
+            }
+        }
+
         if (currentPrediction?.isLethal == true && sequence.any { it is GameAction.Retreat }) {
             val initialActive = initial.players[actor].active
             val newActive = state.players[actor].active
@@ -1345,7 +1361,11 @@ internal class CpuTurnSearch(
         actor: Int
     ): Pair<Line, String> {
         if (bestAttack == null) {
-            val chosen = bestNoAttack ?: immediateEndTurn ?: fallbackLine
+            val chosen = if (bestNoAttack != null && immediateEndTurn != null) {
+                if (bestNoAttack.value > immediateEndTurn.value) bestNoAttack else immediateEndTurn
+            } else {
+                bestNoAttack ?: immediateEndTurn ?: fallbackLine
+            }
             return chosen to "No legal attack candidate available"
         }
 

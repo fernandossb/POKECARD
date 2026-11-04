@@ -145,21 +145,25 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog, private val s
         val activePlan = currentTurnPlan
         val currentState = input.position?.state
         if (activePlan != null && currentState != null && activePlan.turn == input.turn && activePlan.actor == input.observation.viewer && !activePlan.isComplete()) {
-            val nextPlanned = activePlan.nextAction()
-            if (nextPlanned != null) {
-                // MAIN actions were already validated against the real state in cpuInput.
-                // A public position has a masked deck, so validating it again can neither
-                // establish legality of deck searches nor safely consult the real catalog.
-                // Choices are resolved afresh from the current request and selectable cards.
-                val isLegal = input.phase == Phase.MAIN && nextPlanned in input.actions
-                if (isLegal) {
-                    activePlan.advance()
-                    return nextPlanned
+            if (activePlan.initialHistorySize >= 0 && currentState.history.size != activePlan.initialHistorySize + activePlan.stepIndex) {
+                currentTurnPlan = null
+            } else {
+                val nextPlanned = activePlan.nextAction()
+                if (nextPlanned != null) {
+                    // MAIN actions were already validated against the real state in cpuInput.
+                    // A public position has a masked deck, so validating it again can neither
+                    // establish legality of deck searches nor safely consult the real catalog.
+                    // Choices are resolved afresh from the current request and selectable cards.
+                    val isLegal = input.phase == Phase.MAIN && nextPlanned in input.actions
+                    if (isLegal) {
+                        activePlan.advance()
+                        return nextPlanned
+                    } else {
+                        currentTurnPlan = null
+                    }
                 } else {
                     currentTurnPlan = null
                 }
-            } else {
-                currentTurnPlan = null
             }
         }
 
