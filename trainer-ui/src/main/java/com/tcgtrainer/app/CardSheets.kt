@@ -32,7 +32,12 @@ internal fun conditionLabel(condition: SpecialCondition): String = when (conditi
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable internal fun CardDetailSheet(card: CardInstance, state: GameState, engine: RulesEngine, busy: Boolean,
     onDismiss: () -> Unit, dispatch: (GameAction) -> Unit, attack: (GameAction.Attack) -> Unit) {
-    val d = engine.definition(card); val actor = 0; val own = state.players[actor]
+    val original = engine.definition(card)
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val localized by produceState(original, original.id) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { PortugueseCardDetails.load(context, original) }
+    }
+    val d = localized; val actor = 0; val own = state.players[actor]
     val humanTurn = engine.actingPlayer(state) == 0
     val pokemon = state.players.flatMap { it.pokemon() }.find { it.top.id == card.id }
     val ownPokemon = own.pokemon().find { it.top.id == card.id }

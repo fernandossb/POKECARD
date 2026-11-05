@@ -89,7 +89,14 @@ private object ArtCache { val bitmaps = android.util.LruCache<String, ImageBitma
 }
 @Composable internal fun CardBack(modifier: Modifier = Modifier, label: String = "TCG") {
     Box(modifier.clip(RoundedCornerShape(5.dp)).background(Color(0xFF152D51)).border(1.dp, Color(0xFF567AA5), RoundedCornerShape(5.dp)), contentAlignment = Alignment.Center) {
-        Box(Modifier.size(21.dp).border(1.dp, Color(0xFF6E96C5), RoundedCornerShape(50)))
-        Text(label, fontSize = 8.sp, color = Color(0xFFBBD6F5), fontWeight = FontWeight.Bold)
+        val context = LocalContext.current
+        val logo = remember(context) {
+            val drawable = context.packageManager.getApplicationIcon(context.applicationInfo)
+            val bitmap = android.graphics.Bitmap.createBitmap(256, 256, android.graphics.Bitmap.Config.ARGB_8888)
+            drawable.setBounds(0, 0, 256, 256)
+            drawable.draw(android.graphics.Canvas(bitmap))
+            bitmap.asImageBitmap()
+        }
+        Image(logo, contentDescription = "Sleeve PokeCard", modifier = Modifier.fillMaxSize().padding(4.dp), contentScale = ContentScale.Fit)
     }
 }

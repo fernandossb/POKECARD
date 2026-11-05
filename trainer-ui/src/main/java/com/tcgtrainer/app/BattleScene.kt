@@ -4,6 +4,7 @@ import android.app.Activity
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
@@ -64,7 +65,7 @@ internal data class DraggedCard(val card: CardInstance, val origin: Rect, val po
     var serial by remember { mutableLongStateOf(0) }
     var toast by remember { mutableStateOf<String?>(null) }
     var playedEffect by remember(state.gameId) { mutableStateOf<CardInstance?>(null) }
-    LaunchedEffect(playedEffect?.id) { if (playedEffect != null) { delay(1900); playedEffect = null } }
+    LaunchedEffect(playedEffect?.id) { if (playedEffect != null) { delay(5000); playedEffect = null } }
     var settings by remember { mutableStateOf(false) }
     var handFilter by remember { mutableStateOf<Category?>(null) }
     var resultReady by remember { mutableStateOf(false) }
@@ -227,7 +228,8 @@ internal data class DraggedCard(val card: CardInstance, val origin: Rect, val po
                 color = Color(0xF0182435), shape = RoundedCornerShape(8.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Aqua)) {
                 Column(Modifier.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("A MÁQUINA JOGOU", color = Aqua, fontSize = 8.sp, fontWeight = FontWeight.Bold)
-                    CardArt(engine.definition(card), Modifier.fillMaxWidth().aspectRatio(.727f))
+                    CardArt(engine.definition(card), Modifier.fillMaxWidth().aspectRatio(.727f).clickable { inspect(card) })
+                    Text("Toque para ler", color = Aqua, fontSize = 10.sp)
                     Text(engine.definition(card).name, color = Color.White, fontSize = 10.sp, maxLines = 2)
                 }
             }

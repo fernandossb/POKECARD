@@ -20,12 +20,16 @@ internal class BattleGeometry(val width: Float, val height: Float, val viewer: I
     val stadium get() = rect(.018f, .425f, .115f, .10f)
     val hand get() = rect(0f, .855f, 1f, .18f)
     fun benchCard(player: Int, index: Int, count: Int): Rect {
-        val w = width * when { count <= 2 -> .18f; count == 3 -> .16f; count == 4 -> .14f; else -> .116f }
+        val rows = if (count > 3) 2 else 1
+        val columns = (count + rows - 1) / rows
+        val row = index / columns
+        val rowCount = minOf(columns, count - row * columns)
+        val w = minOf(width * .18f, (bench(player).height / rows - height * .014f) * .727f)
         val h = w/.727f
         val gap = width*.016f
-        val left = width/2 - (count*w+(count-1)*gap)/2 + index*(w+gap)
+        val left = width/2 - (rowCount*w+(rowCount-1)*gap)/2 + (index % columns)*(w+gap)
         val area = bench(player)
-        val top = if (player == viewer) area.top+height*.004f else area.bottom-h-height*.004f
+        val top = if (player == viewer) area.top+height*.004f+row*(h+height*.01f) else area.bottom-h-height*.004f-row*(h+height*.01f)
         return Rect(left, top, left+w, top+h)
     }
     fun pokemon(state: GameState, player: Int, id: String): Rect {

@@ -1,3 +1,11 @@
+# POKECARD Brasil 5.99.54 — Apresentação do TCG Trainer
+
+- Sleeves com o ícone do PokeCard.
+- Banco organizado em duas fileiras quando houver mais de três Pokémon.
+- Prévia das cartas de Treinador da CPU por 5 segundos, com toque para consultar os detalhes.
+- Detalhes consultam textos oficiais em português e armazenam uma cópia local; textos sem tradução disponível mantêm o original.
+- Versão Android: 256 (5.99.54).
+
 # POKECARD Brasil 5.99.53 — Aprendizado com as Jogadas do Jogador e Detector de Intenções em Tempo Real
 
 - **Aprendizado com os Movimentos do Jogador (`HumanStrategyAnalyzer` em `CpuLearningEngine`)**:

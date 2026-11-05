@@ -321,6 +321,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                         )
                     }
                     publish(busy = true)
+                    if (action is GameAction.PlayTrainer) delay(5000)
                 }
                 val finalState = session?.snapshot?.state
                 if (finalState?.phase == Phase.GAME_OVER && recorder.isRecordingActive) {
