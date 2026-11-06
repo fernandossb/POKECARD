@@ -1,3 +1,11 @@
+# POKECARD Brasil 5.99.55 — Catálogo de Artes Estendidas
+
+- Catálogo com 114 entradas pesquisadas e referências consultáveis.
+- Obras históricas mostram nome e edição quando a carta está ausente do catálogo local.
+- Composições com montagem pendente de validação visual são identificadas na tela.
+- Contagem de cópias corrigida para obras que repetem a mesma carta.
+- Versão Android 257 (5.99.55).
+
 # POKECARD Brasil 5.99.54 — Apresentação do TCG Trainer
 
 - Sleeves com o ícone do PokeCard.
