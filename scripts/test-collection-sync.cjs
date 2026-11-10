@@ -17,6 +17,7 @@ async function main() {
     esc: String, confirm: () => true, notify: value => { notification = value; },
     openBackupPanel() {}, salvarBackupDeEmergencia() {}, saveState() {},
     saveStateNow() {}, render() {}, migrateState: value => value,
+    textoParaGravar: () => '{}', gravarColecaoNoBanco: async () => {},
     indexedDB: {
       open() {
         const request = {};

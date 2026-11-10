@@ -110,6 +110,10 @@
       state = migrado;
       saveState();
       saveStateNow();
+      // A revisão remota só pode virar base depois de uma gravação durável.
+      // Se o IndexedDB falhar, a próxima tentativa deve voltar a comparar
+      // contra a base anterior, preservando as alterações locais.
+      await gravarColecaoNoBanco(textoParaGravar());
       render();
     } finally {
       aplicando = false;
