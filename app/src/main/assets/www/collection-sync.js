@@ -12,6 +12,9 @@
   let executando = false;
   let aplicando = false;
   let autorizarEnvioInicial = false;
+  let autorizarRestauracaoInicial = false;
+  let estadoAutorizadoParaRestauracao = null;
+  let precisaEscolherColecao = false;
   let sequencia = 0;
   const chamadas = new Map();
   let mensagem = 'Entre com sua conta Google para sincronizar.';
@@ -73,6 +76,9 @@
   async function definirConta(dados) {
     conta = dados.uid ? dados : null;
     autorizarEnvioInicial = false;
+    autorizarRestauracaoInicial = false;
+    estadoAutorizadoParaRestauracao = null;
+    precisaEscolherColecao = false;
     proprietarioLocal = await carregar('__proprietario');
     metadata = conta ? await carregar(conta.uid) : null;
     mensagem = conta && proprietarioLocal && proprietarioLocal !== conta.uid
@@ -140,9 +146,15 @@
         if (!remoto || typeof remoto !== 'object' || !remoto.entries)
           throw new Error('A coleção na nuvem é inválida.');
         if (!metadata) {
-          if (!vazio(local)) {
-            mensagem = 'Existem dados neste aparelho e na nuvem. Exporte um backup e escolha qual coleção usar.';
-            notify(mensagem);
+          if (autorizarRestauracaoInicial && JSON.stringify(local) !== estadoAutorizadoParaRestauracao) {
+            autorizarRestauracaoInicial = false;
+            estadoAutorizadoParaRestauracao = null;
+            mensagem = 'Os dados locais mudaram. Confirme novamente qual coleção usar.';
+            return;
+          }
+          if (!vazio(local) && !autorizarRestauracaoInicial) {
+            precisaEscolherColecao = true;
+            mensagem = 'Há dados neste aparelho e na nuvem. Para usar a coleção da nuvem, toque em Usar coleção da nuvem.';
             return;
           }
           resultado = remoto;
@@ -161,6 +173,9 @@
         if (conta?.uid !== uid) return;
         metadata = { revisao, base: remoto };
         await armazenar(uid, metadata);
+        precisaEscolherColecao = false;
+        autorizarRestauracaoInicial = false;
+        estadoAutorizadoParaRestauracao = null;
         if (!proprietarioLocal) {
           await armazenar('__proprietario', uid);
           proprietarioLocal = uid;
@@ -211,6 +226,12 @@
     autorizarEnvioInicial = true;
     window.pokecardSyncNow();
   };
+  window.pokecardSyncRestore = () => {
+    if (!confirm('Substituir os dados deste aparelho pela coleção da nuvem? Exporte um backup antes se quiser guardar os dados locais.')) return;
+    autorizarRestauracaoInicial = true;
+    estadoAutorizadoParaRestauracao = JSON.stringify(estadoAtual());
+    window.pokecardSyncNow();
+  };
   window.pokecardSyncPanel = () => `<div class="panel sync-conta">
     <strong>Conta e sincronização</strong>
     <p class="card-meta">Sincroniza coleção, decks e obras pessoais. Fotos locais de cartas não são sincronizadas.</p>
@@ -218,6 +239,7 @@
     ${conta ? `<p class="card-meta">${esc(mensagem)}</p>
       <button class="secondary-btn" onclick="pokecardSyncNow()">Sincronizar agora</button>
       ${!metadata ? '<button class="secondary-btn" onclick="pokecardSyncStart()">Ativar sincronização neste aparelho</button>' : ''}
+      ${precisaEscolherColecao ? '<button class="secondary-btn" onclick="pokecardSyncRestore()">Usar coleção da nuvem</button>' : ''}
       <button class="secondary-btn" onclick="pokecardSyncLogout()">Sair da conta</button>`
       : '<button class="secondary-btn" onclick="pokecardSyncLogin()">Entrar com Google</button>'}
   </div>`;

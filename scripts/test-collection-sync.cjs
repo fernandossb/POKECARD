@@ -8,6 +8,7 @@ async function main() {
   let remote = null;
   let revision = '';
   let writes = 0;
+  let failDurableSave = false;
   let notification = '';
   const context = {
     console, JSON, Map, Promise, Error, clearTimeout, PokecardSyncMerge: merge,
@@ -17,7 +18,10 @@ async function main() {
     esc: String, confirm: () => true, notify: value => { notification = value; },
     openBackupPanel() {}, salvarBackupDeEmergencia() {}, saveState() {},
     saveStateNow() {}, render() {}, migrateState: value => value,
-    textoParaGravar: () => '{}', gravarColecaoNoBanco: async () => {},
+    textoParaGravar: () => '{}',
+    gravarColecaoNoBanco: async () => {
+      if (failDurableSave) throw new Error('indexeddb unavailable');
+    },
     indexedDB: {
       open() {
         const request = {};
@@ -85,6 +89,18 @@ async function main() {
   assert.equal(remote.entries.b.quantity, 2);
   assert.equal(remote.entries.c.quantity, 3);
 
+  remote.entries.d = { quantity: 7 };
+  revision = 'durability-check';
+  failDurableSave = true;
+  context.pokecardSyncNow();
+  await settle();
+  assert.equal(stored.get('user').revisao, '2', 'failed local persistence must not advance the base');
+  assert.match(notification, /pendente/);
+  failDurableSave = false;
+  context.pokecardSyncNow();
+  await settle();
+  assert.equal(stored.get('user').revisao, 'durability-check');
+
   context.state.entries.a.quantity = 5;
   remote.entries.a.quantity = 8;
   revision = 'conflict';
@@ -98,6 +114,20 @@ async function main() {
   await settle();
   assert.equal(writes, 2, 'another account must never receive the local collection');
   assert.match(notification, /outra conta/);
+  stored.clear();
+  remote = { version: 2, entries: { pikachu: { quantity: 4 } }, decks: [], importedAt: null };
+  revision = 'poco';
+  context.state = { version: 2, entries: {}, decks: [{ id: 'starter', tcgTrainer: true }], importedAt: null };
+  await context.pokecardSyncReply('login', { uid: 'tablet', email: 'test@example.com' });
+  context.pokecardSyncNow();
+  await settle();
+  assert.match(context.pokecardSyncPanel(), /Usar coleção da nuvem/);
+  assert.equal(context.state.decks[0].id, 'starter');
+  context.pokecardSyncRestore();
+  await settle();
+  assert.equal(context.state.entries.pikachu.quantity, 4);
+  assert.equal(stored.get('tablet').revisao, 'poco');
+  assert.equal(writes, 2, 'restoring must not overwrite the cloud collection');
   console.log('Ativação, combinação e preservação de conflitos: OK');
 }
 
