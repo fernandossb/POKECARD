@@ -2550,6 +2550,7 @@ async function init() {
     loadConditionMultipliers();
     await loadCentralPriceCache();
     state = await loadState();
+    window.pokecardSyncChanged?.();
     if (typeof sincronizarDecksDoTrainer === 'function') sincronizarDecksDoTrainer();
     if (clearNonDatabaseAutomaticPrices()) saveState();
     // Ao mudar para a média brasileira, removemos uma vez os valores internacionais antigos.
@@ -3009,6 +3010,7 @@ function saveState() {
   invalidateDerivedState();
   clearTimeout(stateSaveTimer);
   stateSaveTimer = setTimeout(saveStateNow, 180);
+  window.pokecardSyncChanged?.();
 }
 
 // Garante persistência ao sair, sem bloquear cada toque em +/−.
@@ -12225,6 +12227,7 @@ function openBackupPanel() {
     <h2>Backup da coleção</h2>
     <p class="screen-subtitle">Salve uma cópia para não depender da assinatura ou da instalação do aplicativo.</p>
     <div class="panel"><strong>${summary.uniqueOwned} cartas únicas · ${summary.totalCopies} cartas no total</strong><p class="card-meta">Inclui quantidades, wishlist e decks desta nova versão.</p></div>
+    ${window.pokecardSyncPanel?.() || ''}
     ${NO_NAVEGADOR ? `<p class="card-meta backup-nota">Aqui o backup não é automático: exporte uma cópia de tempos em tempos e guarde em <b>Arquivos</b>, no iCloud Drive ou mande para você no WhatsApp. É também assim que a coleção passa para outro aparelho.</p>` : ''}
     <div class="backup-actions">
       <button class="primary-btn" onclick="exportBackup()">Exportar backup</button>

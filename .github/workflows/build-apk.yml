@@ -3,7 +3,7 @@ name: Gerar APK direto e AAB Google Play
 on:
   workflow_dispatch:
   push:
-    branches: ["main"]
+    branches: ["main", "codex/sync-validation"]
 
 permissions:
   contents: write
@@ -87,6 +87,8 @@ jobs:
           node scripts/test-deck-coherence.js
           node scripts/test-liga-export.cjs
           node scripts/test-pwa.cjs
+          node scripts/test-sync-merge.cjs
+          node scripts/test-collection-sync.cjs
 
       - name: Compilar APK direto e AAB Google Play assinados
         env:
