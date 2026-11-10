@@ -1,3 +1,12 @@
+# POKECARD Brasil 5.99.58 — Sincronização entre aparelhos
+
+- Entre com Google para sincronizar coleção, decks e obras pessoais.
+- A verificação consulta a revisão e baixa os dados apenas quando houver alterações na nuvem.
+- As revisões são compactadas em segundo plano, e alterações conflitantes preservam a coleção local.
+- No primeiro acesso em outro aparelho, é possível escolher a coleção da nuvem.
+- Fotos locais de cartas ainda não são sincronizadas.
+- Versão Android 260 (5.99.58).
+
 # POKECARD Brasil 5.99.55 — Catálogo de Artes Estendidas
 
 - Catálogo com 114 entradas pesquisadas e referências consultáveis.

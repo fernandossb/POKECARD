@@ -108,12 +108,16 @@ public final class MainActivity extends Activity {
     private double topInsetCss;
     private double bottomInsetCss;
     private FirebaseAnalytics firebaseAnalytics;
+    private CollectionSync collectionSync;
 
     @SuppressLint({ "SetJavaScriptEnabled", "JavascriptInterface" })
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         firebaseAnalytics = FirebaseAnalytics.getInstance(this);
+        collectionSync = new CollectionSync(this, (request, result) ->
+                runJavascript("window.pokecardSyncReply&&window.pokecardSyncReply("
+                        + JSONObject.quote(request) + "," + result.toString() + ");"));
         // O conteúdo ocupa também a área da barra de status. O cabeçalho Web ajusta
         // internamente o safe-area para que títulos e botões nunca fiquem sob os
         // ícones.
@@ -391,6 +395,11 @@ public final class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+
+        if (requestCode == CollectionSync.SIGN_IN) {
+            collectionSync.signInResult(data);
+            return;
+        }
 
         if (requestCode == PICK_CARD_IMAGE) {
             if (pendingImageChooser != null) {
@@ -720,6 +729,13 @@ public final class MainActivity extends Activity {
     }
 
     public final class AppBridge {
+        @JavascriptInterface public void syncAccount(String request) { collectionSync.account(request); }
+        @JavascriptInterface public void syncLogin() { collectionSync.signIn(); }
+        @JavascriptInterface public void syncLogout() { collectionSync.signOut(); }
+        @JavascriptInterface public void syncRead(String request, String revision) { collectionSync.read(request, revision); }
+        @JavascriptInterface public void syncWrite(String request, String revision, String data) {
+            collectionSync.write(request, revision, data);
+        }
         @JavascriptInterface
         public void openTcgTrainer(String snapshot) {
             try {

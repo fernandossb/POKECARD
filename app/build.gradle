@@ -26,8 +26,8 @@ android {
         applicationId 'br.com.fichariopokemon.pokedex'
         minSdk 26
         targetSdk 36
-        versionCode 257
-        versionName '5.99.55'
+        versionCode 260
+        versionName '5.99.58'
     }
 
     signingConfigs {
@@ -93,5 +93,8 @@ dependencies {
     // Firebase Analytics: usuÃ¡rios ativos, versÃµes, dispositivos e sessÃµes.
     implementation platform('com.google.firebase:firebase-bom:34.16.0')
     implementation 'com.google.firebase:firebase-analytics'
+    implementation 'com.google.firebase:firebase-auth'
+    implementation 'com.google.firebase:firebase-firestore'
+    implementation 'com.google.android.gms:play-services-auth:21.4.0'
 }
 

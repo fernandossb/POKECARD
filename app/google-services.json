@@ -12,7 +12,20 @@
           "package_name": "br.com.fichariopokemon.pokedex"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "211768760914-apusk3oufapl5aqig3jn65v1no6o4jkd.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "br.com.fichariopokemon.pokedex",
+            "certificate_hash": "63f6febc03b4d78469f655bdd32cb04900c351aa"
+          }
+        },
+        {
+          "client_id": "211768760914-tu8rkdbsvod60tmnnjoe0sg25htccer7.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAEsbGRlTW3i9chqCaaO6EJ8T1VxsHGwt0"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "211768760914-tu8rkdbsvod60tmnnjoe0sg25htccer7.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
