@@ -8,6 +8,7 @@ async function main() {
   let remote = null;
   let revision = '';
   let writes = 0;
+  let downloads = 0;
   let failDurableSave = false;
   let notification = '';
   const context = {
@@ -59,7 +60,15 @@ async function main() {
   context.window = context;
   context.Android = {
     syncAccount(id) { queueMicrotask(() => context.pokecardSyncReply(id, { uid: 'user', email: 'test@example.com' })); },
-    syncRead(id) { queueMicrotask(() => context.pokecardSyncReply(id, revision ? { revision, data: JSON.stringify(remote) } : { revision: '' })); },
+    syncRead(id, knownRevision) {
+      let result = { revision: '' };
+      if (revision && revision === knownRevision) result = { revision, unchanged: true };
+      else if (revision) {
+        downloads++;
+        result = { revision, data: JSON.stringify(remote) };
+      }
+      queueMicrotask(() => context.pokecardSyncReply(id, result));
+    },
     syncWrite(id, expected, data) {
       assert.equal(expected, revision);
       writes++;
@@ -79,8 +88,13 @@ async function main() {
   await settle();
   assert.equal(writes, 1);
   assert.equal(remote.entries.a.quantity, 1);
+  context.pokecardSyncNow();
+  await settle();
+  assert.equal(downloads, 0, 'an unchanged revision must not download the collection');
+  assert.equal(writes, 1, 'an unchanged collection must not be uploaded');
 
   context.state.entries.b = { quantity: 2 };
+  context.pokecardSyncChanged();
   remote.entries.c = { quantity: 3 };
   revision = 'remote-change';
   context.pokecardSyncNow();
@@ -102,6 +116,7 @@ async function main() {
   assert.equal(stored.get('user').revisao, 'durability-check');
 
   context.state.entries.a.quantity = 5;
+  context.pokecardSyncChanged();
   remote.entries.a.quantity = 8;
   revision = 'conflict';
   context.pokecardSyncNow();
@@ -128,6 +143,14 @@ async function main() {
   assert.equal(context.state.entries.pikachu.quantity, 4);
   assert.equal(stored.get('tablet').revisao, 'poco');
   assert.equal(writes, 2, 'restoring must not overwrite the cloud collection');
+  const downloadsBefore = downloads;
+  context.state.entries.pikachu.quantity = 5;
+  context.pokecardSyncChanged();
+  context.pokecardSyncNow();
+  await settle();
+  assert.equal(writes, 3, 'local changes must upload even if the remote revision is unchanged');
+  assert.equal(remote.entries.pikachu.quantity, 5);
+  assert.equal(downloads, downloadsBefore, 'local changes must not force an unchanged download');
   console.log('Ativação, combinação e preservação de conflitos: OK');
 }
 

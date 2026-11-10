@@ -16,6 +16,8 @@
   let estadoAutorizadoParaRestauracao = null;
   let precisaEscolherColecao = false;
   let sequencia = 0;
+  let alteracoesLocais = 0;
+  let ultimaVerificacaoLocal = -1;
   const chamadas = new Map();
   let mensagem = 'Entre com sua conta Google para sincronizar.';
 
@@ -79,6 +81,7 @@
     autorizarRestauracaoInicial = false;
     estadoAutorizadoParaRestauracao = null;
     precisaEscolherColecao = false;
+    ultimaVerificacaoLocal = -1;
     proprietarioLocal = await carregar('__proprietario');
     metadata = conta ? await carregar(conta.uid) : null;
     mensagem = conta && proprietarioLocal && proprietarioLocal !== conta.uid
@@ -136,15 +139,22 @@
     executando = true;
     mensagem = 'Sincronizando…';
     try {
-      const resposta = await solicitar('syncRead');
+      const resposta = await solicitar('syncRead', metadata?.revisao || '');
       if (conta?.uid !== uid) return;
+      if (resposta.unchanged && (!metadata || resposta.revision !== metadata.revisao))
+        throw new Error('A revisão local não corresponde à nuvem.');
+      if (resposta.unchanged && alteracoesLocais === ultimaVerificacaoLocal) {
+        mensagem = 'Coleção sincronizada.';
+        return;
+      }
       const local = estadoAtual();
       let resultado = local;
       const revisao = resposta.revision || '';
-      if (revisao) {
+      if (revisao && !resposta.unchanged) {
         const remoto = JSON.parse(resposta.data);
         if (!remoto || typeof remoto !== 'object' || !remoto.entries)
           throw new Error('A coleção na nuvem é inválida.');
+        const baseRemota = JSON.parse(JSON.stringify(remoto));
         if (!metadata) {
           if (autorizarRestauracaoInicial && JSON.stringify(local) !== estadoAutorizadoParaRestauracao) {
             autorizarRestauracaoInicial = false;
@@ -171,7 +181,9 @@
         if (JSON.stringify(local) !== JSON.stringify(estadoAtual())) { agendar(); return; }
         if (JSON.stringify(resultado) !== JSON.stringify(local)) await aplicar(resultado);
         if (conta?.uid !== uid) return;
-        metadata = { revisao, base: remoto };
+        // A base não pode compartilhar objetos com o estado exibido: uma
+        // edição posterior alteraria a referência usada para detectar mudanças.
+        metadata = { revisao, base: baseRemota };
         await armazenar(uid, metadata);
         precisaEscolherColecao = false;
         autorizarRestauracaoInicial = false;
@@ -180,14 +192,15 @@
           await armazenar('__proprietario', uid);
           proprietarioLocal = uid;
         }
-      } else if (metadata?.revisao) {
+      } else if (!revisao && metadata?.revisao) {
         throw new Error('A revisão da nuvem não está disponível. A coleção local foi preservada.');
-      } else if (!autorizarEnvioInicial) {
+      } else if (!revisao && !autorizarEnvioInicial) {
         mensagem = 'Nenhuma coleção na nuvem. Ative a sincronização para enviar a coleção deste aparelho.';
         return;
       }
 
       const atual = estadoAtual();
+      const alteracoesProcessadas = alteracoesLocais;
       const base = metadata?.base;
       const comparacao = base && PokecardSyncMerge.combinar(base, atual, base);
       if (!base || JSON.stringify(comparacao.dados) !== JSON.stringify(base)) {
@@ -200,8 +213,9 @@
           proprietarioLocal = uid;
         }
         autorizarEnvioInicial = false;
-        if (JSON.stringify(atual) !== JSON.stringify(estadoAtual())) agendar();
       }
+      if (alteracoesLocais === alteracoesProcessadas) ultimaVerificacaoLocal = alteracoesLocais;
+      else agendar();
       mensagem = 'Coleção sincronizada.';
     } catch (error) {
       mensagem = 'Sincronização pendente. ' + (error.message || 'Tente novamente com internet.');
@@ -217,7 +231,7 @@
     timer = setTimeout(sincronizar, 1500);
   }
 
-  window.pokecardSyncChanged = agendar;
+  window.pokecardSyncChanged = () => { alteracoesLocais++; agendar(); };
   window.pokecardSyncLogin = () => window.Android.syncLogin();
   window.pokecardSyncLogout = () => window.Android.syncLogout();
   window.pokecardSyncNow = () => { sincronizar().then(() => { notify(mensagem); openBackupPanel(); }); };

@@ -25,11 +25,14 @@ import java.util.UUID;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 import java.io.ByteArrayInputStream;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /** Bridge assíncrona de revisões imutáveis. A coleção local é a fonte de trabalho. */
 final class CollectionSync {
     static final int SIGN_IN = 1045;
     private static final int PART_SIZE = 400000;
+    private static final ExecutorService IO = Executors.newFixedThreadPool(2);
     interface Callback { void send(String request, JSONObject result); }
     private final Activity activity;
     private final Callback callback;
@@ -94,12 +97,18 @@ final class CollectionSync {
         return db.collection("colecoes").document(user.getUid());
     }
 
-    void read(String request) {
+    void read(String request, String knownRevision) {
         try {
             DocumentReference owner = owner();
-            owner.get(Source.SERVER).addOnSuccessListener(head -> {
+            owner.get(Source.SERVER).addOnSuccessListener(IO, head -> {
                 String revision = head.getString("revisao");
                 if (revision == null) { reply(request, "revision", ""); return; }
+                if (revision.equals(knownRevision)) {
+                    try {
+                        callback.send(request, new JSONObject().put("revision", revision).put("unchanged", true));
+                    } catch (Exception error) { fail(request, error); }
+                    return;
+                }
                 Long count = head.getLong("partes");
                 if (count == null || count < 1 || count > 100) {
                     fail(request, new IllegalStateException("Revisão da nuvem inválida.")); return;
@@ -108,7 +117,7 @@ final class CollectionSync {
                 for (int i = 0; i < count; i++)
                     tasks.add(owner.collection("revisoes").document(revision).collection("partes")
                             .document(String.valueOf(i)).get(Source.SERVER));
-                Tasks.whenAllSuccess(tasks).addOnSuccessListener(parts -> {
+                Tasks.whenAllSuccess(tasks).addOnSuccessListener(IO, parts -> {
                     try {
                         StringBuilder encoded = new StringBuilder();
                         for (Object part : parts) {
@@ -134,6 +143,10 @@ final class CollectionSync {
     }
 
     void write(String request, String expectedRevision, String data) {
+        IO.execute(() -> writeInBackground(request, expectedRevision, data));
+    }
+
+    private void writeInBackground(String request, String expectedRevision, String data) {
         try {
             DocumentReference owner = owner();
             ByteArrayOutputStream output = new ByteArrayOutputStream();

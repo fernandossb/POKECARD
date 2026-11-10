@@ -732,7 +732,7 @@ public final class MainActivity extends Activity {
         @JavascriptInterface public void syncAccount(String request) { collectionSync.account(request); }
         @JavascriptInterface public void syncLogin() { collectionSync.signIn(); }
         @JavascriptInterface public void syncLogout() { collectionSync.signOut(); }
-        @JavascriptInterface public void syncRead(String request) { collectionSync.read(request); }
+        @JavascriptInterface public void syncRead(String request, String revision) { collectionSync.read(request, revision); }
         @JavascriptInterface public void syncWrite(String request, String revision, String data) {
             collectionSync.write(request, revision, data);
         }
