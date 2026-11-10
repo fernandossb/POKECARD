@@ -92,6 +92,11 @@ async function main() {
   assert.equal(writes, 2, 'conflict must never upload');
   assert.equal(context.state.entries.a.quantity, 5);
   assert.match(notification, /conflitantes/);
+  await context.pokecardSyncReply('login', { uid: 'outra-conta', email: 'other@example.com' });
+  context.pokecardSyncStart();
+  await settle();
+  assert.equal(writes, 2, 'another account must never receive the local collection');
+  assert.match(notification, /outra conta/);
   console.log('Ativação, combinação e preservação de conflitos: OK');
 }
 

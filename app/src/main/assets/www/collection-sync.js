@@ -7,6 +7,7 @@
   const STORE = 'revisoes';
   let conta = null;
   let metadata = null;
+  let proprietarioLocal = null;
   let timer = null;
   let executando = false;
   let aplicando = false;
@@ -72,9 +73,12 @@
   async function definirConta(dados) {
     conta = dados.uid ? dados : null;
     autorizarEnvioInicial = false;
+    proprietarioLocal = await carregar('__proprietario');
     metadata = conta ? await carregar(conta.uid) : null;
-    mensagem = conta ? 'Conectado. Aguardando sincronização.' : 'Entre com sua conta Google para sincronizar.';
-    if (conta) agendar();
+    mensagem = conta && proprietarioLocal && proprietarioLocal !== conta.uid
+      ? 'Esta coleção está vinculada a outra conta. Entre com a conta original.'
+      : conta ? 'Conectado. Aguardando sincronização.' : 'Entre com sua conta Google para sincronizar.';
+    if (conta && (!proprietarioLocal || proprietarioLocal === conta.uid)) agendar();
   }
 
   function estadoAtual() {
@@ -115,6 +119,10 @@
   async function sincronizar() {
     if (!conta || !state || executando) return;
     const uid = conta.uid;
+    if (proprietarioLocal && proprietarioLocal !== uid) {
+      mensagem = 'Esta coleção está vinculada a outra conta. Entre com a conta original.';
+      return;
+    }
     executando = true;
     mensagem = 'Sincronizando…';
     try {
@@ -149,6 +157,10 @@
         if (conta?.uid !== uid) return;
         metadata = { revisao, base: remoto };
         await armazenar(uid, metadata);
+        if (!proprietarioLocal) {
+          await armazenar('__proprietario', uid);
+          proprietarioLocal = uid;
+        }
       } else if (metadata?.revisao) {
         throw new Error('A revisão da nuvem não está disponível. A coleção local foi preservada.');
       } else if (!autorizarEnvioInicial) {
@@ -164,6 +176,10 @@
         if (conta?.uid !== uid) return;
         metadata = { revisao: escrita.revision, base: atual };
         await armazenar(uid, metadata);
+        if (!proprietarioLocal) {
+          await armazenar('__proprietario', uid);
+          proprietarioLocal = uid;
+        }
         autorizarEnvioInicial = false;
         if (JSON.stringify(atual) !== JSON.stringify(estadoAtual())) agendar();
       }
@@ -193,6 +209,7 @@
   };
   window.pokecardSyncPanel = () => `<div class="panel sync-conta">
     <strong>Conta e sincronização</strong>
+    <p class="card-meta">Sincroniza coleção, decks e obras pessoais. Fotos locais de cartas não são sincronizadas.</p>
     <p class="card-meta">${esc(conta?.email || mensagem)}</p>
     ${conta ? `<p class="card-meta">${esc(mensagem)}</p>
       <button class="secondary-btn" onclick="pokecardSyncNow()">Sincronizar agora</button>
