@@ -365,7 +365,9 @@ internal data class DraggedCard(val card: CardInstance, val origin: Rect, val po
     val currentStart by rememberUpdatedState(start); val currentMove by rememberUpdatedState(move); val currentFinish by rememberUpdatedState(finish)
     val currentOrigin by rememberUpdatedState(rootOrigin)
     val density = LocalDensity.current
-    val cardWidth = with(density) { (geometry.width*.29f).toDp() }
+    val cardWidth = with(density) {
+        minOf(geometry.width*.29f, geometry.height*.30f*.727f).toDp()
+    }
     val cardHeight = cardWidth/.727f
     var priorCount by remember { mutableIntStateOf(cards.size) }
     LaunchedEffect(cards.size, reveal) {

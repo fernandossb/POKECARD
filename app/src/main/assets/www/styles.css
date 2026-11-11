@@ -6895,3 +6895,17 @@ html.camera-ao-vivo::before { display: none !important; }
   -webkit-backdrop-filter: blur(25px) !important;
   border-top: 1px solid var(--v5-borda-forte) !important;
 }
+
+/* Evita repintura contínua e desfoque por componente em WebViews móveis. */
+.gengar-header-art, .progress > span { animation: none !important; }
+.field, .progress, .badge, .modal-sheet {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

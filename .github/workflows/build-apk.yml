@@ -3,7 +3,7 @@ name: Gerar APK direto e AAB Google Play
 on:
   workflow_dispatch:
   push:
-    branches: ["main"]
+    branches: ["main", "codex/tablet-performance"]
 
 permissions:
   contents: write

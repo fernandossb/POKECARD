@@ -30,8 +30,11 @@ internal val BoardBlue = Color(0xFF599BC6)
 @Composable internal fun BattleBoard(state: GameState, geometry: BattleGeometry, engine: RulesEngine, reveal: Boolean,
     highlights: List<Rect>, hover: Rect?, hoverValid: Boolean, pace: AnimationPace,
     attackProgress: Float, attackSource: String?, attackTarget: String?, incoming: Set<String>, inspect: (CardInstance) -> Unit, discard: (Int) -> Unit, prizes: () -> Unit) {
-    val pulse = rememberInfiniteTransition(label = "drop glow")
-    val glow by pulse.animateFloat(.35f, .85f, infiniteRepeatable(tween(800), RepeatMode.Reverse), label = "drop pulse")
+    val glow = if (highlights.isNotEmpty() && pace != AnimationPace.OFF) {
+        val pulse = rememberInfiniteTransition(label = "drop glow")
+        val animatedGlow by pulse.animateFloat(.35f, .85f, infiniteRepeatable(tween(800), RepeatMode.Reverse), label = "drop pulse")
+        animatedGlow
+    } else .6f
     Canvas(Modifier.fillMaxSize()) {
         drawRect(Brush.verticalGradient(listOf(Color(0xFF19333D), Color(0xFF102B3C))))
         val oval = Rect(-size.width*.29f, -size.height*.015f, size.width*1.29f, size.height*.965f)
