@@ -63,11 +63,11 @@ function bolsosDoFichario(setId) {
 function arteDoBolso(bolso) {
   // A foto que você escolheu para esta versão vale mais que a do catálogo.
   const comFoto = bolso.linha.donos.find(variant => variant.imageUrl);
-  if (comFoto) return upgradeCardImageUrl(comFoto.imageUrl) || '';
+  if (comFoto) return cardGridImage(bolso.card, comFoto) || '';
   const boa = ficharioArteBoa.get(bolso.card.id);
-  if (boa) return boa;
-  // Resolução cheia: o bolso é bem maior que a miniatura da grade.
-  return upgradeCardImageUrl(cardGridImage(bolso.card, null)) || '';
+  if (boa) return rebaixarParaMiniatura(boa) || boa;
+  // O bolso exibe a carta pequena; a imagem em alta resolução só é pedida ao ampliar.
+  return cardGridImage(bolso.card, null) || '';
 }
 
 function bolsoDoFicharioHtml(bolso, indice) {
@@ -155,9 +155,8 @@ function montarPaginaDoFichario(indice) {
   luz.setAttribute('aria-hidden', 'true');
   pagina.appendChild(luz);
   pagina.dataset.indice = String(indice);
-  // Imagem decodificada antes de aparecer: a folha de baixo não "pisca"
-  // carregando quando a de cima sai da frente.
-  pagina.querySelectorAll('img[src]').forEach(img => { if (img.decode) img.decode().catch(() => {}); });
+  // decoding=async evita bloquear a montagem/virada para decodificar todas as
+  // imagens das três páginas. As miniaturas mantêm leve a textura de cada folha.
   return pagina;
 }
 
@@ -470,7 +469,8 @@ function abrirZoomDoFichario(botao) {
   const bolso = E.bolsos[Number(botao.dataset.i)];
   if (!bolso || E.zoom) return;
   const img = botao.querySelector('img');
-  const url = img && img.getAttribute('src') ? (img.currentSrc || img.src) : '';
+  const miniatura = img && img.getAttribute('src') ? (img.currentSrc || img.src) : '';
+  const url = miniatura ? (upgradeCardImageUrl(miniatura) || miniatura) : '';
   const origem = (img || botao).getBoundingClientRect();
   const foil = bolso.tem ? brilhoDaVariante(bolso.linha.identidade) : '';
   const quantas = bolso.linha.quantidade;
@@ -553,8 +553,7 @@ function ficharioArteFalhou(evento) {
 }
 
 /* A mesma cascata de fontes da Coleção (catálogo, espelho em inglês, CDN,
-   APIs), na resolução cheia quando a fonte tem. Sem nenhuma, fica um verso
-   de carta no bolso. */
+   APIs), priorizando miniaturas. Sem arte disponível, fica um verso no bolso. */
 async function trocarArteDoFichario(img) {
   const cardId = img.dataset.carta;
   const tentadas = new Set(String(img.dataset.tentadas || '').split('\n').filter(Boolean));
@@ -566,9 +565,9 @@ async function trocarArteDoFichario(img) {
   if (!ficharioEstado.el) return;
   const lista = [];
   for (const url of candidatas) {
-    const alta = upgradeCardImageUrl(url);
-    if (alta) lista.push(alta);
-    if (url) lista.push(url);
+    const miniatura = rebaixarParaMiniatura(url);
+    if (miniatura) lista.push(miniatura);
+    if (url && url !== miniatura) lista.push(url);
   }
   const proxima = lista.find(url => !tentadas.has(url));
   if (proxima) {

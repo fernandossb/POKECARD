@@ -1,3 +1,10 @@
+# POKECARD Brasil 5.99.64 — Explorar e Fichário mais leves
+
+- Cartões de coleção deixam de aplicar desfoque individual em listas longas.
+- O Fichário usa miniaturas durante a navegação e carrega alta resolução ao ampliar uma carta.
+- A montagem das folhas não força a decodificação simultânea das imagens das páginas vizinhas.
+- Versão Android 266 (5.99.64).
+
 # POKECARD Brasil 5.99.58 — Sincronização entre aparelhos
 
 - Entre com Google para sincronizar coleção, decks e obras pessoais.
