@@ -1740,7 +1740,7 @@ function adiantarLotesDaLista(listaDeCartas, tentados = new Set()) {
 
 function atualizarLinhasVisiveisEmSegundoPlano(listaDeCartas) {
   if (!listaDeCartas.length) return;
-  if (!podeAtualizarLinhasNoLugar()) { agendarRenderKeepingScroll(); return; }
+  if (!podeAtualizarMetadadosNoLugar()) { agendarRenderKeepingScroll(); return; }
   updateHeader();
   for (const card of listaDeCartas) replaceCardRowInPlace(card.id);
 }
@@ -1766,7 +1766,8 @@ function adiantarVariacoesDaLista(listaDeCartas) {
       .catch(() => {})
       .then(() => {
         variacoesEmAndamento--;
-        if (podeAtualizarLinhasNoLugar()) replaceCardRowInPlace(card.id);
+        if (podeAtualizarMetadadosNoLugar()) replaceCardRowInPlace(card.id);
+        else agendarRenderKeepingScroll();
         // Reabre a vaga para a próxima carta ainda não consultada da mesma
         // lista — sem isto, a busca parava depois da primeira leva porque
         // nada mais chama esta função de volta.
@@ -3130,6 +3131,14 @@ function podeAtualizarLinhasNoLugar() {
   if (!['cards', 'wishlist', 'repeated'].includes(ui.tab)) return false;
   const filter = currentCardFilter();
   return !(['owned', 'missing', 'repeated', 'trade'].includes(filter) || ui.cardSort === 'quantity' || ui.cardSort === 'recent');
+}
+
+// Preços e acabamentos não mudam a participação nos filtros Tenho, Quero ou
+// Duplicadas. Atualize só a linha, exceto quando preço determina ordem/filtro.
+function podeAtualizarMetadadosNoLugar() {
+  if (!['cards', 'wishlist', 'repeated'].includes(ui.tab)) return false;
+  const filter = currentCardFilter();
+  return !(['price-review', 'trade'].includes(filter) || ui.cardSort === 'price-desc');
 }
 
 function replaceCardRowInPlace(cardId) {
