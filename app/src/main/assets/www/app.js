@@ -9743,6 +9743,12 @@ function renderCardRow(card) {
   const cardVariants = variantsFor(card.id);
   const displayVariant = cardVariants.find(item => item.imageUrl) || cardVariants[0];
   const displayImage = cardGridImage(card, displayVariant);
+  if (ui.tab === 'cards' && currentCardFilter() === 'owned') {
+    return `<article class="card-row vision-card-tile owned-compact" data-card-id="${esc(card.id)}" onclick="openCard('${esc(card.id)}')">
+      <div class="vision-card-art">${displayImage ? `<img class="card-thumb" src="${esc(displayImage)}" loading="lazy" decoding="async" fetchpriority="low" onerror="this.outerHTML='<div class=&quot;card-placeholder&quot;>TCG</div>'">` : '<div class="card-placeholder">TCG</div>'}<span class="tile-quantity-badge">x${quantity}</span></div>
+      <div class="card-main"><div class="card-name">${esc(card.name)}</div></div>
+    </article>`;
+  }
   const priceBadge = priceBadgeForCard(card.id);
   // A etiqueta única de acabamento saiu: as etiquetas de versão embaixo da
   // arte dizem a mesma coisa e ainda mostram o que falta.
