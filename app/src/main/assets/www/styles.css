@@ -6901,6 +6901,12 @@ html.camera-ao-vivo::before { display: none !important; }
 .progress > span {
   animation: none !important;
 }
+
+/* Evita recalcular o conteúdo atrás de cada carta enquanto a grade rola. */
+.card-list .card-row {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
 .field,
 .progress,
 .badge,
