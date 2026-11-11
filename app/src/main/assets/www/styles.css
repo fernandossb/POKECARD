@@ -6897,8 +6897,14 @@ html.camera-ao-vivo::before { display: none !important; }
 }
 
 /* Evita repintura contínua e desfoque por componente em WebViews móveis. */
-.gengar-header-art, .progress > span { animation: none !important; }
-.field, .progress, .badge, .modal-sheet {
+.gengar-header-art,
+.progress > span {
+  animation: none !important;
+}
+.field,
+.progress,
+.badge,
+.modal-sheet {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
@@ -6908,4 +6914,12 @@ html.camera-ao-vivo::before { display: none !important; }
     transition: none !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Brilhos estáticos evitam repintar todas as cartas possuídas a cada quadro. */
+.vision-card-art.brilho-holo::after,
+.vision-card-art.brilho-reverse::after,
+.card-row.completa .vision-card-art::after {
+  animation: none !important;
+  opacity: .2;
 }

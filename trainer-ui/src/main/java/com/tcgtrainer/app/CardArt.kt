@@ -14,6 +14,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -27,7 +28,11 @@ import java.net.HttpURLConnection
 import java.net.URI
 import java.security.MessageDigest
 
-private object ArtCache { val bitmaps = android.util.LruCache<String, ImageBitmap>(32) }
+private object ArtCache {
+    val bitmaps = object : android.util.LruCache<String, ImageBitmap>(16 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: ImageBitmap): Int = value.asAndroidBitmap().allocationByteCount
+    }
+}
 
 /** Loads cover art without resolving the entire executable catalog on the UI thread. */
 @Composable internal fun CardArt(cardId: String, modifier: Modifier = Modifier) {
@@ -50,6 +55,7 @@ private object ArtCache { val bitmaps = android.util.LruCache<String, ImageBitma
     val context = LocalContext.current
     var bitmap by remember(card.id) { mutableStateOf(ArtCache.bitmaps.get(card.id)) }
     LaunchedEffect(card.id) {
+        if (bitmap != null) return@LaunchedEffect
         bitmap = withContext(Dispatchers.IO) {
             card.artAsset?.let { path -> runCatching {
                 if (!path.startsWith("remote:")) context.assets.open(path).use { BitmapFactory.decodeStream(it)?.asImageBitmap() }

@@ -89,6 +89,7 @@ jobs:
           node scripts/test-pwa.cjs
           node scripts/test-sync-merge.cjs
           node scripts/test-collection-sync.cjs
+          node scripts/test-price-prefetch.cjs
 
       - name: Compilar APK direto e AAB Google Play assinados
         env:

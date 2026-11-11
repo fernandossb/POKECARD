@@ -1703,13 +1703,13 @@ function centralShardFileName(index) {
    ===================================================================== */
 let lotesEmAndamento = new Set();
 
-function adiantarLotesDaLista(listaDeCartas) {
+function adiantarLotesDaLista(listaDeCartas, tentados = new Set()) {
   if (!centralPriceIndex?.cards) return;
   const lotes = new Set();
   for (const card of listaDeCartas.slice(0, 60)) {
     const indice = Number(centralPriceIndex.cards[card.id]);
     if (Number.isInteger(indice) && indice >= 0
-      && !centralPriceLoadedShards.has(indice) && !lotesEmAndamento.has(indice)) {
+      && !centralPriceLoadedShards.has(indice) && !lotesEmAndamento.has(indice) && !tentados.has(indice)) {
       lotes.add(indice);
     }
   }
@@ -1717,6 +1717,7 @@ function adiantarLotesDaLista(listaDeCartas) {
 
   // Poucos por vez: a lista precisa continuar rolando sem travar.
   for (const indice of [...lotes].slice(0, 3)) {
+    tentados.add(indice);
     lotesEmAndamento.add(indice);
     const cartasDoLote = listaDeCartas.filter(item => Number(centralPriceIndex.cards[item.id]) === indice);
     const carta = cartasDoLote[0];
@@ -1732,7 +1733,7 @@ function adiantarLotesDaLista(listaDeCartas) {
         // Sem o redesenho completo de antes, ninguém mais chama de volta esta
         // função sozinho: ela mesma precisa reabrir a vaga que acabou de
         // sobrar, senão os lotes seguintes da lista nunca chegam a pedir.
-        adiantarLotesDaLista(listaDeCartas);
+        adiantarLotesDaLista(listaDeCartas, tentados);
       });
   }
 }
