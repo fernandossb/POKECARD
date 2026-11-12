@@ -9837,9 +9837,17 @@ function renderCardRow(card) {
   const displayVariant = cardVariants.find(item => item.imageUrl) || cardVariants[0];
   const displayImage = cardGridImage(card, displayVariant);
   if (ui.tab === 'cards' && currentCardFilter() === 'owned') {
+    const priceBadge = priceBadgeForCard(card.id);
+    const number = String(card.number || '').includes('/')
+      ? card.number
+      : formatCardNumber(card.localId || card.number, card.setTotal);
     return `<article class="card-row vision-card-tile owned-compact" data-card-id="${esc(card.id)}" onclick="openCard('${esc(card.id)}')">
       <div class="vision-card-art">${displayImage ? `<img class="card-thumb" src="${esc(displayImage)}" loading="lazy" decoding="async" fetchpriority="low" onerror="this.outerHTML='<div class=&quot;card-placeholder&quot;>TCG</div>'">` : '<div class="card-placeholder">TCG</div>'}<span class="tile-quantity-badge">x${quantity}</span></div>
-      <div class="card-main"><div class="card-name">${esc(card.name)}</div></div>
+      <div class="card-main">
+        <div class="card-name">${esc(card.name)}</div>
+        <div class="card-meta">${esc(number || 'Sem número')} · ${esc(card.setName)}</div>
+        <div class="tile-price-row"><span>${priceBadge ? esc(priceBadge) : 'Sem preço'}</span></div>
+      </div>
     </article>`;
   }
   const priceBadge = priceBadgeForCard(card.id);

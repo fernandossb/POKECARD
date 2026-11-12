@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.99.66 — Informações restauradas em Tenho
+
+- A lista Tenho volta a mostrar nome, número e valor da carta.
+- Mantém a renderização compacta e sem desfoque individual nos cartões.
+- Versão Android 268 (5.99.66).
+
 # POKECARD Brasil 5.99.65 — Carregar mais sem perder a posição
 
 - Cartas e Pokémon são acrescentados ao fim das listas existentes, mantendo o conteúdo já visível e a posição de rolagem.
