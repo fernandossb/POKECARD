@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.99.65 — Carregar mais sem perder a posição
+
+- Cartas e Pokémon são acrescentados ao fim das listas existentes, mantendo o conteúdo já visível e a posição de rolagem.
+- A Pokédex atualiza a grade e a contagem da região sem reconstruir os Pokémon que já estavam na tela.
+- Versão Android 267 (5.99.65).
+
 # POKECARD Brasil 5.99.64 — Explorar e Fichário mais leves
 
 - Cartões de coleção deixam de aplicar desfoque individual em listas longas.

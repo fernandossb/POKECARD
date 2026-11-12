@@ -6426,13 +6426,106 @@ function limiteDeCartasVisiveis() {
 const LIMITE_MAXIMO_DE_CARTAS_NA_TELA = 300;
 
 function expandirLimiteDeCartas() {
-  ui.cardLimit = Math.min(ui.cardLimit + 60, LIMITE_MAXIMO_DE_CARTAS_NA_TELA);
-  refreshSearchResults('cardQuery', true);
+  const alvo = document.getElementById('cardSearchResults');
+  const listaEl = alvo?.querySelector('.card-list');
+  const botao = botaoDiretoDeMais(alvo);
+  const inicio = ui.cardLimit;
+  ui.cardLimit = Math.min(inicio + 60, LIMITE_MAXIMO_DE_CARTAS_NA_TELA);
+  if (!alvo || !listaEl || !botao) {
+    refreshSearchResults('cardQuery', true);
+    return;
+  }
+
+  // O lote anterior continua montado; só entram as novas linhas no fim.
+  const existentes = [...listaEl.children].filter(item => item.matches('.card-row')).length;
+  if (existentes !== inicio) {
+    refreshSearchResults('cardQuery', true);
+    return;
+  }
+
+  const trocando = currentCardFilter() === 'trade';
+  const resultado = trocando ? sobrasParaTrocar() : filteredCardsForUi().result;
+  const novos = resultado.slice(inicio, ui.cardLimit);
+  if (trocando) {
+    listaEl.insertAdjacentHTML('beforeend', novos.map(renderLinhaDeSobra).join(''));
+  } else {
+    adiantarLotesDaLista(novos);
+    adiantarVariacoesDaLista(novos);
+    listaEl.insertAdjacentHTML('beforeend', novos.map(renderCardRow).join(''));
+  }
+
+  atualizarBotaoMostrarMais(alvo, existentes + novos.length, resultado.length,
+    ui.cardLimit, LIMITE_MAXIMO_DE_CARTAS_NA_TELA, 60,
+    'expandirLimiteDeCartas', trocando ? 'versões' : 'cartas');
 }
 
 function expandirLimiteDaDex() {
+  const alvo = document.getElementById('dexSearchResults');
+  const botao = botaoDiretoDeMais(alvo);
+  const inicio = ui.dexLimit;
   ui.dexLimit += 180;
-  refreshSearchResults('dexQuery', true);
+  if (!alvo || !botao) {
+    refreshSearchResults('dexQuery', true);
+    return;
+  }
+
+  const { result, stats } = filteredPokedexForUi();
+  const existentes = alvo.querySelectorAll('.pokemon-tile').length;
+  if (existentes !== Math.min(inicio, result.length)) {
+    refreshSearchResults('dexQuery', true);
+    return;
+  }
+
+  const novosPorRegiao = new Map();
+  const novos = result.slice(inicio, ui.dexLimit);
+  for (const item of novos) {
+    if (!novosPorRegiao.has(item.region)) novosPorRegiao.set(item.region, []);
+    novosPorRegiao.get(item.region).push(item);
+  }
+  for (const [region, items] of novosPorRegiao) {
+    const secao = [...alvo.querySelectorAll('.region-section')]
+      .find(item => item.dataset.region === region);
+    if (!secao) {
+      const html = renderRegion(region, items, stats);
+      botao.insertAdjacentHTML('beforebegin', html);
+      continue;
+    }
+
+    const grade = secao.querySelector('.pokemon-grid');
+    if (!grade) continue;
+    grade.insertAdjacentHTML('beforeend', items
+      .map(item => renderPokemonTile(item, estatisticaDoQuadro(item))).join(''));
+    const resumo = secao.querySelector('.region-heading span');
+    if (resumo) {
+      const total = Number(resumo.dataset.total || (grade.children.length - items.length)) + items.length;
+      const comCartas = Number(resumo.dataset.comCartas || 0)
+        + items.filter(item => estatisticaDoQuadro(item).copies > 0).length;
+      resumo.dataset.total = String(total);
+      resumo.dataset.comCartas = String(comCartas);
+      resumo.textContent = `${comCartas} com cartas · ${total} exibidos`;
+    }
+  }
+
+  atualizarBotaoMostrarMais(alvo, existentes + novos.length,
+    result.length, ui.dexLimit, Infinity, 180, 'expandirLimiteDaDex', 'Pokémon');
+}
+
+function botaoDiretoDeMais(alvo) {
+  return [...(alvo?.children || [])].find(item =>
+    item.matches('.load-more, .load-more-limite')) || null;
+}
+
+function atualizarBotaoMostrarMais(alvo, visiveis, total, limite, teto,
+  quantidade, expandirFn, unidade) {
+  const anterior = botaoDiretoDeMais(alvo);
+  const html = botaoMostrarMais(visiveis, total, limite, teto,
+    quantidade, expandirFn, unidade);
+  if (anterior) {
+    if (html) anterior.outerHTML = html;
+    else anterior.remove();
+  } else if (html) {
+    alvo.insertAdjacentHTML('beforeend', html);
+  }
 }
 
 // O botão "Mostrar mais", ou o aviso de que bateu no teto — mesma lógica
@@ -10392,8 +10485,8 @@ function escolherTipoDaDex(tipo) {
 
 function renderRegion(region, items, stats) {
   const owned = items.filter(item => estatisticaDoQuadro(item).copies > 0).length;
-  return `<section class="region-section">
-    <div class="region-heading"><h3>${esc(region)}</h3><span>${owned} com cartas · ${items.length} exibidos</span></div>
+  return `<section class="region-section" data-region="${esc(region)}">
+    <div class="region-heading"><h3>${esc(region)}</h3><span data-com-cartas="${owned}" data-total="${items.length}">${owned} com cartas · ${items.length} exibidos</span></div>
     <div class="pokemon-grid">${items.map(item => renderPokemonTile(item, estatisticaDoQuadro(item))).join('')}</div>
   </section>`;
 }
