@@ -13,7 +13,6 @@ import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.GoogleAuthProvider;
 import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.FirebaseFirestore;
-import com.google.firebase.firestore.Source;
 import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
@@ -100,12 +99,24 @@ final class CollectionSync {
     void read(String request, String knownRevision) {
         try {
             DocumentReference owner = owner();
-            owner.get(Source.SERVER).addOnSuccessListener(IO, head -> {
+            // Use DEFAULT so Firestore can return its cached copy if a tablet
+            // temporarily cannot reach the server. The JS side checks
+            // isFromCache() and must not report a successful cloud sync or
+            // upload against a cached revision.
+            owner.get().addOnSuccessListener(IO, head -> {
                 String revision = head.getString("revisao");
-                if (revision == null) { reply(request, "revision", ""); return; }
+                boolean fromCache = head.getMetadata().isFromCache();
+                if (revision == null) {
+                    try {
+                        callback.send(request, new JSONObject().put("revision", "")
+                                .put("fromCache", fromCache));
+                    } catch (Exception error) { fail(request, error); }
+                    return;
+                }
                 if (revision.equals(knownRevision)) {
                     try {
-                        callback.send(request, new JSONObject().put("revision", revision).put("unchanged", true));
+                        callback.send(request, new JSONObject().put("revision", revision)
+                                .put("unchanged", true).put("fromCache", fromCache));
                     } catch (Exception error) { fail(request, error); }
                     return;
                 }
@@ -116,12 +127,16 @@ final class CollectionSync {
                 List<Task<com.google.firebase.firestore.DocumentSnapshot>> tasks = new ArrayList<>();
                 for (int i = 0; i < count; i++)
                     tasks.add(owner.collection("revisoes").document(revision).collection("partes")
-                            .document(String.valueOf(i)).get(Source.SERVER));
+                            .document(String.valueOf(i)).get());
                 Tasks.whenAllSuccess(tasks).addOnSuccessListener(IO, parts -> {
                     try {
                         StringBuilder encoded = new StringBuilder();
+                        boolean anyFromCache = fromCache;
                         for (Object part : parts) {
-                            String value = ((com.google.firebase.firestore.DocumentSnapshot) part).getString("dados");
+                            com.google.firebase.firestore.DocumentSnapshot snapshot =
+                                    (com.google.firebase.firestore.DocumentSnapshot) part;
+                            anyFromCache |= snapshot.getMetadata().isFromCache();
+                            String value = snapshot.getString("dados");
                             if (value == null) throw new IllegalStateException("Parte da revisão ausente.");
                             encoded.append(value);
                         }
@@ -135,7 +150,8 @@ final class CollectionSync {
                             if (output.size() > 30000000) throw new IllegalStateException("Coleção excede o limite.");
                         }
                         callback.send(request, new JSONObject().put("revision", revision)
-                                .put("data", new String(output.toByteArray(), StandardCharsets.UTF_8)));
+                                .put("data", new String(output.toByteArray(), StandardCharsets.UTF_8))
+                                .put("fromCache", anyFromCache));
                     } catch (Exception error) { fail(request, error); }
                 }).addOnFailureListener(error -> fail(request, error));
             }).addOnFailureListener(error -> fail(request, error));

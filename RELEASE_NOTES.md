@@ -1,3 +1,10 @@
+# POKECARD Brasil 5.99.68 — Sincronização resiliente no tablet
+
+- Leituras da coleção podem usar a última revisão salva pelo Firestore quando a conexão oscila.
+- Dados em cache ficam identificados como pendentes e nunca são enviados como se fossem a versão confirmada na nuvem.
+- O aparelho continua tentando atualizar automaticamente quando a conexão volta; os dados locais permanecem preservados.
+- Versão Android 270 (5.99.68).
+
 # POKECARD Brasil 5.99.67 — Sincronização mais tolerante a alterações simultâneas
 
 - Decks, variantes com identificador e obras pessoais podem combinar alterações independentes feitas em aparelhos diferentes.

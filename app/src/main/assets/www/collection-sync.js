@@ -157,11 +157,21 @@
       }
       const resposta = await solicitar('syncRead', metadata?.revisao || '');
       if (conta?.uid !== uid) return;
+      // Cached immutable revisions can keep the collection usable during
+      // connectivity problems, but are not proof that this device is current
+      // with the server and must never become the expected revision for a write.
+      const dadosEmCache = resposta.fromCache === true;
+      if (dadosEmCache && !resposta.revision && !resposta.unchanged) {
+        mensagem = 'Sem conexão estável com o servidor. A coleção local foi preservada; vou tentar novamente automaticamente.';
+        return;
+      }
       if (resposta.unchanged && (!metadata || resposta.revision !== metadata.revisao))
         throw new Error('A revisão local não corresponde à nuvem.');
       if (resposta.unchanged && alteracoesLocais === ultimaVerificacaoLocal) {
-        mensagem = 'Coleção sincronizada.';
-        ultimaMensagemNotificada = '';
+        mensagem = dadosEmCache
+          ? 'Última cópia conhecida carregada. Aguardando confirmação do servidor.'
+          : 'Coleção sincronizada.';
+        if (!dadosEmCache) ultimaMensagemNotificada = '';
         return;
       }
       const local = estadoAtual();
@@ -220,6 +230,10 @@
       const base = metadata?.base;
       const comparacao = base && PokecardSyncMerge.combinar(base, atual, base);
       if (!base || JSON.stringify(comparacao.dados) !== JSON.stringify(base)) {
+        if (dadosEmCache) {
+          mensagem = 'Cópia conhecida carregada; alterações locais aguardam conexão para enviar.';
+          return;
+        }
         const escrita = await solicitar('syncWrite', revisao, JSON.stringify(atual));
         if (conta?.uid !== uid) return;
         metadata = { revisao: escrita.revision, base: atual };
@@ -229,6 +243,10 @@
           proprietarioLocal = uid;
         }
         autorizarEnvioInicial = false;
+      }
+      if (dadosEmCache) {
+        mensagem = 'Coleção carregada da última cópia conhecida. Aguardando confirmação do servidor.';
+        return;
       }
       if (alteracoesLocais === alteracoesProcessadas) ultimaVerificacaoLocal = alteracoesLocais;
       else agendar();
