@@ -1,3 +1,10 @@
+# POKECARD Brasil 5.99.67 — Sincronização mais tolerante a alterações simultâneas
+
+- Decks, variantes com identificador e obras pessoais podem combinar alterações independentes feitas em aparelhos diferentes.
+- Conflitos reais continuam preservando os dados locais; falhas de conexão informam que os dados permanecem salvos no aparelho.
+- Verificações automáticas de atualização deixam de exibir erros temporários do GitHub no rodapé.
+- Versão Android 269 (5.99.67).
+
 # POKECARD Brasil 5.99.66 — Informações restauradas em Tenho
 
 - A lista Tenho volta a mostrar nome, número e valor da carta.

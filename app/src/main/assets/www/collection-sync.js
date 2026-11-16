@@ -18,6 +18,7 @@
   let sequencia = 0;
   let alteracoesLocais = 0;
   let ultimaVerificacaoLocal = -1;
+  let ultimaMensagemNotificada = '';
   const chamadas = new Map();
   let mensagem = 'Entre com sua conta Google para sincronizar.';
 
@@ -94,6 +95,17 @@
     return JSON.parse(JSON.stringify(state));
   }
 
+  function erroDeConexao(error) {
+    const texto = String(error?.message || error || '');
+    return /failed to get document from server|read timed out|unavailable|deadline_exceeded|network|connection|socket|offline|timeout|temporarily/i.test(texto);
+  }
+
+  function notificarUmaVez(texto) {
+    if (!texto || texto === ultimaMensagemNotificada) return;
+    ultimaMensagemNotificada = texto;
+    notify(texto);
+  }
+
   function vazio(dados) {
     function semConteudo(valor) {
       if (valor == null || valor === false || valor === '') return true;
@@ -149,6 +161,7 @@
         throw new Error('A revisão local não corresponde à nuvem.');
       if (resposta.unchanged && alteracoesLocais === ultimaVerificacaoLocal) {
         mensagem = 'Coleção sincronizada.';
+        ultimaMensagemNotificada = '';
         return;
       }
       const local = estadoAtual();
@@ -176,7 +189,6 @@
           const combinado = PokecardSyncMerge.combinar(metadata.base, local, remoto);
           if (combinado.conflitos.length) {
             mensagem = 'Alterações conflitantes. A coleção local foi preservada; exporte um backup.';
-            notify(mensagem);
             return;
           }
           resultado = combinado.dados;
@@ -221,8 +233,11 @@
       if (alteracoesLocais === alteracoesProcessadas) ultimaVerificacaoLocal = alteracoesLocais;
       else agendar();
       mensagem = 'Coleção sincronizada.';
+      ultimaMensagemNotificada = '';
     } catch (error) {
-      mensagem = 'Sincronização pendente. ' + (error.message || 'Tente novamente com internet.');
+      mensagem = erroDeConexao(error)
+        ? 'Sincronização pendente. Os dados continuam salvos neste aparelho; confira a conexão e tente novamente.'
+        : 'Sincronização não concluída. Os dados locais foram preservados. ' + (error.message || 'Tente novamente.');
       if (/CONFLICT/.test(error.message || '')) agendar();
     } finally {
       executando = false;
@@ -238,7 +253,7 @@
   window.pokecardSyncChanged = () => { alteracoesLocais++; agendar(); };
   window.pokecardSyncLogin = () => window.Android.syncLogin();
   window.pokecardSyncLogout = () => window.Android.syncLogout();
-  window.pokecardSyncNow = () => { sincronizar().then(() => { notify(mensagem); openBackupPanel(); }); };
+  window.pokecardSyncNow = () => { sincronizar().then(() => { notificarUmaVez(mensagem); openBackupPanel(); }); };
   window.pokecardSyncStart = () => {
     if (!confirm('Enviar a coleção deste aparelho para sua conta Google?')) return;
     autorizarEnvioInicial = true;

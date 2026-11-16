@@ -84,6 +84,7 @@ let lastPriceDiagnostic = '';
 let selectedDeckId = null;
 let latestUpdateInfo = null;
 let updateCheckInProgress = false;
+let updateCheckManual = false;
 let centralPriceData = { meta: {}, prices: {}, variantCatalog: {} };
 let centralPriceStatus = {};
 let centralPriceIndex = { meta: {}, cards: {} };
@@ -12667,6 +12668,7 @@ function checkForAppUpdate(manual = true) {
     return;
   }
   updateCheckInProgress = true;
+  updateCheckManual = manual;
   if (manual) notify('Verificando atualizações...');
   window.Android.checkForUpdate();
 }
@@ -12676,9 +12678,16 @@ window.receiveUpdateInfo = function(raw) {
   try {
     const info = typeof raw === 'string' ? JSON.parse(raw) : raw;
     if (!info?.ok) {
-      if (info?.error) notify(`Atualização: ${info.error}`);
+      if (updateCheckManual && info?.error) {
+        const erro = String(info.error);
+        notify(/timed out|timeout|network|connection|unable to resolve|failed to connect/i.test(erro)
+          ? 'Não foi possível consultar as atualizações agora. Confira a internet e tente novamente.'
+          : `Falha ao consultar atualizações: ${erro}`);
+      }
+      updateCheckManual = false;
       return;
     }
+    updateCheckManual = false;
     latestUpdateInfo = info;
     if (!info.updateAvailable) {
       if (document.getElementById('modal') && !document.getElementById('modal').classList.contains('hidden')) {
