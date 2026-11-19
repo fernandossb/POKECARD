@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.99.69 — Preços Liga Pokémon reconhecidos na coleção
+
+- Variantes com correspondência exata e preço publicado pela Liga deixam de aparecer em “Preços pendentes” sem exigir valor manual.
+- Versões sem preço Liga correspondente continuam pendentes para conferência.
+- Versão Android 271 (5.99.69).
+
 # POKECARD Brasil 5.99.68 — Sincronização resiliente no tablet
 
 - Leituras da coleção podem usar a última revisão salva pelo Firestore quando a conexão oscila.

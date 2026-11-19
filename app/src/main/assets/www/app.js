@@ -5757,14 +5757,21 @@ function precoManualExpirado(variant) {
   return Date.now() >= limite.getTime();
 }
 
-/* "Preços pendentes" é sobre CONFIRMAÇÃO MANUAL, não sobre a confiança da
-   correspondência automática (isso já tem o próprio fluxo, em
-   automaticPriceBox/confirmAutomaticPrice). Toda carta sem valor manual em
-   dia fica pendente — o valor do Pokémon Price Database Brasil continua
-   sendo mostrado normalmente, só a etiqueta de "revisar" que muda. */
+function ligaPriceQuoteForVariant(cardId, variant) {
+  const stored = storedAutomaticPriceQuote(variant);
+  if (stored?.priceMarket === 'ligapokemon' && stored.confidence === 'verified' && hasFiniteNumber(stored.brl)) return stored;
+  const live = automaticPriceQuote(cardId, variant || 'normal');
+  return live?.priceMarket === 'ligapokemon' && live.confidence === 'verified' && hasFiniteNumber(live.brl)
+    ? live
+    : null;
+}
+
+/* Um preço exato publicado pela Liga dispensa confirmação manual. Preço de
+   outro mercado ou correspondência ainda em revisão continua pendente. */
 function pendingPriceQuoteForVariant(cardId, variant) {
   if (!variant || Number(variant.quantity) <= 0) return null;
   if (hasFiniteNumber(variant.manualEstimatedValue) && !precoManualExpirado(variant)) return null;
+  if (ligaPriceQuoteForVariant(cardId, variant)) return null;
   return storedAutomaticPriceQuote(variant) || automaticPriceQuote(cardId, variant.finish || 'normal') || { brl: null, pending: true };
 }
 
