@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.99.71 — Vinculação de preços holográficos
+
+- O enum `holofoil` agora pode usar o preço publicado como `holo` quando o catálogo confirma que a carta realmente possui acabamento holográfico.
+- A equivalência não usa preços `holo` que representam reverse em cartas sem holográfica.
+- Versão Android 273 (5.99.71).
+
 # POKECARD Brasil 5.99.70 — Preços MYP Cards somente de vendedores verificados
 
 - Preços MYP Cards só são exibidos e retiram cartas de “Preços pendentes” quando o registro inclui ID do vendedor e confirmação explícita de vendedor verificado.

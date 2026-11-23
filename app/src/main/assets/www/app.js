@@ -906,7 +906,7 @@ function versoesDoTcgplayer(cardId, idioma) {
    null      → o banco não tem preço confiável para esta versão. */
 function versaoQueTemOPreco(cardId, valor, idioma) {
   const exato = exactSourceEnum(valor);
-  if (!['holo', 'reverse', 'reverse-holofoil'].includes(exato)) return undefined;
+  if (!['holo', 'holofoil', 'unlimited-holofoil', 'reverse', 'reverse-holofoil'].includes(exato)) return undefined;
   const sentido = sentidoDoCardmarket(cardId, idioma);
   if (!sentido) return undefined;
   const tem = nome => Boolean(centralPriceResolveKey(cardId, idioma || 'pt-br', nome));
@@ -915,6 +915,18 @@ function versaoQueTemOPreco(cardId, valor, idioma) {
     if (!sentido.holoDeVerdade) return undefined;
     return ['holofoil', 'unlimited-holofoil', sentido.normalEhHolo ? 'normal' : '']
       .find(nome => nome && tem(nome)) || null;
+  }
+  if (['holofoil', 'unlimited-holofoil'].includes(exato)) {
+    // TCGplayer chama a versão de "holofoil"; a Liga e o Cardmarket podem
+    // publicar a mesma holo como "holo". Só fazemos essa ponte quando o
+    // catálogo confirma que esta carta realmente tem acabamento holo — em
+    // cartas sem holo, "holo" do Cardmarket pode ser o preço do reverse.
+    if (tem(exato)) return undefined;
+    const outroNomeHolo = exato === 'holofoil' ? 'unlimited-holofoil' : 'holofoil';
+    if (tem(outroNomeHolo)) return outroNomeHolo;
+    if (sentido.normalEhHolo && tem('normal')) return 'normal';
+    if (sentido.holoDeVerdade && tem('holo')) return 'holo';
+    return undefined;
   }
   if (tem(exato)) return undefined;
   if (exato === 'reverse' && tem('reverse-holofoil')) return 'reverse-holofoil';
