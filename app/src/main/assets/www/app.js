@@ -425,12 +425,10 @@ const ALL_TCGDEX_STAMPS = [
 ];
 const SOURCE_VARIANT_META_KEYS = new Set(['updated', 'unit']);
 
-// Ordem de preferência dos mercados. O preço exibido vem de UM mercado só — o
-// primeiro desta lista que tiver valor para a versão escolhida —, não de uma
-// mistura dos três. TCGdex não publica preço próprio: ele republica TCGplayer
-// e Cardmarket, então na prática a disputa é entre o primeiro e o terceiro.
-const PRICE_SOURCE_PRIORITY = ['tcgplayer', 'tcgdex', 'cardmarket'];
-const PRICE_SOURCE_LABELS = { tcgplayer: 'TCGplayer', tcgdex: 'TCGdex', cardmarket: 'Cardmarket' };
+// O banco informa qual mercado forneceu o preço. Em banco antigo, esta ordem
+// escolhe o mercado prioritário com valor para a variante.
+const PRICE_SOURCE_PRIORITY = ['mypcards', 'ligapokemon', 'tcgplayer', 'tcgdex', 'cardmarket'];
+const PRICE_SOURCE_LABELS = { mypcards: 'MYP Cards', ligapokemon: 'Liga Pokémon', tcgplayer: 'TCGplayer', tcgdex: 'TCGdex', cardmarket: 'Cardmarket' };
 
 function providerFromSourceId(id) {
   return String(id || '').split(':')[0];
@@ -1430,9 +1428,13 @@ function precoCompacto(bruto) {
   const publicado = String(bruto.priceMarket || '').trim();
   const provedores = new Set(fontes.map(item => providerFromSourceId(item.source)).filter(Boolean));
   const mercado = publicado || (provedores.size > 1 ? priorityMarketValues(fontes).provider : [...provedores][0] || '');
-  const valores = (mercado ? fontes.filter(item => providerFromSourceId(item.source) === mercado) : fontes)
+  const fontesElegiveis = fontes.filter(item => providerFromSourceId(item.source) === mercado
+    && (mercado !== 'mypcards' || (item.used === true && item.sellerVerified === true && String(item.sellerId || '').trim())));
+  const valores = (mercado ? fontesElegiveis : fontes)
     .map(item => Number(item?.valueBrl))
     .filter(valor => Number.isFinite(valor) && valor > 0);
+  const vendedorMypVerificado = mercado === 'mypcards' && fontesElegiveis.length > 0;
+  if (mercado === 'mypcards' && !vendedorMypVerificado) return null;
   // Banco antigo, sem o mercado publicado: a conta que o app fazia na hora.
   const recalcular = !publicado && provedores.size > 1 && valores.length > 0;
   return {
@@ -1442,7 +1444,8 @@ function precoCompacto(bruto) {
     k: textoUnico(mercado),
     u: String(bruto.updatedAt || ''),
     v: valores,
-    t: fontes.length,
+    t: fontesElegiveis.length || fontes.length,
+    sv: vendedorMypVerificado ? 1 : 0,
   };
 }
 
@@ -1672,6 +1675,7 @@ function centralPriceQuote(cardId, variant = 'normal') {
     },
     priceMarket: usedMarket,
     priceMarketLabel: PRICE_SOURCE_LABELS[usedMarket] || usedMarket,
+    sellerVerified: usedMarket === 'mypcards' ? match.sv === 1 : undefined,
     sources: [],
     // As referências acompanham o mesmo ajuste de condição do preço exibido.
     low: Math.round((sourceValues.length ? Math.min(...sourceValues) : basePriceBrl) * compatibility.conditionMultiplier * 100) / 100,
@@ -1899,6 +1903,7 @@ function legacyPriceQuote(cardId) {
 
 function storedAutomaticPriceQuote(variant) {
   if (!hasFiniteNumber(variant?.automaticEstimatedValue)) return null;
+  if (variant.automaticPriceMarket === 'mypcards' && variant.automaticPriceSellerVerified !== true) return null;
   const source = String(variant?.automaticPriceSource || '').trim().toLowerCase();
   const provider = String(variant?.automaticPriceProvider || '').trim().toLowerCase();
   const isPriceDatabase = source === 'preco-brasil' || provider.includes('price database');
@@ -1929,6 +1934,7 @@ function storedAutomaticPriceQuote(variant) {
     high: nullableNumber(variant.automaticPriceHigh),
     priceMarket: variant.automaticPriceMarket || '',
     priceMarketLabel: PRICE_SOURCE_LABELS[variant.automaticPriceMarket] || '',
+    sellerVerified: variant.automaticPriceSellerVerified === true,
     marketVariantKey: variant.automaticPriceMarketKey || '',
     marketIdentity: variant.automaticPriceMarketIdentity || marketVariantIdentity(variant),
     validation: {
@@ -2119,7 +2125,7 @@ function limparPrecoDeOutraVersao(cardId, variant) {
     automaticPriceValidationChecks: [], automaticPriceUserValidated: false, automaticPriceAcceptedFingerprint: '',
     automaticPriceUserValidatedAt: null, automaticPriceListingsCount: 0, automaticPriceAcceptedCount: 0,
     automaticPriceExcludedCount: 0, automaticPriceStoresCount: 0, automaticPriceLow: null, automaticPriceHigh: null,
-    automaticPriceMarketKey: '', automaticPriceMarketIdentity: null,
+    automaticPriceMarketKey: '', automaticPriceMarketIdentity: null, automaticPriceSellerVerified: false,
   });
   return true;
 }
@@ -2152,6 +2158,7 @@ function applyAutomaticPriceToVariant(cardId, variant) {
     || nullableNumber(variant.automaticPriceHigh) !== nullableNumber(quote.high)
     || variant.automaticPriceMarketKey !== (quote.marketVariantKey || marketVariantKey(variant))
     || (variant.automaticPriceMarket || '') !== (quote.priceMarket || '')
+    || Boolean(variant.automaticPriceSellerVerified) !== (quote.priceMarket === 'mypcards' && quote.sellerVerified === true)
     || JSON.stringify(variant.automaticPriceValidationReasons || []) !== JSON.stringify(nextReasons)
     || JSON.stringify(variant.automaticPriceValidationChecks || []) !== JSON.stringify(nextChecks);
   variant.automaticEstimatedValue = nextValue;
@@ -2175,6 +2182,7 @@ function applyAutomaticPriceToVariant(cardId, variant) {
   variant.automaticPriceMarketKey = quote.marketVariantKey || marketVariantKey(variant);
   variant.automaticPriceMarket = quote.priceMarket || '';
   variant.automaticPriceMarketIdentity = quote.marketIdentity || marketVariantIdentity(variant);
+  variant.automaticPriceSellerVerified = quote.priceMarket === 'mypcards' && quote.sellerVerified === true;
   if (quote.imageUrl) {
     variant.imageUrl = quote.imageUrl;
     variant.imageSource = quote.imageSource || 'Pokémon Price Database Brasil';
@@ -5757,21 +5765,23 @@ function precoManualExpirado(variant) {
   return Date.now() >= limite.getTime();
 }
 
-function ligaPriceQuoteForVariant(cardId, variant) {
+function verifiedSellerPriceQuoteForVariant(cardId, variant) {
+  const isVerifiedSellerMarket = quote => quote?.priceMarket === 'ligapokemon'
+    || (quote?.priceMarket === 'mypcards' && quote.sellerVerified === true);
   const stored = storedAutomaticPriceQuote(variant);
-  if (stored?.priceMarket === 'ligapokemon' && stored.confidence === 'verified' && hasFiniteNumber(stored.brl)) return stored;
+  if (isVerifiedSellerMarket(stored) && stored.confidence === 'verified' && hasFiniteNumber(stored.brl)) return stored;
   const live = automaticPriceQuote(cardId, variant || 'normal');
-  return live?.priceMarket === 'ligapokemon' && live.confidence === 'verified' && hasFiniteNumber(live.brl)
+  return isVerifiedSellerMarket(live) && live.confidence === 'verified' && hasFiniteNumber(live.brl)
     ? live
     : null;
 }
 
-/* Um preço exato publicado pela Liga dispensa confirmação manual. Preço de
-   outro mercado ou correspondência ainda em revisão continua pendente. */
+/* Preço exato da Liga ou preço MYP com selo de vendedor confirmado dispensa
+   confirmação manual. Fontes sem prova do vendedor continuam pendentes. */
 function pendingPriceQuoteForVariant(cardId, variant) {
   if (!variant || Number(variant.quantity) <= 0) return null;
   if (hasFiniteNumber(variant.manualEstimatedValue) && !precoManualExpirado(variant)) return null;
-  if (ligaPriceQuoteForVariant(cardId, variant)) return null;
+  if (verifiedSellerPriceQuoteForVariant(cardId, variant)) return null;
   return storedAutomaticPriceQuote(variant) || automaticPriceQuote(cardId, variant.finish || 'normal') || { brl: null, pending: true };
 }
 
@@ -9930,9 +9940,12 @@ function automaticPriceBox(cardId, finish = 'normal', variantId = '', identityOv
   if (displayQuote) {
     const converted = displayQuote.brl != null ? money(displayQuote.brl) : 'Preço indisponível';
     const sourceValues = Number(displayQuote.acceptedCount) || 0;
+    const sourceAttribution = displayQuote.priceMarket === 'mypcards'
+      ? ' · <a href="https://mypcards.com" target="_blank" rel="noopener noreferrer">MYP Cards</a>'
+      : '';
     const rangeHtml = sourceValues
       ? `<div class="price-market-summary"><span>Menor referência <strong>${esc(money(displayQuote.low))}</strong></span><span>Preço calculado <strong>${esc(converted)}</strong></span><span>Maior referência <strong>${esc(money(displayQuote.high))}</strong></span></div>
-        <small class="price-sample">${sourceValues} valor(es) do ${esc(displayQuote.priceMarketLabel || 'Price Database')} usados no cálculo</small>`
+        <small class="price-sample">${sourceValues} valor(es) do ${esc(displayQuote.priceMarketLabel || 'Price Database')} usados no cálculo${sourceAttribution}</small>`
       : '';
     const confidence = displayQuote.confidence || 'review';
     const userValidated = Boolean(displayQuote.userValidated || (variant?.automaticPriceUserValidated && variant?.automaticPriceAcceptedFingerprint === displayQuote.fingerprint));

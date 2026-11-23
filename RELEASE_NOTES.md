@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.99.70 — Preços MYP Cards somente de vendedores verificados
+
+- Preços MYP Cards só são exibidos e retiram cartas de “Preços pendentes” quando o registro inclui ID do vendedor e confirmação explícita de vendedor verificado.
+- Preços agregados sem esses dados são ignorados; preços exatos da Liga Pokémon continuam reconhecidos normalmente.
+- Versão Android 272 (5.99.70).
+
 # POKECARD Brasil 5.99.69 — Preços Liga Pokémon reconhecidos na coleção
 
 - Variantes com correspondência exata e preço publicado pela Liga deixam de aparecer em “Preços pendentes” sem exigir valor manual.
