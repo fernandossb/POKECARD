@@ -913,12 +913,13 @@ function versaoQueTemOPreco(cardId, valor, idioma) {
   if (exato === 'holo') {
     // Carta sem holo: este "holo" é o reverse e o preço dele é o do reverse.
     if (!sentido.holoDeVerdade) return undefined;
-    // Algumas fontes (incluindo a Liga) publicam a própria variante como
-    // `holo`, sem traduzir para `holofoil`. Se essa chave existe, é o preço
-    // exato da holográfica e deve ser usado antes de tentar aliases.
+    // TCGplayer vende a holográfica como holofoil; mantenha essa prioridade.
+    const nomeHolofoil = ['holofoil', 'unlimited-holofoil'].find(tem);
+    if (nomeHolofoil) return nomeHolofoil;
+    // A Liga/Cardmarket podem publicar a própria variante como `holo`.
     if (tem('holo')) return undefined;
-    return ['holofoil', 'unlimited-holofoil', sentido.normalEhHolo ? 'normal' : '']
-      .find(nome => nome && tem(nome)) || null;
+    if (sentido.normalEhHolo && tem('normal')) return 'normal';
+    return null;
   }
   if (['holofoil', 'unlimited-holofoil'].includes(exato)) {
     // TCGplayer chama a versão de "holofoil"; a Liga e o Cardmarket podem
