@@ -1574,6 +1574,11 @@ function centralPriceResolveKey(cardId, language, variantEnum) {
   for (const candidate of uniqueValues([language, ...PRICE_LANGUAGE_FALLBACK])) {
     const key = `${cardId}::${candidate}::${variantEnum}`;
     if (centralPriceKeyExists(key)) return { key, language: candidate };
+    // Uma variante importada pode trazer o rótulo em português como chave.
+    if (/^comum$/i.test(variantEnum) && !sentidoDoCardmarket(cardId, candidate)?.normalEhHolo) {
+      const normalKey = `${cardId}::${candidate}::normal`;
+      if (centralPriceKeyExists(normalKey)) return { key: normalKey, language: candidate };
+    }
   }
   return null;
 }

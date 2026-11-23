@@ -1,3 +1,7 @@
+# POKECARD Brasil 5.99.73 — Preço das cartas comuns
+
+- Variantes importadas como Comum podem usar a cotação publicada como `normal`, respeitando a exceção de acabamento do Cardmarket.
+
 # POKECARD Brasil 5.99.72 — Vinculação de preço holo da Liga
 
 - Variantes holográficas agora usam diretamente o preço `holo` quando essa é a nomenclatura publicada no Price Database, além dos aliases `holofoil` e `unlimited-holofoil`.

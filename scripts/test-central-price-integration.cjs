@@ -30,6 +30,9 @@ const context = {
     // em BRL, c confiança 0-100, x 1 quando matchLevel é "exact", k mercado
     // escolhido, u updatedAt, v valores desse mercado, t total de fontes.
     prices: {
+      'sv03.5-001::pt-br::normal': {
+        p: 2.5, c: 95, x: 1, k: 'ligapokemon', v: [2.5], t: 1,
+      },
       'sv03.5-001::pt-br::reverse-holofoil': {
         p: 12.34, c: 75, x: 1, k: 'tcgplayer', u: '2026-08-05T12:00:00Z', v: [12.34], t: 1,
       },
@@ -66,6 +69,11 @@ assert(exact, 'Enum exato deveria localizar preço');
 assert.strictEqual(exact.brl, 12.34);
 assert.strictEqual(exact.confidence, 'verified');
 assert.strictEqual(exact.databaseKey, 'sv03.5-001::pt-br::reverse-holofoil');
+
+const common = context.centralPriceQuote('sv03.5-001', { pricingVariant: 'Comum', language: 'pt-br' });
+assert.strictEqual(common?.databaseKey, 'sv03.5-001::pt-br::normal');
+assert.strictEqual(common?.brl, 2.5);
+assert.strictEqual(common?.confidence, 'verified');
 
 const future = context.centralPriceQuote('sv03.5-001', {
   pricingVariant: 'future-parallel-foil', language: 'pt-br', condition: 'Near Mint',
