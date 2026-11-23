@@ -1,3 +1,10 @@
+# POKECARD Brasil 5.99.72 — Vinculação de preço holo da Liga
+
+- Variantes holográficas agora usam diretamente o preço `holo` quando essa é a nomenclatura publicada no Price Database, além dos aliases `holofoil` e `unlimited-holofoil`.
+- A correspondência continua condicionada à confirmação de que a carta realmente tem acabamento holográfico, evitando confundir o preço reverse.
+- Inclui validação de holo direto, alias holofoil e foil especial com preço próprio.
+- Versão Android 274 (5.99.72).
+
 # POKECARD Brasil 5.99.71 — Vinculação de preços holográficos
 
 - O enum `holofoil` agora pode usar o preço publicado como `holo` quando o catálogo confirma que a carta realmente possui acabamento holográfico.

@@ -20,6 +20,11 @@ const context = {
         { language: 'pt-br', value: 'reverse-holofoil', sources: ['tcgplayer'], priced: true },
         { language: 'pt-br', value: 'future-parallel-foil', sources: ['tcgdex'], priced: true },
       ],
+      'sv06.5-010': [
+        { language: 'en', value: 'cosmos-holofoil', sources: ['tcgdex'], kinds: ['special-foil'], priced: true },
+        { language: 'en', value: 'holo', sources: ['cardmarket', 'tcgdex'], kinds: ['market-variant', 'tcgdex-flag'], priced: true },
+        { language: 'en', value: 'normal', sources: ['tcgplayer', 'tcgdex'], kinds: ['market-variant', 'tcgdex-flag'], priced: true },
+      ],
     },
     // Formato compacto (precoCompacto, fora desta fatia do app.js): p preço
     // em BRL, c confiança 0-100, x 1 quando matchLevel é "exact", k mercado
@@ -30,6 +35,15 @@ const context = {
       },
       'sv03.5-001::pt-br::future-parallel-foil': {
         p: 20, c: 60, x: 1, k: 'tcgplayer', u: '2026-08-05T12:00:00Z', v: [20], t: 1,
+      },
+      'sv06.5-010::en::holo': {
+        p: 0.56, c: 92, x: 1, k: 'cardmarket', u: '2026-08-05T12:00:00Z', v: [0.56], t: 1,
+      },
+      'sv06.5-010::en::normal': {
+        p: 0.48, c: 95, x: 1, k: 'tcgplayer', u: '2026-08-05T12:00:00Z', v: [0.48], t: 1,
+      },
+      'sv06.5-010::en::cosmos-holofoil': {
+        p: 1.09, c: 90, x: 1, k: 'cardmarket', u: '2026-08-05T12:00:00Z', v: [1.09], t: 1,
       },
     },
   },
@@ -58,6 +72,22 @@ const future = context.centralPriceQuote('sv03.5-001', {
   gradingCompany: 'Não graduada', variantTags: [],
 });
 assert(future && future.brl === 20, 'Enum futuro desconhecido deve funcionar sem atualização de allowlist');
+
+const ligaHolo = context.centralPriceQuote('sv06.5-010', {
+  pricingVariant: 'holo', language: 'pt-br', condition: 'Near Mint',
+  gradingCompany: 'Não graduada', variantTags: [],
+});
+assert(ligaHolo && ligaHolo.brl === 0.56, 'A chave holo publicada pela Liga/Cardmarket deve ser usada diretamente');
+const tcgplayerHolo = context.centralPriceQuote('sv06.5-010', {
+  pricingVariant: 'holofoil', language: 'pt-br', condition: 'Near Mint',
+  gradingCompany: 'Não graduada', variantTags: [],
+});
+assert(tcgplayerHolo && tcgplayerHolo.brl === 0.56, 'Holofoil deve encontrar o alias holo quando a fonte usa esse nome');
+const specialFoil = context.centralPriceQuote('sv06.5-010', {
+  pricingVariant: 'cosmos-holofoil', language: 'pt-br', condition: 'Near Mint',
+  gradingCompany: 'Não graduada', variantTags: [],
+});
+assert(specialFoil && specialFoil.brl === 1.09, 'Foil especial com chave própria deve continuar exato');
 
 for (const invalid of ['Reverse Holofoil', 'reversa', 'future parallel foil']) {
   assert.strictEqual(context.centralPriceQuote('sv03.5-001', {
