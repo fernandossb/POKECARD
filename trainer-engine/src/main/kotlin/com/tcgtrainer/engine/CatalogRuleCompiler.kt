@@ -668,6 +668,9 @@ internal object CatalogRuleCompiler {
             id in setOf("me06-102", "me06-130") && name == "Tate & Liza's Training" ->
                 TrainerEffect.DrawAndRecycleIfStadium(2, returnToHandWithLegendary = true) to
                     "Compre duas cartas. Se comprou alguma carta e há um Estádio Lendário em jogo, devolva este Apoiador à mão."
+            id in setOf("me06-103", "me06-131", "me06-140") && name == "Zinnia's Trust" ->
+                TrainerEffect.Switch(opponent = false, moveEnergyFromFormerActive = true) to
+                    "Troque seu Pokémon Ativo com um do Banco. Se fizer isso, mova uma Energia do Pokémon que foi ao Banco para o novo Ativo."
             id == "me06-129" && name == "Pokémon Catcher" ->
                 TrainerEffect.CoinSwitch to
                     "Jogue uma moeda. Se der cara, traga um Pokémon do Banco adversário para o Ativo."

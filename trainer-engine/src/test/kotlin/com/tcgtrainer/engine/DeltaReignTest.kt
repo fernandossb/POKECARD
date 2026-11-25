@@ -168,4 +168,26 @@ class DeltaReignTest {
         assertFalse(supporter in result.state.players[0].discard)
         assertIs<Legality.Illegal>(rules.validate(result.state, action))
     }
+
+    @Test fun `Zinnia moves exactly one energy from the former Active`() {
+        val fire = card("fire", "sve-002")
+        val electric = card("electric", "sve-004")
+        val other = card("other", "sve-003")
+        val own = PlayerState(deck = emptyList(), prizes = emptyList(),
+            hand = listOf(card("zinnia", "me06-103")),
+            active = pokemon("lead", "me06-001").copy(energies = listOf(fire, electric)),
+            bench = listOf(pokemon("target", "me06-084"), pokemon("backup", "me06-001").copy(energies = listOf(other))))
+
+        val play = rules.apply(board(own), GameAction.PlayTrainer("zinnia"))
+        assertEquals(Legality.Legal, play.legality)
+        val switched = rules.apply(play.state, GameAction.ChooseCards(listOf("target")))
+        assertEquals(Legality.Legal, switched.legality)
+        assertEquals("target", switched.state.players[0].active!!.id)
+        assertEquals(setOf("fire", "electric"), switched.state.resolution!!.choices.first().candidates.toSet())
+        assertIs<Legality.Illegal>(rules.validate(switched.state, GameAction.ChooseCards(listOf("other"))))
+        val moved = rules.apply(switched.state, GameAction.ChooseCards(listOf("electric")))
+        assertEquals(Legality.Legal, moved.legality)
+        assertEquals(listOf(electric), moved.state.players[0].active!!.energies)
+        assertEquals(listOf(fire), moved.state.players[0].bench.single { it.id == "lead" }.energies)
+    }
 }

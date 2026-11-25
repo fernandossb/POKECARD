@@ -782,7 +782,8 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                         }.map { it.id }, 1, 1,
                                         confuseSwitchedPokemon = effect.confuseOpponentSwitch,
                                         targetNamePrefix = effect.ownPokemonNamePrefix,
-                                        followWithOpponentSwitch = effect.followWithOpponentSwitch)), drawTo = effect.drawTo))
+                                        followWithOpponentSwitch = effect.followWithOpponentSwitch,
+                                        moveEnergyFromFormerActive = effect.moveEnergyFromFormerActive)), drawTo = effect.drawTo))
                                 }
                                 is TrainerEffect.SwitchAndHealMovedEx -> begin(Resolution(listOf(ChoiceRequest(
                                     ChoiceKind.SWITCH_OWN,
@@ -2545,6 +2546,13 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                     if (confuseNewActive) events += GameEvent("OpponentActiveMoveConfused", "O novo Pokémon Ativo ficou Confuso.")
                                     if (conditionOnNewActive != null) events += GameEvent("OpponentActiveMoveCondition", "A habilidade aplicou $conditionOnNewActive ao novo Pokémon Ativo.")
                                     if (healed > 0) events += GameEvent("PokemonHealed", "Curou $healed de dano do Pokémon ex que foi para o Banco com AZ's Tranquility.", healed)
+                                    if (choice.moveEnergyFromFormerActive && movedToBench != null && movedToBench.energies.isNotEmpty()) {
+                                        val energies = movedToBench.energies
+                                        remainingChoices = listOf(ChoiceRequest(ChoiceKind.ON_BENCH_MOVE_ENERGY,
+                                            "Mova uma Energia do Pokémon que foi ao Banco para o novo Ativo.",
+                                            energies.map { it.id }, 1, 1, sourcePokemonId = target.id,
+                                            visibleCards = energies.map { it.id }, moveEnergyFromFormerActive = true)) + remainingChoices
+                                    }
                                     if (choice.followWithOpponentSwitch && s.players[1-actor].bench.isNotEmpty()) remainingChoices = listOf(ChoiceRequest(
                                         ChoiceKind.SWITCH_OPPONENT, "Escolha um Pokémon do Banco adversário para entrar no Ativo.",
                                         s.players[1-actor].bench.map { it.id }, 1, 1)) + remainingChoices
@@ -2973,7 +2981,9 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                             pokemon.energies + moving else pokemon.energies.filterNot { energy -> energy.id in ids })
                                         player.copy(active = player.active?.let(::transfer), bench = player.bench.map(::transfer))
                                     }
-                                    events += GameEvent("OnBenchAbilityEnergyMoved", "Moveu ${moving.size} Energia(s) para o Ativo pela habilidade.", moving.size)
+                                    if (choice.moveEnergyFromFormerActive)
+                                        events += GameEvent("TrainerEnergyMoved", "Moveu uma Energia do antigo Ativo para o novo Ativo.", moving.size)
+                                    else events += GameEvent("OnBenchAbilityEnergyMoved", "Moveu ${moving.size} Energia(s) para o Ativo pela habilidade.", moving.size)
                                 }
                                 ChoiceKind.ON_BENCH_TO_ACTIVE_ATTACH_ENERGY -> {
                                     val sourceId = checkNotNull(choice.sourcePokemonId)
