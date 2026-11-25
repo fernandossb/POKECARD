@@ -115,7 +115,16 @@ internal val BoardBlue = Color(0xFF599BC6)
                 }
             }
         }
-        state.stadium?.let { card -> Surface(onClick = { if (reveal) inspect(card) }, modifier = Modifier.sceneRect(geometry.stadium), color = Color.Transparent) { CardArt(engine.definition(card), Modifier.fillMaxSize()) } }
+        val stadiumCards = state.stadiumCards().sortedBy { it.definitionId }
+        if (stadiumCards.isNotEmpty()) {
+            Row(Modifier.sceneRect(geometry.stadium)) {
+                stadiumCards.forEach { card ->
+                    Surface(onClick = { if (reveal) inspect(card) }, modifier = Modifier.weight(1f).fillMaxHeight(), color = Color.Transparent) {
+                        CardArt(engine.definition(card), Modifier.fillMaxSize())
+                    }
+                }
+            }
+        }
         if (state.stadium == null) Text("ESTÁDIO", Modifier.sceneRect(geometry.stadium).wrapContentSize(), color = Color.White.copy(alpha = .26f), fontSize = 7.sp)
         Column(Modifier.sceneRect(geometry.rect(.905f, .345f, .095f, .10f)), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Counter("${state.players[1-geometry.viewer].prizes.size}", Modifier.weight(1f).fillMaxWidth(), BoardRed)

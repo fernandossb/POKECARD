@@ -1,3 +1,11 @@
+# POKECARD Brasil 5.99.74 — Reinado Delta no TCG Trainer
+
+- As 141 cartas de Reinado Delta estão no catálogo do Trainer. 102 já têm regras executáveis, incluindo os três Estádios Lendários.
+- A expansão entra no Padrão em 20 de novembro de 2026. O formato usa as marcas H, I e J e preserva as reimpressões elegíveis.
+- A CPU avalia sequências de evolução, Energia e trocas para buscar nocautes decisivos, inclusive quando o Ativo está Confuso.
+- Treinamento de Tate e Liza compra duas cartas e retorna à mão quando há um Estádio Lendário em jogo e a compra aconteceu.
+- Versão Android 276 (5.99.74).
+
 # POKECARD Brasil 5.99.73 — Preço das cartas comuns
 
 - Variantes importadas como Comum podem usar a cotação publicada como `normal`, respeitando a exceção de acabamento do Cardmarket.

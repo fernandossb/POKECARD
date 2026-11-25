@@ -171,23 +171,33 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
     }
     private val content by lazy { ContentEngine(this) }
     fun definition(card: CardInstance) = catalog.get(card.definitionId)
+    internal fun legendaryBenefit(state: GameState) =
+        (state.stadium?.let { definition(it).trainerEffect } as? TrainerEffect.LegendaryStadium)?.benefit
+
+    internal fun healingAmount(state: GameState, amount: Int): Int =
+        if (legendaryBenefit(state) == LegendaryStadiumBenefit.DOUBLE_HEALING) amount.coerceAtMost(Int.MAX_VALUE / 2) * 2 else amount
+
     fun effectiveAbilities(state: GameState, owner: Int, pokemon: PokemonInstance): List<AbilityDefinition> {
         val card = definition(pokemon.top)
+        val pyroduct = legendaryBenefit(state) == LegendaryStadiumBenefit.EVOLUTION_ABILITY_LOCK
+        if (pyroduct && card.stage != Stage.BASIC) return emptyList()
+        fun printedAbilities(definition: CardDefinition) =
+            if (pyroduct && definition.stage != Stage.BASIC) emptyList() else definition.abilities
         val benchStageTwoLock = state.players.any { side -> side.bench.any { source ->
-            definition(source.top).abilities.any { it.suppressBenchStageTwoAbilities }
+            printedAbilities(definition(source.top)).any { it.suppressBenchStageTwoAbilities }
         } } && pokemon.id != state.players[owner].active?.id && card.stage == Stage.STAGE_TWO
         if (benchStageTwoLock) return emptyList()
         if (state.stadium?.let { definition(it).trainerEffect == TrainerEffect.ColorlessAbilityLock } == true && card.type == EnergyType.COLORLESS) return emptyList()
         val lockActive = state.players.indices.any { sourceOwner ->
             val active = state.players[sourceOwner].active ?: return@any false
             val source = definition(active.top)
-            val locks = source.abilities.filter { it.suppressRuleBoxAbilitiesExceptFuture }
+            val locks = printedAbilities(source).filter { it.suppressRuleBoxAbilitiesExceptFuture }
             locks.any { lock ->
                 val opposingActive = state.players[1-sourceOwner].active
                 val exceptionSuppressor = opposingActive?.let { target ->
                     val targetDefinition = definition(target.top)
                     if (targetDefinition.hasRuleBox && !targetDefinition.isFuturePokemon) null
-                    else targetDefinition.abilities.firstOrNull { it.opponentActiveAbilityException != null }
+                    else printedAbilities(targetDefinition).firstOrNull { it.opponentActiveAbilityException != null }
                 }
                 exceptionSuppressor == null || lock.name == exceptionSuppressor.opponentActiveAbilityException
             }
@@ -197,7 +207,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         val suppressor = state.players[1-owner].active?.let { active ->
             val activeDefinition = definition(active.top)
             if (lockActive && activeDefinition.hasRuleBox && !activeDefinition.isFuturePokemon) null
-            else activeDefinition.abilities.firstOrNull { it.opponentActiveAbilityException != null }
+            else printedAbilities(activeDefinition).firstOrNull { it.opponentActiveAbilityException != null }
         } ?: return card.abilities
         return card.abilities.filter { it.name == suppressor.opponentActiveAbilityException }
     }
@@ -548,7 +558,15 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             is GameAction.PlayBasic -> when {
                 state.phase == Phase.BONUS_BENCH && action.cardId !in state.bonusCardIds -> reason("Somente Básicos comprados pelo bônus de mulligan podem entrar nesta etapa.")
                 p.bench.size >= benchCapacity(state, actingPlayer(state)) -> reason("O Banco não tem espaço para outro Pokémon.")
-                hand(action.cardId)?.let { isBasic(definition(it)) } != true -> reason("Somente Pokémon Básico da mão pode ir ao Banco.")
+                hand(action.cardId)?.let { card ->
+                    isBasic(definition(card)) || (state.phase == Phase.MAIN &&
+                        definition(card).abilities.any { it.deltaRule == DeltaAbilityRule.EXCITED_DIVE } &&
+                        p.pokemon().any {
+                            val inPlay = definition(it.top)
+                            inPlay.type == EnergyType.COLORLESS && inPlay.canonicalName.startsWith("Mega ") &&
+                                inPlay.canonicalName.endsWith(" ex")
+                        })
+                } != true -> reason("Escolha um Pokémon Básico ou uma carta com uma habilidade válida para entrar no Banco.")
                 else -> Legality.Legal
             }
             GameAction.FinishSetup -> Legality.Legal
@@ -594,6 +612,9 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 val targetedEffects = attack.effects.filterIsInstance<Effect.TargetedDamage>()
                 val targetedPokemon = state.players[1-state.currentPlayer].pokemon().firstOrNull { it.id == action.targetId }
                 val rocketRequirement = activeAbilities.maxOfOrNull { it.requiresTeamRocketPokemonCount } ?: 0
+                val chaosCrawlerUsed = attack.name == "Chaos Crawler" &&
+                    state.history.any { record -> record.player == state.currentPlayer && record.turn == state.turn - 2 &&
+                        record.events.any { it.type == "AttackDeclared" && it.message.startsWith("Chaos Crawler:") } }
                 val rocketCount = p.pokemon().count { definition(it.top).name.startsWith("Team Rocket's ") }
                 when {
                     state.turn == 1 && !(state.currentPlayer == state.startingPlayer &&
@@ -606,6 +627,9 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     Effect.CopyBenchedNsAttack in printedAttack.effects && copiedAttackOptions(state, state.currentPlayer).isEmpty() -> reason("Não há ataques suportados de Pokémon de N no seu Banco para copiar.")
                     Effect.CopyOpponentActiveAttack in printedAttack.effects && copiedOpponentActiveAttackOptions(state, state.currentPlayer).isEmpty() -> reason("O Pokémon Ativo adversário não tem ataques compatíveis para copiar.")
                     rocketRequirement > rocketCount -> reason("Este Pokémon só pode atacar com pelo menos $rocketRequirement Pokémon da Equipe Rocket em jogo.")
+                    activeAbilities.any { it.deltaRule == DeltaAbilityRule.RESTRICTED_ACTIVATION } && p.hand.size < 10 ->
+                        reason("Este Pokémon só pode atacar com pelo menos 10 cartas na mão.")
+                    chaosCrawlerUsed -> reason("Um dos seus Pokémon já usou Caos Rastejante no seu turno anterior.")
                     !effects.supported(attack) -> reason("Efeito ainda não suportado; ataque bloqueado.")
                     active.restrictions.any { it.blockedTurn == state.turn && (it.attackId == null || it.attackId == action.attackId) } -> reason("Este Pokémon não pode usar este ataque neste turno devido ao seu ataque anterior.")
                     action.attackId in active.attackIdsUsedWhileActive -> reason("Este Pokémon já usou este ataque enquanto está no Ativo; troque-o para o Banco para liberar o ataque novamente.")
@@ -661,6 +685,8 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
     }
 
     fun retreatCost(pokemon: PokemonInstance, friendlyPokemon: List<PokemonInstance> = listOf(pokemon), opponentPokemon: List<PokemonInstance> = emptyList(), state: GameState? = null): Int {
+        val pyroduct = state?.let(::legendaryBenefit) == LegendaryStadiumBenefit.EVOLUTION_ABILITY_LOCK
+        fun printedAbilities(card: CardDefinition) = if (pyroduct && card.stage != Stage.BASIC) emptyList() else card.abilities
         val friendlyActive = friendlyPokemon.firstOrNull()
         val opponentActive = opponentPokemon.firstOrNull()
         val ruleBoxLock = listOfNotNull(friendlyActive, opponentActive).any { source ->
@@ -669,9 +695,9 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             val exceptionSuppressor = opposingActive?.let { target ->
                 val targetDefinition = definition(target.top)
                 if (targetDefinition.hasRuleBox && !targetDefinition.isFuturePokemon) null
-                else targetDefinition.abilities.firstOrNull { it.opponentActiveAbilityException != null }
+                else printedAbilities(targetDefinition).firstOrNull { it.opponentActiveAbilityException != null }
             }
-            sourceDefinition.abilities.any { ability -> ability.suppressRuleBoxAbilitiesExceptFuture &&
+            printedAbilities(sourceDefinition).any { ability -> ability.suppressRuleBoxAbilitiesExceptFuture &&
                 (exceptionSuppressor == null || exceptionSuppressor.opponentActiveAbilityException == ability.name) }
         }
         fun activeAbilityException(source: PokemonInstance?, opposing: PokemonInstance?): AbilityDefinition? {
@@ -680,14 +706,14 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
             if (ruleBoxLock && sourceDefinition.hasRuleBox && !sourceDefinition.isFuturePokemon) return null
             val opposingDefinition = opposing?.let { definition(it.top) }
             if (ruleBoxLock && opposingDefinition?.hasRuleBox == true && !opposingDefinition.isFuturePokemon) return null
-            return sourceDefinition.abilities.firstOrNull { it.opponentActiveAbilityException != null }
+            return printedAbilities(sourceDefinition).firstOrNull { it.opponentActiveAbilityException != null }
         }
         val friendlyLock = activeAbilityException(friendlyActive, opponentActive)
         val opponentLock = activeAbilityException(opponentActive, friendlyActive)
         fun abilities(source: PokemonInstance, friendlySide: Boolean): List<AbilityDefinition> {
             val sourceDefinition = definition(source.top)
             val raw = if (ruleBoxLock && sourceDefinition.hasRuleBox && !sourceDefinition.isFuturePokemon) emptyList()
-                else sourceDefinition.abilities
+                else printedAbilities(sourceDefinition)
             val lock = if (friendlySide && source.id == friendlyActive?.id) opponentLock
                 else if (!friendlySide && source.id == opponentActive?.id) friendlyLock else null
             return if (lock == null) raw else raw.filter { it.name == lock.opponentActiveAbilityException }
@@ -698,11 +724,13 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 type != null && pokemon.energies.any { definition(it).type == type }
             } || (definition(pokemon.top).stage == Stage.BASIC && abilities(source, true).any { it.basicPokemonHaveFreeRetreat })
         } || (pokemon.energies.isEmpty() && abilities(pokemon, true).any { it.freeRetreatWithNoEnergy })
+        val opponentExFreeRetreat = abilities(pokemon, true).any { it.deltaRule == DeltaAbilityRule.PUNK_OUT } &&
+            opponentPokemon.any { definition(it.top).canonicalName.endsWith(" ex") }
         val stadiumFreeRetreat = state?.stadium?.let { definition(it).trainerEffect == TrainerEffect.NsCastle } == true &&
             definition(pokemon.top).name.startsWith("N's ")
         val paradiseReduction = if (state?.stadium?.let { definition(it).trainerEffect == TrainerEffect.ParadiseResort } == true &&
             definition(pokemon.top).canonicalName == "Psyduck") 1 else 0
-        val base = if (free || stadiumFreeRetreat) 0 else (definition(pokemon.top).retreatCost - paradiseReduction).coerceAtLeast(0)
+        val base = if (free || stadiumFreeRetreat || opponentExFreeRetreat) 0 else (definition(pokemon.top).retreatCost - paradiseReduction).coerceAtLeast(0)
         val friendlyBenchRetreatReduction = friendlyPokemon.filter { it.id != friendlyActive?.id }
             .flatMap { abilities(it, true) }.maxOfOrNull { it.ownActiveRetreatCostReduction } ?: 0
         val increase = opponentPokemon.sumOf { source ->
@@ -737,8 +765,12 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 }))
         }
         val ignoreColorless = activeAbilities.any { ability ->
-            ability.ignoreColorlessAttackCostWhenOpponentHandCountIs > 0 &&
-                state.players[1-owner].hand.size == ability.ignoreColorlessAttackCostWhenOpponentHandCountIs
+            (ability.ignoreColorlessAttackCostWhenOpponentHandCountIs > 0 &&
+                state.players[1-owner].hand.size == ability.ignoreColorlessAttackCostWhenOpponentHandCountIs) ||
+                (ability.deltaRule == DeltaAbilityRule.INCARNATE_SOLIDARITY &&
+                    DeltaAbilityRule.incarnateTeam.all { name ->
+                        state.players[owner].pokemon().any { definition(it.top).canonicalName == name }
+                    })
         }
         if (teraAlternative != null) {
             val alternativeCost = teraAlternative.alternativeAttackCost + List(opponentBasicAttackTax) { EnergyType.COLORLESS }
@@ -959,7 +991,8 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
         val greedyEaterBonus = if (damage > 0 && remaining == 0 && definition(defender.top).stage == Stage.BASIC &&
             effectiveAbilities(state, state.currentPlayer, attacker).sumOf { it.extraPrizeForOpponentBasicKnockoutByAttack } > 0) 1 else 0
         return AttackPreview(damage, hp, defender.damage, remaining, remaining == 0,
-            if (remaining == 0) definition(defender.top).prizes + greedyEaterBonus else 0,
+            if (remaining == 0) (definition(defender.top).prizes + greedyEaterBonus -
+                if (damage > 0 && legendaryBenefit(state) == LegendaryStadiumBenefit.LESS_PRIZE) 1 else 0).coerceAtLeast(0) else 0,
             uncertain, minimum, maximum)
     }
 
@@ -1348,11 +1381,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 pendingOptionalStadiumBonus = if (selectedStadium != null) bonus else 0)
             val choiceEvents = mutableListOf<GameEvent>()
             if (selectedStadium != null) {
-                val owner = state.stadiumOwner ?: actor
-                prepared = prepared.copy(stadium = null, stadiumOwner = null,
-                    players = prepared.players.mapIndexed { index, player ->
-                        if (index == owner) player.copy(discard = player.discard + selectedStadium) else player
-                    })
+                prepared = prepared.discardStadium(actor)
                 choiceEvents += GameEvent("StadiumDiscardedForAttackBonus", "Descartou o Estádio para causar $bonus de dano adicional.", bonus)
             } else choiceEvents += GameEvent("StadiumKeptForAttack", "Manteve o Estádio em jogo; o ataque causa o dano base.")
             prepared = prepared.copy(history = prepared.history + ActionRecord(actor, state.turn, action, choiceEvents))
@@ -1928,7 +1957,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     emit("RetaliationScheduled", "Se for atingido no próximo turno adversário, aplicará ${effect.counters} contadores de dano ao atacante.", effect.counters * 10)
                 }
                 if (appliedDamage > 0 && Effect.HealSelfByDamageDealt in attack.effects) {
-                    updatePokemon(p.active.id) { it.copy(damage = (it.damage - preview.damage).coerceAtLeast(0)) }
+                    updatePokemon(p.active.id) { it.copy(damage = (it.damage - healingAmount(next, preview.damage)).coerceAtLeast(0)) }
                     emit("DamageHealed", "Curou o atacante em até ${preview.damage} de dano pelo ataque.", preview.damage)
                 }
                 val remainingHpAfterDamage = (preview.effectiveHp - damageAfterAttack).coerceAtLeast(0)
@@ -2575,12 +2604,12 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                     emit("OpponentDeckDiscarded", "Descartou $count carta(s) do topo do deck adversário, uma por cara.", count)
                 }
                 attack.effects.filterIsInstance<Effect.Heal>().forEach { heal ->
-                    val healed = minOf(heal.amount, next.players[actor].active!!.damage)
+                    val healed = minOf(healingAmount(next, heal.amount), next.players[actor].active!!.damage)
                     updatePokemon(p.active.id) { it.copy(damage = it.damage - healed, healedTurn = if (healed > 0) state.turn else it.healedTurn) }
                     emit("PokemonHealed", "Curou $healed de dano do atacante.", healed)
                 }
                 if ((heads ?: 0) > 0) attack.effects.filterIsInstance<Effect.HealSelfOnCoinHeads>().forEach { heal ->
-                    val healed = minOf(heal.amount, next.players[actor].active!!.damage)
+                    val healed = minOf(healingAmount(next, heal.amount), next.players[actor].active!!.damage)
                     updatePokemon(p.active.id) { it.copy(damage = it.damage - healed, healedTurn = if (healed > 0) state.turn else it.healedTurn) }
                     emit("PokemonHealed", "A moeda caiu em cara: curou $healed de dano do atacante.", healed)
                 }
@@ -2589,7 +2618,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         (!heal.basicOnly || definition(it.top).stage == Stage.BASIC) &&
                         (!heal.teraOnly || definition(it.top).isTera) &&
                         (!heal.benchOnly || next.players[actor].bench.any { bench -> bench.id == it.id }) }.forEach { pokemon ->
-                        val healed = minOf(heal.amount, pokemon.damage)
+                        val healed = minOf(healingAmount(next, heal.amount), pokemon.damage)
                         updatePokemon(pokemon.id) { it.copy(damage = it.damage - healed, healedTurn = if (healed > 0) state.turn else it.healedTurn) }
                         emit("PokemonHealed", "Curou $healed de dano de ${definition(pokemon.top).name}.", healed)
                     }
@@ -2600,7 +2629,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                             pokemon.damage > 0 && (owner == actor ||
                                 !attackTargetEffectsPrevented(next, owner, pokemon))
                         }.forEach { pokemon ->
-                            val healed = minOf(heal.amount, pokemon.damage)
+                            val healed = minOf(healingAmount(next, heal.amount), pokemon.damage)
                             update(owner) { player ->
                                 player.copy(
                                     active = player.active?.let { if (it.id == pokemon.id) it.copy(damage = it.damage - healed) else it },
@@ -2705,9 +2734,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 }
                 if (Effect.DiscardStadium in attack.effects && next.stadium != null) {
                     val stadium = next.stadium!!
-                    val owner = next.stadiumOwner ?: actor
-                    update(owner) { it.copy(discard = it.discard + stadium) }
-                    next = next.copy(stadium = null, stadiumOwner = null)
+                    next = next.discardStadium(actor)
                     emit("StadiumDiscarded", "Descartou ${definition(stadium).name} do campo pelo ataque.")
                     if (Effect.LockOpponentStadiumNextTurn in attack.effects) {
                         update(opponent) { it.copy(stadiumPlayLockedThroughTurn = state.turn + 1) }
@@ -3446,6 +3473,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 val onBenchHealActive = onBenchAbilities.firstOrNull { it.onBenchHealActiveAndRecover > 0 }
                 val onBenchSwitch = onBenchAbilities.any { it.onBenchSwitchAndMoveEnergy }
                 val onBenchToolSearch = onBenchAbilities.any { it.onBenchSearchToolToSelf }
+                val onBenchTopEnergy = onBenchAbilities.firstOrNull { it.deltaRule == DeltaAbilityRule.RULERS_ROAR }
                 val onBenchAbility = onBenchAbilities.firstOrNull { it.onBenchAttachBasicEnergyMax > 0 }
                 val onBenchDiscardEnergy = onBenchAbilities.firstOrNull { it.onBenchDiscardBasicEnergyMax > 0 }
                 val discardableEnergy = onBenchDiscardEnergy?.let { ability -> next.players[actor].deck.filter {
@@ -3454,10 +3482,16 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 val eligibleEnergy = onBenchAbility?.let { ability -> next.players[actor].hand.filter {
                     definition(it).category == Category.ENERGY && definition(it).basicEnergy && definition(it).type == ability.onBenchAttachBasicEnergyType
                 } }.orEmpty()
-                if (state.phase == Phase.MAIN && onBenchHealActive != null && next.players[actor].active?.let { it.damage > 0 || it.conditions.isNotEmpty() } == true) {
+                if (state.phase == Phase.MAIN && onBenchTopEnergy != null && p.deck.isNotEmpty()) {
+                    next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN,
+                        resolution = Resolution(listOf(ChoiceRequest(ChoiceKind.ATTACK_TOP_DECK_ENERGY,
+                            "Usar " + onBenchTopEnergy.name + "?", listOf("use"), 0, 1,
+                            sourcePokemonId = playedPokemon.id, amount = 4,
+                            optionLabels = mapOf("use" to "Olhar as cartas do topo")))))
+                } else if (state.phase == Phase.MAIN && onBenchHealActive != null && next.players[actor].active?.let { it.damage > 0 || it.conditions.isNotEmpty() } == true) {
                     val amount = onBenchHealActive.onBenchHealActiveAndRecover
                     update(actor) { player -> player.copy(active = player.active?.copy(
-                        damage = (player.active!!.damage - amount).coerceAtLeast(0), conditions = emptySet(), poisonDamageCounters = 1)) }
+                        damage = (player.active!!.damage - healingAmount(next, amount)).coerceAtLeast(0), conditions = emptySet(), poisonDamageCounters = 1)) }
                     emit("OnBenchHeal", "${definition(card).name} curou $amount de dano e removeu as Condições Especiais do seu Ativo.", amount)
                 } else if (state.phase == Phase.MAIN && lastDitchAbility != null && lastDitchAbility.usageKey !in next.players[actor].flags.abilitiesUsed) {
                     next = next.copy(phase = Phase.RESOLVE_CHOICE, afterResolution = ResolutionEnd.MAIN,
@@ -3486,10 +3520,7 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                         "${onBenchAbility.name}: você pode ligar até ${onBenchAbility.onBenchAttachBasicEnergyMax} Energia(s) Básica(s) da mão a este Pokémon.",
                         eligibleEnergy.map { it.id }, 0, minOf(onBenchAbility.onBenchAttachBasicEnergyMax, eligibleEnergy.size), sourcePokemonId = card.id))))
                 } else if (state.phase == Phase.MAIN && onBenchAbilities.any { it.onBenchDiscardStadium } && next.stadium != null) {
-                    val stadium = next.stadium!!
-                    val owner = next.stadiumOwner ?: actor
-                    update(owner) { it.copy(discard = it.discard + stadium) }
-                    next = next.copy(stadium = null, stadiumOwner = null)
+                    next = next.discardStadium(actor)
                     emit("OnBenchStadiumDiscarded", "${definition(card).name} descartou o Estádio em jogo.")
                 } else if (state.phase == Phase.MAIN && onBenchAbilities.any { it.onBenchDiscardOpponentDeckTop } && next.players[1-actor].deck.isNotEmpty()) {
                     val top = next.players[1-actor].deck.first()
@@ -3914,8 +3945,10 @@ class RulesEngine(val catalog: CardCatalog = TestCatalog) {
                 }
                 val wonderKissBonus = if (wonderKiss && prizeRng.nextInt(2) == 0) 1 else 0
                 if (wonderKiss) events += GameEvent("WonderKissFlip", if (wonderKissBonus > 0) "Wonder Kiss: cara; recebe 1 Prêmio adicional." else "Wonder Kiss: coroa; sem Prêmio adicional.", wonderKissBonus)
-                owed[1-owner] += prizeCount + extraPrize + wonderKissBonus + briarBonus
-                val totalPrizeCount = prizeCount + extraPrize + wonderKissBonus + briarBonus
+                val summitReduction = if (attackKo && owner != actor &&
+                    legendaryBenefit(state) == LegendaryStadiumBenefit.LESS_PRIZE) 1 else 0
+                val totalPrizeCount = (prizeCount + extraPrize + wonderKissBonus + briarBonus - summitReduction).coerceAtLeast(0)
+                owed[1-owner] += totalPrizeCount
                 events += if (shadowyConcealment) GameEvent("PokemonKnockedOut",
                     "${definition(pokemon.top).name} foi nocauteado; $totalPrizeCount Prêmio(s) após modificadores.", totalPrizeCount)
                 else GameEvent("PokemonKnockedOut", "${definition(pokemon.top).name} foi nocauteado; $totalPrizeCount Prêmio(s).", totalPrizeCount)

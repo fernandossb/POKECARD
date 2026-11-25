@@ -139,7 +139,6 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog, private val s
     fun choose(input: CpuInput): GameAction {
         val budget = CpuSearchBudget.create(input, thinking, config)
         val fallback = chooseHeuristic(input)
-        input.previews[fallback]?.let { if (it.knockout && !it.uncertain && it.prizes >= input.observation.ownPrizeCount) return fallback }
 
         // Reuse active planned sequence if legal and from current turn
         val activePlan = currentTurnPlan
@@ -920,7 +919,8 @@ class CpuPlayer(private val catalog: CardCatalog = TrainerCatalog, private val s
                 is TrainerEffect.MoveBenchedEnergyToActive -> if (active != null && own.filter { it.id != active.id }.sumOf { it.energies.size } > 0) 70.0 else -5.0
                 is TrainerEffect.HealPokemon -> own.filter { (!effect.activeOnly || it.id == active?.id) && (effect.pokemonType == null || d(it.top).type == effect.pokemonType) }
                     .maxOfOrNull { minOf(it.damage, effect.amount).toDouble() } ?: -5.0
-                is TrainerEffect.HealEachOwnPokemon -> own.sumOf { minOf(effect.amount, it.damage).toDouble() }
+                is TrainerEffect.HealEachOwnPokemon -> own.sumOf { minOf(effect.amount, it.damage).toDouble() } -
+                    if (effect.bothPlayers) o.opponentField.sumOf { minOf(effect.amount, it.damage).toDouble() } else 0.0
                     .let { if (it > 0.0) 65.0 + it else -5.0 }
                 is TrainerEffect.RecoverEnergy -> if (o.ownDiscard.any { d(it).category == Category.ENERGY && d(it).basicEnergy }) 45.0 else -5.0
                 is TrainerEffect.RecoverPokemonToDeck -> if (o.ownDiscard.any { d(it).category == Category.POKEMON }) 35.0 else -5.0

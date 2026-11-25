@@ -69,6 +69,53 @@ class MasterAiTacticalTests {
         assertEquals(GameAction.PlayTrainer("boss-1"), action, "CPU must play Boss's Orders to target bench ex for lethal")
     }
 
+    @Test fun `finishing line combines evolution energy switch and gust`() {
+        val cat = catalog()
+        val rules = RulesEngine(cat)
+        var game = GameState("finishing-combo", 1, RngState(1), listOf(
+            PlayerState(deck = List(10) { c("h-deck$it") }, prizes = List(4) { c("h-p$it") },
+                hand = emptyList(), active = pokemon("wall", "wall"), bench = listOf(pokemon("target", "ex"))),
+            PlayerState(deck = List(10) { c("c-deck$it") }, prizes = List(2) { c("c-p$it") },
+                hand = listOf(c("gust", "boss"), c("swap", "switch"), c("evolution", "stage1-hero"), c("attachment")),
+                active = pokemon("pivot", "heavy-wall"), bench = listOf(pokemon("attacker", "small")))
+        ), 0, 1, turn = 4, phase = Phase.MAIN)
+        val cpu = CpuPlayer(cat)
+        var tookWinningAttack = false
+        repeat(12) {
+            if (game.phase == Phase.GAME_OVER) return@repeat
+            assertEquals(1, rules.actingPlayer(game))
+            val action = cpu.choose(rules.cpuInput(game, CpuKnowledge.FAIR))
+            val result = rules.apply(game, action)
+            assertEquals(Legality.Legal, result.legality)
+            if (action is GameAction.Attack) {
+                assertEquals("smash", action.attackId)
+                assertEquals("target", game.players[0].active?.id)
+                tookWinningAttack = true
+            }
+            game = result.state
+        }
+        assertTrue(tookWinningAttack)
+        assertEquals(Phase.GAME_OVER, game.phase)
+        assertEquals(1, game.winner)
+    }
+
+    @Test fun `finishing search switches out a confused attacker for a guaranteed knockout`() {
+        val cat = catalog(hero.copy(retreatCost = 2))
+        val game = GameState("confused-finisher", 1, RngState(1), listOf(
+            PlayerState(deck = listOf(c("h-deck")), prizes = listOf(c("h-prize")),
+                hand = emptyList(), active = pokemon("target", "ex")),
+            PlayerState(deck = listOf(c("c-deck")), prizes = List(2) { c("c-p$it") },
+                hand = listOf(c("swap", "switch")),
+                active = pokemon("confused", "hero", 1).copy(conditions = setOf(SpecialCondition.CONFUSED)),
+                bench = listOf(pokemon("ready", "hero", 1)))
+        ), 0, 1, turn = 4, phase = Phase.MAIN)
+        val line = assertNotNull(CpuTurnSearch(cat).findLethal(game, 1))
+        assertEquals(GameAction.PlayTrainer("swap"), line.first())
+        assertEquals(GameAction.Attack("hit"), line.last())
+        val cpu = CpuPlayer(cat, thinking = CpuThinking.ADAPTIVE)
+        assertEquals(line.first(), cpu.choose(RulesEngine(cat).cpuInput(game, CpuKnowledge.FAIR)))
+    }
+
     // =========================================================================
     // PUZZLE 2: NÃO ATACAR CEGAMENTE
     // =========================================================================
@@ -102,7 +149,7 @@ class MasterAiTacticalTests {
         val deckCards = listOf("stage1-hero", "hero", "energy", "energy")
         val game = GameState("p3", 3, RngState(3), listOf(
             PlayerState(deck = List(10) { c("h-deck$it") }, prizes = List(4) { c("h-p$it") },
-                hand = emptyList(), active = pokemon("h-active", "small")),
+                hand = emptyList(), active = pokemon("h-active", "small"), bench = listOf(pokemon("h-backup", "small"))),
             PlayerState(deck = deckCards.mapIndexed { i, d -> c("c-deck-$i", d) }, prizes = List(2) { c("c-p$it") },
                 hand = listOf(c("ub-1", "ultra-ball"), c("d1", "extra-energy"), c("d2", "extra-energy"), c("hand-e", "energy")),
                 active = pokemon("c-small", "small", 0), bench = emptyList())

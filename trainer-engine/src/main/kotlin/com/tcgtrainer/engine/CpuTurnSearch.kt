@@ -48,7 +48,7 @@ internal class CpuTurnSearch(
     companion object {
         private const val UNKNOWN = "cpu-hidden-card"
         internal fun publicPosition(original: GameState, actor: Int, knowledge: CpuKnowledge = CpuKnowledge.FAIR): CpuPublicPosition? {
-            val publicIds = (original.players[actor].hand + original.players.flatMap { player -> player.discard + player.pokemon().flatMap { it.cards + it.energies + it.tools } } + listOfNotNull(original.stadium)).map { it.id }.toSet() + original.players.flatMap { it.pokemon() }.map { it.id }
+            val publicIds = (original.players[actor].hand + original.players.flatMap { player -> player.discard + player.pokemon().flatMap { it.cards + it.energies + it.tools } } + original.stadiumCards()).map { it.id }.toSet() + original.players.flatMap { it.pokemon() }.map { it.id }
             if (original.resolution?.choices.orEmpty().any { choice ->
                 choice.candidates.any { it !in publicIds && it !in choice.optionLabels } ||
                     choice.visibleCards.any { it !in publicIds } ||
@@ -691,11 +691,8 @@ internal class CpuTurnSearch(
             objectiveBonus += 28.0 * constructiveTrainersCount * tuningAdaptive.handUtilizationBonusMultiplier
         }
 
-        // Reward gusting multi-prize target
-        if (opponent.active != null) {
-            val targetDef = maskedCatalog.get(opponent.active!!.top.definitionId)
-            if (targetDef.prizes >= 2) objectiveBonus += 120.0
-        }
+        // Attack evaluation already rewards Prizes actually taken. Merely exposing
+        // a multi-Prize attacker should not outrank a safer line or a useful lock.
 
         // Search Sequencing Bonus: playing search as first action to assemble attacker
         val firstActionIsSearch = sequence.firstOrNull()?.let { it is GameAction.PlayTrainer && isSearchCard(initial, it.cardId) } == true
@@ -865,9 +862,7 @@ internal class CpuTurnSearch(
         // Direct attack check
         if (initial.phase == Phase.MAIN) {
             for (attack in engine.cpuLegalActions(initial).filterIsInstance<GameAction.Attack>()) {
-                val preview = forecast.preview(initial, attack) ?: continue
-                val wins = preview.knockout && !preview.uncertain && preview.prizes >= neededPrizes
-                if (wins) return listOf(attack)
+                if (isReliableFinisher(initial, actor, attack)) return listOf(attack)
             }
         }
 
@@ -895,9 +890,7 @@ internal class CpuTurnSearch(
 
                 // Check attacks in this state
                 for (attack in actions.filterIsInstance<GameAction.Attack>()) {
-                    val preview = forecast.preview(state, attack) ?: continue
-                    val wins = preview.knockout && !preview.uncertain && preview.prizes >= state.players[actor].prizes.size
-                    if (wins) return node.sequence + attack
+                    if (isReliableFinisher(state, actor, attack)) return node.sequence + attack
                 }
 
                 // Prioritize actions that unlock lethal (gusts, attachments, evolution, tools, switch)
@@ -932,9 +925,51 @@ internal class CpuTurnSearch(
                     next += LethalNode(result.state, node.sequence + action, node.depth + 1)
                 }
             }
-            frontier = next.take(12)
+            frontier = if (neededPrizes <= 2 && next.size > 12) {
+                // Preserve some preparatory routes (including intermediate choices), while
+                // moving positions with a plausible finishing attack to the front.
+                val ranked = next.map { it to finishingPosition(it.state, actor, neededPrizes) }
+                    .sortedByDescending { it.second }.map { it.first }
+                (ranked.take(8) + next.take(4) + ranked).distinctBy { it.sequence }.take(12)
+            } else next.take(12)
         }
         return null
+    }
+
+    private fun isReliableFinisher(state: GameState, actor: Int, action: GameAction.Attack): Boolean {
+        val player = state.players[actor]
+        val active = player.active ?: return false
+        if (SpecialCondition.CONFUSED in active.conditions || active.defendingAttackFailsOnTailsTurn == state.turn) return false
+        val preview = forecast.preview(state, action) ?: return false
+        if (preview.uncertain || !preview.knockout) return false
+        if (preview.prizes < player.prizes.size && state.players[1 - actor].bench.isNotEmpty()) return false
+        val attack = engine.availableAttacks(state, actor, active).firstOrNull { it.id == action.attackId } ?: return false
+        val recoil = attack.effects.sumOf {
+            when (it) {
+                is Effect.Recoil -> it.damage
+                is Effect.SelfDamage -> it.amount
+                else -> 0
+            }
+        }
+        return recoil < engine.effectiveHp(state, active) - active.damage
+    }
+
+    private fun finishingPosition(state: GameState, actor: Int, neededPrizes: Int): Int {
+        val attacking = state.players[actor].active ?: return 0
+        val opponent = state.players[1 - actor]
+        val defending = opponent.active ?: return 0
+        val defender = maskedCatalog.get(defending.top.definitionId)
+        val targetRelevant = defender.prizes >= neededPrizes || opponent.bench.isEmpty()
+        val remainingHp = engine.effectiveHp(state, defending) - defending.damage
+        val attacks = maskedCatalog.get(attacking.top.definitionId).attacks
+        val pressure = attacks.maxOfOrNull { attack ->
+            val cost = engine.attackCost(state, attacking, attack)
+            val ready = engine.energyCost(state, actor, attacking, cost) == Legality.Legal
+            val damage = attack.effects.filterIsInstance<Effect.Damage>().sumOf { it.amount }
+            if (ready) 80 + (damage - remainingHp).coerceIn(-70, 80)
+            else (attacking.energies.size * 8).coerceAtMost(32)
+        } ?: 0
+        return pressure + if (targetRelevant) 35 else 0
     }
 
     /** Keep promising lines from different opening decisions alive through the whole turn search. */

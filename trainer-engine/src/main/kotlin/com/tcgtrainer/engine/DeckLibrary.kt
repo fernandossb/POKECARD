@@ -21,7 +21,8 @@ fun DeckFormat.label() = when (this) { DeckFormat.STANDARD -> "Padrão 2026"; De
 data class LibraryCard(val id: String, val name: String, val canonicalName: String, val set: String, val number: String,
     val category: Category, val stage: Stage, val basicEnergy: Boolean, val regulation: String?, val standard: Boolean,
     val implemented: Boolean, val image: String?, val text: String, val source: String, val aceSpec: Boolean = false) {
-    val searchKey = normalize("$name $canonicalName $set $number $id")
+    val searchKey = normalize("$name $canonicalName $set $number $id" +
+        if (id.startsWith("me06-")) " Reinado Delta Delta Reign" else "")
     val copyKey = when {
         canonicalName.startsWith("Boss's Orders") -> "boss's orders"
         canonicalName.startsWith("Professor's Research") -> "professor's research"
@@ -44,14 +45,20 @@ object CardLibrary {
     private val policy by lazy { javaClass.getResourceAsStream("/library/rotation-policy.json")!!.bufferedReader(Charsets.UTF_8).use { Json.parseToJsonElement(it.readText()).jsonObject } }
     val policyValidThrough get() = LocalDate.parse(policy.s("validThrough")!!)
     val entries: List<LibraryCard> by lazy {
-        val rows = (snapshot["cards"] as? JsonArray).orEmpty().associate { it.jsonObject.s("id")!! to it.jsonObject }.toMutableMap()
+        val rows = CatalogRuleCompiler.rows.toMutableMap()
         TrainerCatalog.definitions.keys.forEach { id -> if (id !in rows) rows[id] = TrainerCatalog.sourceData(id) }
         val marks = policy["legalMarks"]!!.jsonArray.map { it.jsonPrimitive.content }.toSet()
         val waiting = policy["typicalReleaseWaitDays"]!!.jsonPrimitive.int.toLong()
         val banned = policy["bannedIds"]!!.jsonArray.map { it.jsonPrimitive.content }.toSet()
+        val currentDate = LocalDate.now()
+        val reviewedSets = policy["reviewedSets"]!!.jsonObject
+        fun reviewedSet(raw: JsonObject) = (raw["set"] as? JsonObject)?.s("id")?.let { reviewedSets[it] as? JsonObject }
+        fun regulation(raw: JsonObject) = reviewedSet(raw)?.s("mark") ?: raw.s("regulationMark")?.uppercase()
         fun eligible(raw: JsonObject): Boolean {
-            val released = raw.s("setReleaseDate")?.let { runCatching { !LocalDate.parse(it).plusDays(waiting).isAfter(LocalDate.now()) }.getOrDefault(false) } ?: true
-            return released && raw.s("regulationMark")?.uppercase() in marks && raw["legal"]?.jsonObject?.get("standard")?.jsonPrimitive?.booleanOrNull == true
+            if (raw.s("id") in banned || regulation(raw) !in marks) return false
+            reviewedSet(raw)?.s("legalFrom")?.let { return !LocalDate.parse(it).isAfter(currentDate) }
+            val released = raw.s("setReleaseDate")?.let { runCatching { !LocalDate.parse(it).plusDays(waiting).isAfter(currentDate) }.getOrDefault(false) } ?: true
+            return released && raw["legal"]?.jsonObject?.get("standard")?.jsonPrimitive?.booleanOrNull == true
         }
         fun trainerSignature(raw: JsonObject): String? = if (raw.s("category") == "Trainer" && !raw.s("effect").isNullOrBlank())
             listOf(raw.s("name"), raw.s("trainerType"), raw.s("effect")).joinToString("|") { normalize(it.orEmpty()).replace(Regex("\\s+"), " ").trim() } else null
@@ -64,14 +71,14 @@ object CardLibrary {
                 id in policy["reviewedReprints"]!!.jsonArray.map { it.jsonPrimitive.content } ||
                 eligible(raw))
             val text = buildList {
-                raw.s("effect")?.let(::add)
+                (raw.s("effect") ?: reviewed?.text?.takeIf { it.isNotBlank() })?.let(::add)
                 (raw["abilities"] as? JsonArray).orEmpty().forEach { add("${it.jsonObject.s("name")}: ${it.jsonObject.s("effect").orEmpty()}") }
                 (raw["attacks"] as? JsonArray).orEmpty().forEach { add("${it.jsonObject.s("name")} · ${it.jsonObject.s("damage").orEmpty()}\n${it.jsonObject.s("effect").orEmpty()}") }
             }.joinToString("\n\n")
-            LibraryCard(id, reviewed?.name ?: raw.s("name")!!, raw.s("name")!!,
+            LibraryCard(id, raw.s("localizedName") ?: reviewed?.name ?: raw.s("name")!!, raw.s("name")!!,
                 reviewed?.set ?: raw.s("setCode") ?: raw["set"]!!.jsonObject.s("id")!!.uppercase(), raw.s("localId")!!, category,
                 when (raw.s("stage")) { "Stage1" -> Stage.STAGE_ONE; "Stage2" -> Stage.STAGE_TWO; else -> Stage.BASIC },
-                basicEnergy, raw.s("regulationMark"), standard, reviewed?.implemented == true, raw.s("image"), text,
+                basicEnergy, regulation(raw), standard, reviewed?.implemented == true, raw.s("image"), text,
                 "https://api.tcgdex.net/v2/en/cards/$id",
                 // The catalogue's printed rarity is authoritative when present. A stale
                 // engine flag had incorrectly treated Special Red Card (ME04-082) as ACE SPEC.

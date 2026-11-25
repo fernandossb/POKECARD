@@ -47,6 +47,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
             CardFilter.TOOL -> d.trainerType == TrainerType.TOOL
             CardFilter.SUPPORTER -> d.trainerType == TrainerType.SUPPORTER
             CardFilter.STADIUM -> d.trainerType == TrainerType.STADIUM
+            CardFilter.SUPPORTER_OR_STADIUM -> d.trainerType in setOf(TrainerType.SUPPORTER, TrainerType.STADIUM)
             CardFilter.BASIC_POKEMON -> d.category == Category.POKEMON && d.stage == Stage.BASIC
             CardFilter.BASIC_ENERGY -> d.category == Category.ENERGY && d.basicEnergy
             CardFilter.ENERGY -> d.category == Category.ENERGY
@@ -54,6 +55,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
             CardFilter.STAGE_ONE_POKEMON -> d.category == Category.POKEMON && d.stage == Stage.STAGE_ONE
             CardFilter.TERA_POKEMON -> d.category == Category.POKEMON && d.isTera
             CardFilter.BASIC_FIRE_ENERGY -> d.category == Category.ENERGY && d.basicEnergy && d.type == EnergyType.FIRE
+            CardFilter.BASIC_LIGHTNING_ENERGY -> d.category == Category.ENERGY && d.basicEnergy && d.type == EnergyType.LIGHTNING
             CardFilter.EVOLUTION_TEAM_ROCKET_POKEMON -> d.category == Category.POKEMON && d.stage != Stage.BASIC && d.name.startsWith("Team Rocket's ")
             CardFilter.DARKNESS_POKEMON -> d.category == Category.POKEMON && d.type == EnergyType.DARKNESS
             CardFilter.METAL_POKEMON -> d.category == Category.POKEMON && d.type == EnergyType.METAL
@@ -205,6 +207,13 @@ internal class ContentEngine(private val rules: RulesEngine) {
                         s.stadium?.let { def(it).name == d.name } == true -> illegal("Já existe um Estádio com esse nome em jogo.")
                         else -> Legality.Legal
                     }
+                    is TrainerEffect.LegendaryStadium -> when {
+                        p.flags.stadium -> illegal("Você já jogou um Estádio neste turno.")
+                        s.stadium?.let { def(it).trainerEffect == effect } == true -> illegal("Já existe um Estádio com esse nome em jogo.")
+                        p.hand.none { it.definitionId != card.definitionId && def(it).trainerEffect == effect } ->
+                            illegal("Você precisa das duas metades diferentes deste Estádio Lendário na mão.")
+                        else -> Legality.Legal
+                    }
                     TrainerEffect.JanineSecretArt -> Legality.Legal
                     is TrainerEffect.LookTopKeepDiscard -> if (p.deck.isEmpty()) illegal("Seu deck está vazio.") else Legality.Legal
                     is TrainerEffect.HpModifier -> when {
@@ -308,7 +317,8 @@ internal class ContentEngine(private val rules: RulesEngine) {
                     is TrainerEffect.AttachBasicEnergyFromDiscardToTypePokemon -> if (p.discard.none { def(it).category == Category.ENERGY && def(it).basicEnergy && def(it).type == effect.type } || p.pokemon().none { def(it.top).type == effect.type }) illegal("Não há Energia Básica e Pokémon do tipo permitido para Philippe.") else Legality.Legal
                     is TrainerEffect.ShuffleWaterPokemonAndEnergyToDeck -> if (p.discard.none { (def(it).category == Category.POKEMON && def(it).type == EnergyType.WATER) || (def(it).category == Category.ENERGY && def(it).basicEnergy && def(it).type == EnergyType.WATER) }) illegal("Não há Pokémon de Água nem Energia Básica de Água no descarte.") else Legality.Legal
                     TrainerEffect.HandTrimmer, is TrainerEffect.DiscardOpponentHandTo -> Legality.Legal
-                    is TrainerEffect.HealEachOwnPokemon -> Legality.Legal
+                    is TrainerEffect.HealEachOwnPokemon -> if (effect.bothPlayers && s.players.none { player -> player.pokemon().any { it.damage > 0 } })
+                        illegal("Não há Pokémon com dano para curar.") else Legality.Legal
                     is TrainerEffect.RecoverEnergy -> if (p.discard.none { def(it).category == Category.ENERGY && def(it).basicEnergy }) illegal("Não há Energia Básica no descarte.") else Legality.Legal
                     is TrainerEffect.RecoverPokemonToDeck -> if (p.discard.none { def(it).category == Category.POKEMON }) illegal("Não há Pokémon no descarte.") else Legality.Legal
                     is TrainerEffect.AttachBasicEnergyFromDiscardToBenchedType -> when {
@@ -486,16 +496,16 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                 update(playerIndex) { it.copy(bench = it.bench.take(5), discard = it.discard + attached) }
                                 events += GameEvent("AreaZeroBenchReduced", "${removed.size} Pokémon foram descartados do Banco por Area Zero Underdepths.", removed.size)
                             }
-                            fun replaceStadium(card: CardInstance) {
+                            fun replaceStadium(card: CardInstance, companion: CardInstance? = null) {
                                 val old = s.stadium
-                                val oldOwner = s.stadiumOwner
-                                if (old != null && oldOwner != null) {
+                                if (old != null) {
+                                    val oldOwner = s.stadiumOwner ?: actor
                                     if (def(old).trainerEffect == TrainerEffect.AreaZeroUnderdepths) {
                                         listOf(oldOwner, 1 - oldOwner).forEach(::discardBenchOverFive)
                                     }
-                                    update(oldOwner) { it.copy(discard = it.discard + old) }
+                                    s = s.discardStadium(actor)
                                 }
-                                s = s.copy(stadium = card, stadiumOwner = actor)
+                                s = s.copy(stadium = card, stadiumOwner = actor, stadiumCompanion = companion)
                                 update { it.copy(flags = it.flags.copy(stadium = true)) }
                             }
                             when (effect) {
@@ -798,6 +808,11 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                 ))))
                                 TrainerEffect.AcademyAtNight, TrainerEffect.PrismTower, TrainerEffect.BattleCage, TrainerEffect.AreaZeroUnderdepths, TrainerEffect.JammingTower,
                                 TrainerEffect.ParadiseResort -> replaceStadium(card)
+                                is TrainerEffect.LegendaryStadium -> {
+                                    val companion = p.hand.first { it.definitionId != card.definitionId && def(it).trainerEffect == effect }
+                                    update { it.copy(hand = it.hand - companion) }
+                                    replaceStadium(card, companion)
+                                }
                                 is TrainerEffect.RetreatReduction -> begin(Resolution(listOf(ChoiceRequest(ChoiceKind.TOOL_TARGET, "Ligar Ferramenta a qual Pokémon?", p.pokemon().filter { rules.canAttachTool(s, actor, it) }.map { it.id }, 1, 1)), toolCard = card))
                                 TrainerEffect.CounterGain -> begin(Resolution(listOf(ChoiceRequest(ChoiceKind.TOOL_TARGET,
                                     "Ligue Counter Gain a um dos seus Pokémon.", p.pokemon().filter { rules.canAttachTool(s, actor, it) }.map { it.id }, 1, 1)), toolCard = card))
@@ -838,7 +853,10 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                 is TrainerEffect.DrawAndRecycleIfStadium -> {
                                     val drewAtLeastOne = s.players[actor].deck.isNotEmpty()
                                     draw(effect.count)
-                                    if (drewAtLeastOne && s.stadium?.let { def(it).canonicalName == effect.stadiumName } == true) {
+                                    if (drewAtLeastOne && effect.returnToHandWithLegendary && rules.legendaryBenefit(s) != null) {
+                                        update { player -> player.copy(hand = player.hand + card, discard = player.discard - card) }
+                                    } else if (drewAtLeastOne && !effect.returnToHandWithLegendary &&
+                                        s.stadium?.let { def(it).canonicalName == effect.stadiumName } == true) {
                                         update { player ->
                                             val returned = player.discard.firstOrNull { it.id == card.id }
                                             if (returned == null) player else player.copy(
@@ -892,10 +910,8 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                         events += GameEvent("MegatonBlowerAttachmentsDiscarded", "Descartou ${attached.size} Ferramenta(s) e Energia(s) Especial(is) dos Pokémon adversários.", attached.size)
                                     }
                                     val stadium = s.stadium
-                                    val stadiumOwner = s.stadiumOwner
-                                    if (stadium != null && stadiumOwner != null) {
-                                        update(stadiumOwner) { player -> player.copy(discard = player.discard + stadium) }
-                                        s = s.copy(stadium = null, stadiumOwner = null)
+                                    if (stadium != null) {
+                                        s = s.discardStadium(actor)
                                         events += GameEvent("StadiumDiscarded", "Descartou o Estádio em jogo.")
                                     }
                                 }
@@ -979,7 +995,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                 is TrainerEffect.HealEachOwnPokemonOfType -> {
                                     val targets = s.players[actor].pokemon().filter { def(it.top).type == effect.type && it.damage > 0 }
                                     targets.forEach { target ->
-                                        val healed = minOf(effect.amount, target.damage)
+                                        val healed = minOf(rules.healingAmount(s, effect.amount), target.damage)
                                         update { player -> player.copy(
                                             active = player.active?.let { if (it.id == target.id) it.copy(damage = it.damage - healed) else it },
                                             bench = player.bench.map { if (it.id == target.id) it.copy(damage = it.damage - healed) else it }
@@ -1014,20 +1030,23 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                     ))))
                                 }
                                 is TrainerEffect.HealPokemon -> begin(Resolution(listOf(ChoiceRequest(ChoiceKind.HEAL_TARGET, "Curar até ${effect.amount} de dano.",
-                                    (if (effect.activeOnly) listOfNotNull(p.active) else p.pokemon()).filter { (it.damage > 0 || effect.recoverSpecialConditions && it.conditions.isNotEmpty()) && it.energies.size >= effect.requiredEnergyCount && (effect.pokemonType == null || def(it.top).type == effect.pokemonType) && (effect.maxRemainingHp <= 0 || rules.effectiveHp(s, it) - it.damage <= effect.maxRemainingHp) }.map { it.id }, 1, 1, amount = effect.amount,
+                                    (if (effect.activeOnly) listOfNotNull(p.active) else p.pokemon()).filter { (it.damage > 0 || effect.recoverSpecialConditions && it.conditions.isNotEmpty()) && it.energies.size >= effect.requiredEnergyCount && (effect.pokemonType == null || def(it.top).type == effect.pokemonType) && (effect.maxRemainingHp <= 0 || rules.effectiveHp(s, it) - it.damage <= effect.maxRemainingHp) }.map { it.id }, 1, 1,
+                                    amount = effect.amount + effect.bonusPerOtherCopyInDiscard * p.discard.count { def(it).canonicalName == d.canonicalName },
                                     discardAllEnergyAfterHealing = false, discardOneEnergyAfterHealing = effect.discardEnergyIfHealed,
                                     recoverSpecialConditions = effect.recoverSpecialConditions))))
                                 is TrainerEffect.HealEachOwnPokemon -> {
                                     var healed = 0
-                                    s.players[actor].pokemon().filter { it.damage > 0 }.forEach { pokemon ->
-                                        val amount = minOf(effect.amount, pokemon.damage)
-                                        update(actor) { player ->
-                                            fun heal(target: PokemonInstance) = if (target.id == pokemon.id) target.copy(damage = target.damage - amount) else target
+                                    (if (effect.bothPlayers) s.players.indices else listOf(actor)).forEach { owner ->
+                                        update(owner) { player ->
+                                            fun heal(target: PokemonInstance): PokemonInstance {
+                                                val amount = minOf(rules.healingAmount(s, effect.amount), target.damage)
+                                                healed += amount
+                                                return target.copy(damage = target.damage - amount)
+                                            }
                                             player.copy(active = player.active?.let(::heal), bench = player.bench.map(::heal))
                                         }
-                                        healed += amount
                                     }
-                                    events += GameEvent("PokemonHealed", "Curou até ${effect.amount} de dano de cada Pokémon seu.", healed)
+                                    events += GameEvent("PokemonHealed", "Curou $healed pontos de dano no campo.", healed)
                                 }
                                 is TrainerEffect.RecoverEnergy -> begin(Resolution(listOf(ChoiceRequest(if (effect.toDeck) ChoiceKind.RECYCLE_ENERGY else ChoiceKind.RECOVER,
                                     "Escolha até ${effect.max} Energias Básicas do descarte.", p.discard.filter { def(it).category == Category.ENERGY && def(it).basicEnergy }.map { it.id }, 0,
@@ -1267,10 +1286,10 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                 }
                             }
                             else if (ability.healEachOwnPokemon > 0) {
-                                val healed = p.pokemon().filter { it.damage > 0 }.sumOf { minOf(ability.healEachOwnPokemon, it.damage) }
+                                val healed = p.pokemon().filter { it.damage > 0 }.sumOf { minOf(rules.healingAmount(s, ability.healEachOwnPokemon), it.damage) }
                                 update { player -> player.copy(
-                                    active = player.active?.let { pokemon -> if (pokemon.damage > 0) pokemon.copy(damage = (pokemon.damage-ability.healEachOwnPokemon).coerceAtLeast(0), healedTurn = s.turn) else pokemon },
-                                    bench = player.bench.map { pokemon -> if (pokemon.damage > 0) pokemon.copy(damage = (pokemon.damage-ability.healEachOwnPokemon).coerceAtLeast(0), healedTurn = s.turn) else pokemon }) }
+                                    active = player.active?.let { pokemon -> if (pokemon.damage > 0) pokemon.copy(damage = (pokemon.damage - rules.healingAmount(s, ability.healEachOwnPokemon)).coerceAtLeast(0), healedTurn = s.turn) else pokemon },
+                                    bench = player.bench.map { pokemon -> if (pokemon.damage > 0) pokemon.copy(damage = (pokemon.damage - rules.healingAmount(s, ability.healEachOwnPokemon)).coerceAtLeast(0), healedTurn = s.turn) else pokemon }) }
                                 events += GameEvent("PokemonHealed", "Curou até ${ability.healEachOwnPokemon} de dano de cada um dos seus Pokémon.", healed)
                             }
                             else if (ability.healDamage > 0) {
@@ -1442,6 +1461,40 @@ internal class ContentEngine(private val rules: RulesEngine) {
             remainingChoices = resolution.choices.drop(1)
             shuffleAfterResolution = resolution.shuffleAfter
             val p = s.players[actor]
+            if (choice.kind == ChoiceKind.ATTACK_TOP_DECK_ENERGY && choice.sourcePokemonId != null) {
+                val source = p.bench.firstOrNull { it.id == choice.sourcePokemonId }
+                    ?: return invalidTransition(state, "O Pokémon não está mais no Banco.")
+                if ("use" in choice.optionLabels) {
+                    if (ids.isNotEmpty()) {
+                        val top = p.deck.take(choice.amount)
+                        val energies = top.filter { def(it).basicEnergy }
+                        val required = if (energies.isEmpty()) 0 else 1
+                        remainingChoices = listOf(choice.copy(
+                            title = if (required == 0) "Nenhuma Energia Básica no topo. Confirme para enviar as cartas ao fundo do deck."
+                                else "Escolha uma Energia Básica para ligar a " + def(source.top).name + ".",
+                            candidates = energies.map { it.id }, min = required, max = required,
+                            visibleCards = top.map { it.id }, optionLabels = emptyMap())) + remainingChoices
+                    }
+                } else {
+                    val top = p.deck.take(choice.visibleCards.size)
+                    if (top.map { it.id } != choice.visibleCards)
+                        return invalidTransition(state, "O topo do deck mudou.")
+                    val energy = top.firstOrNull { it.id == ids.singleOrNull() && def(it).basicEnergy }
+                    if (ids.isNotEmpty() && energy == null)
+                        return invalidTransition(state, "Escolha uma Energia Básica revelada.")
+                    val rng = SeededRng(s.rng)
+                    val bottom = rng.shuffle(top.filterNot { it.id == energy?.id })
+                    update { player -> player.copy(
+                        deck = player.deck.drop(top.size) + bottom,
+                        bench = player.bench.map {
+                            if (it.id == source.id && energy != null) it.copy(energies = it.energies + energy) else it
+                        }) }
+                    s = s.copy(rng = rng.state)
+                    if (energy != null) events += GameEvent("TopDeckEnergyAttached", "Ligou " + def(energy).name + " a " + def(source.top).name + ".")
+                }
+                s = s.copy(resolution = resolution.copy(choices = remainingChoices))
+                return null
+            }
             if (choice.kind == ChoiceKind.ABILITY_SWAP_WITH_TOP_DECK) {
                 val selected = p.hand.singleOrNull { it.id == ids.singleOrNull() && it.id in choice.candidates }
                     ?: return invalidTransition(state, "Escolha uma carta que ainda esteja na sua mão.")
@@ -2130,10 +2183,10 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                 ChoiceKind.ABILITY_ATTACH_ENERGY_TARGET -> {
                                     val energy = p.hand.first { it.id == choice.selectedEnergy && def(it).category == Category.ENERGY && def(it).basicEnergy }
                                     val targetId = ids.single()
-                                    val actualHeal = minOf(choice.healAmount, p.pokemon().first { it.id == targetId }.damage)
+                                    val actualHeal = minOf(rules.healingAmount(s, choice.healAmount), p.pokemon().first { it.id == targetId }.damage)
                                     update { player -> player.copy(hand = player.hand - energy,
-                                        active = player.active?.let { pokemon -> if (pokemon.id == targetId) pokemon.copy(energies = pokemon.energies + energy, damage = (pokemon.damage - choice.healAmount).coerceAtLeast(0), healedTurn = if (choice.healAmount > 0 && pokemon.damage > 0) state.turn else pokemon.healedTurn) else pokemon },
-                                        bench = player.bench.map { pokemon -> if (pokemon.id == targetId) pokemon.copy(energies = pokemon.energies + energy, damage = (pokemon.damage - choice.healAmount).coerceAtLeast(0), healedTurn = if (choice.healAmount > 0 && pokemon.damage > 0) state.turn else pokemon.healedTurn) else pokemon }) }
+                                        active = player.active?.let { pokemon -> if (pokemon.id == targetId) pokemon.copy(energies = pokemon.energies + energy, damage = (pokemon.damage - rules.healingAmount(s, choice.healAmount)).coerceAtLeast(0), healedTurn = if (choice.healAmount > 0 && pokemon.damage > 0) state.turn else pokemon.healedTurn) else pokemon },
+                                        bench = player.bench.map { pokemon -> if (pokemon.id == targetId) pokemon.copy(energies = pokemon.energies + energy, damage = (pokemon.damage - rules.healingAmount(s, choice.healAmount)).coerceAtLeast(0), healedTurn = if (choice.healAmount > 0 && pokemon.damage > 0) state.turn else pokemon.healedTurn) else pokemon }) }
                                     events += GameEvent("AbilityEnergyAttached", "Ligou ${def(energy).name} a um Pokémon de ${def(p.pokemon().first { it.id == targetId }.top).type}.")
                                     if (actualHeal > 0) events += GameEvent("AbilityPokemonHealed", "Curou $actualHeal de dano do Pokémon que recebeu a Energia.", actualHeal)
                                 }
@@ -2481,7 +2534,7 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                         (targetConditions - setOf(SpecialCondition.ASLEEP, SpecialCondition.PARALYZED, SpecialCondition.CONFUSED)) + triggeredConditions
                                     else targetConditions + triggeredConditions
                                     val healed = movedActive?.takeIf { choice.healMovedPokemonEx && def(it.top).name.endsWith(" ex") }
-                                        ?.let { minOf(choice.healAmount, it.damage) } ?: 0
+                                        ?.let { minOf(rules.healingAmount(s, choice.healAmount), it.damage) } ?: 0
                                     val movedToBench = movedActive?.copy(damage = (movedActive.damage - healed).coerceAtLeast(0) + moveDamageCounters * 10,
                                         restrictions = emptyList(), attackIdsUsedWhileActive = emptyList(), conditions = emptySet(), poisonDamageCounters = 1,
                                         attackImmunityTurn = -1, incomingDamageReduction = 0, damageReductionTurn = -1, outgoingDamageReduction = 0,
@@ -3110,8 +3163,8 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                             (choice.targetPokemonType == null || def(it.top).type == choice.targetPokemonType) &&
                                             (choice.targetNamePrefix == null || def(it.top).canonicalName.startsWith(choice.targetNamePrefix)) })
                                         return invalidTransition(state, "O Pokémon escolhido não pode ser curado por este efeito.")
-                                    update { it.copy(active = it.active?.let { pokemon -> if (pokemon.id == targetId) pokemon.copy(damage = (pokemon.damage-choice.amount).coerceAtLeast(0), healedTurn = if (choice.amount > 0 && pokemon.damage > 0) state.turn else pokemon.healedTurn) else pokemon },
-                                        bench = it.bench.map { pokemon -> if (pokemon.id == targetId) pokemon.copy(damage = (pokemon.damage-choice.amount).coerceAtLeast(0), healedTurn = if (choice.amount > 0 && pokemon.damage > 0) state.turn else pokemon.healedTurn) else pokemon }) }
+                                    update { it.copy(active = it.active?.let { pokemon -> if (pokemon.id == targetId) pokemon.copy(damage = (pokemon.damage - rules.healingAmount(s, choice.amount)).coerceAtLeast(0), healedTurn = if (choice.amount > 0 && pokemon.damage > 0) state.turn else pokemon.healedTurn) else pokemon },
+                                        bench = it.bench.map { pokemon -> if (pokemon.id == targetId) pokemon.copy(damage = (pokemon.damage - rules.healingAmount(s, choice.amount)).coerceAtLeast(0), healedTurn = if (choice.amount > 0 && pokemon.damage > 0) state.turn else pokemon.healedTurn) else pokemon }) }
                                     events += GameEvent("DamageHealed", "Curou até ${choice.amount} de dano do Pokémon escolhido.")
                                 }
                                 ChoiceKind.ATTACK_HAND_ENERGY -> if (ids.isNotEmpty()) {
@@ -3135,9 +3188,9 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                     require(choice.sourcePokemonId == null || choice.sourcePokemonId == targetId)
                                     update { player -> player.copy(hand = player.hand - energy,
                                         active = player.active?.let { if (it.id == targetId) it.copy(energies = it.energies + energy,
-                                            damage = if (choice.healAll) 0 else (it.damage - choice.healAmount).coerceAtLeast(0)) else it },
+                                            damage = if (choice.healAll) 0 else (it.damage - rules.healingAmount(s, choice.healAmount)).coerceAtLeast(0)) else it },
                                         bench = player.bench.map { if (it.id == targetId) it.copy(energies = it.energies + energy,
-                                            damage = if (choice.healAll) 0 else (it.damage - choice.healAmount).coerceAtLeast(0)) else it }) }
+                                            damage = if (choice.healAll) 0 else (it.damage - rules.healingAmount(s, choice.healAmount)).coerceAtLeast(0)) else it }) }
                                     events += GameEvent("AttackHandEnergyAttached", "Ligou ${def(energy).name} a um Pokémon pelo ataque.${when { choice.healAll -> " Todo o dano desse Pokémon foi curado."; choice.healAmount > 0 -> " Curou ${choice.healAmount} de dano."; else -> "" }}")
                                     val eligible = s.players[actor].hand.filter { def(it).category == Category.ENERGY && def(it).basicEnergy &&
                                         (choice.energyType == null || def(it).type == choice.energyType) }
@@ -3609,15 +3662,15 @@ internal class ContentEngine(private val rules: RulesEngine) {
                                     val target = ids.single()
                                     val pokemon = p.pokemon().firstOrNull { it.id == target }
                                         ?: return invalidTransition(state, "O Pokémon escolhido não está em jogo.")
-                                    val healed = minOf(pokemon.damage, choice.amount)
+                                    val healed = minOf(pokemon.damage, rules.healingAmount(s, choice.amount))
                                     val discardedEnergy = if (choice.discardAllEnergyAfterHealing && healed > 0) pokemon.energies else emptyList()
                                     update { player -> player.copy(
                                         active = player.active?.let { active -> if (active.id == target) active.copy(
-                                            damage = (active.damage-choice.amount).coerceAtLeast(0), healedTurn = if (active.damage > 0 && healed > 0) state.turn else active.healedTurn,
+                                            damage = (active.damage - rules.healingAmount(s, choice.amount)).coerceAtLeast(0), healedTurn = if (active.damage > 0 && healed > 0) state.turn else active.healedTurn,
                                             energies = active.energies - discardedEnergy.toSet(),
                                             conditions = if (choice.recoverSpecialConditions) emptySet() else active.conditions) else active },
                                         bench = player.bench.map { benched -> if (benched.id == target) benched.copy(
-                                            damage = (benched.damage-choice.amount).coerceAtLeast(0), healedTurn = if (benched.damage > 0 && healed > 0) state.turn else benched.healedTurn,
+                                            damage = (benched.damage - rules.healingAmount(s, choice.amount)).coerceAtLeast(0), healedTurn = if (benched.damage > 0 && healed > 0) state.turn else benched.healedTurn,
                                             energies = benched.energies - discardedEnergy.toSet(),
                                             conditions = if (choice.recoverSpecialConditions) emptySet() else benched.conditions) else benched },
                                         discard = player.discard + discardedEnergy)
@@ -3674,6 +3727,8 @@ internal class ContentEngine(private val rules: RulesEngine) {
         CardFilter.POKEMON -> "Pokémon"; CardFilter.BASIC_FIGHTING_OR_ENERGY -> "Básico de Luta ou Energia de Luta Básica"
         CardFilter.POKEMON_OR_ENERGY -> "Pokémon ou Energia Básica"; CardFilter.ITEM -> "Item"
         CardFilter.TOOL -> "Ferramenta"; CardFilter.SUPPORTER -> "Apoiador"; CardFilter.STADIUM -> "Estádio"
+        CardFilter.SUPPORTER_OR_STADIUM -> "Apoiador ou Estádio"
+        CardFilter.BASIC_LIGHTNING_ENERGY -> "Energia Básica de Raio"
         CardFilter.BASIC_POKEMON -> "Pokémon Básico"; CardFilter.BASIC_ENERGY -> "Energia Básica"
         CardFilter.ENERGY -> "Energia"; CardFilter.DARKNESS_POKEMON -> "Pokémon de Escuridão"; CardFilter.METAL_POKEMON -> "Pokémon Metal"
         CardFilter.STAGE_ONE_POKEMON -> "Pokémon Estágio 1"; CardFilter.TERA_POKEMON -> "Pokémon Tera"; CardFilter.BASIC_FIRE_ENERGY -> "Energia Básica de Fogo"

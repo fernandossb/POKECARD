@@ -7,10 +7,11 @@ internal object CatalogRuleCompiler {
     private fun JsonObject.s(key: String) = (get(key) as? JsonPrimitive)?.contentOrNull
     private fun JsonObject.a(key: String) = (get(key) as? JsonArray).orEmpty()
     val rows: Map<String, JsonObject> by lazy {
-        javaClass.getResourceAsStream("/library/catalog.json")!!.bufferedReader(Charsets.UTF_8).use {
-            Json.parseToJsonElement(it.readText()).jsonObject["cards"]!!.jsonArray
-                .associate { row -> row.jsonObject.s("id")!! to row.jsonObject }
-        }
+        listOf("catalog.json", "delta-reign.json").flatMap { file ->
+            checkNotNull(javaClass.getResourceAsStream("/library/$file")).bufferedReader(Charsets.UTF_8).use {
+                Json.parseToJsonElement(it.readText()).jsonObject["cards"]!!.jsonArray.map { row -> row.jsonObject }
+            }
+        }.associate { row -> row.s("id")!! to row }
     }
     private fun type(value: String?) = EnergyType.entries.firstOrNull { it.name == value?.uppercase() }
     private fun symbolType(symbol: String): EnergyType? {
@@ -59,9 +60,11 @@ internal object CatalogRuleCompiler {
             requiresActive = true, teamDamageReduction = activeTeamDamageReduction.groupValues[1].toInt())
         return null
     }
-    internal fun compileAbility(id: String, index: Int, raw: JsonObject): AbilityDefinition? {
-        val name = raw.s("name") ?: return null
-        val text = raw.s("effect")?.trim().orEmpty()
+    private fun compileEarlyAbilityRule(id: String, index: Int, name: String, text: String): AbilityDefinition? {
+        if (DeltaAbilityRule.match(id, name, text) != null) return AbilityDefinition("$id-ability$index", name, text)
+        val activeSelfHeal = Regex("Once during your turn, if this Pokémon is in the Active Spot, you may use this Ability\\. Heal (\\d+) damage from this Pokémon\\.").matchEntire(text)
+        if (activeSelfHeal != null)
+            return AbilityDefinition("$id-ability$index", name, text, requiresActive = true, usageKey = name, healDamage = activeSelfHeal.groupValues[1].toInt())
         compileAdditionalAbilityRule(id, index, name, text)?.let { return it }
         if (text == "If this Pokémon is in your hand when you are setting up to play, you may put it face down in the Active Spot.")
             return AbilityDefinition("$id-ability$index", name, text, mayStartActiveFromHand = true)
@@ -117,6 +120,13 @@ internal object CatalogRuleCompiler {
             return AbilityDefinition("$id-ability$index", name, text, usageKey = name, usagePerPokemon = true,
                 triggersWhenMovedFromBenchToActive = true, moveEnergyFromOtherPokemonToSelf = true,
                 moveEnergyFromOtherPokemonToSelfType = EnergyType.METAL)
+        return null
+    }
+
+    internal fun compileAbility(id: String, index: Int, raw: JsonObject): AbilityDefinition? {
+        val name = raw.s("name") ?: return null
+        val text = raw.s("effect")?.trim().orEmpty()
+        compileEarlyAbilityRule(id, index, name, text)?.let { return it }
         val activeToBenchAttach = Regex("Once during your turn, when this Pokémon moves from (?:the )?Active Spot to your Bench, you may use this Ability\\. Attach up to (\\d+) Basic (?:\\{|\\[)([GRFLWPMD])(?:\\}|\\]) Energy cards from your hand to this Pokémon\\.").matchEntire(text)
         if (activeToBenchAttach != null) return AbilityDefinition("$id-ability$index", name, text,
             usageKey = name, usagePerPokemon = true, triggersWhenMovedFromActiveToBench = true,
@@ -627,10 +637,60 @@ internal object CatalogRuleCompiler {
         return null
     }
 
+    private fun compileDeltaTrainer(id: String, raw: JsonObject): CardDefinition? {
+        if (raw.s("category") != "Trainer") return null
+        val name = raw.s("name") ?: return null
+        val (effect, text) = when {
+            id in setOf("me06-089", "me06-125", "me06-139") && name == "Aarune" ->
+                TrainerEffect.Search(listOf(CardFilter.SUPPORTER_OR_STADIUM), maxPerFilter = 3) to
+                    "Busque até três cartas de Apoiador ou Estádio no seu baralho. Revele-as, coloque-as na mão e embaralhe o baralho."
+            id in setOf("me06-090", "me06-126") && name == "Adventure Lantern" ->
+                TrainerEffect.Search(listOf(CardFilter.BASIC_FIRE_ENERGY, CardFilter.BASIC_LIGHTNING_ENERGY)) to
+                    "Busque uma Energia Básica de Fogo e uma Energia Básica de Raio. Revele-as, coloque-as na mão e embaralhe o baralho."
+            id in setOf("me06-092", "me06-128") && name == "Emcee's Hype" ->
+                TrainerEffect.DrawCardsIfOpponentPrizesAtMost(2, 2, 3) to
+                    "Compre duas cartas. Se o adversário tem três ou menos Prêmios restantes, compre mais duas."
+            id == "me06-093" && name == "Grisham" ->
+                TrainerEffect.HealEachOwnPokemon(50, bothPlayers = true) to
+                    "Cure 50 pontos de dano de cada Pokémon em jogo, dos dois lados."
+            id in setOf("me06-094", "me06-095") && name == "Legendary Pyroduct" ->
+                TrainerEffect.LegendaryStadium(LegendaryStadiumBenefit.EVOLUTION_ABILITY_LOCK) to
+                    "Jogue duas metades diferentes juntas. Pokémon Evoluídos dos dois lados ficam sem Habilidades."
+            id in setOf("me06-096", "me06-097") && name == "Legendary Summit" ->
+                TrainerEffect.LegendaryStadium(LegendaryStadiumBenefit.LESS_PRIZE) to
+                    "Jogue duas metades diferentes juntas. Quem nocautear um Pokémon adversário por dano de ataque recebe um Prêmio a menos."
+            id in setOf("me06-098", "me06-099") && name == "Legendary Trench" ->
+                TrainerEffect.LegendaryStadium(LegendaryStadiumBenefit.DOUBLE_HEALING) to
+                    "Jogue duas metades diferentes juntas. Dobre a cura de dano para os Pokémon dos dois lados."
+            id == "me06-101" && name == "Tasty Rice Ball" ->
+                TrainerEffect.HealPokemon(30, activeOnly = true, bonusPerOtherCopyInDiscard = 30) to
+                    "Cure 30 pontos de dano do seu Pokémon Ativo e mais 30 para cada outra cópia deste Item no seu descarte."
+            id in setOf("me06-102", "me06-130") && name == "Tate & Liza's Training" ->
+                TrainerEffect.DrawAndRecycleIfStadium(2, returnToHandWithLegendary = true) to
+                    "Compre duas cartas. Se comprou alguma carta e há um Estádio Lendário em jogo, devolva este Apoiador à mão."
+            id == "me06-129" && name == "Pokémon Catcher" ->
+                TrainerEffect.CoinSwitch to
+                    "Jogue uma moeda. Se der cara, traga um Pokémon do Banco adversário para o Ativo."
+            else -> return null
+        }
+        return CardDefinition(id, name, "DLR", raw.s("localId") ?: return null,
+            category = Category.TRAINER, verified = true,
+            source = "https://assets.tcgdex.net/en/me/me06/" + raw.s("localId") + "/high.webp",
+            artAsset = raw.s("image")?.let { "remote:$it/high.webp" }, text = text,
+            trainerType = when (raw.s("trainerType")) {
+                "Item" -> TrainerType.ITEM
+                "Supporter" -> TrainerType.SUPPORTER
+                "Stadium" -> TrainerType.STADIUM
+                else -> return null
+            }, trainerEffect = effect)
+    }
+
     fun compile(raw: JsonObject, reviewed: Map<String, CardDefinition>): CardDefinition? {
         val id = raw.s("id") ?: return null
         val image = raw.s("image").orEmpty()
         val source = "TCGdex • https://api.tcgdex.net/v2/en/cards/$id • gramática executável v1"
+        if (id.startsWith("me06-")) compileDeltaTrainer(id, raw)?.let { return it }
+        if (id.startsWith("me06-") && raw.s("category") in listOf("Trainer", "Energy") && raw.s("effect").isNullOrBlank()) return null
         // Reuse only identical trainer/energy print semantics, including ACE SPEC rarity.
         if (raw.s("category") in listOf("Trainer", "Energy")) {
             if (raw.s("category") == "Trainer" && raw.s("trainerType") == "Supporter" &&
@@ -1843,6 +1903,17 @@ internal object CatalogRuleCompiler {
         val cost = raw.a("cost").map { type(it.jsonPrimitive.content) ?: return null }
         val text = raw.s("effect").orEmpty().trim()
         compileAdditionalAttackRule(id, index, raw)?.let { return it }
+        if (text == "During your opponent's next turn, prevent all damage from attacks done to this Pokémon. If 1 of your Pokémon used Chaos Crawler during your last turn, this attack can't be used." &&
+            raw.s("name") == "Chaos Crawler" && raw.s("damage") == "120") {
+            return AttackDefinition("$id-attack$index", "Chaos Crawler", cost,
+                listOf(Effect.Damage(120), Effect.PreventBasicPokemonDamageNextTurn,
+                    Effect.PreventEvolutionPokemonDamageNextTurn), text)
+        }
+        if (text == "This attack does 50 damage for each {R} Energy and each {L} Energy attached to all of your Pokémon.") {
+            return AttackDefinition("$id-attack$index", raw.s("name") ?: return null, cost,
+                listOf(Effect.OwnEnergyTypeCountDamage(EnergyType.FIRE, 50, allPokemon = true),
+                    Effect.OwnEnergyTypeCountDamage(EnergyType.LIGHTNING, 50, allPokemon = true)), text)
+        }
         if (text == "During your opponent's next turn, prevent all damage done to this Pokémon by attacks from Ancient Pokémon.") {
             val rewritten = JsonObject(raw.toMutableMap().apply { put("effect", JsonPrimitive("")) })
             val compiled = compileAttack(id, index, rewritten) ?: return null
