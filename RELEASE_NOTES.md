@@ -1,3 +1,9 @@
+# POKECARD Brasil 5.99.75 — Reinado Delta completo no TCG Trainer
+
+- As 141 cartas de Reinado Delta têm regras jogáveis no TCG Trainer.
+- As últimas 36 versões de cartas incluem as três Energias Especiais, o Colete Personalizado e o Chapéu de Mega Rayquaza.
+- Versão Android 277 (5.99.75).
+
 # POKECARD Brasil 5.99.74 — Reinado Delta no TCG Trainer
 
 - As 141 cartas de Reinado Delta estão no catálogo do Trainer. 102 já têm regras executáveis, incluindo os três Estádios Lendários.

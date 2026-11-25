@@ -28,7 +28,28 @@ class DeltaReignTest {
         assertEquals(Stage.STAGE_ONE, TrainerCatalog.get("me06-069").stage)
         assertEquals("Inkay", TrainerCatalog.get("me06-069").evolvesFromName)
         assertEquals(Stage.STAGE_TWO, TrainerCatalog.get("me06-088").stage)
-        println("Delta Reign executable: ${cards.count { it.implemented }}/${cards.size}")
+        assertTrue(cards.all { it.implemented },
+            "Reinado Delta sem regras executáveis: ${cards.filterNot { it.implemented }.joinToString { it.id }}")
+    }
+
+    @Test fun `Delta Gift attaches one Basic Energy per capped Pokemon and keeps both tools`() {
+        val lead = pokemon("lead", "me06-001").copy(energies = listOf(card("ready", "sve-001")))
+            .withAddedTool(card("cap-active", "me06-100"))
+        val bench = pokemon("bench", "me06-001").withAddedTool(card("cap-bench", "me06-100"))
+        val game = board(PlayerState(hand = emptyList(), prizes = emptyList(), active = lead, bench = listOf(bench),
+            deck = listOf(card("fire", "sve-002"), card("water", "sve-003"), card("special", "me06-134"))))
+        val attack = rules.availableAttacks(game, 0, lead).single { it.name == "Delta Gift" }
+        val attacked = rules.apply(game, GameAction.Attack(attack.id))
+        assertEquals(Legality.Legal, attacked.legality)
+        val first = rules.apply(attacked.state, GameAction.ChooseCards(listOf("fire")))
+        assertEquals(Legality.Legal, first.legality)
+        assertEquals(listOf("water"), first.state.resolution!!.choices.first().candidates)
+        val second = rules.apply(first.state, GameAction.ChooseCards(listOf("water")))
+        assertEquals(Legality.Legal, second.legality)
+        val player = second.state.players[0]
+        assertEquals(listOf("ready", "fire"), player.active!!.energies.map { it.id })
+        assertEquals(listOf("water"), player.bench.single().energies.map { it.id })
+        assertTrue(player.pokemon().all { it.tools.single().definitionId == "me06-100" })
     }
 
     @Test fun `Rayquaza can decline its ability or attach only one revealed basic energy`() {
@@ -49,6 +70,37 @@ class DeltaReignTest {
         assertEquals(listOf("fire"), attach.state.players[0].bench.single().energies.map { it.id })
         assertEquals("untouched", attach.state.players[0].deck.first().id)
         assertEquals(setOf("a", "b", "electric"), attach.state.players[0].deck.drop(1).map { it.id }.toSet())
+    }
+
+    @Test fun `Slippery Oil lets the opposing player choose a new Active and resumes the current turn`() {
+        val arboliva = pokemon("arboliva", "me06-017")
+        val initial = board(PlayerState(hand = emptyList(), deck = emptyList(), prizes = emptyList(), active = arboliva))
+        val target = pokemon("target", "me06-001")
+        val game = initial.copy(players = listOf(initial.players[0], initial.players[1].copy(bench = listOf(target))))
+        val ability = TrainerCatalog.get("me06-017").abilities.single()
+        val use = rules.apply(game, GameAction.UseAbility(arboliva.id, ability.id))
+        assertEquals(Legality.Legal, use.legality)
+        assertEquals(1, rules.actingPlayer(use.state))
+        val chosen = rules.apply(use.state, GameAction.ChooseCards(listOf(target.id)))
+        assertEquals(Legality.Legal, chosen.legality)
+        assertEquals(target.id, chosen.state.players[1].active?.id)
+        assertEquals(0, rules.actingPlayer(chosen.state))
+    }
+
+    @Test fun `Azurill can search for a Special Energy and attach it to the bench`() {
+        val azurill = pokemon("azurill", "me06-080").copy(energies = listOf(card("ready", "sve-001")))
+        val bench = pokemon("bench", "me06-001")
+        val game = board(PlayerState(hand = emptyList(), prizes = emptyList(), active = azurill, bench = listOf(bench),
+            deck = listOf(card("special", "me06-134"))))
+        val attack = TrainerCatalog.get("me06-080").attacks.single()
+        val search = rules.apply(game, GameAction.Attack(attack.id))
+        assertEquals(Legality.Legal, search.legality)
+        val found = rules.apply(search.state, GameAction.ChooseCards(listOf("special")))
+        assertEquals(Legality.Legal, found.legality)
+        assertEquals(listOf(bench.id), found.state.resolution!!.choices.first().candidates)
+        val attached = rules.apply(found.state, GameAction.ChooseCards(listOf(bench.id)))
+        assertEquals(Legality.Legal, attached.legality)
+        assertEquals("special", attached.state.players[0].bench.single().energies.single().id)
     }
 
     @Test fun `Talonflame enters the bench from hand only with a Colorless Mega ex`() {

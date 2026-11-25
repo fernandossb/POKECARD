@@ -61,7 +61,13 @@ internal object CatalogRuleCompiler {
         return null
     }
     private fun compileEarlyAbilityRule(id: String, index: Int, name: String, text: String): AbilityDefinition? {
+        if (DeltaAbilityRule.match(id, name, text) == DeltaAbilityRule.BUDDY_BOOST)
+            return AbilityDefinition("$id-ability$index", name, text,
+                attachHandEnergyTypes = listOf(EnergyType.FIRE, EnergyType.LIGHTNING), attachHandEnergyTypesMax = 2)
         if (DeltaAbilityRule.match(id, name, text) != null) return AbilityDefinition("$id-ability$index", name, text)
+        if (text == "Once during your turn, you may use this Ability. Attach a Basic Lightning Energy card from your discard pile to 1 of your Pokémon.")
+            return AbilityDefinition("$id-ability$index", name, text, usageKey = name,
+                attachBasicEnergyFromDiscard = true, attachBasicEnergyFromDiscardType = EnergyType.LIGHTNING)
         val activeSelfHeal = Regex("Once during your turn, if this Pokémon is in the Active Spot, you may use this Ability\\. Heal (\\d+) damage from this Pokémon\\.").matchEntire(text)
         if (activeSelfHeal != null)
             return AbilityDefinition("$id-ability$index", name, text, requiresActive = true, usageKey = name, healDamage = activeSelfHeal.groupValues[1].toInt())
@@ -647,6 +653,11 @@ internal object CatalogRuleCompiler {
             id in setOf("me06-090", "me06-126") && name == "Adventure Lantern" ->
                 TrainerEffect.Search(listOf(CardFilter.BASIC_FIRE_ENERGY, CardFilter.BASIC_LIGHTNING_ENERGY)) to
                     "Busque uma Energia Básica de Fogo e uma Energia Básica de Raio. Revele-as, coloque-as na mão e embaralhe o baralho."
+            id in setOf("me06-091", "me06-127") && name == "Custom Vest" ->
+                TrainerEffect.CustomVest to
+                    "Se o Pokémon equipado não é um Mega Pokémon ex, ele recebe 60 a menos de dano de ataques de Mega Pokémon ex adversários, após Fraqueza e Resistência."
+            id == "me06-100" && name == "Mega Rayquaza Cap" ->
+                TrainerEffect.MegaRayquazaCap to "O Pokémon com esta Ferramenta pode usar o ataque Delta Gift."
             id in setOf("me06-092", "me06-128") && name == "Emcee's Hype" ->
                 TrainerEffect.DrawCardsIfOpponentPrizesAtMost(2, 2, 3) to
                     "Compre duas cartas. Se o adversário tem três ou menos Prêmios restantes, compre mais duas."
@@ -680,10 +691,15 @@ internal object CatalogRuleCompiler {
             category = Category.TRAINER, verified = true,
             source = "https://assets.tcgdex.net/en/me/me06/" + raw.s("localId") + "/high.webp",
             artAsset = raw.s("image")?.let { "remote:$it/high.webp" }, text = text,
+            attacks = if (id == "me06-100") listOf(AttackDefinition(
+                "me06-100-delta-gift", "Delta Gift", listOf(EnergyType.COLORLESS), listOf(Effect.DeltaGift),
+                "Para cada Pokémon seu com um Chapéu de Mega Rayquaza, busque uma Energia Básica e ligue-a a ele. Depois, embaralhe o baralho."
+            )) else emptyList(),
             trainerType = when (raw.s("trainerType")) {
                 "Item" -> TrainerType.ITEM
                 "Supporter" -> TrainerType.SUPPORTER
                 "Stadium" -> TrainerType.STADIUM
+                "Tool" -> TrainerType.TOOL
                 else -> return null
             }, trainerEffect = effect)
     }
@@ -693,6 +709,17 @@ internal object CatalogRuleCompiler {
         val image = raw.s("image").orEmpty()
         val source = "TCGdex • https://api.tcgdex.net/v2/en/cards/$id • gramática executável v1"
         if (id.startsWith("me06-")) compileDeltaTrainer(id, raw)?.let { return it }
+        if (raw.s("category") == "Energy" && id in setOf("me06-132", "me06-133", "me06-134")) {
+            val (energy, text) = when (id) {
+                "me06-132" -> EnergyType.WATER to "Fornece Energia de Água. Um Pokémon de Água ligado a ela se recupera de todas as Condições Especiais e fica imune a elas."
+                "me06-133" -> EnergyType.GRASS to "Fornece Energia de Planta. Um Pokémon de Planta ligado a ela ganha 20 PS."
+                else -> EnergyType.FIRE to "Fornece Energia de Fogo. Se um ataque do Pokémon de Fogo ligado a ela descartar esta Energia, ela volta à sua mão após o ataque."
+            }
+            val canonicalName = raw.s("name") ?: return null
+            return CardDefinition(id, raw.s("localizedName") ?: canonicalName, "DLR", raw.s("localId") ?: return null,
+                category = Category.ENERGY, type = energy, verified = true, canonicalName = canonicalName, source = source,
+                artAsset = "remote:$image/high.webp", text = text)
+        }
         if (id.startsWith("me06-") && raw.s("category") in listOf("Trainer", "Energy") && raw.s("effect").isNullOrBlank()) return null
         // Reuse only identical trainer/energy print semantics, including ACE SPEC rarity.
         if (raw.s("category") in listOf("Trainer", "Energy")) {
@@ -1571,11 +1598,15 @@ internal object CatalogRuleCompiler {
         val resistance = raw.a("resistances").firstOrNull()?.jsonObject
         if (weakness != null && (weakness.s("value") !in listOf("×2", "x2") || type(weakness.s("type")) == null)) return null
         if (resistance != null && (resistance.s("value") != "-30" || type(resistance.s("type")) == null)) return null
-        val attacks = raw.a("attacks").mapIndexed { index, attack ->
+        val azurill = id in setOf("me06-080", "me06-115") && raw.a("attacks").isEmpty() &&
+            raw.a("abilities").singleOrNull()?.jsonObject?.s("name") == "Bouncy-Bounce Charge"
+        val attacks = if (azurill) listOf(AttackDefinition("$id-attack0", "Bouncy-Bounce Charge",
+            listOf(EnergyType.COLORLESS), listOf(Effect.AttachBasicEnergyFromDeckAny(1, benchedOnly = true, basicOnly = false)),
+            "Busque uma Energia no seu baralho, ligue-a a um Pokémon do seu Banco e embaralhe.")) else raw.a("attacks").mapIndexed { index, attack ->
             compileAttack(id, index, attack.jsonObject) ?: return null
         }
         if (attacks.isEmpty()) return null
-        val abilities = raw.a("abilities").mapIndexed { index, ability -> compileAbility(id, index, ability.jsonObject) ?: return null }
+        val abilities = if (azurill) emptyList() else raw.a("abilities").mapIndexed { index, ability -> compileAbility(id, index, ability.jsonObject) ?: return null }
         val hp = raw.s("hp")?.toIntOrNull()?.takeIf { it > 0 } ?: return null
         val retreat = raw.s("retreat")?.toIntOrNull()?.takeIf { it >= 0 } ?: return null
         val prizes = when {
@@ -1597,6 +1628,44 @@ internal object CatalogRuleCompiler {
     }
 
     private fun compileAdditionalAttackRule(id: String, index: Int, raw: JsonObject): AttackDefinition? {
+        if (id.startsWith("me06-")) {
+            val effect = when (raw.s("name")) {
+                "Lure Out" -> if (id == "me06-060") Effect.LureOut else null
+                "Ominous Eyes" -> if (id == "me06-060") Effect.MultiTargetDamageCounters(5, 1) else null
+                "Colorful Whip" -> if (raw.s("effect") == "Reveal any number of Pokémon from your hand, and this attack does 30 damage for each different type of Pokémon you revealed in this way.")
+                    Effect.OwnHandPokemonRevealDamage(30, emptyList(), distinctTypes = true) else null
+                "Bug Out" -> if (raw.s("effect") == "Reveal the bottom 7 cards of your deck, and this attack does 50 damage for each Pokémon you find there that has the Bug Out attack. Then, shuffle any revealed Pokémon back into your deck. Discard the other cards.")
+                    Effect.BugOut else null
+                "Rewarm" -> if (raw.s("effect") == "This attack does 30 damage for each Basic {R} Energy card in your discard pile. Then, shuffle those cards into your deck.")
+                    Effect.OwnDiscardBasicEnergyDamageAndShuffle(EnergyType.FIRE, 30) else null
+                "Voltaic Hammer" -> if (raw.s("effect") == "Discard any amount of Basic Energy from this Pokémon, and this attack does 60 damage for each card you discarded in this way.")
+                    Effect.DiscardOwnEnergyDamageBonus(99, 60, basicOnly = true, attackerOnly = true) else null
+                "Brutal Lands" -> if (raw.s("effect") == "If a Stadium that has \"Legendary\" in its name is in play, this attack does 170 more damage.")
+                    Effect.LegendaryStadiumAttackBonus(activeDamage = 170) else null
+                "Brutal Whirlpool" -> if (raw.s("effect") == "If a Stadium that has \"Legendary\" in its name is in play, this attack also does 50 damage to each of your opponent's Benched Pokémon. (Don't apply Weakness and Resistance for Benched Pokémon.)")
+                    Effect.LegendaryStadiumAttackBonus(benchDamage = 50) else null
+                "Make Waves" -> if (raw.s("effect") == "Each player shuffles their hand into their deck and draws 4 cards.")
+                    Effect.ShuffleBothHandsDraw(4) else null
+                "Linear Attack" -> if (raw.s("effect") == "This attack does 30 damage to 1 of your opponent's Pokémon. (Don't apply Weakness and Resistance for Benched Pokémon.)")
+                    Effect.TargetedDamage(30) else null
+                "Punishing Needles" -> if (raw.s("effect") == "This attack does 50 more damage for each of your opponent's Pokémon in play that has an Ability.")
+                    Effect.OpponentAbilitiesDamageBonus(50) else null
+                else -> null
+            }
+            if (effect != null) {
+                val name = raw.s("name") ?: return null
+                val cost = raw.a("cost").map { type(it.jsonPrimitive.content) ?: return null }
+                val damage = raw.s("damage")?.removeSuffix("+")?.toIntOrNull() ?: 0
+                return AttackDefinition("$id-attack$index", name, cost, listOfNotNull(
+                    damage.takeIf { it > 0 }?.let { Effect.Damage(it) }, effect), raw.s("effect").orEmpty())
+            }
+            if (raw.s("name") == "Thunder-Clad" && raw.s("effect") ==
+                "If you go first, you can use this attack during your first turn. Search your deck for an Energy card and attach it to this Pokémon. Then, shuffle your deck.") {
+                val cost = raw.a("cost").map { type(it.jsonPrimitive.content) ?: return null }
+                return AttackDefinition("$id-attack$index", "Thunder-Clad", cost,
+                    listOf(Effect.MayAttackFirstTurnIfStarting, Effect.EnergyFromDeck(1, null, basicOnly = false)), raw.s("effect").orEmpty())
+            }
+        }
         if (raw.s("effect")?.trim() == "Search your deck for up to 3 Basic {G} Energy cards, reveal them, and put them into your hand. Then, shuffle your deck.") {
             val rewritten = JsonObject(raw.toMutableMap().apply { put("effect", JsonPrimitive("")) })
             val compiled = compileAttack(id, index, rewritten) ?: return null

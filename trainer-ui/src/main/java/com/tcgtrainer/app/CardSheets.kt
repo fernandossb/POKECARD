@@ -87,7 +87,9 @@ internal fun conditionLabel(condition: SpecialCondition): String = when (conditi
                     if (legality is Legality.Illegal) Text(legality.reason, color = Coral, fontSize = 11.sp)
                 }
             }
-            d.attacks.forEach { definition ->
+            val attachedAttacks = ownPokemon?.let { engine.availableAttacks(state, actor, it) }
+                .orEmpty().filter { available -> d.attacks.none { it.id == available.id } }
+            (d.attacks + attachedAttacks).forEach { definition ->
                 HorizontalDivider()
                 Text(definition.name, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Text("Custo: ${definition.cost.joinToString { energyLabel(it) }}", color = Muted, fontSize = 12.sp)
